@@ -1,7 +1,9 @@
 # Tenderfoot — Design Specification
 
 **Date:** 2026-08-03
-**Status:** Design approved, pending review
+**Revised:** 2026-08-04 — objective reframed to utilization (§1, §8), answer key removed
+(§8.2), platform-bound adapters and verified source facts added (§5.7–5.8)
+**Status:** Design approved
 **Author:** Matt Smith, Koehler Partners (with Claude)
 
 ---
@@ -28,9 +30,21 @@ Four problems, all present, none currently addressed by any system:
 
 ### The goal behind the goal
 
-KP's proposal capacity is currently low, and raising it is the point. Tenderfoot's first job
-is therefore not to alert — it is to answer a business question: **is there enough winnable
-work in this market to justify staffing business development?**
+KP's proposal capacity is currently low, and raising it is the point. But the business
+question underneath is **utilization**, not headcount: keeping the existing team loaded as
+projects wind down. Hires follow won work — some past KP engagements have staffed five or six
+people — they are not a precondition for looking.
+
+Tenderfoot's first job is therefore not to alert. It is to answer: **when KP has bench, is
+there qualified work on the table that KP is not seeing?**
+
+Two consequences run through the rest of this document. Timing is not one score among four —
+it is weighted against KP's actual capacity calendar (§6.3), because an opportunity landing in
+a trough is worth more than a larger one landing when the team is full. And Phase 0's question
+is *coverage*, not volume (§8.2).
+
+Whether sustained volume eventually justifies a dedicated BD hire is a query over the same
+data, answerable later. It is not the design target.
 
 That framing drives the sequencing in §3.1.
 
@@ -108,12 +122,15 @@ Every ingestion adapter takes a `since` parameter.
 **Backwards (Phase 0).** `since = 24 months ago`. Ingest the archive, score it against the
 Firm Profile, and produce a market-sizing report:
 
-> *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You bid
-> on 3 of them."*
+> *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. Nine of
+> them closed during quarters when you had bench."*
 
-This does four things simultaneously: sizes the market, validates the scoring against known
-ground truth, builds a labeled example set for free, and requires no scheduler, no
+This does three things simultaneously: sizes the market against the capacity calendar, builds
+a labeled example set through adjudication (§8.2), and requires no scheduler, no
 notifications, no uptime, and no dashboard.
+
+It does *not* validate the scorer against known ground truth. There is no bid history to
+validate against — see §8.2.
 
 **Forwards (production).** `since = last successful run`, on a schedule. Same adapters, same
 scorer, same storage.
@@ -167,7 +184,11 @@ KP-specific facts exist:
 - Hard limits — bonding capacity, insurance ceilings, headcount, revenue, registrations held
 - Past performance library — the projects that can actually be cited
 - Negative profile — what will never be bid, and why
-- Capacity — how many pursuits can run at once
+- Capacity — not a single number but a **timeline**: how many pursuits can run at once, plus
+  when current engagements are scheduled to end. The same mechanism that reads clients'
+  contract end dates to predict re-competes (§4.3), pointed inward, predicts KP's own troughs.
+  This is what Timing scores against (§6.3) and what Phase 0's coverage measure compares to
+  (§8.2).
 
 **Bootstrap:** the Profile can be largely auto-drafted from KP's website and past proposals,
 then corrected by hand. This is also the onboarding flow a future customer would receive.
@@ -215,8 +236,8 @@ listing page is metadata; the scope of work is in a PDF.
 ### 4.5 Judgment layer
 
 **Assessment** — the score for a `(Solicitation × Firm Profile)` pair, **versioned by scorer
-version**. Required so that changing the scorer can be evaluated against the answer key
-rather than hoped about.
+version**. Required so that changing the scorer can be evaluated against accumulated
+adjudications (§8.2) rather than hoped about.
 
 **Pursuit** — the lifecycle record:
 
@@ -225,8 +246,11 @@ New → Triaged → Watching → Bid / No-Bid → Submitted → Won / Lost
 ```
 
 Each transition carries a **reason**. This is the system of record, and every reason is a
-labeled training example. KP's existing win/loss history seeds this table and becomes the
-backtest's answer key.
+labeled training example.
+
+There is no prior history to seed this table with (§8.2) — it starts empty and fills from
+Phase 0 adjudications and then from live use. That makes the reason field load-bearing from
+the very first decision rather than merely nice to have.
 
 ### 4.6 What the model buys
 
@@ -250,6 +274,13 @@ Two of the most valuable features are not features — they are queries:
    dedicated inbox subscribed to many portals yields more per hour of work than scraping,
    does not break on redesign, has no terms-of-service problem, and needs no scheduler.
    Detail pages still get fetched, but from a *known* URL rather than a discovered one.
+
+   **The trap:** these subscriptions are usually themselves code filters. Indiana matches
+   notifications to the bidder's UNSPSC codes (§5.8) — meaning the portal applies exactly the
+   filter §6.2 forbids, before the record is ever visible, and invisibly. Two rules follow.
+   Register with a **deliberately over-inclusive** code set. And treat email as a
+   *change-detection ping*, never as the record source: every email-tier source stays paired
+   with a listing adapter that sees everything posted.
 3. **HTML scrape** — where neither exists. Accept that these rot.
 4. **Manual drop** — paste a URL or forward an email and it ingests. Small feature,
    disproportionate value: the system is never a wall, and opportunities heard about in
@@ -305,6 +336,57 @@ then Indiana's state portal and its largest local buyers, then notification subs
 for Midwest states, with manual drop covering the rest. Each new source earns its slot with
 yield numbers.
 
+Demand-driven still governs *which* sources get added. But §5.7 changes the growth curve: the
+marginal cost of the second jurisdiction on an already-built platform is near zero, so the
+ordering should prefer a new state on a known platform over a new state on a new one, all
+else equal.
+
+### 5.7 Adapters bind to platforms, not jurisdictions
+
+States do not build procurement portals; most license one of roughly five. Verified or
+strongly indicated across the initial scope:
+
+| Portal | Platform | Anonymous browse |
+|---|---|---|
+| Illinois BidBuy | Periscope S2G (BidSync/Jaggaer) | Verified — public browse, no login |
+| Ohio OhioBuys | Ivalua | Unverified; SSO login wall visible |
+| Michigan SIGMA VSS | CGI Advantage VSS | Unverified |
+| Kentucky eMARS VSS | CGI Advantage VSS — *same as Michigan* | Unverified |
+| Indiana IDOA | PeopleSoft supplier portal + static HTML public list | Verified public |
+
+The same platforms recur nationally: Periscope also runs Arkansas and Montana, Ivalua runs
+North Dakota, CGI Advantage runs Colorado and Maine.
+
+**Therefore the Source Registry carries a `platform` field, and adapters bind to platform plus
+per-deployment configuration rather than to a jurisdiction.** One CGI Advantage adapter covers
+Michigan and Kentucky together; one Periscope adapter covers Illinois and several others.
+
+Two limits, so this is not oversold. Deployments differ in enabled fields, URL paths, and
+authentication, so this is a *parameterized* adapter, not a free one — much of the work is
+shared, not all of it. And the largest states (California, Florida, Texas, Virginia) run
+custom systems where the leverage is absent entirely.
+
+This is what turns §2.1's portability claim from an aspiration into arithmetic.
+
+### 5.8 Verified source facts
+
+Established 2026-08-04. Recorded because they constrain the build.
+
+| Source | Finding | Consequence |
+|---|---|---|
+| Indiana IDOA | Emails solicitations to registered bidders, matched on **UNSPSC code** | Tier 2 viable, with the over-inclusive registration rule in §5.1 |
+| Indiana IDOA | Only solicitations expected to exceed **$75,000** are publicly posted | A documented coverage floor, not an unknown |
+| Indiana IDOA | Public listing is anonymous-readable — event name, agency, event ID, description, due date, contact. No RSS, API, or bulk download | Tier 3, plain table, low complexity |
+| Indiana IDOA | **No solicitation archive.** Closed solicitations are not published | Indiana cannot be backtested on the solicitation side (§8.2) |
+| Indiana Transparency Portal / IDOA contract search | Contracts searchable by ID, vendor, agency, amount, type, and date range | Indiana's Phase 0 and expiration radar run here instead |
+| SAM.gov | API returns latest active version only; Data Services publishes archived CSVs going back decades, refreshed weekly | Clean split — API for live, bulk CSV for backfill. Validates the `since` design in §3.1 |
+| USASpending | FY2008 via Award Data Archive, FY2001 via custom download; period-of-performance dates present | Deep enough for the entity chain |
+
+The Indiana archive gap resolves in a useful direction. The state's *contract* side is well
+published even though its *solicitation* side is not — and contract end dates were already the
+higher-value signal (§4.3). The gap pushes Phase 0 toward the better data rather than away
+from it.
+
 ---
 
 ## 6. Matching
@@ -336,10 +418,15 @@ requirement $500K exceeds $250K capacity"* is useful information, and extraction
 sometimes simply wrong. A rejection that cannot be inspected is a bug that will never be
 found.
 
-**Codes are a signal, never a filter.** NAICS, PSC, and state commodity codes are frequently
-missing or wrong in state and local procurement. Codes earn a positive boost on match; they
-never gate. Using codes as a filter is the most common way these systems develop a silent
-recall problem, and recall is KP's first-named pain.
+**Codes are a signal, never a filter.** NAICS, PSC, UNSPSC, and state commodity codes are
+frequently missing or wrong in state and local procurement. Codes earn a positive boost on
+match; they never gate. Using codes as a filter is the most common way these systems develop a
+silent recall problem, and recall is KP's first-named pain.
+
+This rule binds upstream too. Where a source's *own* notification subscription is code-filtered
+— as Indiana's is — the discipline is enforced by registering over-inclusively and pairing the
+subscription with a listing adapter (§5.1). A filter applied by someone else is still a filter,
+and it is worse than one applied here because its losses are invisible.
 
 ### 6.3 Four machine scores, one human score
 
@@ -350,7 +437,13 @@ The system produces four components, kept separate and separately visible:
 | **Fit** | Can we do this work? |
 | **Winnability** | Realistic odds — incumbency, field size, evaluation criteria, references held |
 | **Value** | Contract size × term × plausible margin |
-| **Timing** | Capacity in that window; is the response window survivable |
+| **Timing** | Does this land in a capacity trough? Is the response window survivable? |
+
+**Timing carries additional weight**, per §1. Because the objective is utilization rather than
+raw volume, an opportunity landing in a trough is worth more than a larger one landing when
+the team is full. Timing scores against the Profile's capacity timeline (§4.2), not against
+the calendar in the abstract — which means Timing is the one score that changes as KP's
+project book changes, without anything about the opportunity changing at all.
 
 Separation permits sorting a single blended number cannot: *high value, low winnability* is
 a teaming call, not a no-bid. *Everything strong but a 9-day window* is a lesson about
@@ -453,7 +546,10 @@ and the incumbent has never lost* is worth knowing before writing anything.
 
 ### 7.6 Reports
 
-Phase 0 market sizing as a live view, plus win-rate and source-yield reporting.
+Phase 0 market sizing as a live view — including the coverage-against-capacity chart (§8.2),
+which is the report the whole exercise exists to produce — plus source-yield reporting. Win
+rate becomes a report once there is enough history to populate one; it is never a system
+objective (§8.6).
 
 ### 7.7 Saved views
 
@@ -484,22 +580,39 @@ Two kinds of interruption and only two. Everything else is pull.
 Phase 0 does not end. Every scoring change is re-run over the archive and compared, which is
 only possible because Assessments are versioned by scorer version.
 
-### 8.2 Two numbers from the answer key
+### 8.2 There is no answer key; validation is human adjudication
 
-KP's bid/win/loss history seeds Pursuit records, yielding:
+This section originally assumed KP's bid/win/loss history could seed Pursuit records and serve
+as ground truth. It cannot. KP has competitively bid **one** solicitation — a small Indiana
+University engagement. Recalled success across all past proposals is roughly 30%, but that is
+a recollection rather than a record, and it counts a $100K job identically to a $5M one.
 
-**Agreement** — of opportunities actually pursued, how many does the scorer place in its top
-tier? Missing something KP *chose to bid* is provably wrong scoring.
+**This is not a system that improves an existing bid process. There is no existing process to
+improve.** The pipeline is being built from zero. That raises the bar on early precision: a
+bad first month has nothing to be judged against and no established habit to fall back on.
 
-**Discovery** — how many surfaced that KP never saw? Not automatically validatable; requires
-sampling and human judgment (*"yes, I'd have bid that"* / *"no, absurd"*). That review
-becomes additional answer key. A few hours of work, and the number the staffing decision
-rests on.
+Validation therefore works as follows.
 
-**Known limitation:** recall is measurable only against what was pursued. True recall is not
-measurable — what was published but never seen is unknown. If that gap needs closing, the
-method is to pick one jurisdiction and one year, exhaustively enumerate everything
-published, and score all of it. Done once, not annually.
+**Adjudication.** The backtest produces a ranked list; the user reads the top N and marks each
+*would have bid* / *would not have bid* / *unclear*. Slower than scoring against history, but
+it is the only ground truth available — and it produces the few-shot example set (§6.6) as a
+byproduct rather than as separate work.
+
+**Coverage, not volume.** Per §1, the question is whether qualified work existed during the
+months KP had bench. Group adjudicated results by month and compare against the capacity
+timeline (§4.2). Ten opportunities clustered in a single quarter is a *worse* result than five
+spread across the year, and a count alone cannot see the difference.
+
+**Value-weighted, never count-weighted.** With roughly a 50× spread between KP's smallest and
+largest engagements, any metric treating bids as equal units is wrong. Report expected value,
+not hit count. This applies to every number in this section.
+
+**Past proposals still do work.** Even without bid outcomes, the proposals KP has already
+written populate the past performance library and the negative profile (§4.2).
+
+**Known limitation:** true recall remains unmeasurable — what was published but never seen is
+unknown. If that gap needs closing, the method is to pick one jurisdiction and one year,
+exhaustively enumerate everything published, and score all of it. Done once, not annually.
 
 ### 8.3 Precision, measured live
 
@@ -518,7 +631,7 @@ wrong is merely annoying. Weight accordingly.
 
 | Pain | Metric |
 |---|---|
-| Missing things entirely | Discovery count — opportunities surfaced that would not have been seen |
+| Missing things entirely | Discovery — opportunities surfaced that would not have been seen, weighted by value and by whether they land in a capacity trough |
 | Finding out too late | Median lead time from first sighting to deadline; expiration-radar leads converted |
 | Drowning in noise | Triage precision (Interested rate) |
 | No system of record | Whether the Pursuit board is current — a usage question, not a software one |
@@ -532,10 +645,12 @@ pursued. Tuning a scorer against win rate is tuning against noise.
 
 ### 8.7 A negative result is a valid result
 
-Phase 0 may report that only a handful of winnable opportunities existed in 24 months. That
-is a valuable answer, not a failure — it would mean the capacity constraint is not solved by
-a BD hire, learned for a few weeks of work instead of a year of salary. Accepting this
-outcome in advance is what makes a small first phase the right first phase.
+Phase 0 may report that only a handful of winnable opportunities existed in 24 months, or that
+the ones that existed never landed when KP had bench. That is a valuable answer, not a failure
+— it would mean the utilization problem is not solved by better opportunity discovery, and
+that the effort belongs somewhere else entirely (relationships, teaming, a different market).
+Learned for a few weeks of work instead of a year of building. Accepting this outcome in
+advance is what makes a small first phase the right first phase.
 
 ---
 
@@ -554,17 +669,26 @@ Recorded so they are not rebuilt by accident:
 
 ## 10. Open questions
 
-1. **Do Indiana and Midwest procurement portals actually offer usable email notification
-   subscriptions?** This is the load-bearing assumption behind adapter tier 2 (§5.1). If
-   they do not, more falls to scraping and the maintenance profile worsens. Needs
-   verification before the source plan is fixed.
-2. **What counts as "enough" in Phase 0?** The threshold that would justify a BD hire should
-   be named before the number is produced, not after.
-3. **Technology stack, hosting, and deployment** — deferred to the development plan.
-4. **How far back does the archive actually go** on the priority sources? SAM.gov and
-   USASpending are deep; Indiana's portal is unverified.
-5. **How much of KP's bid/win/loss history is recoverable**, and in what form? This
-   determines the strength of the answer key (§8.2).
+**Resolved 2026-08-04** (see §5.7–5.8): Indiana's email notifications are real but
+code-filtered. Archive depth is deep for SAM.gov and USASpending, absent for Indiana
+solicitations, good for Indiana contracts. KP's bid history is effectively empty, which
+rewrote §8.2 rather than merely weakening it.
+
+Still open:
+
+1. **Do the Ohio, Michigan, and Kentucky portals allow anonymous browsing?** Illinois and
+   Indiana are verified public; the Ivalua and CGI Advantage deployments are not. This decides
+   whether those states are tier 3 or require registered accounts, and it sets the real cost
+   of the platform-adapter strategy in §5.7.
+2. **Do any state portals archive closed solicitations?** None found so far. If the answer is
+   uniformly no, solicitation-side backtesting is a federal-only capability and every state's
+   Phase 0 runs on contract data.
+3. **What is KP's capacity calendar?** Timing scoring (§6.3) and the Phase 0 coverage measure
+   (§8.2) both depend on knowing when current engagements wind down. Needed before Phase 0 can
+   be *interpreted*, not before it can be run.
+4. **Is anyone besides Matt clearing the triage queue?** Determines whether Pursuits need
+   assignment and ownership from day one, or whether that is a later problem.
+5. **Technology stack, hosting, and deployment** — deferred to the development plan.
 
 ---
 
