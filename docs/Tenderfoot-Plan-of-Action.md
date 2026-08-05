@@ -29,10 +29,25 @@ exists to answer whether the prospects are good enough to keep building.
 | Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred |
 | Component inventory | ✅ 48 in-scope components with dependencies |
 | Source research | ✅ Platform-bound adapters, verified archive depths (§5.7–5.8) |
-| Per-view UI outline | ❌ **Matt, next** |
-| Design references + brand artifact | ❌ Not gathered |
-| Domain source material | ❌ Not collected |
-| Workflow spec (stack/hosting) | ❌ The last open question (§10.3) |
+| UI outline + user stories | 🔜 **Matt, tomorrow** — his own format (see below) |
+| Design references | 🔜 Matt, tomorrow — inspiration images |
+| Brand artifact | ❌ Not gathered — *separate input from references, see §4.1* |
+| Tech stack outline | 🔜 **Matt** — closes §10.3, feeds Stage B2 |
+| Domain source material | ✅ 76 solicitations banded; all 11 band A bundles pulled (`corpus/`) |
+
+**The outline format changed.** IMPACT's terse `SHELL` / `SCREEN` / `VIEW` composition list did
+not suit this project. Matt is supplying instead:
+
+- The area outline, **with a description per area**
+- An **effort/impact assessment** per area
+- A **priority** per area
+- A **complete set of user stories**
+
+That is richer than the playbook's input #2 and it carries sequencing information the original
+format did not. Consequence: **§6's slice ordering is now a proposal to reconcile against
+Matt's priorities, not a fixed plan.** Where his effort/impact ranking disagrees with the
+dependency graph, the dependency graph wins only on hard ordering constraints (§2.2 entity FKs,
+§3.1 `since`); everything else defers to his priority.
 
 ---
 
@@ -218,12 +233,13 @@ This is why 5A and 3I get built as infrastructure in SP5–SP6 rather than as fe
 
 | When | What | Rough cost |
 |---|---|---|
-| **Now** | Per-view UI outline — `SHELL` / `SCREEN` / `VIEW`, elements in caps, composition only | A sitting |
-| Stage A1 | Design references + KP brand artifact | An hour |
-| **Stage A2** | **The hand-run** — score 30–50 real solicitations | **A day. Highest-value item here.** |
+| **Tomorrow** | Area outline with descriptions, effort/impact, priority — plus user stories | In progress |
+| **Tomorrow** | Inspiration images | In progress |
+| Tomorrow | Tech stack outline — closes §10.3 | In progress |
+| Stage A1 | **KP brand artifact** — logo or equivalent. *Not the same thing as inspiration images* (§4.1) | Minutes |
+| **Stage A2** | **The hand-run** — verdicts on the 24 band A/B rows in `corpus/manifest.md` | **A day. Highest-value item here, and it blocks on nothing.** |
 | Stage A4 | Pick a design direction | Minutes |
 | Stage A8 | Prototype iteration feedback | Recurring |
-| Stage B2 | Stack / hosting preference | A conversation |
 | SP2 gate | Design system sign-off | An hour |
 | **SP6** | **Adjudication session** — the gate | A day |
 
@@ -233,23 +249,31 @@ Everything else is buildable without blocking on him.
 
 ## 8. Immediate next actions
 
-1. **Matt:** write the per-view UI outline. Composition only — no styling. Proto2PRD §4.2.2 has
-   the format, and the IMPACT original is a working example.
-2. **Matt:** point at design references and the KP brand artifact.
-3. **Claude:** collect 30–50 real solicitations from SAM.gov and Indiana, with documents.
-4. **Both:** the hand-run (A2). Do this before writing any code, including prototype code.
-5. **Then:** the bake-off.
+1. ~~**Claude:** collect real solicitations with documents.~~ ✅ Done — `corpus/`, 76 banded,
+   11 band A bundles pulled, findings in `corpus/FINDINGS.md`.
+2. **Matt:** area outline + descriptions + effort/impact + priority, and the user stories.
+3. **Matt:** inspiration images, **and separately the KP brand artifact** (§4.1).
+4. **Matt:** tech stack outline.
+5. **Matt:** the hand-run (A2) — fill Verdict and Reason in `corpus/manifest.md`. **This blocks
+   on nothing else and is the only step that can invalidate the project cheaply.** It does not
+   have to wait for the outline.
+6. **Claude:** reconcile §6's slice order against Matt's priorities; draft the workflow spec
+   from the stack outline.
+7. **Then:** the bake-off.
 
-Steps 1 and 3 are independent and can run at the same time.
+Steps 2 through 5 are independent of each other.
 
 ---
 
 ## 9. Open questions
 
-1. **Stack, hosting, deployment** — deferred to the workflow spec (B2). The last open item from
-   the design spec's §10.
-2. **Prototype repo location** — separate repo, per Proto2PRD §4.9, or a tracked subdirectory?
+1. ~~**Stack, hosting, deployment.**~~ Matt is supplying a tech stack outline; it becomes the
+   input to the workflow spec (B2).
+2. ~~**Where the hand-run's labels live.**~~ Settled: `corpus/manifest.md`, versioned from the
+   start, with Verdict and Reason columns already in place.
+3. **Prototype repo location** — separate repo, per Proto2PRD §4.9, or a tracked subdirectory?
    IMPACT used a nested independent repo, which worked.
-3. **Where the hand-run's labels live** — they are needed by the prototype (mock data), SP4
-   (extraction accuracy), SP5 (few-shot examples), and SP6 (adjudication baseline). One file,
-   versioned, from the start.
+4. **How many design directions in the bake-off, and what register does each represent?**
+   IMPACT ran three — warm-editorial, civic-minimal, modular-dashboard — but the brief itself
+   was lost, which Proto2PRD §4.3 flags as the one part of Phase 0 that did not survive.
+   Decide it deliberately this time and write it down before generating anything.
