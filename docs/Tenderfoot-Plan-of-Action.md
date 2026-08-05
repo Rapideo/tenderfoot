@@ -75,10 +75,42 @@ the backtest harness (5A), assessment versioning (3I), and a scored baseline. Th
 | # | Input | Tenderfoot's version | Owner |
 |---|---|---|---|
 | 1 | PRD | The design spec — already written | ✅ |
-| 2 | Per-view outline | `SHELL` / `SCREEN` / `VIEW` inventory | **Matt** |
-| 3 | Design references | One coherent system, sampled at several zoom levels | Matt + Claude |
-| 4 | Brand artifact | KP logo — `C:\projects\kp-web` | Matt |
-| 5 | Domain source material | **30–50 real solicitations, hand-collected** | Claude |
+| 2 | Area outline + user stories | Descriptions, effort/impact, priority | **Matt** |
+| 3 | Design references | Inspiration images — one coherent system | **Matt** |
+| 4 | Brand artifact | **None exists. See A1.1.** | — |
+| 5 | Domain source material | 76 real solicitations, 11 bundles pulled | ✅ `corpus/` |
+
+### A1.1 Tenderfoot is its own brand, and that breaks a mechanism
+
+**Decision (2026-08-04):** Tenderfoot is **not** branded as Koehler Partners. It is an internal
+tool first, but it carries its own name, identity, and design language.
+
+This is architecturally consistent — §2.1's first portability rule says no fact about KP appears
+in the product — and a KP-branded interface would have been the largest remaining violation of
+it. Branding Tenderfoot as itself makes the portability claim real rather than notional.
+
+**But it removes the artifact the playbook's second mechanism depends on.** Proto2PRD §7.2:
+
+> "Deriving the palette from an artifact nobody controls removes colour from the space of
+> things that can be relitigated. There is no 'what if the blue were softer' conversation,
+> because the blue is not a preference — it is a measurement."
+
+IMPACT had a logo that already existed. **Tenderfoot has no logo.** There is nothing to measure.
+
+**The adaptation:** the mechanism's value was never that nobody chose the artifact — someone
+chose IMPACT's logo too, at some point. Its value is that *once an artifact is named, colour
+becomes derivable instead of debatable.* So:
+
+1. **Name one inspiration image as the palette source before sampling anything.** Not "the
+   references generally" — one file.
+2. **Sample per token, with a comment naming the source element**, exactly as IMPACT did
+   (Proto2PRD §4.5).
+3. **Do not revisit it.** The discipline is in the not-revisiting, not in the provenance.
+
+**And one thing moves from input to output:** IMPACT got a wordmark free with its logo.
+Tenderfoot's **name treatment is a Phase 0 deliverable**, produced by the bake-off rather than
+supplied to it. Each design direction should render the name in its own register — that is part
+of what is being chosen.
 
 Input 5 is where Tenderfoot differs most usefully. IMPACT's mock data was realistic but
 *invented* — Eskenazi Health, Indy Tech Trades. Ours can be **real**: pull actual solicitations
@@ -236,7 +268,7 @@ This is why 5A and 3I get built as infrastructure in SP5–SP6 rather than as fe
 | **Tomorrow** | Area outline with descriptions, effort/impact, priority — plus user stories | In progress |
 | **Tomorrow** | Inspiration images | In progress |
 | Tomorrow | Tech stack outline — closes §10.3 | In progress |
-| Stage A1 | **KP brand artifact** — logo or equivalent. *Not the same thing as inspiration images* (§4.1) | Minutes |
+| Stage A3 | Name **one** inspiration image as the palette source (§4.1.1) — Tenderfoot has no logo to measure | Minutes |
 | **Stage A2** | **The hand-run** — verdicts on the 24 band A/B rows in `corpus/manifest.md` | **A day. Highest-value item here, and it blocks on nothing.** |
 | Stage A4 | Pick a design direction | Minutes |
 | Stage A8 | Prototype iteration feedback | Recurring |
@@ -252,7 +284,7 @@ Everything else is buildable without blocking on him.
 1. ~~**Claude:** collect real solicitations with documents.~~ ✅ Done — `corpus/`, 76 banded,
    11 band A bundles pulled, findings in `corpus/FINDINGS.md`.
 2. **Matt:** area outline + descriptions + effort/impact + priority, and the user stories.
-3. **Matt:** inspiration images, **and separately the KP brand artifact** (§4.1).
+3. **Matt:** inspiration images. No KP branding — Tenderfoot carries its own identity (§4.1.1).
 4. **Matt:** tech stack outline.
 5. **Matt:** the hand-run (A2) — fill Verdict and Reason in `corpus/manifest.md`. **This blocks
    on nothing else and is the only step that can invalidate the project cheaply.** It does not

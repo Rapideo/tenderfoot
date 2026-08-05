@@ -462,6 +462,26 @@ That per-token provenance is what makes the palette unarguable. *(CS §7.2)*
 The sequencing is correct and worth preserving deliberately: **choose the direction while
 colour is still approximate, so the choice is about form rather than hue. Then measure.**
 
+#### When no brand artifact exists
+
+IMPACT inherited a logo. A new product often has nothing to measure — no mark, no palette, no
+name treatment. The mechanism still works, with one substitution.
+
+Its value was never that nobody chose the artifact; someone chose IMPACT's logo too, at some
+point. **The value is that once an artifact is named, colour becomes derivable instead of
+debatable.** So name one:
+
+1. **Designate a single source before sampling** — one specific reference image, not "the
+   references" collectively. Naming a set defeats the purpose, because a set still requires a
+   choice at sampling time.
+2. **Sample per token with a comment naming the source element**, exactly as if it were a logo.
+3. **Do not revisit it.** The discipline lives in the not-revisiting.
+
+And note what moves: a project with an existing logo gets its **wordmark and name treatment as
+an input**. A project without one gets them as a **Phase 0 output** — each design direction
+should render the product name in its own register, because that is part of what the bake-off
+is choosing between.
+
 ### 4.5.1 Constraints fall out of the source artifact
 
 Measuring the logo also produced a hard rule that survived into production: **never place the
