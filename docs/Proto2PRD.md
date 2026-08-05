@@ -288,9 +288,9 @@ carried exactly five kinds of input. Reproduce all five.
 | # | Input | IMPACT artifact | Size | Job |
 |---|---|---|---|---|
 | 1 | **PRD** | `PRD.md` | 261 lines, 16 sections | Rules, roles, permissions, non-goals |
-| 2 | **Per-view outline** | `IMPACT ... App Outline.md` | 283 lines | Field-level screen/view inventory |
-| 3 | **Design-language references** | `References/ref1–ref5.png` | 5 images | Aesthetic vocabulary |
-| 4 | **Brand source artifact** | `References/IMPACT LOGO.png` | 1 image | Colour, by measurement |
+| 2 | **Screen/area outline** | `IMPACT ... App Outline.md` | 283 lines | Field-level screen/view inventory |
+| 3 | **Design conventions** *(optional slot)* | `References/ref1–ref5.png` | 5 images | Aesthetic vocabulary — how it should feel |
+| 4 | **Palette source** *(optional slot)* | `References/IMPACT LOGO.png` | 1 image | Colour, by measurement |
 | 5 | **Domain source material** | Sample rubrics `.docx`, placeholder questions `.md` | — | Real content from the client |
 
 Inputs 3 and 4 are **two permanent slots with different jobs**, and conflating them is a
@@ -721,16 +721,17 @@ very first commit — *"chore: seed repo with planning docs and prototype refere
 ### 4.10 Phase 0 checklist
 
 - [ ] Write the PRD — rules, roles, permissions, entities, journeys, **non-goals**, open questions, assumptions.
-- [ ] Write the per-view outline — `SHELL` / `SCREEN` / `VIEW` with elements in caps. Composition only, no styling.
-- [ ] Gather design-language references — one coherent system sampled at several zoom levels, not a grab-bag. Aim to match them, but expect the brand artifact and the content type to override them (§4.2.4).
+- [ ] Write the screen/area outline. IMPACT used `SHELL` / `SCREEN` / `VIEW` with elements in caps, composition only. **Other formats work** — richer ones carrying descriptions, effort/impact, priority, or user stories additionally supply sequencing information. Whatever the format, it is authoritative for *composition*, and the PRD stays authoritative for rules.
+- [ ] **Slot 3 — design conventions.** One coherent system sampled at several zoom levels, not a grab-bag. Aim to match, but expect the palette source and the content type to override it (§4.2.4). *Optional.*
+- [ ] **Slot 4 — palette source.** A logo, a named image, or something created for the project. May be absent; may share an artifact with slot 3, deliberately. *Optional.* See §4.5.
+- [ ] If no name treatment exists, note that the **wordmark becomes a Phase 0 output**, rendered by each direction.
 - [ ] **Write down the bake-off brief** — how many directions, and what register each one represents. IMPACT's was lost.
-- [ ] Identify the brand source artifact — logo or equivalent, something nobody controls.
 - [ ] Collect real domain source material from the client.
 - [ ] Pick three representative screens: **a landing, a data table, a long form.**
 - [ ] Generate **three named design directions** across those screens. Hold brand hue constant; vary canvas, radii, typography, shadow.
 - [ ] Select one. Promote it. **Archive the losers; do not delete them.**
-- [ ] **Now** sample the palette from the brand artifact, per token, with a comment naming the source element.
-- [ ] Record any constraints the artifact imposes.
+- [ ] **Now** sample the palette from the named slot-4 source, per token, with a comment naming the source element. Not before — choose form while colour is still approximate.
+- [ ] Record any constraints the source artifact imposes.
 - [ ] Write CLAUDE.md — source-of-truth list with precedence, prototype location, token table, product rules, working conventions.
 - [ ] Build out the full prototype. Encode business rules in the mock layer, with comments explaining each rule.
 - [ ] Iterate with stakeholders using **real spec/plan pairs** — the prototype gets the same discipline as production (§4.7), including plan-authored commit messages.
@@ -1068,8 +1069,10 @@ The case study named eight. The prototype forensics add four more, marked **(R)*
 
 1. **Promote an artifact to literal specification.** Name it, declare it authoritative, define
    matching concretely, enumerate acceptable deviations.
-2. **Derive the design language from something external and fixed.** Colours sampled from a
-   logo cannot be relitigated.
+2. **Name a fixed source for the palette, then measure it.** Colours sampled per-token from a
+   named artifact cannot be relitigated. What carries the mechanism is the *naming*, not the
+   provenance — someone chose the logo too. Design conventions and palette source are two
+   independent optional slots (§4.5), not one input.
 3. **Make the prototype executable, so it specifies behaviour.** The production data model
    should be the prototype's mock dataset, normalized.
 4. **Separate spec from plan, and commit both before coding.**
@@ -1124,10 +1127,11 @@ Listed so it costs less next time.
 ## 16. Master replay checklist
 
 **Phase 0 — Prototype** *(expanded — see §4.10 for the full version)*
-- [ ] PRD, per-view outline, design references, brand artifact, domain source material.
-- [ ] Three directions across landing / table / form. Brand held constant.
+- [ ] PRD, screen/area outline, design conventions *(slot 3)*, palette source *(slot 4)*, domain source material. Both visual slots optional.
+- [ ] Write down the bake-off brief before generating anything.
+- [ ] Three directions across landing / table / form. Brand hue held constant; vary form only.
 - [ ] Select, promote, archive losers.
-- [ ] Sample palette per token with source comments.
+- [ ] **Then** sample palette per token with source comments.
 - [ ] CLAUDE.md with source-of-truth precedence.
 - [ ] Build out; encode business rules in the mock layer with comments.
 - [ ] Iterate with stakeholders. Freeze.
