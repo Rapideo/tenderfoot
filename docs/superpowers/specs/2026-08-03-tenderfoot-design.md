@@ -1,8 +1,9 @@
 # Tenderfoot — Design Specification
 
 **Date:** 2026-08-03
-**Revised:** 2026-08-04 — objective reframed to utilization (§1, §8), answer key removed
-(§8.2), platform-bound adapters and verified source facts added (§5.7–5.8)
+**Revised:** 2026-08-04 — answer key removed (§8.2); platform-bound adapters and verified
+source facts added (§5.7–5.8); **scope narrowed to prospect discovery only (§1)** — the system
+is capacity-agnostic, and pipeline management is deferred (§9)
 **Status:** Design approved
 **Author:** Matt Smith, Koehler Partners (with Claude)
 
@@ -28,23 +29,34 @@ Four problems, all present, none currently addressed by any system:
 3. **Noise** — portal alerts are overwhelmingly irrelevant
 4. **No system of record** — opportunities live in email and memory; decisions are not captured
 
-### The goal behind the goal
+### The goal, stated narrowly
 
-KP's proposal capacity is currently low, and raising it is the point. But the business
-question underneath is **utilization**, not headcount: keeping the existing team loaded as
-projects wind down. Hires follow won work — some past KP engagements have staffed five or six
-people — they are not a precondition for looking.
+Tenderfoot's only job right now is to **deliver the most accurate, most likely prospects for
+consideration.** Nothing beyond that.
 
-Tenderfoot's first job is therefore not to alert. It is to answer: **when KP has bench, is
-there qualified work on the table that KP is not seeing?**
+The system is deliberately **capacity-agnostic.** It does not model how many people KP
+employs, how much work KP can absorb, or when current engagements wind down. Those are
+judgments the reader makes when a prospect is in front of them, and encoding them would make
+the system wrong in a way that is structurally invisible: an opportunity suppressed because
+the calendar looked full is a miss that never appears in any report. Recall is the first-named
+pain (§1), and every capacity heuristic is a quiet tax on it.
 
-Two consequences run through the rest of this document. Timing is not one score among four —
-it is weighted against KP's actual capacity calendar (§6.3), because an opportunity landing in
-a trough is worth more than a larger one landing when the team is full. And Phase 0's question
-is *coverage*, not volume (§8.2).
+One distinction has to stay sharp, because it is easy to blur:
 
-Whether sustained volume eventually justifies a dedicated BD hire is a query over the same
-data, answerable later. It is not the design target.
+> **Eligibility facts stay. Capacity judgments go.**
+>
+> A solicitation demanding fifty employees, $2M in bonding, or five years of audited
+> financials is a **hard gate** (§6.1) — KP either qualifies or it does not, and that is a
+> fact about the document. Whether KP *wants* the work, or has the bandwidth for it, is not
+> modeled anywhere.
+
+Headcount and revenue therefore remain in the Firm Profile (§4.2) strictly as eligibility
+thresholds. They never become a reason to rank one qualified prospect above another.
+
+**Later — explicitly not now — Tenderfoot becomes a contract seeking *and management* tool.**
+Pipeline state, ownership, workload planning, and win/loss analytics all belong to that phase
+(§9). This document describes the seeking half, and the seeking half is judged on one thing:
+are the prospects it surfaces accurate and likely?
 
 That framing drives the sequencing in §3.1.
 
@@ -122,12 +134,11 @@ Every ingestion adapter takes a `since` parameter.
 **Backwards (Phase 0).** `since = 24 months ago`. Ingest the archive, score it against the
 Firm Profile, and produce a market-sizing report:
 
-> *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. Nine of
-> them closed during quarters when you had bench."*
+> *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You saw
+> one of them."*
 
-This does three things simultaneously: sizes the market against the capacity calendar, builds
-a labeled example set through adjudication (§8.2), and requires no scheduler, no
-notifications, no uptime, and no dashboard.
+This does three things simultaneously: sizes the market, builds a labeled example set through
+adjudication (§8.2), and requires no scheduler, no notifications, no uptime, and no dashboard.
 
 It does *not* validate the scorer against known ground truth. There is no bid history to
 validate against — see §8.2.
@@ -181,14 +192,15 @@ KP-specific facts exist:
 - Certifications and set-aside status — WBE, MBE, DBE, WOSB/EDWOSB, VOSB, 8(a), HUBZone,
   state equivalents
 - Geography served, and whether work is remote-deliverable
-- Hard limits — bonding capacity, insurance ceilings, headcount, revenue, registrations held
+- Hard limits — bonding capacity, insurance ceilings, headcount, revenue, registrations held.
+  **Eligibility thresholds only** (§1): these answer *can KP legally bid this*, never *should
+  KP take this on*.
 - Past performance library — the projects that can actually be cited
 - Negative profile — what will never be bid, and why
-- Capacity — not a single number but a **timeline**: how many pursuits can run at once, plus
-  when current engagements are scheduled to end. The same mechanism that reads clients'
-  contract end dates to predict re-competes (§4.3), pointed inward, predicts KP's own troughs.
-  This is what Timing scores against (§6.3) and what Phase 0's coverage measure compares to
-  (§8.2).
+**Not in the Profile:** any representation of KP's workload, staffing level as a capacity
+constraint, pursuit concurrency limit, or engagement calendar. Earlier drafts carried a
+capacity timeline; it was removed deliberately (§1). The system surfaces qualified prospects
+and stops there.
 
 **Bootstrap:** the Profile can be largely auto-drafted from KP's website and past proposals,
 then corrected by hand. This is also the onboarding flow a future customer would receive.
@@ -437,13 +449,12 @@ The system produces four components, kept separate and separately visible:
 | **Fit** | Can we do this work? |
 | **Winnability** | Realistic odds — incumbency, field size, evaluation criteria, references held |
 | **Value** | Contract size × term × plausible margin |
-| **Timing** | Does this land in a capacity trough? Is the response window survivable? |
+| **Timing** | Is the response window survivable? How much runway is there before the deadline? |
 
-**Timing carries additional weight**, per §1. Because the objective is utilization rather than
-raw volume, an opportunity landing in a trough is worth more than a larger one landing when
-the team is full. Timing scores against the Profile's capacity timeline (§4.2), not against
-the calendar in the abstract — which means Timing is the one score that changes as KP's
-project book changes, without anything about the opportunity changing at all.
+**Timing is a property of the opportunity, not of KP** (§1). It asks whether there is enough
+time left to produce a real proposal — days remaining, whether a mandatory pre-bid conference
+has already passed, whether the Q&A window is still open. It does *not* consult a workload
+calendar, and it does not know or care what else is in flight.
 
 Separation permits sorting a single blended number cannot: *high value, low winnability* is
 a teaming call, not a no-bid. *Everything strong but a 9-day window* is a lesson about
@@ -546,10 +557,9 @@ and the incumbent has never lost* is worth knowing before writing anything.
 
 ### 7.6 Reports
 
-Phase 0 market sizing as a live view — including the coverage-against-capacity chart (§8.2),
-which is the report the whole exercise exists to produce — plus source-yield reporting. Win
-rate becomes a report once there is enough history to populate one; it is never a system
-objective (§8.6).
+Phase 0 market sizing as a live view — how many qualified prospects exist, at what value, from
+which sources — plus source-yield reporting. Win rate becomes a report once there is enough
+history to populate one; it is never a system objective (§8.6).
 
 ### 7.7 Saved views
 
@@ -598,10 +608,11 @@ Validation therefore works as follows.
 it is the only ground truth available — and it produces the few-shot example set (§6.6) as a
 byproduct rather than as separate work.
 
-**Coverage, not volume.** Per §1, the question is whether qualified work existed during the
-months KP had bench. Group adjudicated results by month and compare against the capacity
-timeline (§4.2). Ten opportunities clustered in a single quarter is a *worse* result than five
-spread across the year, and a count alone cannot see the difference.
+**Accuracy is the whole measure.** Per §1, the only question Phase 0 answers is whether the
+prospects surfaced are good ones. Two numbers come out of adjudication: what fraction of the
+top N the user would actually have bid (precision), and how many of those KP had never seen
+(discovery). Nothing is grouped against a workload calendar — the system has no opinion about
+whether KP had room.
 
 **Value-weighted, never count-weighted.** With roughly a 50× spread between KP's smallest and
 largest engagements, any metric treating bids as equal units is wrong. Report expected value,
@@ -631,7 +642,7 @@ wrong is merely annoying. Weight accordingly.
 
 | Pain | Metric |
 |---|---|
-| Missing things entirely | Discovery — opportunities surfaced that would not have been seen, weighted by value and by whether they land in a capacity trough |
+| Missing things entirely | Discovery — qualified opportunities surfaced that would not have been seen, weighted by value |
 | Finding out too late | Median lead time from first sighting to deadline; expiration-radar leads converted |
 | Drowning in noise | Triage precision (Interested rate) |
 | No system of record | Whether the Pursuit board is current — a usage question, not a software one |
@@ -645,12 +656,12 @@ pursued. Tuning a scorer against win rate is tuning against noise.
 
 ### 8.7 A negative result is a valid result
 
-Phase 0 may report that only a handful of winnable opportunities existed in 24 months, or that
-the ones that existed never landed when KP had bench. That is a valuable answer, not a failure
-— it would mean the utilization problem is not solved by better opportunity discovery, and
-that the effort belongs somewhere else entirely (relationships, teaming, a different market).
-Learned for a few weeks of work instead of a year of building. Accepting this outcome in
-advance is what makes a small first phase the right first phase.
+Phase 0 may report that only a handful of genuinely winnable opportunities existed in 24
+months. That is a valuable answer, not a failure — it would mean discovery is not the binding
+constraint, and that the effort belongs somewhere else entirely (relationships, teaming, a
+different market or service line). Learned for a few weeks of work instead of a year of
+building. Accepting this outcome in advance is what makes a small first phase the right first
+phase.
 
 ---
 
@@ -664,6 +675,23 @@ Recorded so they are not rebuilt by accident:
 - Scraping paywalled aggregators (GovWin, BidNet, BidPrime) (§5.5)
 - Breadth-first national source coverage; coverage is demand-driven (§5.6)
 - Win-rate optimization as a system objective (§8.6)
+- **Any model of KP's workload, staffing capacity, pursuit concurrency, or engagement
+  calendar** (§1). Headcount and revenue exist solely as eligibility thresholds.
+
+### Deferred to the management phase
+
+Tenderfoot becomes a seeking *and management* tool later. These are designed in this document
+because the data model has to accommodate them, but they are not part of the current build:
+
+- The pipeline board (§7.2) and Pursuit states beyond the triage decision — `Submitted`,
+  `Won`, `Lost` (§4.5)
+- Assignment and ownership of pursuits
+- Workload planning and win/loss analytics
+
+**What is not deferred** is the triage decision itself and its captured reason. That is not
+management — it is the feedback loop that makes the next prospect more accurate (§6.6), which
+is the entire current objective. The lifecycle state machine can stay stubbed at
+`New → Triaged → Interested / Not Interested` without losing anything that matters now.
 
 ---
 
@@ -683,12 +711,11 @@ Still open:
 2. **Do any state portals archive closed solicitations?** None found so far. If the answer is
    uniformly no, solicitation-side backtesting is a federal-only capability and every state's
    Phase 0 runs on contract data.
-3. **What is KP's capacity calendar?** Timing scoring (§6.3) and the Phase 0 coverage measure
-   (§8.2) both depend on knowing when current engagements wind down. Needed before Phase 0 can
-   be *interpreted*, not before it can be run.
-4. **Is anyone besides Matt clearing the triage queue?** Determines whether Pursuits need
-   assignment and ownership from day one, or whether that is a later problem.
-5. **Technology stack, hosting, and deployment** — deferred to the development plan.
+3. **Technology stack, hosting, and deployment** — deferred to the development plan.
+
+*Closed 2026-08-04:* KP's capacity calendar is no longer needed — the system is
+capacity-agnostic (§1). Whether anyone besides Matt clears the queue no longer gates anything
+either, since assignment and ownership moved to the management phase (§9).
 
 ---
 
