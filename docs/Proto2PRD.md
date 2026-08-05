@@ -81,6 +81,53 @@ expensive review happens where changing your mind is cheap.
 The dividing line: if you can hold the entire change in your head at once and the cost of
 getting it wrong is "redo a few hours," skip it. If you cannot, apply it.
 
+### 2.1 Boundary conditions — where this playbook's assumptions hold
+
+This playbook is derived from a single project. IMPACT was a role-scoped assessment portal:
+forms, admin screens, a question engine, and a permission model. Four of its properties are
+baked into the procedure without ever being stated. Check them before assuming the whole thing
+transfers.
+
+**1. It assumes the product is UI-shaped.** Phase 0 is screens, design directions, tokens, and
+primitives, because for IMPACT the screens largely *were* the product — a running prototype was
+a near-complete specification.
+
+When the value lives in an engine — a pipeline, a matcher, a model, a solver — the prototype
+still earns its place: it settles the data model (§4.1.1), the interface, and the vocabulary.
+But **it does not touch the actual risk.** A prototype can render a beautifully-scored result
+and say nothing about whether the score is right. If that describes your project, plan a
+*second* instrument for the engine and do not let a polished prototype create false confidence.
+
+**2. It assumes correctness is binary.** Every verification in this document is a yes/no: a
+test passes, a curl returns `abc`, a console prints `5`. That works when a feature either
+functions or does not.
+
+Some components are never "correct" — only better or worse than the last version. Ranking,
+matching, extraction, classification, forecasting. For those, the per-task verification format
+cannot express the gate. You need three things the playbook does not describe: **a scored
+baseline set, a version stamp on the component that produced each score, and a regression gate**
+(*"quality did not drop against version N-1"*). Build all three as **test infrastructure early**,
+not as a deliverable late — otherwise there is no way to tell an improvement from a regression,
+and tuning becomes guesswork.
+
+**3. It assumes the project will be finished.** IMPACT's sub-projects march to launch; the only
+question was how long. When feasibility is genuinely uncertain — when the honest answer might
+be "this does not work well enough to be worth building" — **insert an explicit go/no-go gate**
+at the earliest point that produces real evidence, and be willing to stop there. Sequence the
+work so that gate arrives early and cheap. A playbook that only describes finishing will
+happily march you past the moment you should have stopped.
+
+**4. It assumes you own your dependencies.** IMPACT's stack was chosen, provisioned, and
+controlled. Its one platform surprise (§5.2, free-tier auto-pause) was still a documented
+property of a vendor it had selected.
+
+When a substantial share of your inputs belongs to other people — third-party APIs, scraped
+sites, partner feeds, public data portals — **source rot becomes a first-class concern with no
+counterpart in this document.** Those inputs change without notice, rate-limit without warning,
+and fail *silently* by returning zero rows rather than an error. That needs volume baselines,
+staleness alarms, and graceful degradation designed in from the first adapter, plus a legal
+posture recorded per source.
+
 ---
 
 ## 3. The pipeline at a glance
