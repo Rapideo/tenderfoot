@@ -1,0 +1,1540 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype to Production in Sixteen Days — IMPACT Portal Case Study</title>
+    <meta
+      name="description"
+      content="How a prototype, a design language, and a handful of requirements became a live production app in sixteen working days — and the one reordering that would make it cheaper next time."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Minimal reset — the hosted-artifact runtime supplies one; a standalone
+         file needs its own. Component rules below override these. */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body,
+      h1,
+      h2,
+      h3,
+      h4,
+      p,
+      ul,
+      ol,
+      li,
+      figure,
+      blockquote,
+      pre {
+        margin: 0;
+        padding: 0;
+      }
+      img {
+        max-width: 100%;
+        display: block;
+      }
+    </style>
+
+<style>
+  :root {
+    --navy: #153A98;
+    --navy-deep: #051028;
+    --cyan: #00A6F6;
+    --gold: #FFD71F;
+
+    --ground: #EFF1F5;
+    --surface: #FFFFFF;
+    --surface-alt: #F7F8FB;
+    --ink: #0B1220;
+    --ink-mid: #35405A;
+    --ink-muted: #5A6580;
+    --rule: #D5DAE4;
+    --rule-soft: #E4E8EF;
+    --accent: #153A98;
+    --accent-quiet: #29489f;
+    --critical: #B3271E;
+
+    --font-display: 'Archivo Black', 'Arial Black', 'Helvetica Neue', Helvetica, sans-serif;
+    --font-body: 'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, 'SF Mono', Menlo, ui-monospace, monospace;
+
+    --measure: 68ch;
+    --wide: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #050B18;
+      --surface: #0C1526;
+      --surface-alt: #101B30;
+      --ink: #E9EDF4;
+      --ink-mid: #B9C3D6;
+      --ink-muted: #8B98B0;
+      --rule: #1E2A42;
+      --rule-soft: #17223A;
+      --accent: #00A6F6;
+      --accent-quiet: #4FC0FF;
+      --critical: #FF7A6E;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground: #EFF1F5;
+    --surface: #FFFFFF;
+    --surface-alt: #F7F8FB;
+    --ink: #0B1220;
+    --ink-mid: #35405A;
+    --ink-muted: #5A6580;
+    --rule: #D5DAE4;
+    --rule-soft: #E4E8EF;
+    --accent: #153A98;
+    --accent-quiet: #29489f;
+    --critical: #B3271E;
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #050B18;
+    --surface: #0C1526;
+    --surface-alt: #101B30;
+    --ink: #E9EDF4;
+    --ink-mid: #B9C3D6;
+    --ink-muted: #8B98B0;
+    --rule: #1E2A42;
+    --rule-soft: #17223A;
+    --accent: #00A6F6;
+    --accent-quiet: #4FC0FF;
+    --critical: #FF7A6E;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 0 28px 120px;
+  }
+
+  .col {
+    max-width: var(--measure);
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    background: var(--navy-deep);
+    color: #fff;
+    margin: 0 -28px 0;
+    padding: 0 28px;
+  }
+
+  .masthead__inner {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 76px 0 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .eyebrow span:not(:last-child)::after {
+    content: "/";
+    margin-left: 14px;
+    color: rgba(255, 255, 255, 0.28);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(2.5rem, 6.2vw, 4.6rem);
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    max-width: 20ch;
+    margin: 0;
+  }
+
+  h1 em {
+    font-style: normal;
+    color: var(--gold);
+  }
+
+  .standfirst {
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.82);
+    max-width: 58ch;
+    margin: 0;
+  }
+
+  .masthead__meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.52);
+    letter-spacing: 0.04em;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    padding-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 26px;
+  }
+
+  /* ---------- stat band ---------- */
+
+  .statband {
+    background: var(--surface);
+    border-bottom: 1px solid var(--rule);
+    margin: 0 -28px 72px;
+    padding: 0 28px;
+  }
+
+  .statband__inner {
+    max-width: var(--wide);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .stat {
+    padding: 30px 26px 28px;
+    border-right: 1px solid var(--rule-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stat:last-child { border-right: 0; }
+
+  .stat__num {
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 3.4vw, 2.7rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat__label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  /* ---------- typography ---------- */
+
+  section { margin-bottom: 68px; }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 8px;
+    max-width: 24ch;
+  }
+
+  .sectnum {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--accent);
+    max-width: 100%;
+  }
+
+  h3 {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 1.18rem;
+    line-height: 1.35;
+    letter-spacing: -0.005em;
+    margin: 40px 0 10px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  h4 {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 34px 0 10px;
+  }
+
+  p { margin: 0 0 18px; max-width: var(--measure); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  strong { font-weight: 650; color: var(--ink); }
+
+  ul, ol { max-width: var(--measure); margin: 0 0 18px; padding-left: 22px; }
+  li { margin-bottom: 9px; }
+  li::marker { color: var(--ink-muted); }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.87em;
+    background: var(--surface-alt);
+    border: 1px solid var(--rule-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  pre {
+    background: var(--navy-deep);
+    color: #DDE6F5;
+    padding: 20px 22px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 0 0 22px;
+    max-width: var(--measure);
+    border-left: 3px solid var(--cyan);
+  }
+
+  pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: inherit;
+  }
+
+  /* ---------- thesis block ---------- */
+
+  .thesis {
+    background: var(--navy-deep);
+    color: #fff;
+    padding: 44px 46px;
+    border-radius: 4px;
+    margin: 0 0 40px;
+    max-width: 78ch;
+    border-left: 5px solid var(--gold);
+  }
+
+  .thesis__label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gold);
+    display: block;
+    margin-bottom: 16px;
+  }
+
+  .thesis p {
+    font-family: var(--font-display);
+    font-size: clamp(1.3rem, 2.6vw, 1.72rem);
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    margin: 0;
+    max-width: 30ch;
+    text-wrap: balance;
+  }
+
+  .thesis .thesis__sub {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.76);
+    margin-top: 20px;
+    max-width: 62ch;
+    letter-spacing: 0;
+  }
+
+  /* ---------- pull quote ---------- */
+
+  blockquote {
+    margin: 0 0 26px;
+    padding: 4px 0 4px 26px;
+    border-left: 3px solid var(--accent);
+    max-width: 64ch;
+    color: var(--ink-mid);
+  }
+
+  blockquote p {
+    font-size: 1.06rem;
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+
+  blockquote p:last-child { margin-bottom: 0; }
+
+  blockquote.mandate {
+    border-left-color: var(--gold);
+    background: var(--surface);
+    padding: 26px 28px;
+    border-radius: 3px;
+  }
+
+  blockquote.mandate p {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* ---------- callouts ---------- */
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 22px 26px;
+    border-radius: 3px;
+    margin: 0 0 26px;
+    max-width: 72ch;
+  }
+
+  .note p:last-child { margin-bottom: 0; }
+
+  .note__label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap {
+    overflow-x: auto;
+    margin: 0 0 28px;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 460px;
+    font-size: 15px;
+  }
+
+  th {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: left;
+    color: var(--ink-muted);
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface-alt);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+    color: var(--ink-mid);
+  }
+
+  tbody tr:last-child td { border-bottom: 0; }
+
+  td:first-child { color: var(--ink); font-weight: 550; }
+
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .swatch {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 2px;
+    margin-right: 8px;
+    vertical-align: -2px;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+  }
+
+  /* ---------- mechanisms ---------- */
+
+  .mechs {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-width: 80ch;
+    display: grid;
+    gap: 2px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .mechs li {
+    background: var(--surface);
+    padding: 22px 26px;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 4px 14px;
+  }
+
+  .mechs b {
+    grid-column: 1;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    padding-top: 1px;
+  }
+
+  .mechs h3 {
+    grid-column: 2;
+    margin: 0 0 6px;
+    font-size: 1.02rem;
+  }
+
+  .mechs p {
+    grid-column: 2;
+    margin: 0;
+    color: var(--ink-mid);
+    font-size: 15.5px;
+  }
+
+  /* ---------- failures ---------- */
+
+  .miss {
+    border-left: 3px solid var(--critical);
+    padding-left: 24px;
+    margin-bottom: 38px;
+    max-width: 74ch;
+  }
+
+  .miss h3 {
+    margin-top: 0;
+    color: var(--ink);
+  }
+
+  .miss__tag {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--critical);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  /* ---------- checklist ---------- */
+
+  .checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 30px;
+    max-width: 74ch;
+  }
+
+  .checklist li {
+    position: relative;
+    padding-left: 32px;
+    margin-bottom: 11px;
+    color: var(--ink-mid);
+  }
+
+  .checklist li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 15px;
+    height: 15px;
+    border: 1.5px solid var(--rule);
+    border-radius: 2px;
+    background: var(--surface);
+  }
+
+  .checklist li.key { color: var(--ink); font-weight: 550; }
+  .checklist li.key::before { border-color: var(--accent); }
+
+  .phase-head {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin: 28px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+    max-width: 74ch;
+  }
+
+  /* ---------- refs ---------- */
+
+  .refs {
+    border-top: 2px solid var(--rule);
+    padding-top: 30px;
+    max-width: 80ch;
+  }
+
+  .refs ul { list-style: none; padding: 0; max-width: 80ch; }
+
+  .refs li {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin-bottom: 9px;
+    line-height: 1.5;
+  }
+
+  .refs b { color: var(--ink-mid); font-weight: 500; }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 18px 80px; }
+    .masthead, .statband { margin-left: -18px; margin-right: -18px; padding-left: 18px; padding-right: 18px; }
+    .thesis { padding: 30px 26px; }
+    .mechs li { grid-template-columns: 1fr; }
+    .mechs b { grid-column: 1; }
+    .mechs h3, .mechs p { grid-column: 1; }
+    .stat { border-right: 0; border-bottom: 1px solid var(--rule-soft); }
+  }
+</style>
+
+<style>
+  /* Print: drop the dark mastheads to ink-on-paper, keep the structure. */
+  @media print {
+    :root {
+      --ground: #fff;
+      --surface: #fff;
+      --surface-alt: #fff;
+      --ink: #000;
+      --ink-mid: #1a1a1a;
+      --ink-muted: #444;
+      --rule: #bbb;
+      --rule-soft: #ddd;
+      --accent: #153a98;
+    }
+    body {
+      font-size: 11pt;
+      background: #fff;
+    }
+    .masthead,
+    .thesis {
+      background: #fff !important;
+      color: #000 !important;
+      border: 1px solid #bbb;
+    }
+    .masthead h1,
+    .masthead h1 em,
+    .standfirst,
+    .masthead__meta,
+    .eyebrow,
+    .thesis p,
+    .thesis__sub,
+    .thesis__label {
+      color: #000 !important;
+    }
+    pre {
+      background: #f4f4f4;
+      color: #000;
+      border-left: 3px solid #153a98;
+    }
+    section {
+      break-inside: avoid-page;
+    }
+    h2,
+    h3 {
+      break-after: avoid-page;
+    }
+  }
+</style>
+  </head>
+  <body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="masthead__inner">
+      <div class="eyebrow">
+        <span>Case Study</span>
+        <span>Internal Playbook</span>
+        <span>Rapideo</span>
+      </div>
+      <h1>Prototype to production in <em>sixteen working days</em></h1>
+      <p class="standfirst">
+        How a per-view outline, a design language, and a handful of requirements became a live,
+        role-scoped production application indistinguishable from the prototype it was designed
+        against — and the one reordering that would make it cheaper next time.
+      </p>
+      <div class="masthead__meta">
+        <span>IMPACT / HirePath Internship Assessment Portal</span>
+        <span>2026-04-16 → 2026-06-19</span>
+        <span>Written 2026-08-02</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="statband">
+    <div class="statband__inner">
+      <div class="stat">
+        <div class="stat__num">16</div>
+        <div class="stat__label">Active working days</div>
+      </div>
+      <div class="stat">
+        <div class="stat__num">99</div>
+        <div class="stat__label">Pull requests</div>
+      </div>
+      <div class="stat">
+        <div class="stat__num">292</div>
+        <div class="stat__label">Commits, two repos</div>
+      </div>
+      <div class="stat">
+        <div class="stat__num">54,558</div>
+        <div class="stat__label">Lines of plan</div>
+      </div>
+      <div class="stat">
+        <div class="stat__num">1.65&times;</div>
+        <div class="stat__label">Plan-to-code ratio</div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <span class="sectnum">Executive summary</span>
+    <h2>The result is repeatable. The reason is not the obvious one.</h2>
+    <p>
+      In sixteen days of actual work spread across nine weeks, this project went from a per-view
+      outline, a design language, and a handful of requirements to a live, production, role-scoped
+      web application that is visually indistinguishable from the prototype it was designed against.
+    </p>
+    <p>
+      That outcome is real and it is repeatable. But the reason it worked is not the reason most
+      people would guess, and getting it right next time depends on understanding the difference.
+    </p>
+
+    <div class="thesis">
+      <span class="thesis__label">The finding</span>
+      <p>Fidelity was not achieved by careful work. It was achieved by promoting an artifact to the status of literal specification.</p>
+      <p class="thesis__sub">
+        Sub-projects 1&ndash;5 treated the prototype as <em>reference material</em> and shipped a completely
+        functional application in about four working days. A visual audit immediately afterward found
+        P0-severity gaps on essentially every route. The app worked perfectly and looked wrong.
+      </p>
+    </div>
+
+    <p>
+      Sub-project 7 changed one word. The prototype stopped being reference and became
+      <strong>&ldquo;the design specification, literally&rdquo;</strong> &mdash; same class names, same copy,
+      verbatim. Fidelity immediately became a mechanical exercise instead of an aspirational one,
+      and closed 51 of 57 audit entries in two days.
+    </p>
+    <p>
+      <strong>The implication for next time: the correction is the improvement.</strong> Build the design
+      primitives from the prototype first and hang function on them, and sub-project 7 never needs to
+      exist. That single reordering is the highest-value change available to the process.
+    </p>
+
+    <div class="note">
+      <span class="note__label">On tone</span>
+      <p>
+        This document is candid by design. It is an internal playbook, not a sales artifact.
+        The failures section names real misses with PR numbers, because that is the part that
+        makes it useful the second time.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <span class="sectnum">01 &mdash; The numbers</span>
+    <h2>What sixteen days actually bought</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Phase</th><th>Span</th><th>Active days</th><th>Output</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Prototype</td><td class="num">Apr 16 → May 11</td><td class="num">6</td><td>177 commits · 36 pages · 5,061 lines HTML/CSS/JS</td></tr>
+          <tr><td>Planning</td><td class="num">May 10 → May 11</td><td class="num">2</td><td>12 specs · 18 plans · 54,558 lines</td></tr>
+          <tr><td>Build</td><td class="num">May 11 → May 20</td><td class="num">7</td><td>99 PRs · ~33,000 LOC app + db</td></tr>
+          <tr><td>Launch &amp; after</td><td class="num">May 26 → Jun 19</td><td class="num">3</td><td>Production live · reports · user management</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      180 application files, 73 test files, 247 tests at the 2026-05-20 launch-readiness snapshot
+      (204 unit, 21 RLS, 22 Playwright). Three ratios explain more than the totals do.
+    </p>
+
+    <h3>Plans were 1.65&times; larger than the code they produced</h3>
+    <p>
+      54,558 lines of implementation plan yielded roughly 33,000 lines of application and database
+      code. This sounds like waste. It is the opposite &mdash; it is the central mechanism.
+    </p>
+
+    <h3>Documentation outweighs code 1.75:1</h3>
+    <p>
+      57,742 lines of markdown against 33,000 lines of code. This is a strength that eventually
+      became a liability.
+    </p>
+
+    <h3>PR-to-commit ratio is 0.86</h3>
+    <p>
+      99 pull requests against 115 commits on the production repository. Squash-merge discipline held
+      for the entire build; almost every commit on <code>main</code> is a reviewed, CI-green pull request.
+    </p>
+  </section>
+
+  <section>
+    <span class="sectnum">02 &mdash; Act I</span>
+    <h2>The prototype as specification</h2>
+    <h4>April 16 → May 8</h4>
+
+    <p>
+      The prototype is 36 static HTML pages, a 3,427-line stylesheet, and a 1,634-line shared
+      JavaScript module. No build tooling, no framework, no test runner. It was built in four bursts:
+      24 commits on April 16 that produced the entire first-pass application, then 42, 85, and 18
+      commits on May 6, 7, and 8 refining it against stakeholder feedback.
+    </p>
+    <p>
+      The May 7 spike &mdash; 85 commits in one day &mdash; is where the prototype stopped being a mockup
+      and became a specification. That day consolidated the competency assessment, restructured the
+      settings shell, and moved intern identity capture to the chooser page. Each of those changes
+      carried into production unmodified.
+    </p>
+
+    <h3>The design language came from a fixed, external source</h3>
+    <p>The palette was sampled from pixels in the IMPACT logo &mdash; five tokens, each with a defined role:</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Token</th><th>Hex</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><span class="swatch" style="background:#153A98"></span><code>--navy</code></td><td class="num">#153A98</td><td>Primary brand</td></tr>
+          <tr><td><span class="swatch" style="background:#051028"></span><code>--navy-deep</code></td><td class="num">#051028</td><td>Dark surfaces (nav, footer)</td></tr>
+          <tr><td><span class="swatch" style="background:#00A6F6"></span><code>--cyan</code></td><td class="num">#00A6F6</td><td>Secondary, info, focus</td></tr>
+          <tr><td><span class="swatch" style="background:#FFD71F"></span><code>--gold</code></td><td class="num">#FFD71F</td><td>Highlight, CTA, active state</td></tr>
+          <tr><td><span class="swatch" style="background:#EFF1F5"></span><code>--canvas</code></td><td class="num">#EFF1F5</td><td>Body background</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      This matters more than it appears to. Deriving the palette from an artifact nobody controls
+      removes colour from the space of things that can be relitigated. There is no
+      &ldquo;what if the blue were softer&rdquo; conversation, because the blue is not a preference &mdash;
+      it is a measurement. Every subsequent decision inherits that settledness.
+    </p>
+    <p>
+      The same logic produced a hard constraint that survived into production: <em>never place the logo
+      PNG on the light canvas</em>, because the source image has glow baked in and reads as a dirty halo.
+      The workaround &mdash; a typographic wordmark in Archivo Black for light surfaces &mdash; became a
+      permanent component.
+    </p>
+
+    <h3>The prototype encoded business rules, not just appearance</h3>
+    <p>
+      This is the part that is easy to miss and that made everything downstream cheaper.
+      <code>app.js</code> was not a pile of mock data. Read its comments:
+    </p>
+
+<pre><code>// Intern record stores only the minimum PII required to identify the
+// intern at assessment time: first initial, last name, and cohort
+// (which itself implies the employer). No first name, no date of
+// birth, no zipcode are persisted.
+const INTERNS = [ ... ]
+
+// Look up an intern by the composite identity the public-side flow
+// collects: first initial (case-insensitive), last name, and cohort.
+function internByIdentity(firstInitial, last, cohortId) { ... }
+
+// Per-set merge: fall back to defaults for any default missing from
+// sessionStorage, EXCEPT explicit tombstones (parsed[id] === null)
+// which mean "deleted by admin; do not resurrect from defaults".</code></pre>
+
+    <p>In 1,634 lines the prototype had already settled:</p>
+    <ul>
+      <li><strong>The minimum-PII policy</strong> — which fields persist and which are collected for usability but discarded.</li>
+      <li><strong>The composite-key identity model</strong> — first initial + last name + cohort, with employer implied by cohort. This became <code>lookupInternByIdentity</code> in production essentially verbatim.</li>
+      <li><strong>Three-tier competency stitching</strong> — program-core, per-cohort, per-intern overlays, including runtime-authored sets.</li>
+      <li><strong>Soft-delete tombstone semantics</strong> — an explicitly deleted item must not be resurrected from defaults. A genuinely subtle data-modelling decision that most teams discover in production.</li>
+      <li><strong>Role scoping</strong> — roles belong to their parent employer, mirroring the cohort→employer relationship.</li>
+    </ul>
+
+    <div class="note">
+      <span class="note__label">Why this act is load-bearing</span>
+      <p>
+        The 15-table production data model is essentially this mock dataset normalized. The prototype
+        was a working specification of behaviour that happened to also be a picture.
+      </p>
+      <p>
+        A prototype that only shows appearance leaves every behavioural question open, and those
+        questions get answered <em>during</em> implementation &mdash; the most expensive place to answer
+        them. A prototype that runs forces the awkward questions early, in the cheapest possible
+        medium, where changing your mind costs a <code>sessionStorage</code> key rather than a database
+        migration.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <span class="sectnum">03 &mdash; Act II</span>
+    <h2>Planning</h2>
+    <h4>May 10 → May 11</h4>
+
+    <p>
+      Two days produced 12 design specs and 18 implementation plans totalling 54,558 lines. The
+      structure is deliberate and worth reproducing exactly.
+    </p>
+
+    <h3>Three artifacts, three audiences</h3>
+    <p>
+      The <strong>design spec</strong> answers <em>what</em> and <em>why</em>. The production rebuild spec is
+      855 lines covering stack, topology, a 15-table data model, a three-tier permission model, the
+      question-set engine, migration strategy, and phasing. Every load-bearing technology choice
+      carries a one-sentence rationale.
+    </p>
+    <p>
+      A separate 441-line <strong>workflow spec</strong> covers the SDLC layer &mdash; branching, commit
+      format, review, CI, deployment topology, secrets, branch protection. Separating &ldquo;what the
+      app does&rdquo; from &ldquo;how we build it&rdquo; was correct; they change at different rates and
+      are read by different people.
+    </p>
+    <p>
+      The <strong>implementation plan</strong> answers <em>how</em>. One per sub-project. The largest is
+      6,105 lines for Admin Core alone.
+    </p>
+    <p>
+      The distinction is enforced. A spec that drifts into implementation detail and a plan that
+      relitigates architecture are both failures. Keeping them separate is what lets a non-technical
+      stakeholder review the spec and an executing agent consume the plan without either being
+      confused by the other's content.
+    </p>
+
+    <h3>Sub-project decomposition</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>Sub-project</th><th>Tasks</th><th>PRs</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0</td><td>Project Infrastructure</td><td class="num">58</td><td class="num">14</td></tr>
+          <tr><td class="num">1</td><td>Foundation</td><td class="num">60</td><td class="num">16</td></tr>
+          <tr><td class="num">2</td><td>Admin Core</td><td class="num">37</td><td class="num">11</td></tr>
+          <tr><td class="num">3</td><td>Question Engine</td><td class="num">38</td><td class="num">8</td></tr>
+          <tr><td class="num">4</td><td>Assessment Forms</td><td class="num">31</td><td class="num">6</td></tr>
+          <tr><td class="num">5</td><td>Employer Shell</td><td class="num">38</td><td class="num">12</td></tr>
+          <tr><td class="num">6</td><td>Polish &amp; Launch</td><td class="num">52</td><td>—</td></tr>
+          <tr><td class="num">7</td><td>Frontend Rebuild <em>(added May 18)</em></td><td>—</td><td class="num">9</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The splitting rule that produced this: <strong>a single plan exceeding roughly fifty tasks needs
+      to become two plans.</strong> Past that size the execution graph stops being trackable and the
+      document stops being navigable.
+    </p>
+
+    <h3>Why the plans are larger than the code</h3>
+    <p>
+      Because they contain complete, paste-able code &mdash; not pseudo-code, not descriptions of code.
+      Every task names exact file paths and carries a concrete verification command.
+    </p>
+    <p>
+      This is the mechanism that made the whole thing work. A task written to that standard can be
+      executed by a fresh agent with no accumulated context in a couple of minutes. That property is
+      what enables both parallelism and a sustained ~10 PRs/day cadence, and it is what stops long
+      sessions from degrading as context fills with irrelevant history.
+    </p>
+    <div class="note">
+      <span class="note__label">The 1.65&times; ratio is not overhead</span>
+      <p>
+        The plan <em>is</em> the code, written once in a form that is reviewable before it is executable.
+        You pay the cost of writing it either way; writing it as a plan first means the expensive
+        review happens in prose, where changing your mind is cheap.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <span class="sectnum">04 &mdash; Act III</span>
+    <h2>Execution</h2>
+    <h4>May 11 → May 20</h4>
+
+    <p>
+      99 pull requests in roughly seven working days. May 11 alone carries 50 commits &mdash;
+      sub-project 0, the entire infrastructure layer, in a single session.
+    </p>
+    <p>
+      Every PR: branch from <code>main</code>, implement one or more plan tasks, Conventional Commit,
+      push, open PR, CI runs five jobs, review, squash-merge, delete branch. <code>main</code> is
+      branch-protected; direct pushes are rejected. This held for all 99.
+    </p>
+
+    <h3>The gate protocol</h3>
+    <p>
+      This is the mechanism most likely to be undervalued, and the one that made agent-driven
+      execution safe at this volume. Between phases, execution <strong>stops</strong> and waits for
+      explicit human sign-off:
+    </p>
+
+    <blockquote>
+      <p>
+        <strong>Step 4: Request Gate G1 sign-off</strong> — Comment in the PR requesting Matt's gate
+        sign-off. Include a brief screenshot of the tokens.css diff and a DevTools screenshot showing
+        computed body styles. <strong>Do NOT start Phase B until Gate G1 is signed off.</strong>
+      </p>
+    </blockquote>
+
+    <p>
+      Sub-project 7 alone defines eight such gates across 991 lines of plan. Each names the specific
+      evidence required &mdash; not &ldquo;looks good?&rdquo; but &ldquo;confirm tokens match prototype
+      <code>:root</code> exactly, font links load Latin-subset Plex, print stylesheet present.&rdquo;
+    </p>
+    <p>
+      Gates work because they are <strong>cheap and frequent</strong>. A gate every few tasks bounds how
+      far execution can drift before a human sees it. Ninety-nine PRs of unattended agent work would
+      have compounded small misreadings into large ones; ninety-nine PRs punctuated by fifteen gates
+      could not.
+    </p>
+
+    <h3>The infrastructure investment came first</h3>
+    <p>
+      Sub-project 0 &mdash; 58 tasks, 14 PRs, before a single line of application code &mdash; bought
+      branch protection, a five-job CI pipeline, Conventional Commits enforced by commitlint and
+      Husky, lint-staged pre-commit hooks, two Netlify projects, two Supabase projects, a GitHub Pages
+      management dashboard, and the methodology playbook itself.
+    </p>
+    <p>
+      Front-loading this is uncomfortable because it produces nothing demo-able. It is also what made
+      the following six sub-projects boring in the right way. Every subsequent PR landed into a
+      pipeline that already worked.
+    </p>
+  </section>
+
+  <section>
+    <span class="sectnum">05 &mdash; Act IV</span>
+    <h2>The fidelity correction</h2>
+    <h4>May 18 → May 19</h4>
+
+    <p>
+      This act is the most instructive in the entire project, and it exists because of a mistake.
+    </p>
+
+    <h3>The audit</h3>
+    <p>
+      On May 18, with sub-projects 1 through 5 complete and the application fully functional, a
+      route-by-route visual audit compared production against the prototype. Its headline finding:
+    </p>
+
+    <blockquote>
+      <p>
+        Production was built <strong>function-first</strong> across the board: every shipped route renders
+        correct data and handles its action surface, but the brand language &mdash; Archivo Black
+        headlines, IBM Plex Mono micro-labels, navy/cyan/gold tokens, dark-surface nav and footer
+        shells, sticky action bars, sectioned rubric panels, mono receipts &mdash; is
+        <strong>applied unevenly or not at all</strong>.
+      </p>
+    </blockquote>
+
+    <p>Concretely, the production landing page was this:</p>
+
+<pre><code>&lt;main style="max-width:720"&gt;
+  &lt;h1&gt;IMPACT Internship Assessment Portal&lt;/h1&gt;
+  &lt;p&gt;The production app is under construction.&lt;/p&gt;
+&lt;/main&gt;</code></pre>
+
+    <p>
+      Against a prototype with a navy nav, wordmark, hero with a gold corner glyph and accent
+      underline, a three-card pillars section with numbered mono labels, and a dark footer.
+    </p>
+    <p>
+      Worse, the components existed. <code>AuthShell</code> had been built in sub-project 5 with a
+      docstring reading <em>&ldquo;Mirrors the prototype's login.html aesthetic&rdquo;</em> &mdash; and
+      <code>/login</code> itself was never refactored to use it. The tokens were all defined in
+      <code>tokens.css</code> and simply not consumed. <strong>The design system was present and
+      unwired.</strong>
+    </p>
+
+    <h3>The decision</h3>
+    <blockquote>
+      <p>
+        A patch-by-patch fix campaign would touch nearly every component file anyway. At that volume
+        of change, <strong>rebuilding from the prototype as the literal spec is cheaper and produces a
+        better result than translating audit findings into surgical edits.</strong>
+      </p>
+    </blockquote>
+    <p>
+      This is a generalizable heuristic. When a corrective campaign would touch most of the surface
+      anyway, the campaign is more expensive than the rebuild <em>and</em> worse, because patches
+      converge on &ldquo;close enough&rdquo; while a rebuild converges on &ldquo;same.&rdquo;
+    </p>
+
+    <h3>The mandate</h3>
+    <blockquote class="mandate">
+      <p>
+        The rebuilt frontend MUST look and behave exactly like the prototype. Pixel-for-pixel parity
+        is the non-negotiable success criterion of this project. Every other consideration &mdash;
+        abstraction reuse, component elegance, developer ergonomics &mdash; is subordinate to it.
+      </p>
+    </blockquote>
+    <p>
+      And then it defines its terms, which is what makes it operable rather than inspirational.
+      Matching means: same semantic elements, nesting, and class names; same tokens, spacing scale,
+      radii, and shadows; same typography; same 1240px container, 100px nav height, 64px wordmark;
+      <strong>copy verbatim</strong> &mdash; titles, button labels, micro-labels, modal bodies, toast
+      messages, empty states.
+    </p>
+    <p>
+      Critically, it also enumerates <strong>acceptable deviations</strong> &mdash; real data replacing
+      mock, production URLs replacing <code>.html</code> links, React Router <code>&lt;Form&gt;</code>
+      replacing <code>onsubmit</code>, non-visual accessibility additions. Anything outside those
+      classes requires an explicit <code>Deviation:</code> entry in the PR description with
+      justification.
+    </p>
+    <div class="note">
+      <span class="note__label">Why the escape hatch matters</span>
+      <p>
+        A mandate without an escape hatch gets quietly violated. A mandate with a <em>documented</em>
+        escape hatch gets followed, because compliance is easier than the paperwork of deviating.
+      </p>
+    </div>
+
+    <h3>The order of the rebuild</h3>
+    <p>
+      Phase A ported tokens, then global CSS, then fonts, then print rules. Phase B built shell and
+      presentation primitives against a dedicated dev-primitives demo route. Phase C rebuilt the form
+      primitives. Only then &mdash; Phases D, E, F &mdash; did pages get rebuilt.
+    </p>
+    <p>
+      <strong>Primitives before pages.</strong> This is the ordering that sub-projects 1&ndash;5 lacked,
+      and reproducing it from the start is the single highest-value change in the revised playbook.
+    </p>
+
+    <h3>The result</h3>
+    <p>
+      51 audit entries closed. 4 deferred to a manual test pass because they require hard-to-reach
+      state (a live Supabase recovery token, an unconsumed invite link). 2 residual entries.
+      75 side-by-side screenshots filed as the durable evidence.
+    </p>
+    <p><strong>Elapsed: two days.</strong></p>
+  </section>
+
+  <section>
+    <span class="sectnum">06 &mdash; Act V</span>
+    <h2>Launch and after</h2>
+    <h4>May 26 → June 19</h4>
+
+    <p>
+      Production went live May 26. The bootstrap sequence &mdash; schema, 32 RLS policies, the JWT
+      custom-access-token hook, reference-data seed, admin account &mdash; ran against an empty
+      database and was verified end-to-end with a live sign-in producing a correctly-claimed JWT.
+    </p>
+    <p>Three things happened after launch that belong in the record.</p>
+
+    <h3>Auto-deploy was not actually wired</h3>
+    <p>
+      The Netlify project showed a repo URL, branch, and build command, and looked linked.
+      <code>build_settings.installation_id</code> was <code>null</code> &mdash; the GitHub App
+      installation had never completed, so Netlify had no repository access.
+    </p>
+
+    <h3>Three routes were 500-ing on a missing environment variable</h3>
+    <p>
+      <code>env.server.ts</code> is a lazy Proxy that throws on access of a missing required var.
+      <code>APP_URL</code> was unset, which broke password reset, employer invites, and the anonymous
+      intern identity-confirm step. Not caught by any test, because tests run with a fake env block.
+    </p>
+
+    <h3>Production went down thirteen days after launch</h3>
+    <p>
+      Both Supabase projects are free tier and auto-pause after roughly seven days of inactivity.
+      Paused presents as the project subdomain dropping out of DNS, which the client library returns
+      as a generic error, which the login action maps to <em>&ldquo;Invalid email or password.&rdquo;</em>
+      Every login &mdash; with correct credentials &mdash; was rejected with a message indicating the
+      opposite of the actual problem.
+    </p>
+  </section>
+
+  <section>
+    <span class="sectnum">07 &mdash; Mechanisms</span>
+    <h2>The eight load-bearing mechanisms</h2>
+    <p>Extracted and generalized. These are what to carry to the next engagement.</p>
+
+    <ol class="mechs">
+      <li>
+        <b>01</b>
+        <h3>Promote an artifact to literal specification</h3>
+        <p>Not &ldquo;inspired by,&rdquo; not &ldquo;approximating.&rdquo; Name the artifact, declare it authoritative, define what matching means concretely, and enumerate the acceptable deviations. Ambiguity about authority is what produces drift.</p>
+      </li>
+      <li>
+        <b>02</b>
+        <h3>Derive the design language from something external and fixed</h3>
+        <p>Colours sampled from a logo cannot be relitigated. Anchoring subjective decisions to measurements removes an entire category of recurring conversation.</p>
+      </li>
+      <li>
+        <b>03</b>
+        <h3>Make the prototype executable, so it specifies behaviour</h3>
+        <p>A running prototype forces identity models, persistence semantics, and edge cases to be settled in the cheapest medium available. The production data model should be the prototype's data model, normalized.</p>
+      </li>
+      <li>
+        <b>04</b>
+        <h3>Separate spec from plan, and commit both before coding</h3>
+        <p>Spec answers what and why for stakeholders; plan answers how for executors. Different audiences, different change rates, different documents.</p>
+      </li>
+      <li>
+        <b>05</b>
+        <h3>Write plans containing complete code with per-task verification</h3>
+        <p>This is what makes tasks executable without context, which is what makes parallelism and cadence possible. Expect the plan to exceed the code in volume. That is correct.</p>
+      </li>
+      <li>
+        <b>06</b>
+        <h3>Decompose into sub-projects with demo-able endings</h3>
+        <p>Fifty tasks is the splitting threshold. Each sub-project should be independently valuable and depend only on its predecessor.</p>
+      </li>
+      <li>
+        <b>07</b>
+        <h3>Gate phases on explicit human sign-off with named evidence</h3>
+        <p>Frequent cheap gates bound drift. Specify what evidence the gate requires, or the gate degrades into a rubber stamp.</p>
+      </li>
+      <li>
+        <b>08</b>
+        <h3>Buy the infrastructure before you need it</h3>
+        <p>Branch protection, CI, hooks, environments, and deploy targets before the first feature. It produces nothing demo-able and it makes everything after it boring.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <span class="sectnum">08 &mdash; What went wrong</span>
+    <h2>The parts that cost time, listed so they cost less next time</h2>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 01 · Ordering</span>
+      <h3>Function-first ordering cost an entire sub-project</h3>
+      <p>
+        Sub-project 7 exists only because sub-projects 1 through 5 treated the prototype as reference
+        instead of specification. Roughly two days of rebuild, plus the audit that preceded it, plus
+        nine PRs &mdash; all recoverable work that produced no new capability.
+      </p>
+      <p>
+        The failure was not carelessness. Every one of those sub-projects shipped working software
+        with green tests. The failure was that <strong>&ldquo;working&rdquo; was the stated bar and
+        &ldquo;matching&rdquo; was assumed to follow from it.</strong> It does not. Fidelity is a separate
+        requirement and needs to be stated as one, in the original spec.
+      </p>
+    </div>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 02 · Test aim</span>
+      <h3>The test suite was large but not aimed at the riskiest seam</h3>
+      <p>
+        204 unit tests, and the launch blocker was a JWT hook returning the wrong claim shape (PR
+        #107). CI could not see it because <strong>no test exercised a PostgREST write path at all.</strong>
+        The coverage gap was closed by PR #108 &mdash; written after the bug, to prove the fix.
+      </p>
+      <p>
+        The lesson is about aim, not volume. The riskiest seam in this architecture was always the
+        boundary where a JWT claim becomes a row-level-security decision. That is where tests were
+        thinnest. Test count is a poor proxy for coverage of the things that can actually take you down.
+      </p>
+    </div>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 03 · False green</span>
+      <h3>Playwright was gated off in CI for the entire build</h3>
+      <p>
+        Every PR displayed <code>Playwright — skipping</code>. The specs existed and passed locally. The
+        first green Playwright run in CI happened in sub-project 6, PR #105 &mdash; after the
+        application was feature-complete.
+      </p>
+      <p>
+        <strong>A skipped job reads as a passing job.</strong> For weeks the pipeline showed green with its
+        most realistic signal disabled. If a suite is not gating, it is documentation.
+      </p>
+    </div>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 04 · Unexercised paths</span>
+      <h3>Deployment was assumed working until it was needed</h3>
+      <p>
+        <code>installation_id: null</code> while the Netlify UI showed a linked repository is a precise
+        example of a broader failure: the deploy path was configured through an API, looked correct in
+        every dashboard, and had never once been exercised end to end. The same applies to
+        <code>APP_URL</code> &mdash; a required variable, absent, breaking three production flows on
+        first contact with a real user.
+      </p>
+    </div>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 05 · Platform</span>
+      <h3>Platform properties were never specced</h3>
+      <p>
+        Nobody wrote down that the database tier auto-pauses. It is not a bug and not an outage in the
+        traditional sense &mdash; it is a documented property of the plan the project was on. It took
+        production down thirteen days after launch, and the symptom actively misdirected diagnosis by
+        reporting an authentication failure.
+      </p>
+      <p>
+        Infrastructure specs cover topology and secrets. They should also cover <strong>the limits and
+        behaviours of the tier you are actually on.</strong>
+      </p>
+    </div>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 06 · The important one</span>
+      <h3>No real user touched the product until seven weeks after launch</h3>
+      <p>
+        The July 2026 testing round produced feedback that no amount of spec rigour would have
+        surfaced. A tester reported entering a competency assessment, being prompted to save, saving,
+        receiving confirmation, submitting &mdash; and finding the record later showing only a date with
+        every response field blank. That is a potential data-loss defect, and it was found by the first
+        person to use the software in anger.
+      </p>
+      <p>
+        The same round surfaced that the difference between <strong>Save</strong> and <strong>Submit</strong>
+        is not clear to users, that it is ambiguous whether marking a barrier means it applies or does
+        not apply, that &ldquo;Not Yet Tracked&rdquo; has no discoverable meaning, and that the available
+        outcome statuses do not cover real situations the program encounters &mdash; an intern losing
+        eligibility temporarily, or transferring between employers.
+      </p>
+      <p>
+        None of these are implementation defects against the spec. <strong>They are defects in the
+        spec</strong>, and the only instrument that detects them is a real user. The process built the
+        right thing correctly and had no mechanism for asking whether it was the right thing.
+      </p>
+    </div>
+
+    <div class="miss">
+      <span class="miss__tag">Miss 07 · Carrying cost</span>
+      <h3>Documentation outgrew maintainability</h3>
+      <p>
+        57,742 lines of markdown against 33,000 lines of code. This was a genuine strength during the
+        build &mdash; every decision traceable, every plan replayable &mdash; and it has a carrying cost.
+        <code>CLAUDE.md</code> has itself become dense enough to need curation, and several plan
+        documents describe CSS classes and component names that never existed, which actively misleads
+        anyone replaying them.
+      </p>
+      <p>
+        Plans are write-once artifacts describing an intended future. Once executed, they are history
+        and should be marked as such. Conflating &ldquo;committed plan&rdquo; with &ldquo;current
+        truth&rdquo; is how a documentation asset turns into a documentation liability.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <span class="sectnum">09 &mdash; Playbook v2</span>
+    <h2>Concrete changes for the next engagement</h2>
+
+    <h3>9.1 &nbsp;Reorder: primitives before function</h3>
+    <p>
+      <strong>The single highest-value change.</strong> Sub-project 7's Phase A and Phase B become
+      sub-project 1's Phase A and Phase B.
+    </p>
+    <ol>
+      <li>Port design tokens from the prototype verbatim.</li>
+      <li>Port global and base CSS verbatim.</li>
+      <li>Wire fonts and print styles.</li>
+      <li>Build every shell and presentation primitive against a dev-only demo route that renders them in isolation.</li>
+      <li>Build the form primitives.</li>
+      <li><strong>Then</strong> build features, composing only primitives that already exist.</li>
+    </ol>
+    <p>
+      The dev-primitives demo route is the trick that makes this work &mdash; it lets the design system
+      be reviewed and signed off in one place, before any feature depends on it. A feature built on
+      approved primitives is correct by construction.
+    </p>
+
+    <h3>9.2 &nbsp;Put the fidelity mandate in the original spec</h3>
+    <p>
+      Copy sub-project 7's opening section into the architectural spec of the next project, before
+      sub-project 1 starts. Include all four parts: the bolded mandate, the concrete definition of
+      matching, the enumerated acceptable deviations, and the requirement that anything else be
+      documented as an explicit deviation in the PR.
+    </p>
+
+    <h3>9.3 &nbsp;Write the seam tests before the features</h3>
+    <p>
+      Identify the two or three places where the architecture could fail catastrophically &mdash; here,
+      the JWT-claim-to-RLS boundary and the anonymous submission path. Write tests that prove those
+      boundaries hold <strong>before</strong> building features on top of them. Not more tests; earlier and
+      better-aimed ones.
+    </p>
+
+    <h3>9.4 &nbsp;Never merge with a skipped job</h3>
+    <p>
+      Either the end-to-end suite gates from the first PR that has something to test, or it is deleted
+      and the pretence dropped. A permanently-skipped job is worse than no job because it renders green
+      meaningless.
+    </p>
+
+    <h3>9.5 &nbsp;Deploy a hello-world on day one</h3>
+    <p>
+      Before sub-project 1, push a trivial page through the complete production path &mdash; commit, CI,
+      build, deploy, live URL, and a request that touches the database and returns. Every integration
+      failure at launch was in a link of that chain that had never been exercised end to end.
+    </p>
+
+    <h3>9.6 &nbsp;Spec the platform, not just the architecture</h3>
+    <p>
+      Add a section to the infrastructure spec covering the properties of the specific tier in use:
+      pause behaviour, rate limits, cold starts, email deliverability limits, connection caps. Note
+      which are acceptable and which need upgrading before real use.
+    </p>
+
+    <h3>9.7 &nbsp;Get a real user in at the first demo-able milestone</h3>
+    <p>
+      Not at launch. At the end of the first sub-project that produces something touchable &mdash; here,
+      that was Admin Core, roughly six weeks before anyone outside the build actually used it.
+    </p>
+    <div class="note">
+      <span class="note__label">The July feedback is the proof</span>
+      <p>
+        Every question in it could have been asked in mid-May against a half-built admin shell, and
+        several would have changed the data model while changing the data model was still cheap.
+        <strong>Budget one user session per sub-project.</strong> It is the cheapest defect-detection
+        available and it finds a class of problem that nothing else does.
+      </p>
+    </div>
+
+    <h3>9.8 &nbsp;Mark plans as history when they close</h3>
+    <p>
+      On sub-project close, stamp the plan with a status header: executed, on what date, superseded by
+      what. Keep one document as the single current-truth artifact, and treat everything under
+      <code>plans/</code> as an archive.
+    </p>
+  </section>
+
+  <section>
+    <span class="sectnum">10 &mdash; Replay checklist</span>
+    <h2>Starting the next project from zero</h2>
+
+    <div class="phase-head">Phase 0 — Prototype</div>
+    <ul class="checklist">
+      <li>Extract the design language from a fixed external artifact; define tokens with roles.</li>
+      <li>Build the prototype as running HTML/CSS/JS, not static mockups.</li>
+      <li class="key">Encode the real data model and business rules in its mock layer, with comments explaining each rule.</li>
+      <li>Iterate with stakeholders until they stop asking for changes.</li>
+      <li>Freeze it. Separate repository, no further edits.</li>
+    </ul>
+
+    <div class="phase-head">Phase 1 — Plan</div>
+    <ul class="checklist">
+      <li>Write the architectural design spec: stack, data model, permissions, topology, non-goals.</li>
+      <li>Write the workflow spec separately: branching, commits, review, CI, deploy, secrets.</li>
+      <li class="key">Include the fidelity mandate in the architectural spec (9.2).</li>
+      <li class="key">Include the platform-properties section (9.6).</li>
+      <li>Decompose into sub-projects of ≤50 tasks, each ending demo-able.</li>
+      <li>Write one plan per sub-project with complete code and per-task verification.</li>
+      <li>Commit everything before writing application code.</li>
+    </ul>
+
+    <div class="phase-head">Phase 2 — Infrastructure</div>
+    <ul class="checklist">
+      <li>Repo, branch protection, Conventional Commits, hooks, CI with all jobs gating.</li>
+      <li>All environments provisioned.</li>
+      <li class="key">Hello-world through the full production deploy path (9.5).</li>
+    </ul>
+
+    <div class="phase-head">Phase 3 — Design system</div>
+    <ul class="checklist">
+      <li>Port tokens, global CSS, fonts, print styles verbatim from the prototype.</li>
+      <li>Build all shell, presentation, and form primitives against a dev-only demo route.</li>
+      <li class="key">Gate on human sign-off before any feature work (9.1).</li>
+    </ul>
+
+    <div class="phase-head">Phase 4 — Features</div>
+    <ul class="checklist">
+      <li class="key">Seam tests before features (9.3).</li>
+      <li>Execute plan tasks, one or few per PR, squash-merged into protected main.</li>
+      <li>Gate every phase on named evidence.</li>
+      <li class="key">One real-user session per sub-project (9.7).</li>
+    </ul>
+
+    <div class="phase-head">Phase 5 — Launch</div>
+    <ul class="checklist">
+      <li>Bootstrap production, verify auth end-to-end with a live sign-in.</li>
+      <li>Confirm every required environment variable is present in every context.</li>
+      <li>Verify the deploy trigger actually fires — not that the dashboard says it will.</li>
+      <li>Stamp closed plans as history (9.8).</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="sectnum">11 &mdash; The honest summary</span>
+    <h2>What made it work, and what it could not see</h2>
+
+    <p>
+      The process produced an excellent result: a live, secure, role-scoped production application,
+      visually indistinguishable from its prototype, built in sixteen working days with a full test
+      pyramid and a complete written record of every decision.
+    </p>
+    <p>
+      Two things made that possible: <strong>a prototype precise enough to be read as a
+      specification</strong>, and <strong>plans detailed enough to be executed without context.</strong>
+      Everything else in this document is scaffolding around those two.
+    </p>
+    <p>
+      The process also had one structural flaw and one blind spot. The flaw was ordering &mdash;
+      function before fidelity &mdash; which cost a sub-project and is fully correctable by 9.1. The
+      blind spot was that no real user touched the product until seven weeks after launch, which meant
+      the process could verify the product was built correctly but had no way to learn whether it was
+      built right.
+    </p>
+    <p>
+      The July feedback is what that blind spot looks like from the outside, and closing it &mdash; 9.7
+      &mdash; is the change most likely to matter on the next engagement.
+    </p>
+  </section>
+
+  <div class="refs">
+    <h4>Source material</h4>
+    <ul>
+      <li><b>docs/methodology.md</b> — the generalized four-stage playbook</li>
+      <li><b>docs/superpowers/specs/2026-05-10-production-rebuild-design.md</b> — architectural spec</li>
+      <li><b>docs/superpowers/specs/2026-05-11-development-workflow-design.md</b> — SDLC spec</li>
+      <li><b>docs/superpowers/specs/2026-05-18-frontend-rebuild-design.md</b> — the fidelity mandate</li>
+      <li><b>docs/superpowers/visual-fidelity-audit-2026-05-14.md</b> — route-by-route delta inventory</li>
+      <li><b>docs/superpowers/visual-fidelity-screenshots/2026-05-19-final/</b> — 75 side-by-side captures</li>
+      <li><b>docs/launch-todo.md</b> — open items after launch</li>
+      <li><b>KP Feedback July 2026/</b> — first real-user testing round</li>
+    </ul>
+  </div>
+
+</div>
+  </body>
+</html>
