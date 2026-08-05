@@ -29,6 +29,22 @@ case study's corrections are folded in, and **§4 — the prototype phase — is
 forensic examination of the IMPACT prototype repository**, because that was the only surviving
 record of how it was actually done.
 
+### This document is maintained continuously, not retrospectively
+
+The process is a deliverable. Learnings get folded in **as they emerge**, in general form —
+not reconstructed at the end of a project, when the reasoning has already been lost. IMPACT's
+bake-off brief is the cautionary example: it happened, it worked, nobody wrote it down, and it
+is gone (§4.3).
+
+Two rules follow, and both are easy to violate while feeling productive:
+
+1. **Generalize, do not narrow.** A rule that is merely true of the current project does not
+   belong here in project-specific form. Ask whether it would hold for the next one.
+2. **Keep optional inputs as permanent slots.** When a project does not need part of the
+   process, mark that part optional — never collapse it into a neighbour or rewrite it as an
+   exception. A playbook trimmed to fit the project in front of you stops being a playbook, and
+   a slot that has been collapsed is invisible to whoever needs it next.
+
 ### Provenance of each claim
 
 | Marker | Source |
@@ -277,8 +293,11 @@ carried exactly five kinds of input. Reproduce all five.
 | 4 | **Brand source artifact** | `References/IMPACT LOGO.png` | 1 image | Colour, by measurement |
 | 5 | **Domain source material** | Sample rubrics `.docx`, placeholder questions `.md` | — | Real content from the client |
 
-Inputs 3 and 4 are **different inputs with different jobs**, and conflating them is a mistake.
-The references supply *how it should feel*. The brand artifact supplies *what colour it is*.
+Inputs 3 and 4 are **two permanent slots with different jobs**, and conflating them is a
+mistake. Design conventions supply *how it should feel*. The palette source supplies *what
+colour it is*. They are independently sourceable and either may be absent — see §4.5. IMPACT
+happened to fill them from unrelated artifacts, which is the normal case rather than the
+exception.
 
 #### 4.2.1 The PRD's shape
 
@@ -462,25 +481,41 @@ That per-token provenance is what makes the palette unarguable. *(CS §7.2)*
 The sequencing is correct and worth preserving deliberately: **choose the direction while
 colour is still approximate, so the choice is about form rather than hue. Then measure.**
 
-#### When no brand artifact exists
+#### The two visual inputs are independent, and either can be absent
 
-IMPACT inherited a logo. A new product often has nothing to measure — no mark, no palette, no
-name treatment. The mechanism still works, with one substitution.
+Inputs 3 and 4 (§4.2) are **two permanent slots in the process, not one input with a fallback.**
+Keep both open on every project even when only one gets filled.
 
-Its value was never that nobody chose the artifact; someone chose IMPACT's logo too, at some
-point. **The value is that once an artifact is named, colour becomes derivable instead of
-debatable.** So name one:
+| Slot | Answers | Can be sourced from |
+|---|---|---|
+| **Design conventions** | *How should it feel?* — type pairing, spacing, section rhythm, component treatment, formal register | Reference images, an existing product, a style guide, a competitor, or a written description |
+| **Palette source** | *What colour is it?* | A logo, a brand artifact, a single reference image, a photograph, a client's existing palette spec |
 
-1. **Designate a single source before sampling** — one specific reference image, not "the
-   references" collectively. Naming a set defeats the purpose, because a set still requires a
-   choice at sampling time.
-2. **Sample per token with a comment naming the source element**, exactly as if it were a logo.
+They are independent along every axis:
+
+- **Different sources are normal.** IMPACT drew conventions from an unrelated agency case study
+  and colour from its own logo. Neither informed the other.
+- **Either can be absent.** No logo yet? The palette slot gets filled from a named image
+  instead. Strong brand but no aesthetic direction? Conventions come from elsewhere, or from
+  the bake-off itself.
+- **One artifact can fill both** — a rich brand guide often does. That is a convenience, not the
+  expected case, and it should be a deliberate choice rather than a collapse.
+- **Neither is required to be pre-existing.** Both can be created for the project.
+
+**What actually matters is not provenance but naming.** The mechanism's value was never that
+nobody chose IMPACT's logo — someone chose it, at some point. Its value is that *once an
+artifact is named, colour becomes derivable instead of debatable.* So whichever slot gets
+filled, and from wherever:
+
+1. **Designate a single specific source before sampling** — one file, not a set. A set still
+   requires a choice at sampling time, which is the thing being eliminated.
+2. **Sample per token, with a comment naming the source element.**
 3. **Do not revisit it.** The discipline lives in the not-revisiting.
 
-And note what moves: a project with an existing logo gets its **wordmark and name treatment as
-an input**. A project without one gets them as a **Phase 0 output** — each design direction
-should render the product name in its own register, because that is part of what the bake-off
-is choosing between.
+**One consequence to plan for.** A project inheriting a logo gets its **wordmark and name
+treatment as an input**. A project without one gets them as a **Phase 0 output** — each design
+direction renders the product name in its own register, and that becomes part of what the
+bake-off chooses between. Budget for it either way.
 
 ### 4.5.1 Constraints fall out of the source artifact
 

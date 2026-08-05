@@ -76,8 +76,8 @@ the backtest harness (5A), assessment versioning (3I), and a scored baseline. Th
 |---|---|---|---|
 | 1 | PRD | The design spec — already written | ✅ |
 | 2 | Area outline + user stories | Descriptions, effort/impact, priority | **Matt** |
-| 3 | Design references | Inspiration images — one coherent system | **Matt** |
-| 4 | Brand artifact | **None exists. See A1.1.** | — |
+| 3 | Design conventions | Inspiration images — one coherent system | **Matt** |
+| 4 | Palette source | Open. May be a mark, a named image, or something else — see A1.1 | **Matt** |
 | 5 | Domain source material | 76 real solicitations, 11 bundles pulled | ✅ `corpus/` |
 
 ### A1.1 Tenderfoot is its own brand, and that breaks a mechanism
@@ -89,22 +89,28 @@ This is architecturally consistent — §2.1's first portability rule says no fa
 in the product — and a KP-branded interface would have been the largest remaining violation of
 it. Branding Tenderfoot as itself makes the portability claim real rather than notional.
 
-**But it removes the artifact the playbook's second mechanism depends on.** Proto2PRD §7.2:
+**Both visual input slots stay open.** Proto2PRD §4.5 keeps design conventions and palette
+source as **two permanent, independent inputs** — either may be absent, either may be
+pre-existing or created for the project, and one artifact filling both is a convenience rather
+than the expected case. Tenderfoot is not an exception to that model; it is one configuration
+of it.
+
+- **Slot 3 — design conventions.** Filled: inspiration images.
+- **Slot 4 — palette source.** **Open.** There is no Tenderfoot mark yet. It may end up a mark
+  created for the project, one named inspiration image, or something else. Keep the slot;
+  decide the filling later.
+
+What matters is not provenance but **naming before sampling**. Proto2PRD §7.2 is about
+relitigation:
 
 > "Deriving the palette from an artifact nobody controls removes colour from the space of
 > things that can be relitigated. There is no 'what if the blue were softer' conversation,
 > because the blue is not a preference — it is a measurement."
 
-IMPACT had a logo that already existed. **Tenderfoot has no logo.** There is nothing to measure.
+Someone chose IMPACT's logo too, at some point. So whatever fills slot 4:
 
-**The adaptation:** the mechanism's value was never that nobody chose the artifact — someone
-chose IMPACT's logo too, at some point. Its value is that *once an artifact is named, colour
-becomes derivable instead of debatable.* So:
-
-1. **Name one inspiration image as the palette source before sampling anything.** Not "the
-   references generally" — one file.
-2. **Sample per token, with a comment naming the source element**, exactly as IMPACT did
-   (Proto2PRD §4.5).
+1. **Designate one specific source before sampling anything** — one file, not a set.
+2. **Sample per token, with a comment naming the source element**, exactly as IMPACT did.
 3. **Do not revisit it.** The discipline is in the not-revisiting, not in the provenance.
 
 **And one thing moves from input to output:** IMPACT got a wordmark free with its logo.
