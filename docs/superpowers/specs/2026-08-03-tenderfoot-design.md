@@ -131,8 +131,13 @@ Sources → Sightings → canonical records → Assessments → the app
 
 Every ingestion adapter takes a `since` parameter.
 
-**Backwards (Phase 0).** `since = 24 months ago`. Ingest the archive, score it against the
-Firm Profile, and produce a market-sizing report:
+> **Naming note.** "Phase 0" in *this* document always means the **backwards run — the
+> backtest**. It is unrelated to "Phase 0" in `docs/Proto2PRD.md`, which means the **prototype**.
+> `docs/Tenderfoot-Plan-of-Action.md` avoids the collision entirely: the prototype is *Stage A*
+> and the backtest lands in *SP6*.
+
+**Backwards (Phase 0 — the backtest).** `since = 24 months ago`. Ingest the archive, score it
+against the Firm Profile, and produce a market-sizing report:
 
 > *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You saw
 > one of them."*
@@ -150,13 +155,18 @@ There is no throwaway "historical import" system. This is why archive depth is a
 source-selection criterion rather than a nice-to-have — a source that cannot be run
 backwards cannot participate in proving the market.
 
-### 3.2 Build sequencing is not specified here
+### 3.2 Build sequencing lives in the plan of action
 
 This document describes the designed system in full. It is deliberately larger than one
-implementation effort, and the order in which pieces get built — what ships in Phase 0
-versus what waits — is a separate conversation. §2.2 and §3.1 constrain that sequencing in
-two places only: the schema carries its entity foreign keys from the first migration, and
-ingestion adapters are backfill-capable from the first adapter. Everything else is open.
+implementation effort, and it deliberately does not say what gets built when.
+
+**That sequencing now exists: `docs/Tenderfoot-Plan-of-Action.md`** — nine development slices
+with a go/no-go gate at SP6, applying the `docs/Proto2PRD.md` playbook to this project.
+
+This document constrains that sequencing in exactly two places, and they are load-bearing:
+the schema carries its entity foreign keys from the first migration (§2.2), and ingestion
+adapters are backfill-capable from the first adapter (§3.1). Everything else the plan is free
+to reorder.
 
 ---
 
@@ -711,7 +721,10 @@ Still open:
 2. **Do any state portals archive closed solicitations?** None found so far. If the answer is
    uniformly no, solicitation-side backtesting is a federal-only capability and every state's
    Phase 0 runs on contract data.
-3. **Technology stack, hosting, and deployment** — deferred to the development plan.
+3. **Technology stack, hosting, and deployment** — now assigned to the **workflow spec**,
+   written in Stage B of `docs/Tenderfoot-Plan-of-Action.md`. Kept separate from this document
+   deliberately: architecture and SDLC change at different rates and are read by different
+   people.
 
 *Closed 2026-08-04:* KP's capacity calendar is no longer needed — the system is
 capacity-agnostic (§1). Whether anyone besides Matt clears the queue no longer gates anything
