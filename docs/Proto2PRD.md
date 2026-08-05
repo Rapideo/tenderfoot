@@ -298,21 +298,36 @@ The design language they carry: a heavy geometric display face paired with a cle
 body; near-monochrome with exactly one saturated accent; generously rounded cards; solid
 circular icon badges; a warm off-white canvas; full-bleed alternating sections.
 
-#### 4.2.4 The references are vocabulary to react to, not a template **(R)**
+#### 4.2.4 Expect the references to lose **(R)**
 
-This is the subtle part, and it is visible only by comparing the references against what
-shipped.
+**Stated intent** (from the author, 2026-08-04): *"My intention was always to get as close to
+the image design reference as possible."*
 
-The svyazi references are **heavily rounded** and **green**. The selected IMPACT direction is
-**sharp** (2px/4px/8px radii) and **navy**. It kept the references' *structural* ideas — one
-disciplined accent, heavy-display-plus-clean-body pairing, dark full-bleed sections, card
-rhythm — and rejected their softness in favour of an institutional read.
+**What shipped diverged from them substantially.** The svyazi references are heavily rounded
+and green. The selected IMPACT direction is sharp — 2px/4px/8px radii — and navy. Variation
+`01-warm-editorial` used 10/18/28px plus pills and was by far the closest to the references;
+it lost.
 
-Meanwhile variation `01-warm-editorial` used 10px/18px/28px radii plus pills — much closer to
-the references. **So the spread between variations was itself a referendum on how literally to
-follow the references**, and the answer came back "not very."
+This is not a criticism of the intent. It is the most useful thing in this section, because it
+identifies a force nobody plans for. **Reference images are the weakest of the three inputs
+competing to define the look**, and they get overridden by two stronger ones:
 
-Supply references so the directions have a vocabulary. Do not supply them as a target.
+1. **The brand artifact wins on colour.** Once the palette is *measured* from a logo (§4.5),
+   it is not a preference and cannot yield. The references' green was never going to survive
+   contact with a navy/cyan/gold logo.
+2. **The content type wins on form.** Dense admin tables and long multi-question forms are
+   served badly by generous radii, large padding, and airy card rhythm. A marketing landing
+   page — which is what the references were — has the opposite requirements. The moment the
+   bake-off rendered a real data table, roundness stopped paying for itself.
+
+What *did* survive is structural rather than superficial: one disciplined accent colour, a
+heavy-display-plus-clean-body type pairing, dark full-bleed sections, and card-based section
+rhythm. Those are the transferable parts of a reference, and they transferred.
+
+**The practical guidance:** supply references and aim to match them. But expect the bake-off to
+reveal where they cannot hold, and treat that as the bake-off doing its job rather than as a
+failure to follow the brief. Finding out on three screens is the cheapest possible place to
+find out.
 
 ### 4.3 The bake-off: N competing directions **(R)**
 
@@ -332,6 +347,12 @@ The three screens each direction had to render: **`index.html` (public landing),
 `dashboard.html` (an admin data table), `self-assessment.html` (a long form).** Landing, list,
 form — the three archetypes that between them exercise nearly every visual decision a business
 application needs to make.
+
+> **Unrecorded:** how the bake-off was briefed — why three directions rather than two or five,
+> and how each was characterised — is not preserved in the repository, and the author does not
+> recall it. The named slugs (`warm-editorial`, `civic-minimal`, `modular-dashboard`) are the
+> only surviving evidence that the directions were framed as distinct *registers* rather than
+> as arbitrary variations. Brief the next one deliberately, and write the brief down.
 
 #### 4.3.1 Hold the brand constant; vary the style **(R)**
 
@@ -599,7 +620,8 @@ very first commit — *"chore: seed repo with planning docs and prototype refere
 
 - [ ] Write the PRD — rules, roles, permissions, entities, journeys, **non-goals**, open questions, assumptions.
 - [ ] Write the per-view outline — `SHELL` / `SCREEN` / `VIEW` with elements in caps. Composition only, no styling.
-- [ ] Gather design-language references — one coherent system sampled at several zoom levels, not a grab-bag.
+- [ ] Gather design-language references — one coherent system sampled at several zoom levels, not a grab-bag. Aim to match them, but expect the brand artifact and the content type to override them (§4.2.4).
+- [ ] **Write down the bake-off brief** — how many directions, and what register each one represents. IMPACT's was lost.
 - [ ] Identify the brand source artifact — logo or equivalent, something nobody controls.
 - [ ] Collect real domain source material from the client.
 - [ ] Pick three representative screens: **a landing, a data table, a long form.**
@@ -1075,6 +1097,8 @@ Primary evidence:
 | Palette measured after selection | Shipped `#153A98` ≠ any variation's `#1B2B8F` |
 | Per-token provenance | Inline comments in shipped `styles.css` `:root` |
 | References are one design system | `ref1`–`ref5.png` — all svyazi communications agency, five views |
+| Intent was to match the references closely | Author, 2026-08-04. The divergence in §4.2.4 was therefore an outcome, not a design philosophy |
+| Bake-off brief not preserved | Author does not recall it; no document in the repo records it |
 | Methodology ran inside Phase 0 | May 6 commit sequence: design spec → implementation plan → implement → update CLAUDE.md |
 | Commit rhythm | `git log --format="%ad" --date=short \| sort \| uniq -c` |
 | Mock-layer construction | `Prototypes/PROTOTYPE/app.js` — 1,634 lines: IIFE + `window.IMPACT` namespace, realistic seed data, defaults+overlay merge, namespaced storage keys, rule-bearing comments |
