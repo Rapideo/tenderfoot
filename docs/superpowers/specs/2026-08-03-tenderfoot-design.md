@@ -694,7 +694,9 @@ Still open:
 
 ## Appendix — relationship to the original concept outline
 
-The original *Tenderfoot — Concept Outline.md* mapped as follows:
+*Tenderfoot — Concept Outline.md* has since been rewritten as the build inventory. Its
+original form is preserved verbatim as *OLD - Tenderfoot Concept Outline.md* (and in git at
+`183df06`), and mapped as follows:
 
 | Original | Where it lives now |
 |---|---|
