@@ -205,7 +205,9 @@ KP-specific facts exist:
 - Hard limits — bonding capacity, insurance ceilings, headcount, revenue, registrations held.
   **Eligibility thresholds only** (§1): these answer *can KP legally bid this*, never *should
   KP take this on*.
-- Past performance library — the projects that can actually be cited
+- Past performance library — the projects that can actually be cited. **Deferred 2026-08-10:
+  the records are not accessible to this project. The field stays in the model and stays empty;
+  nothing may be designed to depend on it.** See §7.3.
 - Negative profile — what will never be bid, and why
 **Not in the Profile:** any representation of KP's workload, staffing level as a capacity
 constraint, pursuit concurrency limit, or engagement calendar. Earlier drafts carried a
@@ -545,10 +547,25 @@ Pursuits across their states. The system of record; the answer to problem #4.
 
 ### 7.3 Opportunity detail
 
-- The **brief** — what it is, why it fits, **which specific past projects to cite**, what is
-  missing and would need a partner, key dates, key risks, the pursuit-cost fact panel, and a
-  recommended posture. The value is not summarizing the RFP; it is connecting the RFP to
-  KP's past performance library, which is the tedious part of every bid/no-bid call.
+- The **brief** — what it is, why it fits, what is missing and would need a partner, key dates,
+  key risks, the pursuit-cost fact panel, and a recommended posture.
+
+  > **Scope change, 2026-08-10.** This bullet previously read *"which specific past projects to
+  > cite"*, and claimed the brief's value *"is not summarizing the RFP; it is connecting the RFP
+  > to KP's past performance library, which is the tedious part of every bid/no-bid call."*
+  >
+  > **The past performance records are not accessible to this project** (Matt, 2026-08-10), so
+  > that capability is deferred and nothing may be built assuming it.
+  >
+  > **What this costs, stated plainly:** the brief was the clearest answer to *why open an app
+  > instead of reading the RFP*. Without the library it is a well-organised summary with
+  > evidence attached — still worth having, no longer decisive. The remaining case for the app
+  > is the triage queue's reason capture (§7.1), which is unaffected and was always the larger
+  > claim.
+  >
+  > The Firm Profile field stays in the model and stays empty (§4.2). If the records become
+  > available the capability returns without a migration, which is the only reason to leave the
+  > field in place rather than delete it.
 - Four scores with citations
 - Extracted fields with confidence
 - Documents inline, with extraction highlights pointing back into the source PDF
@@ -628,8 +645,11 @@ whether KP had room.
 largest engagements, any metric treating bids as equal units is wrong. Report expected value,
 not hit count. This applies to every number in this section.
 
-**Past proposals still do work.** Even without bid outcomes, the proposals KP has already
-written populate the past performance library and the negative profile (§4.2).
+**Past proposals still do work — but not yet.** Even without bid outcomes, the proposals KP has
+already written would populate the past performance library and the negative profile (§4.2).
+**Both are deferred as of 2026-08-10:** the records are not accessible to this project. The
+negative profile — what will never be bid, and why — has a second source that *is* available,
+namely the hand-run's no-bid reasons, and should be built from those instead.
 
 **Known limitation:** true recall remains unmeasurable — what was published but never seen is
 unknown. If that gap needs closing, the method is to pick one jurisdiction and one year,

@@ -29,7 +29,7 @@ Nothing else can be built first. These are the three portability rules made conc
 | ID | Component | What it is | Needs | P0 |
 |---|---|---|---|---|
 | 0A | **Schema** | Eleven objects in four groups (§4). Entity foreign keys present from the first migration — retrofitting them is the expensive mistake (§2.2). | — | ✅ |
-| 0B | **Firm Profile** | The only home for customer-specific facts (§4.2): capabilities, codes, certifications, geography, hard limits, past performance, negative profile. Hard limits are **eligibility thresholds only** — no workload or capacity modeling (§1). | 0A | ✅ |
+| 0B | **Firm Profile** | The only home for customer-specific facts (§4.2): capabilities, codes, certifications, geography, hard limits, ~~past performance~~, negative profile. Hard limits are **eligibility thresholds only** — no workload or capacity modeling (§1). **Past performance deferred 2026-08-10** — records not accessible; field stays in the model, stays empty, nothing depends on it. Negative profile now sourced from hand-run no-bid reasons instead of past proposals. | 0A | ✅ |
 | 0C | **Source Registry** | Sources as rows, not code. Carries tier, **platform** (§5.7), legal posture (§5.5), archive depth, yield baselines. | 0A | ✅ |
 | 0D | **Storage + migrations** | Stack undecided (§10.3). | — | ✅ |
 

@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.1.1, 2026-08-10.**
+**Tenderfoot SVRC — version 0.1.2, 2026-08-10.**
 Work in progress. Not canonical.
 
 > **This is Claude's draft, not Matt's document.** It exists to be overwritten. Three things
@@ -279,39 +279,39 @@ bid/no-bid call, and it is the part a machine can genuinely do.
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 5   | 4   | 4   | 0%    | 60%  |
+| 3   | 3   | 3   | 2   | 0%    | 75%  |
 
-**Overview** — What it is, why it fits, which past projects to cite, what is missing, key dates,
-key risks, and a recommended posture.
+**Overview** — What it is, why it fits, what is missing and would need a partner, key dates, key
+risks, the pursuit-cost fact panel, and a recommended posture.
 
-**Known gaps** — **The past performance library is planned but empty, and its shape is undecided.**
+*Rescored 2026-08-10 when past-performance citation was cut. `Imp` 5 → 3 and `Eff` 4 → 3, both
+because the largest piece left. `Vol` 4 → 2 and `Conc` 60% → 75% because a cut is a decision:
+this node is smaller and considerably more settled than it was.*
 
-An earlier draft of this node claimed nothing planned to build one. That was wrong and is
-corrected here: the library is a field on the Firm Profile (§4.2, `0B`), and §8.2 names a
-source — *"the proposals KP has already written populate the past performance library."* What is
-missing is not the plan. It is that nothing has been collected, and that one line of spec is the
-entire specification.
+**Known gaps** — **Past-performance citation is cut. The brief ships without it.**
 
-**Settled 2026-08-10.** The library is **engagement records, not proposal text.** Those are two
-different stores: the engagement record is what a bid *cites*, the proposal text is what a writer
-*pastes*. Tenderfoot owes the first and not the second — a reusable-narrative store would quietly
-turn this into a proposal-authoring product, which is not what it is.
+*Decided 2026-08-10: the records are not accessible to this project.* Not deferred pending a
+decision, not blocked on analysis — unavailable. So nothing in this document may be designed
+assuming them, and the two open questions this node carried (where the records live, how many
+there are) are withdrawn rather than parked.
 
-This slightly corrects §8.2. Proposals may be a *source* for engagement records, but they are a
-thin one here: KP has fifteen years of delivered work and one competitive bid, so a library built
-from proposals would be nearly empty while one built from delivered engagements is the richest
-asset the firm has.
+**What the brief is now:** what it is, why it fits, what is missing and would need a partner,
+key dates, key risks, the pursuit-cost fact panel, and a recommended posture. All of that is
+buildable from the solicitation itself plus the Firm Profile.
 
-**Open questions** — Two, both blocking, both waiting on people rather than analysis:
+**What it is not:** the thing that told you which past projects to cite. §7.3 called that *the
+tedious part of every bid/no-bid call*, and it was the clearest answer to *why open an app
+instead of reading the RFP*. That answer is gone, and the honest replacement is weaker — a
+well-organised summary with its evidence attached.
 
-1. **Where do engagement records live today** — already written down somewhere citable, scattered
-   across proposals and contracts and SharePoint, or mostly in colleagues' heads? Extraction,
-   consolidation, and interview are three different projects.
-2. **Roughly how many citable engagements are there?** Under ~30 and the brief can rank the whole
-   library against a solicitation with no retrieval layer at all. Over ~100 and this needs real
-   embedding-based retrieval, which is a materially larger build.
+The app's remaining case is the triage queue's reason capture (§7.1), which is untouched and was
+always the larger claim. Worth being clear that this node got quieter and Screen 1 did not.
 
-Matt is gathering both from the people who would know. Design resumes when they land.
+**One thing preserved from the cancelled brainstorm**, in case access ever changes: the library
+would hold **engagement records, not proposal text** — what a bid *cites*, not what a writer
+*pastes*. A reusable-narrative store would turn Tenderfoot into a proposal-authoring product.
+The Firm Profile field stays in the model and stays empty (§4.2), so the capability could return
+without a migration.
 
 **Open questions** — Is the recommended posture useful or presumptuous? A machine recommending
 "pursue as prime" to a firm with one competitive bid in its history may be claiming authority it
@@ -721,6 +721,26 @@ Levels 3 and below take no grid and no labels.
   M/WBE status on every contract.
 - **The largest gap found while writing this is not a UI gap.** The brief (2.1) rests entirely
   on a past-performance library that has been planned in one line and collected not at all.
+
+*Revision note, 0.1.1 → 0.1.2 — a cut, and what it costs. 2026-08-10.*
+
+- **Past-performance citation removed from the brief** (Matt, 2026-08-10). The records are not
+  accessible to this project. Not parked pending analysis — unavailable, so the two open
+  questions in View 2.1 are withdrawn rather than left waiting, and nothing may be designed
+  assuming them.
+- **The cost is recorded rather than absorbed.** §7.3 claimed the brief's value was connecting
+  the RFP to the past performance library, *"the tedious part of every bid/no-bid call"* — the
+  clearest answer to why open an app instead of reading the RFP. That answer is gone. What
+  remains is a well-organised summary with evidence attached: worth having, not decisive. The
+  app's case now rests on the triage queue's reason capture, which is untouched.
+- **View 2.1 rescored, downward and more settled.** `Imp` 5 → 3, `Eff` 4 → 3, `Vol` 4 → 2,
+  `Conc` 60% → 75%. A cut removes work and uncertainty at the same time.
+- **The Firm Profile field stays in the model and stays empty** (§4.2), which is the only reason
+  to leave it rather than delete it: if access changes, the capability returns without a
+  migration.
+- **The negative profile was collateral and has been rerouted.** §8.2 had past proposals feeding
+  both the library and the negative profile. The negative profile has a second source that *is*
+  available — the hand-run's no-bid reasons — and should be built from those.
 
 *Revision note, 0.1.0 → 0.1.1 — one correction, one decision. 2026-08-10.*
 
