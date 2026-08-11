@@ -35,6 +35,7 @@ Two rules follow, and both are easy to violate while feeling productive:
 | *(M)* | `methodology.md` — the generalized playbook |
 | *(CS)* | `case-study-2026-08-02.md` — the IMPACT post-mortem |
 | **(R)** | **Recovered 2026-08-04 from `C:\projects\impact-internship-portal\impact-prototype` git history — not previously documented anywhere** |
+| *(N)* | **New** — a decision or option that postdates IMPACT. Not evidence from the build, and not yet validated by a project. Marked so it is never mistaken for a proven mechanism. |
 
 Where the recovered record *contradicts* the written documents, that is called out explicitly.
 
@@ -302,6 +303,36 @@ What varied was canvas temperature, corner radius, typography, and shadow depth.
 
 This is good experimental design. If the variations differ on everything, the choice becomes "which do you like," which is unresolvable. If they differ on one axis — here, *formal register*: editorial warmth vs civic sharpness vs modular softness — the choice becomes answerable, and the answer means something.
 
+#### 4.3.2 Which tool runs the bake-off — a fork in the playbook *(N)*
+
+*Added 2026-08-10. This is the first decision in this document that IMPACT could not have made, so it is marked (N) and carries no evidence behind it yet.*
+
+IMPACT's prototype was built end-to-end in **Claude Code** — confirmed by `CLAUDE.md` appearing in the very first commit, and recoverable no other way, since the git history carries no co-author trailers. That is the process this playbook reproduces, and it is the only one with a result attached.
+
+**Claude Design did not exist then.** It launched 2026-04-17, roughly nine months after the IMPACT build. It converts prompts, images, documents, and codebases into interactive prototypes; it can read a repository's components to apply an *existing* design system; and it packages a **handoff bundle that passes to Claude Code in a single instruction.** So the two are complementary, with a supported seam between them, rather than alternatives.
+
+**The split follows the phases almost exactly.**
+
+| | Bake-off (§4.3–4.5) | Prototype build-out (§4.1.1, §4.6–4.9) |
+|---|---|---|
+| Output | N directions, N−1 of them archived | One artifact read as a literal specification |
+| Lifespan | Deliberately disposable | Becomes the production schema and the CLAUDE.md |
+| Best tool | **Claude Design** | **Claude Code** |
+
+**Why the build-out cannot leave the repository.** Every mechanism that makes the prototype specification-grade is repo-shaped: the mock layer's rule-bearing comments (§4.1.1) *are* the spec; the production data model **is the prototype's mock dataset normalized**, so the seed data has to be authored as though it were schema; the prototype phase runs real spec/plan pairs at production scale with commit messages written before the work (§4.7.1); and the bake-off itself commits all N directions together and **archives the losers rather than deleting them** (§4.4). A prototype that lives outside version control forfeits all of that and becomes a picture of the product instead of a description of it.
+
+**Why the bake-off is the natural place to fork.** It is generation-heavy, it is throwaway by design, and most of its output is discarded on purpose. Building three complete directions in hand-written CSS is slow work whose entire value is in being *compared* and then mostly thrown away.
+
+**One feature that sounds relevant and is not, on the first pass.** Reading a codebase to apply an existing design system is Claude Design's headline capability, and it is backwards for a Phase 0 bake-off: **the design system does not exist yet — producing it is what the bake-off is for.** Where a project starts without a brand artifact at all, the wordmark is an output too (§4.5). That feature earns its place at §4.7 iteration and in the production build, not before selection.
+
+**Three constraints survive the tool choice, and they are the ones that matter:**
+
+1. **Write the bake-off brief down before generating anything.** This is the one part of IMPACT's Phase 0 that did not survive (§4.3), and a faster generator makes it *easier* to skip, not harder.
+2. **Hold the brand hue constant across directions** (§4.3.1). Vary register, not everything. A tool that happily varies all axes at once will produce an unresolvable "which do you like."
+3. **Measure the palette after selection, from one named source, sampled per token with the source element named in a comment** (§4.5). This is a discipline, not a feature, and no tool enforces it.
+
+**Recorded as a fork, not a recommendation.** Using two tools where IMPACT used one is a **deliberate deviation from the method being reproduced.** It is very likely worth it at the bake-off. But the next project should know it was a choice — so whoever takes this fork owes this document one line about whether the handoff bundle actually saved work, or whether translating a Design artifact into a specification-grade repo cost more than building it there in the first place.
+
 ### 4.4 Selection, promotion, and archiving **(R)**
 
 The winner is promoted to `Prototypes/PROTOTYPE/`. The losers move to `Prototypes/archive/` **and are also zipped to `archive.zip`** — kept, not deleted.
@@ -515,10 +546,11 @@ On IMPACT the prototype lived in its own git repo, nested inside the production 
 - [ ] **Slot 4 — palette source.** A logo, a named image, or something created for the project. May be absent; may share an artifact with slot 3, deliberately. *Optional.* See §4.5.
 - [ ] If no name treatment exists, note that the **wordmark becomes a Phase 0 output**, rendered by each direction.
 - [ ] **Write down the bake-off brief** — how many directions, and what register each one represents. IMPACT's was lost.
+- [ ] **Decide which tool runs the bake-off, and record the choice** (§4.3.2). Claude Design is the faster generator; Claude Code is where the build-out has to happen regardless. Forking costs a handoff — take it deliberately.
 - [ ] Collect real domain source material from the client.
 - [ ] Pick three representative screens: **a landing, a data table, a long form.**
 - [ ] Generate **three named design directions** across those screens. Hold brand hue constant; vary canvas, radii, typography, shadow.
-- [ ] Select one. Promote it. **Archive the losers; do not delete them.**
+- [ ] Select one. Promote it. **Archive the losers; do not delete them.** If the directions were generated outside the repository, commit all of them — including the losers — before promoting one.
 - [ ] **Now** sample the palette from the named slot-4 source, per token, with a comment naming the source element. Not before — choose form while colour is still approximate.
 - [ ] Record any constraints the source artifact imposes.
 - [ ] Write CLAUDE.md — source-of-truth list with precedence, prototype location, token table, product rules, working conventions.

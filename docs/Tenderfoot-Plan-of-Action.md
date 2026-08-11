@@ -121,6 +121,16 @@ Hold brand hue constant across all three directions; vary canvas, radii, typogra
 
 Expect the references to lose ground to the content type (§4.2.4). Tenderfoot is dense tables and long documents, which is the same pull that took IMPACT to 2/4/8px radii.
 
+**Tooling for this stage: Claude Design, then hand off.** Per Proto2PRD §4.3.2, the bake-off is the one part of Phase 0 where forking away from Claude Code is likely worth it — it is generation-heavy, disposable by design, and two of the three directions get archived. Claude Design's handoff bundle passes to Claude Code in one instruction, which is the seam.
+
+Three Tenderfoot-specific notes on taking that fork:
+
+- **Its headline feature does not apply yet.** Claude Design reads a repository to apply an *existing* design system. Tenderfoot has none — producing it is what A3–A5 are *for*, and the wordmark is an output too (§A1.1). That capability becomes useful at A8–A9 and in production, not here.
+- **Commit all three directions to the repo before promoting one**, including the losers. §4.4's archive-don't-delete rule is easy to lose across a tool boundary, and the losers are evidence about why the winner won.
+- **Owe Proto2PRD one line afterwards** — whether the handoff actually saved work, or whether translating a Design artifact into a specification-grade repo cost more than building it in the repo would have. §4.3.2 is marked *(N)*: it is an option with no result attached, and this project would be the first to attach one.
+
+**The build-out (A7) stays in Claude Code regardless**, and not by preference. Tenderfoot's mock data is 76 real solicitations and 39MB of committed documents; §4.1.1 makes the production schema *the prototype's mock dataset normalized*; and SP1's demo criterion is those exact records loading into the real schema. None of that survives leaving the repository.
+
 ### A4–A6. Select, measure, document
 
 - Select one direction. Promote it. **Archive the losers, do not delete them.**
