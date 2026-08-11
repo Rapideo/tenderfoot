@@ -333,6 +333,31 @@ IMPACT's prototype was built end-to-end in **Claude Code** — confirmed by `CLA
 
 **Recorded as a fork, not a recommendation.** Using two tools where IMPACT used one is a **deliberate deviation from the method being reproduced.** It is very likely worth it at the bake-off. But the next project should know it was a choice — so whoever takes this fork owes this document one line about whether the handoff bundle actually saved work, or whether translating a Design artifact into a specification-grade repo cost more than building it there in the first place.
 
+#### 4.3.2.1 First evidence — Tenderfoot, 2026-08-10 *(N)*
+
+Tenderfoot took the fork the same evening §4.3.2 was written. One direction generated in Claude Design from the SVRC outline, exported as a bundled HTML file. **The debt above is now partly paid.**
+
+**What the fork proved, and it is the central claim of this whole playbook.** The outline went in and a working prototype came out, covering nearly the entire SVRC — triage queue with pass/restore, the brief, extracted fields with confidence and source columns, both radars, entity browser, source yield, firm profile, source registry. More tellingly, it carried decisions made *hours* earlier: a scope cut removed from the brief, two column names that existed only because of a source probe that afternoon, and a gap flagged in the outline rendered as a real column. It also produced a wordmark, which the project had defined as a Phase 0 *output*. **A sufficiently precise outline is buildable by a tool that never saw the conversation.**
+
+**What the fork did not produce, measured rather than felt:**
+
+| Proto2PRD requirement | State of the generated artifact |
+|---|---|
+| Token table, per-token, source named (§4.5) | **Zero CSS custom properties.** 342 inline `style=` attributes, 0 `class` attributes |
+| A radius scale | **Eight values** — 3/4/5/6/7/8/9/10px, chosen per component |
+| Mock layer as architecture (§4.1.1) | Data largely inline in markup; no namespace, no rule-bearing comments |
+| N directions, losers archived (§4.3–4.4) | One direction; archive empty |
+
+**The lesson, stated for the next project.** These are not defects in the tool — they are the **difference between a prototype and a specification.** A design tool optimises for the artifact looking right; Proto2PRD's prototype has to be *read* by whoever builds production, and everything in that table is a property of being readable rather than of looking correct. Inline literals render identically to tokens and specify nothing.
+
+So the fork's real shape is narrower than "use Design for the bake-off":
+
+> **Claude Design buys you the direction. It does not buy you the specification.** Budget the extraction — tokens, radius scale, mock layer — as real work on the far side of the handoff, not as cleanup. The generated bundle is an *input* to the prototype, not the prototype.
+
+**One practical trap.** The export is a bundle with its template encoded inside a `<script>` tag. Editing it in place is possible and pointless: a re-export from the design tool discards the edits. Extract once, into repo-native files, and treat the bundle as a frozen source artifact. Keep it — it is the record of what the direction actually looked like before anyone touched it.
+
+**Still unpaid:** whether the extraction cost more than building in the repo from the start. That is answerable only after it is done, and it is the number that decides whether this fork is worth recommending rather than merely recording.
+
 ### 4.4 Selection, promotion, and archiving **(R)**
 
 The winner is promoted to `Prototypes/PROTOTYPE/`. The losers move to `Prototypes/archive/` **and are also zipped to `archive.zip`** — kept, not deleted.
