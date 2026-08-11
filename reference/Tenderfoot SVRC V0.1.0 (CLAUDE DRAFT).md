@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.1.0, 2026-08-10.**
+**Tenderfoot SVRC — version 0.1.1, 2026-08-10.**
 Work in progress. Not canonical.
 
 > **This is Claude's draft, not Matt's document.** It exists to be overwritten. Three things
@@ -284,10 +284,34 @@ bid/no-bid call, and it is the part a machine can genuinely do.
 **Overview** — What it is, why it fits, which past projects to cite, what is missing, key dates,
 key risks, and a recommended posture.
 
-**Known gaps** — **The past performance library does not exist.** The brief's whole value rests
-on it and nothing in the corpus, the spec, or the plan currently produces one. This is the
-largest single gap in this document and it is not a UI gap — it is a missing data source that a
-UI has been designed on top of.
+**Known gaps** — **The past performance library is planned but empty, and its shape is undecided.**
+
+An earlier draft of this node claimed nothing planned to build one. That was wrong and is
+corrected here: the library is a field on the Firm Profile (§4.2, `0B`), and §8.2 names a
+source — *"the proposals KP has already written populate the past performance library."* What is
+missing is not the plan. It is that nothing has been collected, and that one line of spec is the
+entire specification.
+
+**Settled 2026-08-10.** The library is **engagement records, not proposal text.** Those are two
+different stores: the engagement record is what a bid *cites*, the proposal text is what a writer
+*pastes*. Tenderfoot owes the first and not the second — a reusable-narrative store would quietly
+turn this into a proposal-authoring product, which is not what it is.
+
+This slightly corrects §8.2. Proposals may be a *source* for engagement records, but they are a
+thin one here: KP has fifteen years of delivered work and one competitive bid, so a library built
+from proposals would be nearly empty while one built from delivered engagements is the richest
+asset the firm has.
+
+**Open questions** — Two, both blocking, both waiting on people rather than analysis:
+
+1. **Where do engagement records live today** — already written down somewhere citable, scattered
+   across proposals and contracts and SharePoint, or mostly in colleagues' heads? Extraction,
+   consolidation, and interview are three different projects.
+2. **Roughly how many citable engagements are there?** Under ~30 and the brief can rank the whole
+   library against a solicitation with no retrieval layer at all. Over ~100 and this needs real
+   embedding-based retrieval, which is a materially larger build.
+
+Matt is gathering both from the people who would know. Design resumes when they land.
 
 **Open questions** — Is the recommended posture useful or presumptuous? A machine recommending
 "pursue as prime" to a firm with one competitive bid in its history may be claiming authority it
@@ -696,4 +720,17 @@ Levels 3 and below take no grid and no labels.
   (3.2) turns out to be easier than the spec assumed, because Indiana publishes prime and sub
   M/WBE status on every contract.
 - **The largest gap found while writing this is not a UI gap.** The brief (2.1) rests entirely
-  on a past-performance library that does not exist and that nothing currently plans to build.
+  on a past-performance library that has been planned in one line and collected not at all.
+
+*Revision note, 0.1.0 → 0.1.1 — one correction, one decision. 2026-08-10.*
+
+- **Corrected an overstated claim in View 2.1.** The draft said nothing planned a past-performance
+  library. The spec plans it — Firm Profile field, §4.2, component `0B`, with §8.2 naming past
+  proposals as a source. The real gap is that nothing has been collected and that one line is the
+  whole specification. Recorded rather than quietly edited, because the original claim was
+  repeated to Matt in conversation.
+- **Settled: the library is engagement records, not proposal text** (Matt, 2026-08-10). Two
+  separate stores — what a bid cites versus what a writer pastes. Tenderfoot owes only the first.
+- **Two blocking questions left open deliberately**, both waiting on people rather than analysis:
+  where engagement records live today, and roughly how many exist. The second sets whether the
+  brief needs a retrieval layer at all, so guessing it would have designed the wrong system.
