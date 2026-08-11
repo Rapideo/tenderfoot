@@ -28,7 +28,7 @@ Component IDs throughout (`0A`, `2B`, `5C`…) refer to the build inventory. Sec
 | Design references | 🔜 **Matt** — inspiration images |
 | Brand artifact | ❌ Not gathered — *separate input from references, see §4.1* |
 | Tech stack outline | 🔜 **Matt** — closes §10.3, feeds Stage B2 |
-| Prototype | 🔜 **Matt, in progress as of 2026-08-10** |
+| Prototype | ◐ **First direction in the repo, 2026-08-10.** Generated in Claude Design from the SVRC; bundle frozen at `prototype/PROTOTYPE/`, mock layer and tokens extracted to `src/`. **Rendering untouched** — see §A7 |
 | Domain source material | ✅ 76 solicitations banded; all 11 band A bundles pulled (`corpus/`) |
 | Calibration material | ✅ 140 closed federal solicitations, two samplings (`corpus/calibration/`) |
 | Contract history + expiry dates | ✅ 2,160 Indiana contracts expiring within 18 months (`corpus/indiana-contracts/`) |
@@ -144,6 +144,16 @@ Three Tenderfoot-specific notes on taking that fork:
 ### A7. Build out the prototype
 
 Roughly nine screens: triage queue, opportunity brief, adjudication view, entity detail, expiration radar, saved views, source admin, profile editor, reports.
+
+> **State as of 2026-08-10, end of session.** A first direction exists and covers nearly the whole SVRC. Three facts about it, so nobody has to re-derive them tomorrow:
+>
+> 1. **The bundle is frozen and unmodified.** `prototype/PROTOTYPE/Tenderfoot UI Mockups.html` is byte-identical to what came out of Claude Design. Editing it in place is pointless — a re-export discards the edits — so it stays as the record of the direction and extraction goes outward into `src/`.
+> 2. **The specification layer is started, and it is separate from what renders.** `src/app.js` holds the seed data as a §4.1.1 mock layer with the business rules written in as comments; `src/tokens.css` names the palette. **Nothing loads them.** The rendered prototype still carries 342 inline styles, zero custom properties, ten radius values, and no comments. Gaps are closed *for production*, not *for the artifact you look at*.
+> 3. **The rendering layer has not been rebuilt, deliberately.** That is A7 proper, not cleanup, and it is a rebuild with real risk of losing fidelity to the chosen direction. Procedure and rationale: `ClaudeDesign_Proto_Cleanup.md`.
+>
+> **The decision waiting at the top of A7:** does the rendering get rebuilt repo-native, or does iteration stay in Claude Design with a re-extract each round? The second keeps generation fast and makes the mock layer's comments the only durable specification. The first makes the prototype itself the specification, as IMPACT's was. Not settled.
+>
+> **Two decisions handed back and still open:** the radius scale (ten values; collapsing them changes the design), and the reason-chip vocabulary (generator-invented, must come from the hand-run instead). One generated chip — *"Capacity — too large"* — contradicts §1's capacity-agnostic rule and is flagged in `src/app.js` rather than silently fixed.
 
 **The mock layer is the deliverable.** `app.js`, IIFE plus one namespace, seeded with the real solicitations from A1, encoding the eleven-object graph with commented business rules — the Solicitation → Award → Contract chain, sightings versus canonical records, assessment versioning, the hard-gate model.
 
@@ -305,4 +315,6 @@ Steps 2 through 5 are independent of each other, and step 7 is independent of al
 1. ~~**Stack, hosting, deployment.**~~ Matt is supplying a tech stack outline; it becomes the input to the workflow spec (B2).
 2. ~~**Where the hand-run's labels live.**~~ Settled: `corpus/manifest.md`, versioned from the start, with Verdict and Reason columns already in place.
 3. ~~**Prototype repo location.**~~ **Resolved 2026-08-10: a tracked subdirectory, `prototype/`.** IMPACT used a nested independent repo, which worked — 177 iteration commits kept out of the production log, and a freeze enforced by the filesystem rather than by discipline. Tenderfoot takes the simpler route because there is no production repo to nest inside yet. **The cost is real and accepted:** prototype commits interleave with planning and corpus commits, and "frozen" (§4.9) becomes a rule rather than a property. Splitting it out later is the remedy, and it gets more annoying the longer it waits. Layout and rules in `../prototype/README.md`.
-4. **How many design directions in the bake-off, and what register does each represent?** IMPACT ran three — warm-editorial, civic-minimal, modular-dashboard — but the brief itself was lost, which Proto2PRD §4.3 flags as the one part of Phase 0 that did not survive. Decide it deliberately this time and write it down before generating anything.
+4. **How many design directions in the bake-off, and what register does each represent?** IMPACT ran three — warm-editorial, civic-minimal, modular-dashboard — but the brief itself was lost, which Proto2PRD §4.3 flags as the one part of Phase 0 that did not survive. **Overtaken by events 2026-08-10:** one direction was generated and is in the repo; `prototype/archive/` is empty. Either other directions exist and should be committed there before this one is promoted (§4.4), or the bake-off effectively ran with N=1 — which is a legitimate choice but should be *recorded as* a choice, since §4.3.1's argument is that the comparison is what makes the selection mean something.
+5. **Does the rendering get rebuilt repo-native, or does iteration stay in Claude Design with a re-extract each round?** Raised 2026-08-10 by the first extraction. It decides whether the prototype itself is the specification, as IMPACT's was, or whether `src/app.js`'s comments are the only durable specification and the visual artifact stays disposable. See §A7.
+6. **The radius scale**, and **the reason-chip vocabulary.** Both handed back from the extraction rather than decided. Chips should come from the hand-run, not from the generator.
