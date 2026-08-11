@@ -11,13 +11,37 @@ This is not a demo. Per Proto2PRD, the prototype is **a specification written in
 ```
 prototype/
   PROTOTYPE/
-    Tenderfoot UI Mockups.html   the Claude Design export — FROZEN SOURCE, do not edit
-    src/app.js                   mock layer extracted from it, with the rules written in
-    src/tokens.css               palette extracted to named tokens
+    Tenderfoot UI Mockups V1,1.html  CURRENT — Claude Design export, frozen source
+    Tenderfoot UI Mockups.html       V1 — superseded, kept for the diff
+    src/app.js                       mock layer — EXTRACTED FROM V1, now stale
+    src/tokens.css                   palette — EXTRACTED FROM V1, now superseded
   archive/       the losing bake-off directions, kept unmodified
   CLAUDE.md      the prototype's own source-of-truth document (§4.6) — to be written
   README.md      this file
 ```
+
+> ### `src/` is stale as of V1.1 — read this before using it
+>
+> **V1.1 landed hours after the V1 extraction, and moved underneath it.** This is the re-extraction cost that `../docs/Tenderfoot-Plan-of-Action.md` §9 question 5 raised, arriving immediately and answering itself: **every Design iteration invalidates the extraction.**
+>
+> | | V1 | V1.1 |
+> |---|---|---|
+> | Template | 114 KB | 160 KB |
+> | DSL script | 44.8 KB | 70.0 KB |
+> | CSS custom properties | **0** | **67**, with 774 `var()` usages |
+> | Raw inline hex | ~700 | 136 |
+> | Distinct radii | 10 | **12** |
+> | DSL comments | 0 | **0** |
+>
+> **The generator closed the token gap by itself.** V1.1 defines 67 tokens and uses them 774 times. `src/tokens.css` — extraction-by-hand from V1 — is therefore **superseded as a token layer.** Its only remaining value is as a *naming* proposal: the generated names are terse and positional (`--acc`, `--brd`, `--text3b`, `--brdctl4`, `--accbg2/3/4`), which tells you a value was added when one was needed rather than designed as a scale. Mine name by role. Neither is authoritative until someone decides.
+>
+> **The radius problem got worse, not better** — twelve values now, including a new 2 and 12. Still no scale.
+>
+> **The gap that did not close is the one that matters.** V1.1's DSL is 25 KB larger, gained an `ENTITIES` structure, and still carries **zero comments**. That is exactly the finding in `../docs/Proto2PRD.md` §4.3.2.1: the generator produces data, not rules. It will keep producing better data and never produce a rule, because the rules are things only a person in the room knows.
+>
+> So `src/app.js` needs re-extracting against V1.1 — the data moved — but **the comments in it are still the only copy of the reasoning** and must be carried forward, not regenerated. That is the shape of every future round.
+>
+> **Also unchanged in V1.1:** the `fonts.googleapis.com` preconnect, and the `Capacity` reason chip that contradicts §1's capacity-agnostic rule.
 
 `PROTOTYPE/src/` is the one that moves. The bundle and `archive/` never do.
 

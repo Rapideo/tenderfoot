@@ -119,3 +119,23 @@ Output: `src/app.js` (482 lines, 5 opportunity records with cited scores, gate r
 **The honest verdict on the fork.** Generation was fast and the coverage was startling — a working prototype off an outline, carrying decisions made hours earlier. Cleanup was cheap for tokens and data, and the expensive part was writing down rules that were never in the artifact to begin with. **Those rules would have had to be written either way** — building in the repo from the start does not avoid them, it just writes them earlier and interleaved with the design.
 
 So on this evidence the fork holds. Worth re-measuring on a project where the bake-off runs three directions rather than one, since that is where generation should pay most and where the archiving discipline is most at risk.
+
+---
+
+## Re-extraction: the cost this procedure actually carries
+
+**Measured the same evening.** V1.1 of the Tenderfoot prototype arrived hours after V1 was extracted, and moved underneath it. That is not a mishap — **it is the steady state.** Any iteration in the design tool invalidates the extraction, so plan for the procedure to run every round rather than once.
+
+What changed between two versions a few hours apart: template 114 KB → 160 KB, DSL 44.8 KB → 70 KB, a new top-level data structure, **and 67 CSS custom properties where there had been none.**
+
+Three lessons, and the third is the important one.
+
+**1. The generator will close the mechanical gaps by itself, given another pass.** The token layer that step 3 of this procedure creates by hand appeared in V1.1 unprompted — 67 tokens, 774 `var()` usages. So hand-tokenising an early version can be wasted work. **If more iterations are expected, defer step 3** and keep only the naming proposal, since generated token names tend to be positional (`--acc`, `--brdctl4`, `--accbg2/3/4`) where a human names by role.
+
+**2. It will not fix what it cannot know.** The radius count went *up*, 10 values to 12. Nothing that requires a decision gets decided by iterating.
+
+**3. Comments never regenerate, and they are the only thing that must survive.** V1.1's DSL was 25 KB larger and still carried **zero comments**. A generator produces better data every round and never produces a rule, because rules are facts about why a field exists — a real bundle shipped two deadlines, a spec section forbids a category, a chip contradicts a stated non-goal. **So re-extraction is not re-running the script. It is diffing the new data against the old, then carrying the previous round's comments forward onto shapes that may have moved.**
+
+That reframes the procedure. Steps 3 and 4 are provisional and may be worth skipping while iteration continues. **Step 2 is the durable one**, and its comment block is the only artifact in the whole cleanup that accumulates value rather than being replaced.
+
+**Practical consequence for step 0:** keep every version, not just the current one. The diff between them is what tells you which comments still apply.
