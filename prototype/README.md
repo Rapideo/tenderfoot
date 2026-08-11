@@ -10,13 +10,22 @@ This is not a demo. Per Proto2PRD, the prototype is **a specification written in
 
 ```
 prototype/
-  PROTOTYPE/     the promoted direction — the live prototype, and the thing that gets built from
+  PROTOTYPE/
+    Tenderfoot UI Mockups.html   the Claude Design export — FROZEN SOURCE, do not edit
+    src/app.js                   mock layer extracted from it, with the rules written in
+    src/tokens.css               palette extracted to named tokens
   archive/       the losing bake-off directions, kept unmodified
   CLAUDE.md      the prototype's own source-of-truth document (§4.6) — to be written
   README.md      this file
 ```
 
-`PROTOTYPE/` is the one that moves. `archive/` never does.
+`PROTOTYPE/src/` is the one that moves. The bundle and `archive/` never do.
+
+**Why the bundle is frozen.** Its template is a JSON string inside a `<script>` tag; editing it in place is possible and pointless, because a re-export from Claude Design discards the edits. It stays as the record of what the direction looked like before anyone cleaned it up. Extraction goes *out* of it, into `src/`.
+
+The extraction procedure is written down: [`../docs/ClaudeDesign_Proto_Cleanup.md`](../docs/ClaudeDesign_Proto_Cleanup.md).
+
+**Two things `src/` hands back rather than decides.** The radius scale — the direction used ten values and collapsing them changes how it looks, which makes it a design call. And the reason-chip vocabulary, which the generator invented and which must be replaced by categories that emerge from the hand-run, in the scorer's own words.
 
 ## Three rules, all from the recovered IMPACT record
 

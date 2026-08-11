@@ -344,9 +344,15 @@ Tenderfoot took the fork the same evening §4.3.2 was written. One direction gen
 | Proto2PRD requirement | State of the generated artifact |
 |---|---|
 | Token table, per-token, source named (§4.5) | **Zero CSS custom properties.** 342 inline `style=` attributes, 0 `class` attributes |
-| A radius scale | **Eight values** — 3/4/5/6/7/8/9/10px, chosen per component |
-| Mock layer as architecture (§4.1.1) | Data largely inline in markup; no namespace, no rule-bearing comments |
+| A radius scale | **Ten values** — 1/3/4/5/6/7/8/9/10/20px, chosen per component |
+| Mock layer as architecture (§4.1.1) | **Data present and well-shaped; rules absent.** Structured seed data with cited scores and gate reasons — but **zero comments**, and comments are what §4.1.1 asks for |
 | N directions, losers archived (§4.3–4.4) | One direction; archive empty |
+
+> **Correction, same evening.** The mock-layer row first read *"data largely inline in markup; no namespace, no rule-bearing comments."* The first half was wrong, and wrong in an instructive way: it was inferred from counting `style=` and `class=` attributes in the rendered markup, without opening the generator's own DSL script — which is exactly where the data lived. **A 692-line seed dataset was there all along**, with the four scores carrying citations and document pointers, gate reasons on every filtered item, and a modelled deadline conflict lifted from the project's real corpus findings.
+>
+> The lesson survives the correction and sharpens: **what the generator produced was data without rules.** A design tool can be told the shape of a record and will produce excellent records. It cannot know that a `conflict` field exists because a real bundle shipped two deadlines and the wrong one would have killed the best opportunity three weeks early. That sentence has to be written by someone who was there, and it is the sentence production gets built from.
+>
+> Method note for whoever measures the next one: **counting markup is not reading the artifact.** Decode the bundle and read its script before judging what it does and does not contain.
 
 **The lesson, stated for the next project.** These are not defects in the tool — they are the **difference between a prototype and a specification.** A design tool optimises for the artifact looking right; Proto2PRD's prototype has to be *read* by whoever builds production, and everything in that table is a property of being readable rather than of looking correct. Inline literals render identically to tokens and specify nothing.
 
@@ -355,6 +361,8 @@ So the fork's real shape is narrower than "use Design for the bake-off":
 > **Claude Design buys you the direction. It does not buy you the specification.** Budget the extraction — tokens, radius scale, mock layer — as real work on the far side of the handoff, not as cleanup. The generated bundle is an *input* to the prototype, not the prototype.
 
 **One practical trap.** The export is a bundle with its template encoded inside a `<script>` tag. Editing it in place is possible and pointless: a re-export from the design tool discards the edits. Extract once, into repo-native files, and treat the bundle as a frozen source artifact. Keep it — it is the record of what the direction actually looked like before anyone touched it.
+
+**The extraction is now a written procedure: [`ClaudeDesign_Proto_Cleanup.md`](ClaudeDesign_Proto_Cleanup.md).** Bundle anatomy, the decode, lifting the seed data into a §4.1.1 mock layer, naming the palette, what to hand back rather than decide, and what the cleanup deliberately does not do. Run it once per direction, after selection, before build-out.
 
 **Still unpaid:** whether the extraction cost more than building in the repo from the start. That is answerable only after it is done, and it is the number that decides whether this fork is worth recommending rather than merely recording.
 
