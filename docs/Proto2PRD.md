@@ -1,49 +1,32 @@
 # Proto2PRD — The Complete Playbook
 
-> From a set of reference images and a screen outline, to a prototype precise enough to be
-> read as a literal specification, to production software that matches it.
+> From a set of reference images and a screen outline, to a prototype precise enough to be read as a literal specification, to production software that matches it.
 
 **Written:** 2026-08-04 · Internal Rapideo playbook
-**Supersedes:** nothing — it *merges* `methodology.md` and `case-study-2026-08-02.md` and adds
-the prototype phase, which neither document describes.
+**Supersedes:** nothing — it *merges* `methodology.md` and `case-study-2026-08-02.md` and adds the prototype phase, which neither document describes.
 
 ---
 
 ## 0. What this document is, and why it exists
 
-`methodology.md` describes four stages: Brainstorm → Design Spec → Implementation Plan →
-Execution. It is accurate and it works.
+`methodology.md` describes four stages: Brainstorm → Design Spec → Implementation Plan → Execution. It is accurate and it works.
 
 It also has a hole. The case study's own closing summary says:
 
-> "Two things made that possible: **a prototype precise enough to be read as a
-> specification**, and plans detailed enough to be executed without context. Everything else
-> in this document is scaffolding around those two."
+> "Two things made that possible: **a prototype precise enough to be read as a specification**, and plans detailed enough to be executed without context. Everything else in this document is scaffolding around those two."
 
-One of those two mechanisms has no written procedure anywhere. The prototype appears in the
-case study's replay checklist as "Phase 0" and is never explained. The methodology's four
-stages do not include it at all.
+One of those two mechanisms has no written procedure anywhere. The prototype appears in the case study's replay checklist as "Phase 0" and is never explained. The methodology's four stages do not include it at all.
 
-This document closes that gap. Everything in `methodology.md` is carried forward here, the
-case study's corrections are folded in, and **§4 — the prototype phase — is reconstructed from
-forensic examination of the IMPACT prototype repository**, because that was the only surviving
-record of how it was actually done.
+This document closes that gap. Everything in `methodology.md` is carried forward here, the case study's corrections are folded in, and **§4 — the prototype phase — is reconstructed from forensic examination of the IMPACT prototype repository**, because that was the only surviving record of how it was actually done.
 
 ### This document is maintained continuously, not retrospectively
 
-The process is a deliverable. Learnings get folded in **as they emerge**, in general form —
-not reconstructed at the end of a project, when the reasoning has already been lost. IMPACT's
-bake-off brief is the cautionary example: it happened, it worked, nobody wrote it down, and it
-is gone (§4.3).
+The process is a deliverable. Learnings get folded in **as they emerge**, in general form — not reconstructed at the end of a project, when the reasoning has already been lost. IMPACT's bake-off brief is the cautionary example: it happened, it worked, nobody wrote it down, and it is gone (§4.3).
 
 Two rules follow, and both are easy to violate while feeling productive:
 
-1. **Generalize, do not narrow.** A rule that is merely true of the current project does not
-   belong here in project-specific form. Ask whether it would hold for the next one.
-2. **Keep optional inputs as permanent slots.** When a project does not need part of the
-   process, mark that part optional — never collapse it into a neighbour or rewrite it as an
-   exception. A playbook trimmed to fit the project in front of you stops being a playbook, and
-   a slot that has been collapsed is invisible to whoever needs it next.
+1. **Generalize, do not narrow.** A rule that is merely true of the current project does not belong here in project-specific form. Ask whether it would hold for the next one.
+2. **Keep optional inputs as permanent slots.** When a project does not need part of the process, mark that part optional — never collapse it into a neighbour or rewrite it as an exception. A playbook trimmed to fit the project in front of you stops being a playbook, and a slot that has been collapsed is invisible to whoever needs it next.
 
 ### Provenance of each claim
 
@@ -61,19 +44,11 @@ Where the recovered record *contradicts* the written documents, that is called o
 
 Everything else is scaffolding. *(CS §11)*
 
-**1. Promote an artifact to literal specification.** Not "inspired by." Not "approximating."
-Name the artifact, declare it authoritative, define concretely what *matching* means, and
-enumerate the acceptable deviations. Ambiguity about authority is what produces drift.
+**1. Promote an artifact to literal specification.** Not "inspired by." Not "approximating." Name the artifact, declare it authoritative, define concretely what *matching* means, and enumerate the acceptable deviations. Ambiguity about authority is what produces drift.
 
-**2. Write plans containing complete, paste-able code with per-task verification.** This is
-what makes a task executable by a fresh agent with no accumulated context, which is what
-enables both parallelism and cadence.
+**2. Write plans containing complete, paste-able code with per-task verification.** This is what makes a task executable by a fresh agent with no accumulated context, which is what enables both parallelism and cadence.
 
-The IMPACT numbers behind this: plans were **1.65× larger than the code they produced** —
-54,558 lines of plan yielding ~33,000 lines of application and database code. That sounds like
-waste and is the opposite. **The plan is the code, written once in a form that is reviewable
-before it is executable.** You pay the cost either way; writing it as prose first means the
-expensive review happens where changing your mind is cheap.
+The IMPACT numbers behind this: plans were **1.65× larger than the code they produced** — 54,558 lines of plan yielding ~33,000 lines of application and database code. That sounds like waste and is the opposite. **The plan is the code, written once in a form that is reviewable before it is executable.** You pay the cost either way; writing it as prose first means the expensive review happens where changing your mind is cheap.
 
 ---
 
@@ -94,62 +69,31 @@ expensive review happens where changing your mind is cheap.
 - The work is purely operational.
 - A spec and plan already exist and the work is straightforward execution.
 
-The dividing line: if you can hold the entire change in your head at once and the cost of
-getting it wrong is "redo a few hours," skip it. If you cannot, apply it.
+The dividing line: if you can hold the entire change in your head at once and the cost of getting it wrong is "redo a few hours," skip it. If you cannot, apply it.
 
 ### 2.1 Boundary conditions — where this playbook's assumptions hold
 
-This playbook is derived from a single project. IMPACT was a role-scoped assessment portal:
-forms, admin screens, a question engine, and a permission model. Four of its properties are
-baked into the procedure without ever being stated. Check them before assuming the whole thing
-transfers.
+This playbook is derived from a single project. IMPACT was a role-scoped assessment portal: forms, admin screens, a question engine, and a permission model. Four of its properties are baked into the procedure without ever being stated. Check them before assuming the whole thing transfers.
 
-**1. It assumes the product is UI-shaped.** Phase 0 is screens, design directions, tokens, and
-primitives, because for IMPACT the screens largely *were* the product — a running prototype was
-a near-complete specification.
+**1. It assumes the product is UI-shaped.** Phase 0 is screens, design directions, tokens, and primitives, because for IMPACT the screens largely *were* the product — a running prototype was a near-complete specification.
 
-When the value lives in an engine — a pipeline, a matcher, a model, a solver — the prototype
-still earns its place: it settles the data model (§4.1.1), the interface, and the vocabulary.
-But **it does not touch the actual risk.** A prototype can render a beautifully-scored result
-and say nothing about whether the score is right. If that describes your project, plan a
-*second* instrument for the engine and do not let a polished prototype create false confidence.
+When the value lives in an engine — a pipeline, a matcher, a model, a solver — the prototype still earns its place: it settles the data model (§4.1.1), the interface, and the vocabulary. But **it does not touch the actual risk.** A prototype can render a beautifully-scored result and say nothing about whether the score is right. If that describes your project, plan a *second* instrument for the engine and do not let a polished prototype create false confidence.
 
-**2. It assumes correctness is binary.** Every verification in this document is a yes/no: a
-test passes, a curl returns `abc`, a console prints `5`. That works when a feature either
-functions or does not.
+**2. It assumes correctness is binary.** Every verification in this document is a yes/no: a test passes, a curl returns `abc`, a console prints `5`. That works when a feature either functions or does not.
 
-Some components are never "correct" — only better or worse than the last version. Ranking,
-matching, extraction, classification, forecasting. For those, the per-task verification format
-cannot express the gate. You need three things the playbook does not describe: **a scored
-baseline set, a version stamp on the component that produced each score, and a regression gate**
-(*"quality did not drop against version N-1"*). Build all three as **test infrastructure early**,
-not as a deliverable late — otherwise there is no way to tell an improvement from a regression,
-and tuning becomes guesswork.
+Some components are never "correct" — only better or worse than the last version. Ranking, matching, extraction, classification, forecasting. For those, the per-task verification format cannot express the gate. You need three things the playbook does not describe: **a scored baseline set, a version stamp on the component that produced each score, and a regression gate** (*"quality did not drop against version N-1"*). Build all three as **test infrastructure early**, not as a deliverable late — otherwise there is no way to tell an improvement from a regression, and tuning becomes guesswork.
 
-**3. It assumes the project will be finished.** IMPACT's sub-projects march to launch; the only
-question was how long. When feasibility is genuinely uncertain — when the honest answer might
-be "this does not work well enough to be worth building" — **insert an explicit go/no-go gate**
-at the earliest point that produces real evidence, and be willing to stop there. Sequence the
-work so that gate arrives early and cheap. A playbook that only describes finishing will
-happily march you past the moment you should have stopped.
+**3. It assumes the project will be finished.** IMPACT's sub-projects march to launch; the only question was how long. When feasibility is genuinely uncertain — when the honest answer might be "this does not work well enough to be worth building" — **insert an explicit go/no-go gate** at the earliest point that produces real evidence, and be willing to stop there. Sequence the work so that gate arrives early and cheap. A playbook that only describes finishing will happily march you past the moment you should have stopped.
 
-**4. It assumes you own your dependencies.** IMPACT's stack was chosen, provisioned, and
-controlled. Its one platform surprise (§5.2, free-tier auto-pause) was still a documented
-property of a vendor it had selected.
+**4. It assumes you own your dependencies.** IMPACT's stack was chosen, provisioned, and controlled. Its one platform surprise (§5.2, free-tier auto-pause) was still a documented property of a vendor it had selected.
 
-When a substantial share of your inputs belongs to other people — third-party APIs, scraped
-sites, partner feeds, public data portals — **source rot becomes a first-class concern with no
-counterpart in this document.** Those inputs change without notice, rate-limit without warning,
-and fail *silently* by returning zero rows rather than an error. That needs volume baselines,
-staleness alarms, and graceful degradation designed in from the first adapter, plus a legal
-posture recorded per source.
+When a substantial share of your inputs belongs to other people — third-party APIs, scraped sites, partner feeds, public data portals — **source rot becomes a first-class concern with no counterpart in this document.** Those inputs change without notice, rate-limit without warning, and fail *silently* by returning zero rows rather than an error. That needs volume baselines, staleness alarms, and graceful degradation designed in from the first adapter, plus a legal posture recorded per source.
 
 ---
 
 ## 3. The pipeline at a glance
 
-Six phases. Each produces a written, version-controlled artifact. The hand-off between phases
-is explicit.
+Six phases. Each produces a written, version-controlled artifact. The hand-off between phases is explicit.
 
 | Phase | Produces | Gate before proceeding |
 |---|---|---|
@@ -160,39 +104,29 @@ is explicit.
 | **4 — Features** | Sub-projects, small PRs | Named-evidence gate per phase |
 | **5 — Launch** | Production | Auth verified live; every env var present |
 
-The single most important ordering rule, and the one IMPACT got wrong: **Phase 3 comes before
-Phase 4.** *(CS §9.1)* Details in §7.
+The single most important ordering rule, and the one IMPACT got wrong: **Phase 3 comes before Phase 4.** *(CS §9.1)* Details in §7.
 
 ---
 
 ## 4. Phase 0 — The Prototype **(R)**
 
-**This entire section is newly recovered.** It is the part of the process that made IMPACT
-work and the part that was never written down.
+**This entire section is newly recovered.** It is the part of the process that made IMPACT work and the part that was never written down.
 
 ### 4.1 What the prototype actually is
 
-Not a mockup. Not a clickable wireframe. **A running application with a mock data layer, whose
-mock layer encodes the real business rules.**
+Not a mockup. Not a clickable wireframe. **A running application with a mock data layer, whose mock layer encodes the real business rules.**
 
-The IMPACT prototype at freeze: **36 static HTML pages, a 3,427-line stylesheet, a 1,634-line
-shared JavaScript module. No build tooling, no framework, no test runner.** *(CS §2.1)*
+The IMPACT prototype at freeze: **36 static HTML pages, a 3,427-line stylesheet, a 1,634-line shared JavaScript module. No build tooling, no framework, no test runner.** *(CS §2.1)*
 
-Its job is to be *promoted to specification* later. That only works if it specifies behaviour,
-not just appearance — which is why the mock layer matters more than the pixels.
+Its job is to be *promoted to specification* later. That only works if it specifies behaviour, not just appearance — which is why the mock layer matters more than the pixels.
 
-> **The 15-table production data model is essentially the prototype's mock dataset,
-> normalized.** *(CS §2.3)*
+> **The 15-table production data model is essentially the prototype's mock dataset, normalized.** *(CS §2.3)*
 
-The prototype settled, in `sessionStorage`, where changing your mind costs nothing:
-the minimum-PII policy, the composite-key identity model, three-tier competency stitching,
-soft-delete tombstone semantics, and role scoping. Every one of those is a data-modelling
-decision that most teams discover in production.
+The prototype settled, in `sessionStorage`, where changing your mind costs nothing: the minimum-PII policy, the composite-key identity model, three-tier competency stitching, soft-delete tombstone semantics, and role scoping. Every one of those is a data-modelling decision that most teams discover in production.
 
 ### 4.1.1 How the mock layer is actually built **(R)**
 
-`app.js` is 1,634 lines. Its construction is worth copying precisely, because this is the
-artifact that becomes the production data model.
+`app.js` is 1,634 lines. Its construction is worth copying precisely, because this is the artifact that becomes the production data model.
 
 **One IIFE, one namespace, no build step.**
 
@@ -205,12 +139,9 @@ artifact that becomes the production data model.
 })(window);
 ```
 
-Every page loads the same `app.js` via a plain `<script>` tag and reaches everything through
-`window.IMPACT`. No modules, no bundler, no imports to maintain.
+Every page loads the same `app.js` via a plain `<script>` tag and reaches everything through `window.IMPACT`. No modules, no bundler, no imports to maintain.
 
-**The data is realistic, not lorem ipsum.** The seed employers are Eskenazi Health, Indy Tech
-Trades, Habitat Indianapolis, Elevate Ventures — real Indianapolis organisations with plausible
-contacts, phone numbers, and domain-specific notes:
+**The data is realistic, not lorem ipsum.** The seed employers are Eskenazi Health, Indy Tech Trades, Habitat Indianapolis, Elevate Ventures — real Indianapolis organisations with plausible contacts, phone numbers, and domain-specific notes:
 
 ```js
 {
@@ -223,10 +154,7 @@ contacts, phone numbers, and domain-specific notes:
 }
 ```
 
-This is not decoration. Realistic records of realistic *length* surface truncation, wrapping,
-and column-width problems that placeholder text hides entirely — and they make stakeholder
-review meaningful, because the reviewer is looking at their own world rather than at
-`Lorem ipsum dolor`.
+This is not decoration. Realistic records of realistic *length* surface truncation, wrapping, and column-width problems that placeholder text hides entirely — and they make stakeholder review meaningful, because the reviewer is looking at their own world rather than at `Lorem ipsum dolor`.
 
 **Defaults plus an overlay, computed at init, written through named functions.**
 
@@ -235,19 +163,11 @@ review meaningful, because the reviewer is looking at their own world rather tha
 // Reads sessionStorage at module init; writes happen via saveProgramInfo().
 ```
 
-Each mutable collection is wrapped in its own immediately-invoked function that merges a
-hard-coded default set with whatever the user has changed. Reads happen once; every write goes
-through a named `save*` function. Storage keys are namespaced — `impact.settings.programInfo`,
-`impact.settings.questionSets` — and per-record keys are generated by a helper
-(`assessmentStorageKey(type, internId)`).
+Each mutable collection is wrapped in its own immediately-invoked function that merges a hard-coded default set with whatever the user has changed. Reads happen once; every write goes through a named `save*` function. Storage keys are namespaced — `impact.settings.programInfo`, `impact.settings.questionSets` — and per-record keys are generated by a helper (`assessmentStorageKey(type, internId)`).
 
-**Two storage tiers, chosen deliberately.** `sessionStorage` for editable configuration and
-in-progress work; `localStorage` for intern identity, so a confirmed intern is not asked to
-re-identify. That distinction is a product decision made in the prototype and carried into
-production.
+**Two storage tiers, chosen deliberately.** `sessionStorage` for editable configuration and in-progress work; `localStorage` for intern identity, so a confirmed intern is not asked to re-identify. That distinction is a product decision made in the prototype and carried into production.
 
-**Comments state the rule and its reason, not the mechanics.** These are the actual comments,
-and each one is a data-model decision:
+**Comments state the rule and its reason, not the mechanics.** These are the actual comments, and each one is a data-model decision:
 
 ```js
 // Roles are scoped to their parent employer (mirrors the Cohort → Employer relationship).
@@ -265,25 +185,17 @@ and each one is a data-model decision:
 // do not resurrect from defaults".
 ```
 
-`lookupInternByIdentity` became a production function of essentially the same name and shape.
-The tombstone rule is a genuinely subtle persistence decision, settled here for the price of a
-comment.
+`lookupInternByIdentity` became a production function of essentially the same name and shape. The tombstone rule is a genuinely subtle persistence decision, settled here for the price of a comment.
 
-**The abstraction that mattered most was proven here.** All five question-bearing forms shared
-one data-driven pipeline: `_render*` helpers each take a question record plus a container, and
-emit a wrapper carrying `data-qid="<question.id>"` so a single `collectAnswers` can harvest the
-whole form generically. Production inherited that wholesale as the question-set engine.
+**The abstraction that mattered most was proven here.** All five question-bearing forms shared one data-driven pipeline: `_render*` helpers each take a question record plus a container, and emit a wrapper carrying `data-qid="<question.id>"` so a single `collectAnswers` can harvest the whole form generically. Production inherited that wholesale as the question-set engine.
 
-> That was not convergent evolution — it was the prototype having already proven the
-> abstraction was correct. *(CS §2.4)*
+> That was not convergent evolution — it was the prototype having already proven the abstraction was correct. *(CS §2.4)*
 
-**The rule to take away:** if a decision would be expensive to reverse after a migration
-exists, make it here, and leave a comment saying why.
+**The rule to take away:** if a decision would be expensive to reverse after a migration exists, make it here, and leave a comment saying why.
 
 ### 4.2 The five inputs **(R)**
 
-The IMPACT prototype's first commit (`e70fcbf`, 2026-04-16, 32 files, 8,474 insertions)
-carried exactly five kinds of input. Reproduce all five.
+The IMPACT prototype's first commit (`e70fcbf`, 2026-04-16, 32 files, 8,474 insertions) carried exactly five kinds of input. Reproduce all five.
 
 | # | Input | IMPACT artifact | Size | Job |
 |---|---|---|---|---|
@@ -293,22 +205,13 @@ carried exactly five kinds of input. Reproduce all five.
 | 4 | **Palette source** *(optional slot)* | `References/IMPACT LOGO.png` | 1 image | Colour, by measurement |
 | 5 | **Domain source material** | Sample rubrics `.docx`, placeholder questions `.md` | — | Real content from the client |
 
-Inputs 3 and 4 are **two permanent slots with different jobs**, and conflating them is a
-mistake. Design conventions supply *how it should feel*. The palette source supplies *what
-colour it is*. They are independently sourceable and either may be absent — see §4.5. IMPACT
-happened to fill them from unrelated artifacts, which is the normal case rather than the
-exception.
+Inputs 3 and 4 are **two permanent slots with different jobs**, and conflating them is a mistake. Design conventions supply *how it should feel*. The palette source supplies *what colour it is*. They are independently sourceable and either may be absent — see §4.5. IMPACT happened to fill them from unrelated artifacts, which is the normal case rather than the exception.
 
 #### 4.2.1 The PRD's shape
 
-Sixteen sections: Overview, Goals, Non-Goals (v1), Users & Roles, Unique Identifier, Core
-Entities (one subsection per entity), Business Rules (one subsection per rule), User Journeys
-(one per role-task), Screens (reference), Validation & Error Handling, Authentication & Access
-Control, Data Retention, Open Questions, Out of Scope / Deferred, Assumptions, Success
-Criteria.
+Sixteen sections: Overview, Goals, Non-Goals (v1), Users & Roles, Unique Identifier, Core Entities (one subsection per entity), Business Rules (one subsection per rule), User Journeys (one per role-task), Screens (reference), Validation & Error Handling, Authentication & Access Control, Data Retention, Open Questions, Out of Scope / Deferred, Assumptions, Success Criteria.
 
-Note what is present: **Non-Goals appear third**, before entities. Open Questions and
-Assumptions are first-class sections, not footnotes.
+Note what is present: **Non-Goals appear third**, before entities. Open Questions and Assumptions are first-class sections, not footnotes.
 
 #### 4.2.2 The per-view outline's shape
 
@@ -336,18 +239,13 @@ CANCEL BUTTON
 RECOVER BUTTON
 ```
 
-`SHELL` holds anything global — navbar, modals. Then `SCREEN` groups `VIEW`s. Elements are
-bare, capitalised nouns with optional role qualifiers in parentheses.
+`SHELL` holds anything global — navbar, modals. Then `SCREEN` groups `VIEW`s. Elements are bare, capitalised nouns with optional role qualifiers in parentheses.
 
-This is deliberately crude and that is the point. It is unambiguous about *composition* while
-saying nothing about *appearance*, which leaves the design directions genuinely free to differ.
-The CLAUDE.md written alongside it says: *"The outline is authoritative for component
-composition; the PRD covers rules and permissions."*
+This is deliberately crude and that is the point. It is unambiguous about *composition* while saying nothing about *appearance*, which leaves the design directions genuinely free to differ. The CLAUDE.md written alongside it says: *"The outline is authoritative for component composition; the PRD covers rules and permissions."*
 
 #### 4.2.3 What the reference images actually were **(R)**
 
-All five are drawn from **one single design case study** — a communications agency called
-*svyazi* — sampled across five different views:
+All five are drawn from **one single design case study** — a communications agency called *svyazi* — sampled across five different views:
 
 | File | Content |
 |---|---|
@@ -357,51 +255,30 @@ All five are drawn from **one single design case study** — a communications ag
 | `ref4.png` | The complete landing page, full scroll — section rhythm, card grids, alternating light/dark/accent bands |
 | `ref5.png` | Closing slide — logo lockup on a full-bleed accent panel |
 
-**One coherent system, sampled at multiple zoom levels** — specimen, component, page, and
-in-situ mockup. Not five unrelated screenshots.
+**One coherent system, sampled at multiple zoom levels** — specimen, component, page, and in-situ mockup. Not five unrelated screenshots.
 
-The design language they carry: a heavy geometric display face paired with a clean humanist
-body; near-monochrome with exactly one saturated accent; generously rounded cards; solid
-circular icon badges; a warm off-white canvas; full-bleed alternating sections.
+The design language they carry: a heavy geometric display face paired with a clean humanist body; near-monochrome with exactly one saturated accent; generously rounded cards; solid circular icon badges; a warm off-white canvas; full-bleed alternating sections.
 
 #### 4.2.4 Expect the references to lose **(R)**
 
-**Stated intent** (from the author, 2026-08-04): *"My intention was always to get as close to
-the image design reference as possible."*
+**Stated intent** (from the author, 2026-08-04): *"My intention was always to get as close to the image design reference as possible."*
 
-**What shipped diverged from them substantially.** The svyazi references are heavily rounded
-and green. The selected IMPACT direction is sharp — 2px/4px/8px radii — and navy. Variation
-`01-warm-editorial` used 10/18/28px plus pills and was by far the closest to the references;
-it lost.
+**What shipped diverged from them substantially.** The svyazi references are heavily rounded and green. The selected IMPACT direction is sharp — 2px/4px/8px radii — and navy. Variation `01-warm-editorial` used 10/18/28px plus pills and was by far the closest to the references; it lost.
 
-This is not a criticism of the intent. It is the most useful thing in this section, because it
-identifies a force nobody plans for. **Reference images are the weakest of the three inputs
-competing to define the look**, and they get overridden by two stronger ones:
+This is not a criticism of the intent. It is the most useful thing in this section, because it identifies a force nobody plans for. **Reference images are the weakest of the three inputs competing to define the look**, and they get overridden by two stronger ones:
 
-1. **The brand artifact wins on colour.** Once the palette is *measured* from a logo (§4.5),
-   it is not a preference and cannot yield. The references' green was never going to survive
-   contact with a navy/cyan/gold logo.
-2. **The content type wins on form.** Dense admin tables and long multi-question forms are
-   served badly by generous radii, large padding, and airy card rhythm. A marketing landing
-   page — which is what the references were — has the opposite requirements. The moment the
-   bake-off rendered a real data table, roundness stopped paying for itself.
+1. **The brand artifact wins on colour.** Once the palette is *measured* from a logo (§4.5), it is not a preference and cannot yield. The references' green was never going to survive contact with a navy/cyan/gold logo.
+2. **The content type wins on form.** Dense admin tables and long multi-question forms are served badly by generous radii, large padding, and airy card rhythm. A marketing landing page — which is what the references were — has the opposite requirements. The moment the bake-off rendered a real data table, roundness stopped paying for itself.
 
-What *did* survive is structural rather than superficial: one disciplined accent colour, a
-heavy-display-plus-clean-body type pairing, dark full-bleed sections, and card-based section
-rhythm. Those are the transferable parts of a reference, and they transferred.
+What *did* survive is structural rather than superficial: one disciplined accent colour, a heavy-display-plus-clean-body type pairing, dark full-bleed sections, and card-based section rhythm. Those are the transferable parts of a reference, and they transferred.
 
-**The practical guidance:** supply references and aim to match them. But expect the bake-off to
-reveal where they cannot hold, and treat that as the bake-off doing its job rather than as a
-failure to follow the brief. Finding out on three screens is the cheapest possible place to
-find out.
+**The practical guidance:** supply references and aim to match them. But expect the bake-off to reveal where they cannot hold, and treat that as the bake-off doing its job rather than as a failure to follow the brief. Finding out on three screens is the cheapest possible place to find out.
 
 ### 4.3 The bake-off: N competing directions **(R)**
 
 **This is the single most important undocumented step.**
 
-The first commit did not contain *a* prototype. It contained **three complete, competing design
-directions**, each built across the same three representative screens, each with its own
-stylesheet:
+The first commit did not contain *a* prototype. It contained **three complete, competing design directions**, each built across the same three representative screens, each with its own stylesheet:
 
 | Direction | Stylesheet | Canvas | Radii | Typography |
 |---|---|---|---|---|
@@ -409,16 +286,9 @@ stylesheet:
 | **`02-civic-minimal`** | **1,065 lines** | **`#EFF1F5` cool grey** | **2 / 4 / 8** | **Archivo Black + IBM Plex Sans + IBM Plex Mono** |
 | `03-modular-dashboard` | 1,042 lines | `#FAFAF7` warm white | 10 / 16 / 22 + pill | Be Vietnam Pro |
 
-The three screens each direction had to render: **`index.html` (public landing),
-`dashboard.html` (an admin data table), `self-assessment.html` (a long form).** Landing, list,
-form — the three archetypes that between them exercise nearly every visual decision a business
-application needs to make.
+The three screens each direction had to render: **`index.html` (public landing), `dashboard.html` (an admin data table), `self-assessment.html` (a long form).** Landing, list, form — the three archetypes that between them exercise nearly every visual decision a business application needs to make.
 
-> **Unrecorded:** how the bake-off was briefed — why three directions rather than two or five,
-> and how each was characterised — is not preserved in the repository, and the author does not
-> recall it. The named slugs (`warm-editorial`, `civic-minimal`, `modular-dashboard`) are the
-> only surviving evidence that the directions were framed as distinct *registers* rather than
-> as arbitrary variations. Brief the next one deliberately, and write the brief down.
+> **Unrecorded:** how the bake-off was briefed — why three directions rather than two or five, and how each was characterised — is not preserved in the repository, and the author does not recall it. The named slugs (`warm-editorial`, `civic-minimal`, `modular-dashboard`) are the only surviving evidence that the directions were framed as distinct *registers* rather than as arbitrary variations. Brief the next one deliberately, and write the brief down.
 
 #### 4.3.1 Hold the brand constant; vary the style **(R)**
 
@@ -428,40 +298,27 @@ All three variations shipped with **byte-identical brand hues**:
 --navy: #1B2B8F;  --navy-deep: #0F1B5C;  --cyan: #2EA7E0;  --gold: #F5C518;
 ```
 
-What varied was canvas temperature, corner radius, typography, and shadow depth. What did not
-vary was hue.
+What varied was canvas temperature, corner radius, typography, and shadow depth. What did not vary was hue.
 
-This is good experimental design. If the variations differ on everything, the choice becomes
-"which do you like," which is unresolvable. If they differ on one axis — here, *formal
-register*: editorial warmth vs civic sharpness vs modular softness — the choice becomes
-answerable, and the answer means something.
+This is good experimental design. If the variations differ on everything, the choice becomes "which do you like," which is unresolvable. If they differ on one axis — here, *formal register*: editorial warmth vs civic sharpness vs modular softness — the choice becomes answerable, and the answer means something.
 
 ### 4.4 Selection, promotion, and archiving **(R)**
 
-The winner is promoted to `Prototypes/PROTOTYPE/`. The losers move to `Prototypes/archive/`
-**and are also zipped to `archive.zip`** — kept, not deleted.
+The winner is promoted to `Prototypes/PROTOTYPE/`. The losers move to `Prototypes/archive/` **and are also zipped to `archive.zip`** — kept, not deleted.
 
 CLAUDE.md then carries an explicit rule:
 
-> `Prototypes/archive/` (and `archive.zip`) hold discarded earlier variations.
-> **Don't modify archived files.**
+> `Prototypes/archive/` (and `archive.zip`) hold discarded earlier variations. **Don't modify archived files.**
 
-Verification that this is what happened: diffing the promoted `self-assessment.html` against
-each archived variation gives **6 differing lines against `02-civic-minimal`**, versus 642 and
-669 against the other two. The shipped stylesheet still carries its origin in a header comment
-— *"IMPACT Internship Assessment Portal — Civic Minimal (02)"* — which survived all the way
-into production.
+Verification that this is what happened: diffing the promoted `self-assessment.html` against each archived variation gives **6 differing lines against `02-civic-minimal`**, versus 642 and 669 against the other two. The shipped stylesheet still carries its origin in a header comment — *"IMPACT Internship Assessment Portal — Civic Minimal (02)"* — which survived all the way into production.
 
 **Keep the losers.** They are the record of what was considered, and they cost nothing.
 
 ### 4.5 Measure the palette *after* selection, not before **(R)**
 
-**This corrects a widely-repeated claim.** Both `methodology.md` and the case study say the
-palette was "sampled from pixels in the IMPACT logo," which is true — but both imply it
-happened up front. It did not.
+**This corrects a widely-repeated claim.** Both `methodology.md` and the case study say the palette was "sampled from pixels in the IMPACT logo," which is true — but both imply it happened up front. It did not.
 
-The variations were generated with **estimated** brand colours. Only the winner had its palette
-replaced with **measured** values:
+The variations were generated with **estimated** brand colours. Only the winner had its palette replaced with **measured** values:
 
 | Token | Variations (estimated) | Shipped (measured) | Sampled from |
 |---|---|---|---|
@@ -471,20 +328,15 @@ replaced with **measured** values:
 | `--cyan` | `#2EA7E0` | **`#00A6F6`** | state-shape bright stripe |
 | `--gold` | `#F5C518` | **`#FFD71F`** | state-shape gold stripe |
 
-Every shipped token carries an inline comment naming **which part of the logo it came from**.
-That per-token provenance is what makes the palette unarguable. *(CS §7.2)*
+Every shipped token carries an inline comment naming **which part of the logo it came from**. That per-token provenance is what makes the palette unarguable. *(CS §7.2)*
 
-> "Deriving the palette from an artifact nobody controls removes colour from the space of
-> things that can be relitigated. There is no 'what if the blue were softer' conversation,
-> because the blue is not a preference — it is a measurement."
+> "Deriving the palette from an artifact nobody controls removes colour from the space of things that can be relitigated. There is no 'what if the blue were softer' conversation, because the blue is not a preference — it is a measurement."
 
-The sequencing is correct and worth preserving deliberately: **choose the direction while
-colour is still approximate, so the choice is about form rather than hue. Then measure.**
+The sequencing is correct and worth preserving deliberately: **choose the direction while colour is still approximate, so the choice is about form rather than hue. Then measure.**
 
 #### The two visual inputs are independent, and either can be absent
 
-Inputs 3 and 4 (§4.2) are **two permanent slots in the process, not one input with a fallback.**
-Keep both open on every project even when only one gets filled.
+Inputs 3 and 4 (§4.2) are **two permanent slots in the process, not one input with a fallback.** Keep both open on every project even when only one gets filled.
 
 | Slot | Answers | Can be sourced from |
 |---|---|---|
@@ -493,84 +345,51 @@ Keep both open on every project even when only one gets filled.
 
 They are independent along every axis:
 
-- **Different sources are normal.** IMPACT drew conventions from an unrelated agency case study
-  and colour from its own logo. Neither informed the other.
-- **Either can be absent.** No logo yet? The palette slot gets filled from a named image
-  instead. Strong brand but no aesthetic direction? Conventions come from elsewhere, or from
-  the bake-off itself.
-- **One artifact can fill both** — a rich brand guide often does. That is a convenience, not the
-  expected case, and it should be a deliberate choice rather than a collapse.
+- **Different sources are normal.** IMPACT drew conventions from an unrelated agency case study and colour from its own logo. Neither informed the other.
+- **Either can be absent.** No logo yet? The palette slot gets filled from a named image instead. Strong brand but no aesthetic direction? Conventions come from elsewhere, or from the bake-off itself.
+- **One artifact can fill both** — a rich brand guide often does. That is a convenience, not the expected case, and it should be a deliberate choice rather than a collapse.
 - **Neither is required to be pre-existing.** Both can be created for the project.
 
-**What actually matters is not provenance but naming.** The mechanism's value was never that
-nobody chose IMPACT's logo — someone chose it, at some point. Its value is that *once an
-artifact is named, colour becomes derivable instead of debatable.* So whichever slot gets
-filled, and from wherever:
+**What actually matters is not provenance but naming.** The mechanism's value was never that nobody chose IMPACT's logo — someone chose it, at some point. Its value is that *once an artifact is named, colour becomes derivable instead of debatable.* So whichever slot gets filled, and from wherever:
 
-1. **Designate a single specific source before sampling** — one file, not a set. A set still
-   requires a choice at sampling time, which is the thing being eliminated.
+1. **Designate a single specific source before sampling** — one file, not a set. A set still requires a choice at sampling time, which is the thing being eliminated.
 2. **Sample per token, with a comment naming the source element.**
 3. **Do not revisit it.** The discipline lives in the not-revisiting.
 
-**One consequence to plan for.** A project inheriting a logo gets its **wordmark and name
-treatment as an input**. A project without one gets them as a **Phase 0 output** — each design
-direction renders the product name in its own register, and that becomes part of what the
-bake-off chooses between. Budget for it either way.
+**One consequence to plan for.** A project inheriting a logo gets its **wordmark and name treatment as an input**. A project without one gets them as a **Phase 0 output** — each design direction renders the product name in its own register, and that becomes part of what the bake-off chooses between. Budget for it either way.
 
 ### 4.5.1 Constraints fall out of the source artifact
 
-Measuring the logo also produced a hard rule that survived into production: **never place the
-logo PNG on the light canvas**, because the source art has glow baked in and reads as a dirty
-halo on anything but its native dark background. The workaround — a typographic wordmark in
-Archivo Black — became a permanent component.
+Measuring the logo also produced a hard rule that survived into production: **never place the logo PNG on the light canvas**, because the source art has glow baked in and reads as a dirty halo on anything but its native dark background. The workaround — a typographic wordmark in Archivo Black — became a permanent component.
 
-Expect the brand artifact to impose at least one constraint like this. Write it down where it
-will be read.
+Expect the brand artifact to impose at least one constraint like this. Write it down where it will be read.
 
 ### 4.6 CLAUDE.md is the prototype's specification **(R)**
 
-The prototype repo's `CLAUDE.md` existed **in the first commit**, at 79 lines, and was updated
-continuously — many commit bodies do nothing but record a CLAUDE.md page-count bump.
+The prototype repo's `CLAUDE.md` existed **in the first commit**, at 79 lines, and was updated continuously — many commit bodies do nothing but record a CLAUDE.md page-count bump.
 
 **This answers the tooling question definitively.** Line 3:
 
-> "This file provides guidance to **Claude Code** (claude.ai/code) when working with code in
-> this repository."
+> "This file provides guidance to **Claude Code** (claude.ai/code) when working with code in this repository."
 
-Not Claude Design. Note that git authorship would never have told you this: **all 177 commits
-are authored by Matthew Smith with no `Co-Authored-By` trailers.** The only durable record of
-how the work was done is CLAUDE.md itself.
+Not Claude Design. Note that git authorship would never have told you this: **all 177 commits are authored by Matthew Smith with no `Co-Authored-By` trailers.** The only durable record of how the work was done is CLAUDE.md itself.
 
 Its sections, which are worth copying as a template:
 
 1. **What this project is** — two sentences plus what the app tracks.
-2. **Source-of-truth documents** — an explicit list, with a line stating which document wins
-   on which question: *"The outline is authoritative for component composition; the PRD covers
-   rules and permissions."* Plus the instruction: *"Check these before inventing answers about
-   scope, field names, or flows."*
-3. **Prototype** — where the selected direction lives, how to open it, what each page is, and
-   the don't-touch-the-archive rule.
-4. **Brand & style system** — the token table with roles, the sampled-not-estimated note, the
-   logo-on-light-canvas prohibition, and the font stack.
-5. **Product rules to know** — the PRD compressed to the dozen rules that actually affect
-   markup decisions.
-6. **Working conventions** — e.g. *"CSS tokens are the primary knob for palette changes; don't
-   hardcode hex values inline"*, *"New screens should be based on an existing page"*, and a
-   note that the navbar/footer full-bleed asymmetry against a 1240px container **is
-   intentional**.
+2. **Source-of-truth documents** — an explicit list, with a line stating which document wins on which question: *"The outline is authoritative for component composition; the PRD covers rules and permissions."* Plus the instruction: *"Check these before inventing answers about scope, field names, or flows."*
+3. **Prototype** — where the selected direction lives, how to open it, what each page is, and the don't-touch-the-archive rule.
+4. **Brand & style system** — the token table with roles, the sampled-not-estimated note, the logo-on-light-canvas prohibition, and the font stack.
+5. **Product rules to know** — the PRD compressed to the dozen rules that actually affect markup decisions.
+6. **Working conventions** — e.g. *"CSS tokens are the primary knob for palette changes; don't hardcode hex values inline"*, *"New screens should be based on an existing page"*, and a note that the navbar/footer full-bleed asymmetry against a 1240px container **is intentional**.
 
-That last category matters more than it looks. Recording that an oddity is deliberate prevents
-a later session from helpfully "fixing" it.
+That last category matters more than it looks. Recording that an oddity is deliberate prevents a later session from helpfully "fixing" it.
 
-> **A caution, by example.** That same CLAUDE.md contains the line *"Not a git repo — no
-> version control commands apply."* The repository has 177 commits. It was true when written
-> and nobody revisited it. This is *(CS §8.7)* — documentation drift — caught in the wild, in
-> the very file whose job is to be current.
+> **A caution, by example.** That same CLAUDE.md contains the line *"Not a git repo — no version control commands apply."* The repository has 177 commits. It was true when written and nobody revisited it. This is *(CS §8.7)* — documentation drift — caught in the wild, in the very file whose job is to be current.
 
 ### 4.7 Iteration runs the same four stages, at prototype scale **(R)**
 
-The prototype was not built ad hoc. The May 6 commit sequence shows the full methodology
-running *inside* Phase 0:
+The prototype was not built ad hoc. The May 6 commit sequence shows the full methodology running *inside* Phase 0:
 
 ```
 Add design spec for intern assessment chooser + Personal Goals + Midpoint Reflection
@@ -587,11 +406,9 @@ Delete self-assessment.html — superseded by chooser + two new forms
 Update CLAUDE.md for chooser + Personal Goals + Midpoint Reflection rollout
 ```
 
-Spec → plan → implement → **re-point everything that referenced the old thing** → delete what
-was superseded → update CLAUDE.md. A complete cycle, in one day, on a static prototype.
+Spec → plan → implement → **re-point everything that referenced the old thing** → delete what was superseded → update CLAUDE.md. A complete cycle, in one day, on a static prototype.
 
-**These are not metaphorical specs and plans. They exist as documents**, and they are the same
-size and shape as production ones:
+**These are not metaphorical specs and plans. They exist as documents**, and they are the same size and shape as production ones:
 
 | Prototype-phase document | Lines |
 |---|---|
@@ -600,35 +417,27 @@ size and shape as production ones:
 | `docs/superpowers/plans/2026-05-06-intern-assessment-chooser.md` | **1,771** |
 | plus six more spec/plan pairs across May 6–7 | — |
 
-A **207-line spec produced a 1,771-line plan** — an 8.6× ratio, steeper than production's 1.65×.
-Seven spec/plan pairs were written for a static HTML prototype with no build step.
+A **207-line spec produced a 1,771-line plan** — an 8.6× ratio, steeper than production's 1.65×. Seven spec/plan pairs were written for a static HTML prototype with no build step.
 
 #### 4.7.1 The prototype plan uses the same execution machinery
 
 The April 16 plan opens with this, verbatim:
 
-> **For agentic workers:** Use `superpowers:subagent-driven-development` (recommended) or
-> `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox
-> (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Its header sections are exactly a production plan's: **Goal · Architecture · Tech stack ·
-Out of scope (stated in PRD) · File map · Phase overview**, then numbered tasks grouped into
-phases — `Task 1.1` through `Task 5.3` across five phases, ending with **Execution notes**.
+Its header sections are exactly a production plan's: **Goal · Architecture · Tech stack · Out of scope (stated in PRD) · File map · Phase overview**, then numbered tasks grouped into phases — `Task 1.1` through `Task 5.3` across five phases, ending with **Execution notes**.
 
 The Architecture line does real work, protecting what has already been decided:
 
-> "Existing CSS token system is untouched; new patterns (toast, empty-state, print rules) are
-> appended to `styles.css`."
+> "Existing CSS token system is untouched; new patterns (toast, empty-state, print rules) are appended to `styles.css`."
 
 And the Tech stack line sets the verification standard:
 
-> "Pure static HTML + CSS + vanilla JS. No build step, no framework, no test runner.
-> **Verification is manual (click-through in the browser). Commits after each task.**"
+> "Pure static HTML + CSS + vanilla JS. No build step, no framework, no test runner. **Verification is manual (click-through in the browser). Commits after each task.**"
 
 #### 4.7.2 The task format, including the commit
 
-Each task decomposes into checkbox steps carrying complete code, a concrete verification with
-an **expected value**, and — notably — **the commit command and message**:
+Each task decomposes into checkbox steps carrying complete code, a concrete verification with an **expected value**, and — notably — **the commit command and message**:
 
 ```markdown
 - [ ] **Step 1: Author `app.js`**
@@ -636,9 +445,7 @@ an **expected value**, and — notably — **the commit command and message**:
 Place at top of `Prototypes/PROTOTYPE/app.js`:
 
   ```js
-  (function (window) {
-    // -------- Mock dataset (single source of truth for demo) --------
-    const COHORTS = [ ... ]
+(function (window) { // -------- Mock dataset (single source of truth for demo) -------- const COHORTS = [ ... ]
   ```
 
 - [ ] **Step 2: Verify module loads**
@@ -651,40 +458,29 @@ the `<script src="app.js">` import.
 - [ ] **Step 3: Commit**
 
   ```bash
-  git add Prototypes/PROTOTYPE/app.js Prototypes/PROTOTYPE/readiness-detail.html
-  git commit -m "Add shared app.js with mock dataset and modal helper"
+git add Prototypes/PROTOTYPE/app.js Prototypes/PROTOTYPE/readiness-detail.html git commit -m "Add shared app.js with mock dataset and modal helper"
   ```
 ```
 
-**The plan dictates the commit message.** That is why the prototype's 177-commit log reads as
-cleanly as it does — the log was authored in the plan, before the work.
+**The plan dictates the commit message.** That is why the prototype's 177-commit log reads as cleanly as it does — the log was authored in the plan, before the work.
 
-Note the verification: not "check it works," but *"confirm DevTools console shows `5`."* Manual
-click-through is still a verification standard when it names the expected value.
+Note the verification: not "check it works," but *"confirm DevTools console shows `5`."* Manual click-through is still a verification standard when it names the expected value.
 
 #### 4.7.3 The prototype spec format
 
 Different from a production design spec, and worth its own template:
 
-**Goal · Page inventory · Routing · [one section per page] · Data flow — sessionStorage ·
-CSS additions · Edge cases & decisions · Manual test plan · Out of scope**
+**Goal · Page inventory · Routing · [one section per page] · Data flow — sessionStorage · CSS additions · Edge cases & decisions · Manual test plan · Out of scope**
 
-Two sections carry disproportionate weight. **"Data flow — sessionStorage"** is where the
-persistence model gets settled — the thing that becomes the production data model.
-**"Edge cases & decisions"** is where the business rules that the PRD left open get closed,
-cheaply, before anything depends on them.
+Two sections carry disproportionate weight. **"Data flow — sessionStorage"** is where the persistence model gets settled — the thing that becomes the production data model. **"Edge cases & decisions"** is where the business rules that the PRD left open get closed, cheaply, before anything depends on them.
 
 #### 4.7.4 What to take from this
 
-**Structural demolition is expected.** Deleting `self-assessment.html` outright, and
-re-pointing every entry point to a new chooser hub, is exactly the kind of change you want
-happening here rather than after a migration exists.
+**Structural demolition is expected.** Deleting `self-assessment.html` outright, and re-pointing every entry point to a new chooser hub, is exactly the kind of change you want happening here rather than after a migration exists.
 
-**CLAUDE.md is updated as part of the change**, in the same commit sequence — not afterwards,
-and not "when we get round to it."
+**CLAUDE.md is updated as part of the change**, in the same commit sequence — not afterwards, and not "when we get round to it."
 
-**The prototype is not a lower-discipline environment.** It is the same discipline applied
-where mistakes are cheap. That is the whole point of doing it first.
+**The prototype is not a lower-discipline environment.** It is the same discipline applied where mistakes are cheap. That is the whole point of doing it first.
 
 ### 4.8 The rhythm **(R)**
 
@@ -699,24 +495,17 @@ where mistakes are cheap. That is the whole point of doing it first.
 | May 10 | 3 | *(not mentioned in the case study)* |
 | May 11 | 5 | *(not mentioned in the case study)* |
 
-Three weeks of calendar silence between April 16 and May 6 — that gap is stakeholder review,
-not idleness.
+Three weeks of calendar silence between April 16 and May 6 — that gap is stakeholder review, not idleness.
 
-The case study singles out May 7: *"where the prototype stopped being a mockup and became a
-specification. Each of those changes carried directly into production unmodified."*
+The case study singles out May 7: *"where the prototype stopped being a mockup and became a specification. Each of those changes carried directly into production unmodified."*
 
-Scale note: the bake-off ran on **3 screens**; the frozen prototype had **36**. You do not need
-a complete application to choose a direction. You need a landing, a table, and a form.
+Scale note: the bake-off ran on **3 screens**; the frozen prototype had **36**. You do not need a complete application to choose a direction. You need a landing, a table, and a form.
 
 ### 4.9 Freeze it
 
-When stakeholders stop asking for changes: **freeze the prototype and stop editing it.**
-*(CS §10)* Separate repository. From this point it is a specification, and specifications that
-move are not specifications.
+When stakeholders stop asking for changes: **freeze the prototype and stop editing it.** *(CS §10)* Separate repository. From this point it is a specification, and specifications that move are not specifications.
 
-On IMPACT the prototype lived in its own git repo, nested inside the production repo directory
-but tracked independently, and was seeded into the production repo as reference in that repo's
-very first commit — *"chore: seed repo with planning docs and prototype reference."*
+On IMPACT the prototype lived in its own git repo, nested inside the production repo directory but tracked independently, and was seeded into the production repo as reference in that repo's very first commit — *"chore: seed repo with planning docs and prototype reference."*
 
 ### 4.10 Phase 0 checklist
 
@@ -746,59 +535,35 @@ Two days produced 12 design specs and 18 implementation plans on IMPACT — 54,5
 
 ### 5.1 Three artifacts, three audiences
 
-**Design spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`. Answers *what* and
-*why*. Stack, topology, data model, permission model, migration strategy, phasing. Every
-load-bearing technology choice carries a one-sentence rationale. IMPACT's was 855 lines.
+**Design spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`. Answers *what* and *why*. Stack, topology, data model, permission model, migration strategy, phasing. Every load-bearing technology choice carries a one-sentence rationale. IMPACT's was 855 lines.
 
-**Workflow spec** — separate document, 441 lines on IMPACT. The SDLC layer: branching, commit
-format, review, CI, deployment topology, secrets, branch protection. Separating "what the app
-does" from "how we build it" is correct — they change at different rates and are read by
-different people.
+**Workflow spec** — separate document, 441 lines on IMPACT. The SDLC layer: branching, commit format, review, CI, deployment topology, secrets, branch protection. Separating "what the app does" from "how we build it" is correct — they change at different rates and are read by different people.
 
-**Implementation plan** — `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`. Answers *how*. One
-per sub-project. IMPACT's largest was 6,105 lines for Admin Core alone.
+**Implementation plan** — `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`. Answers *how*. One per sub-project. IMPACT's largest was 6,105 lines for Admin Core alone.
 
-**The distinction is enforced.** A spec that drifts into implementation detail and a plan that
-relitigates architecture are both failures.
+**The distinction is enforced.** A spec that drifts into implementation detail and a plan that relitigates architecture are both failures.
 
 ### 5.2 Two things that must be in the spec from the start
 
-**The fidelity mandate** *(CS §9.2)*. Copy this into the architectural spec before sub-project
-1 begins — not after an audit discovers it is missing:
+**The fidelity mandate** *(CS §9.2)*. Copy this into the architectural spec before sub-project 1 begins — not after an audit discovers it is missing:
 
-> **The frontend MUST look and behave exactly like the prototype. Pixel-for-pixel parity is
-> the non-negotiable success criterion. Every other consideration — abstraction reuse,
-> component elegance, developer ergonomics — is subordinate to it.**
+> **The frontend MUST look and behave exactly like the prototype. Pixel-for-pixel parity is the non-negotiable success criterion. Every other consideration — abstraction reuse, component elegance, developer ergonomics — is subordinate to it.**
 
-Then define the terms, because a mandate without a definition is inspiration rather than
-instruction. *Matching* means: same semantic elements, nesting, and class names; same tokens,
-spacing scale, radii, shadows; same typography; same container width, nav height, and mark
-size; **copy verbatim** — titles, button labels, micro-labels, modal bodies, toast messages,
-empty states.
+Then define the terms, because a mandate without a definition is inspiration rather than instruction. *Matching* means: same semantic elements, nesting, and class names; same tokens, spacing scale, radii, shadows; same typography; same container width, nav height, and mark size; **copy verbatim** — titles, button labels, micro-labels, modal bodies, toast messages, empty states.
 
-And enumerate the **acceptable deviations**: real data replacing mock, production URLs
-replacing `.html` links, framework form components replacing `onsubmit`, non-visual
-accessibility additions. Anything else requires an explicit `Deviation:` entry in the PR
-description with justification.
+And enumerate the **acceptable deviations**: real data replacing mock, production URLs replacing `.html` links, framework form components replacing `onsubmit`, non-visual accessibility additions. Anything else requires an explicit `Deviation:` entry in the PR description with justification.
 
-> "A mandate without an escape hatch gets quietly violated. A mandate with a *documented*
-> escape hatch gets followed, because compliance is easier than the paperwork of deviating."
+> "A mandate without an escape hatch gets quietly violated. A mandate with a *documented* escape hatch gets followed, because compliance is easier than the paperwork of deviating."
 
-**The platform-properties section** *(CS §9.6)*. Document the limits and behaviours of the
-specific tier you are on: pause behaviour, rate limits, cold starts, email deliverability caps,
-connection limits. Note which are acceptable and which need upgrading before real use.
+**The platform-properties section** *(CS §9.6)*. Document the limits and behaviours of the specific tier you are on: pause behaviour, rate limits, cold starts, email deliverability caps, connection limits. Note which are acceptable and which need upgrading before real use.
 
-IMPACT's production went down thirteen days after launch because both Supabase projects were
-free tier and auto-pause after ~7 days of inactivity. Not a bug — a documented property of the
-plan, never written down. It surfaced as *"Invalid email or password"* on correct credentials.
+IMPACT's production went down thirteen days after launch because both Supabase projects were free tier and auto-pause after ~7 days of inactivity. Not a bug — a documented property of the plan, never written down. It surfaced as *"Invalid email or password"* on correct credentials.
 
 ### 5.3 Sub-project decomposition *(M §6, CS §3.2)*
 
-**The splitting rule: a plan exceeding roughly fifty tasks becomes two plans.** Past that the
-execution graph stops being trackable and the document stops being navigable.
+**The splitting rule: a plan exceeding roughly fifty tasks becomes two plans.** Past that the execution graph stops being trackable and the document stops being navigable.
 
-Each sub-project ends in something demo-able and depends only on its predecessor. IMPACT's
-seven (plus one unplanned):
+Each sub-project ends in something demo-able and depends only on its predecessor. IMPACT's seven (plus one unplanned):
 
 | # | Name | Tasks | PRs |
 |---|---|---|---|
@@ -815,12 +580,10 @@ seven (plus one unplanned):
 
 Not a task: *"implement the auth flow."* That is a phase.
 
-A task: *"create `src/lib/auth/session.ts` with the contents below, and verify with
-`npm test src/lib/auth/session.test.ts`."*
+A task: *"create `src/lib/auth/session.ts` with the contents below, and verify with `npm test src/lib/auth/session.test.ts`."*
 
 - Exact file paths.
-- **Complete, paste-able code** — no pseudo-code, no placeholders. If the executor has to
-  invent syntax, the plan failed.
+- **Complete, paste-able code** — no pseudo-code, no placeholders. If the executor has to invent syntax, the plan failed.
 - A concrete verification command, not "check it works."
 - Checkbox format: `- [ ]`, flipped to `- [x]` on completion.
 
@@ -830,40 +593,25 @@ Commit everything before writing application code.
 
 ## 6. Phase 2 — Infrastructure
 
-Before a single line of application code. On IMPACT this was 58 tasks and 14 PRs, buying:
-branch protection, a five-job CI pipeline, Conventional Commits enforced by commitlint and
-Husky, lint-staged pre-commit hooks, two Netlify projects, two Supabase projects, a management
-dashboard, and the methodology document itself.
+Before a single line of application code. On IMPACT this was 58 tasks and 14 PRs, buying: branch protection, a five-job CI pipeline, Conventional Commits enforced by commitlint and Husky, lint-staged pre-commit hooks, two Netlify projects, two Supabase projects, a management dashboard, and the methodology document itself.
 
-> "Front-loading this is uncomfortable because it produces nothing demo-able. It is also what
-> made the following six sub-projects boring in the right way."
+> "Front-loading this is uncomfortable because it produces nothing demo-able. It is also what made the following six sub-projects boring in the right way."
 
-**Deploy a hello-world on day one** *(CS §9.5)*. Push a trivial page through the *complete*
-production path — commit, CI, build, deploy, live URL, and a request that touches the database
-and returns. Every integration failure at IMPACT's launch was in a link of that chain that had
-never once been exercised end to end. `build_settings.installation_id` was `null` while every
-dashboard showed a correctly linked repository.
+**Deploy a hello-world on day one** *(CS §9.5)*. Push a trivial page through the *complete* production path — commit, CI, build, deploy, live URL, and a request that touches the database and returns. Every integration failure at IMPACT's launch was in a link of that chain that had never once been exercised end to end. `build_settings.installation_id` was `null` while every dashboard showed a correctly linked repository.
 
-**Every CI job gates from the first PR that has something to test** *(CS §9.4)*. IMPACT ran the
-entire build with `Playwright — skipping` on every PR; the first green end-to-end run in CI was
-after the application was feature-complete. **A skipped job reads as a passing job.** If a
-suite is not gating, it is documentation.
+**Every CI job gates from the first PR that has something to test** *(CS §9.4)*. IMPACT ran the entire build with `Playwright — skipping` on every PR; the first green end-to-end run in CI was after the application was feature-complete. **A skipped job reads as a passing job.** If a suite is not gating, it is documentation.
 
 ---
 
 ## 7. Phase 3 — Design system: primitives before features
 
-**The single highest-value correction in the entire playbook** *(CS §9.1)*, and the reason
-IMPACT needed an eighth sub-project it never planned for.
+**The single highest-value correction in the entire playbook** *(CS §9.1)*, and the reason IMPACT needed an eighth sub-project it never planned for.
 
 ### 7.1 What went wrong, so it is clear why this matters
 
-Sub-projects 1 through 5 treated the prototype as *reference material*. They shipped a
-completely functional application in about four working days — every route rendering, every
-form submitting, row-level security scoping correctly, tests green.
+Sub-projects 1 through 5 treated the prototype as *reference material*. They shipped a completely functional application in about four working days — every route rendering, every form submitting, row-level security scoping correctly, tests green.
 
-A visual audit then found **P0-severity gaps on essentially every route.** The app worked
-perfectly and looked wrong. The production landing page was:
+A visual audit then found **P0-severity gaps on essentially every route.** The app worked perfectly and looked wrong. The production landing page was:
 
 ```html
 <main style="max-width:720">
@@ -872,41 +620,31 @@ perfectly and looked wrong. The production landing page was:
 </main>
 ```
 
-Worse: **the design system existed and was simply unwired.** `AuthShell` had been built with a
-docstring reading *"Mirrors the prototype's login.html aesthetic"* — and `/login` itself was
-never refactored to use it. Every token was defined in `tokens.css` and not consumed.
+Worse: **the design system existed and was simply unwired.** `AuthShell` had been built with a docstring reading *"Mirrors the prototype's login.html aesthetic"* — and `/login` itself was never refactored to use it. Every token was defined in `tokens.css` and not consumed.
 
-The failure was not carelessness. **"Working" was the stated bar and "matching" was assumed to
-follow from it. It does not.** Fidelity is a separate requirement and has to be stated as one.
+The failure was not carelessness. **"Working" was the stated bar and "matching" was assumed to follow from it. It does not.** Fidelity is a separate requirement and has to be stated as one.
 
 ### 7.2 The correct order
 
 1. Port design tokens from the frozen prototype **verbatim**.
 2. Port global and base CSS verbatim.
 3. Wire fonts and print styles.
-4. Build every shell and presentation primitive against a **dev-only demo route** that renders
-   them in isolation.
+4. Build every shell and presentation primitive against a **dev-only demo route** that renders them in isolation.
 5. Build the form primitives.
 6. **Gate on human sign-off.**
 7. **Then** build features, composing only primitives that already exist.
 
-> "The dev-primitives demo route is the trick that makes this work — it lets the design system
-> be reviewed and signed off in one place, before any feature depends on it. A feature built on
-> approved primitives is correct by construction."
+> "The dev-primitives demo route is the trick that makes this work — it lets the design system be reviewed and signed off in one place, before any feature depends on it. A feature built on approved primitives is correct by construction."
 
 ### 7.3 The rebuild-vs-patch heuristic
 
-When IMPACT faced the audit, the plan's reasoning for rebuilding rather than patching
-generalizes:
+When IMPACT faced the audit, the plan's reasoning for rebuilding rather than patching generalizes:
 
-> "A patch-by-patch fix campaign would touch nearly every component file anyway. At that volume
-> of change, **rebuilding from the prototype as the literal spec is cheaper and produces a
-> better result** than translating audit findings into surgical edits."
+> "A patch-by-patch fix campaign would touch nearly every component file anyway. At that volume of change, **rebuilding from the prototype as the literal spec is cheaper and produces a better result** than translating audit findings into surgical edits."
 
 Patches converge on "close enough." A rebuild converges on "same."
 
-The rebuild closed 51 of 57 audit entries in **two days**, with 75 side-by-side screenshots
-filed as durable evidence.
+The rebuild closed 51 of 57 audit entries in **two days**, with 75 side-by-side screenshots filed as durable evidence.
 
 ---
 
@@ -914,72 +652,46 @@ filed as durable evidence.
 
 ### 8.1 Cadence
 
-99 pull requests in roughly seven working days. Every PR: branch from `main`, implement one or
-more plan tasks, Conventional Commit, push, open PR, CI runs, review, squash-merge, delete
-branch. `main` branch-protected, direct pushes rejected. This held for all 99. PR-to-commit
-ratio 0.86.
+99 pull requests in roughly seven working days. Every PR: branch from `main`, implement one or more plan tasks, Conventional Commit, push, open PR, CI runs, review, squash-merge, delete branch. `main` branch-protected, direct pushes rejected. This held for all 99. PR-to-commit ratio 0.86.
 
 ### 8.2 The gate protocol
 
-> "This is the mechanism most likely to be undervalued, and the one that made agent-driven
-> execution safe at this volume."
+> "This is the mechanism most likely to be undervalued, and the one that made agent-driven execution safe at this volume."
 
 Between phases, execution **stops** and waits for explicit human sign-off. A real example:
 
-> **Step 4: Request Gate G1 sign-off** — Comment in the PR requesting Matt's gate sign-off.
-> Include a brief screenshot of the tokens.css diff and a DevTools screenshot showing computed
-> body styles. **Do NOT start Phase B until Gate G1 is signed off.**
+> **Step 4: Request Gate G1 sign-off** — Comment in the PR requesting Matt's gate sign-off. Include a brief screenshot of the tokens.css diff and a DevTools screenshot showing computed body styles. **Do NOT start Phase B until Gate G1 is signed off.**
 
-Sub-project 7 alone defined eight gates across 991 lines of plan. Each names the **specific
-evidence required** — not "looks good?" but "confirm tokens match prototype `:root` exactly,
-font links load Latin-subset Plex, print stylesheet present."
+Sub-project 7 alone defined eight gates across 991 lines of plan. Each names the **specific evidence required** — not "looks good?" but "confirm tokens match prototype `:root` exactly, font links load Latin-subset Plex, print stylesheet present."
 
-Gates work because they are **cheap and frequent**. A gate every few tasks bounds how far
-execution can drift before a human sees it. *Specify the evidence, or the gate degrades into a
-rubber stamp.*
+Gates work because they are **cheap and frequent**. A gate every few tasks bounds how far execution can drift before a human sees it. *Specify the evidence, or the gate degrades into a rubber stamp.*
 
 ### 8.3 Seam tests before features *(CS §9.3)*
 
-Identify the two or three places where the architecture could fail catastrophically, and write
-tests proving those boundaries hold **before** building features on top of them.
+Identify the two or three places where the architecture could fail catastrophically, and write tests proving those boundaries hold **before** building features on top of them.
 
-IMPACT had 204 unit tests, and the launch blocker was a JWT hook returning the wrong claim
-shape — because **no test exercised a PostgREST write path at all.** The riskiest seam in that
-architecture was always the boundary where a JWT claim becomes a row-level-security decision,
-and that is where tests were thinnest.
+IMPACT had 204 unit tests, and the launch blocker was a JWT hook returning the wrong claim shape — because **no test exercised a PostgREST write path at all.** The riskiest seam in that architecture was always the boundary where a JWT claim becomes a row-level-security decision, and that is where tests were thinnest.
 
-**Not more tests. Earlier and better-aimed ones.** Test count is a poor proxy for coverage of
-the things that can actually take you down.
+**Not more tests. Earlier and better-aimed ones.** Test count is a poor proxy for coverage of the things that can actually take you down.
 
 ### 8.4 One real-user session per sub-project *(CS §9.7)*
 
 The most important item in the entire case study, and its biggest failure.
 
-No real user touched IMPACT until **seven weeks after launch.** When one finally did, the first
-round surfaced: a tester entering a competency assessment, being prompted to save, saving,
-receiving confirmation, submitting — and finding the record later showing only a date with
-every response field blank. A potential data-loss defect, found by the first person to use the
-software in anger.
+No real user touched IMPACT until **seven weeks after launch.** When one finally did, the first round surfaced: a tester entering a competency assessment, being prompted to save, saving, receiving confirmation, submitting — and finding the record later showing only a date with every response field blank. A potential data-loss defect, found by the first person to use the software in anger.
 
-The same round found that Save vs Submit is not clear to users, that marking a barrier is
-ambiguous about whether it applies, that "Not Yet Tracked" has no discoverable meaning, and
-that the available outcome statuses do not cover real situations the program encounters.
+The same round found that Save vs Submit is not clear to users, that marking a barrier is ambiguous about whether it applies, that "Not Yet Tracked" has no discoverable meaning, and that the available outcome statuses do not cover real situations the program encounters.
 
-> "None of these are implementation defects against the spec. **They are defects in the spec**,
-> and the only instrument that detects them is a real user. The process built the right thing
-> correctly and had no mechanism for asking whether it was the right thing."
+> "None of these are implementation defects against the spec. **They are defects in the spec**, and the only instrument that detects them is a real user. The process built the right thing correctly and had no mechanism for asking whether it was the right thing."
 
-Budget one user session per sub-project, starting at the first demo-able milestone. It is the
-cheapest defect detection available and it finds a class of problem nothing else does.
+Budget one user session per sub-project, starting at the first demo-able milestone. It is the cheapest defect detection available and it finds a class of problem nothing else does.
 
 ---
 
 ## 9. Phase 5 — Launch
 
 - Bootstrap production; verify auth end-to-end with a live sign-in producing a correctly-claimed token.
-- Confirm **every required environment variable is present in every context.** IMPACT shipped
-  with `APP_URL` unset, breaking password reset, employer invites, and the anonymous
-  identity-confirm step — invisible to tests, because tests run with a fake env block.
+- Confirm **every required environment variable is present in every context.** IMPACT shipped with `APP_URL` unset, breaking password reset, employer invites, and the anonymous identity-confirm step — invisible to tests, because tests run with a fake env block.
 - Verify the deploy trigger actually **fires**, rather than that a dashboard says it will.
 - Stamp closed plans as history *(CS §9.8)*.
 
@@ -999,8 +711,7 @@ docs/
       YYYY-MM-DD-<topic>.md                         <- one per sub-project plan
 ```
 
-- Always prefix `YYYY-MM-DD` — **date of creation**, not date of the work described. Gives
-  chronological listing in a file explorer.
+- Always prefix `YYYY-MM-DD` — **date of creation**, not date of the work described. Gives chronological listing in a file explorer.
 - Lowercase hyphen-separated topic slugs.
 - Specs end in `-design.md`; plans have no suffix. Impossible to confuse at a glance.
 - One spec per architectural domain. One plan per sub-project.
@@ -1010,16 +721,11 @@ docs/
 
 ## 11. Execution modes *(M §7)*
 
-**Subagent-driven** (`superpowers:subagent-driven-development`) — recommended. A fresh agent
-per task or small batch. The main session orchestrates: picks the next task, dispatches with
-only the context that task needs, reviews, merges. Keeps the main context clean across many
-tasks. Best for many small independent tasks; the IMPACT plans were designed for it.
+**Subagent-driven** (`superpowers:subagent-driven-development`) — recommended. A fresh agent per task or small batch. The main session orchestrates: picks the next task, dispatches with only the context that task needs, reviews, merges. Keeps the main context clean across many tasks. Best for many small independent tasks; the IMPACT plans were designed for it.
 
-**Inline** (`superpowers:executing-plans`) — same agent executes everything in one session.
-Simpler operationally. Best for plans under ~20 tasks or where tasks are tightly coupled.
+**Inline** (`superpowers:executing-plans`) — same agent executes everything in one session. Simpler operationally. Best for plans under ~20 tasks or where tasks are tightly coupled.
 
-Trade-off: inline is simpler but more vulnerable to context drift; subagent is more reliable
-for long projects at slightly higher orchestration cost.
+Trade-off: inline is simpler but more vulnerable to context drift; subagent is more reliable for long projects at slightly higher orchestration cost.
 
 ---
 
@@ -1027,13 +733,9 @@ for long projects at slightly higher orchestration cost.
 
 A plan is a model of the future; reality diverges. Three responses, in increasing severity.
 
-**12.1 PR-description deviation notes.** Small, project-local deviations go under a
-`### Deviations from plan` heading in the PR description. Captured in git history; the plan is
-not modified.
+**12.1 PR-description deviation notes.** Small, project-local deviations go under a `### Deviations from plan` heading in the PR description. Captured in git history; the plan is not modified.
 
-**12.2 Inline spec or plan amendments.** For deviations that change the canonical what or how,
-append to the bottom of the document. **The original body stays intact** so the historical
-decision is preserved; the amendment overrides.
+**12.2 Inline spec or plan amendments.** For deviations that change the canonical what or how, append to the bottom of the document. **The original body stays intact** so the historical decision is preserved; the amendment overrides.
 
 ```markdown
 ## Amendment 2026-05-11 — Use three Supabase environments, not two
@@ -1048,18 +750,11 @@ supersedes it.
 
 IMPACT amended its spec three times during sub-project 0 alone.
 
-**12.3 Project-memory updates.** For lessons that should outlast the project, capture them in
-`MEMORY.md` or equivalent. These inform the *next* project's Phase 0.
+**12.3 Project-memory updates.** For lessons that should outlast the project, capture them in `MEMORY.md` or equivalent. These inform the *next* project's Phase 0.
 
-**12.4 Mark plans as history when they close** *(CS §9.8)*. On sub-project close, stamp the
-plan with a status header: executed, on what date, superseded by what. Keep exactly one
-document as current truth and treat `plans/` as an archive.
+**12.4 Mark plans as history when they close** *(CS §9.8)*. On sub-project close, stamp the plan with a status header: executed, on what date, superseded by what. Keep exactly one document as current truth and treat `plans/` as an archive.
 
-IMPACT ended at 57,742 lines of markdown against 33,000 lines of code — a genuine strength
-during the build with a real carrying cost after it. Several plan documents describe CSS
-classes and component names that never existed, which actively misleads anyone replaying them.
-**Conflating "committed plan" with "current truth" is how a documentation asset becomes a
-documentation liability.**
+IMPACT ended at 57,742 lines of markdown against 33,000 lines of code — a genuine strength during the build with a real carrying cost after it. Several plan documents describe CSS classes and component names that never existed, which actively misleads anyone replaying them. **Conflating "committed plan" with "current truth" is how a documentation asset becomes a documentation liability.**
 
 ---
 
@@ -1067,31 +762,18 @@ documentation liability.**
 
 The case study named eight. The prototype forensics add four more, marked **(R)**.
 
-1. **Promote an artifact to literal specification.** Name it, declare it authoritative, define
-   matching concretely, enumerate acceptable deviations.
-2. **Name a fixed source for the palette, then measure it.** Colours sampled per-token from a
-   named artifact cannot be relitigated. What carries the mechanism is the *naming*, not the
-   provenance — someone chose the logo too. Design conventions and palette source are two
-   independent optional slots (§4.5), not one input.
-3. **Make the prototype executable, so it specifies behaviour.** The production data model
-   should be the prototype's mock dataset, normalized.
+1. **Promote an artifact to literal specification.** Name it, declare it authoritative, define matching concretely, enumerate acceptable deviations.
+2. **Name a fixed source for the palette, then measure it.** Colours sampled per-token from a named artifact cannot be relitigated. What carries the mechanism is the *naming*, not the provenance — someone chose the logo too. Design conventions and palette source are two independent optional slots (§4.5), not one input.
+3. **Make the prototype executable, so it specifies behaviour.** The production data model should be the prototype's mock dataset, normalized.
 4. **Separate spec from plan, and commit both before coding.**
-5. **Write plans containing complete code with per-task verification.** Expect the plan to
-   exceed the code in volume. That is correct.
-6. **Decompose into sub-projects with demo-able endings.** Fifty tasks is the splitting
-   threshold.
+5. **Write plans containing complete code with per-task verification.** Expect the plan to exceed the code in volume. That is correct.
+6. **Decompose into sub-projects with demo-able endings.** Fifty tasks is the splitting threshold.
 7. **Gate phases on explicit human sign-off with named evidence.**
 8. **Buy the infrastructure before you need it.**
-9. **(R) Compete three design directions before committing to one.** Cheap, and it converts an
-   unanswerable aesthetic question into an answerable one.
-10. **(R) Hold brand constant across the variations; vary only formal register.** A choice
-    between options differing on one axis is decidable; a choice between options differing on
-    everything is not.
-11. **(R) Measure the palette after selection, not before.** Choose form while colour is still
-    approximate.
-12. **(R) Keep a CLAUDE.md from the first commit, listing source-of-truth documents with
-    explicit precedence.** It is the only durable record of how the work was done — git
-    authorship will not tell you.
+9. **(R) Compete three design directions before committing to one.** Cheap, and it converts an unanswerable aesthetic question into an answerable one.
+10. **(R) Hold brand constant across the variations; vary only formal register.** A choice between options differing on one axis is decidable; a choice between options differing on everything is not.
+11. **(R) Measure the palette after selection, not before.** Choose form while colour is still approximate.
+12. **(R) Keep a CLAUDE.md from the first commit, listing source-of-truth documents with explicit precedence.** It is the only durable record of how the work was done — git authorship will not tell you.
 
 ---
 
@@ -1113,13 +795,10 @@ Listed so it costs less next time.
 
 ## 15. What this is NOT *(M §9)*
 
-- **Not a substitute for thinking.** The four stages do not guarantee good decisions. They
-  guarantee the decisions are written down.
+- **Not a substitute for thinking.** The four stages do not guarantee good decisions. They guarantee the decisions are written down.
 - **Not a process for every PR.** A typo fix does not need this pipeline.
-- **Not a guarantee the plan survives contact with reality.** It will not. §12 exists because
-  plans are models, and models are wrong.
-- **Not a replacement for code review, testing, or operational rigour.** This is the front end
-  of the pipeline; the downstream gates are still required.
+- **Not a guarantee the plan survives contact with reality.** It will not. §12 exists because plans are models, and models are wrong.
+- **Not a replacement for code review, testing, or operational rigour.** This is the front end of the pipeline; the downstream gates are still required.
 - **Not a marketing methodology.** These artifacts are technical communication.
 
 ---
@@ -1171,8 +850,7 @@ Listed so it costs less next time.
 
 ## 17. Superpowers skills referenced *(M §10)*
 
-- `superpowers:brainstorming` — Phase 0 inputs and Phase 1 design spec. Q&A-driven scope
-  discovery; produces the spec.
+- `superpowers:brainstorming` — Phase 0 inputs and Phase 1 design spec. Q&A-driven scope discovery; produces the spec.
 - `superpowers:writing-plans` — Phase 1 plans. Decomposes a spec into executable tasks.
 - `superpowers:subagent-driven-development` — Phase 4, recommended mode.
 - `superpowers:executing-plans` — Phase 4, inline mode.
@@ -1187,9 +865,7 @@ Listed so it costs less next time.
 
 ## 18. Source evidence
 
-Everything marked **(R)** in this document was recovered on 2026-08-04 by direct examination
-of `C:\projects\impact-internship-portal\impact-prototype` — a git repository of 177 commits,
-tracked independently and nested inside the production repo directory.
+Everything marked **(R)** in this document was recovered on 2026-08-04 by direct examination of `C:\projects\impact-internship-portal\impact-prototype` — a git repository of 177 commits, tracked independently and nested inside the production repo directory.
 
 Primary evidence:
 
@@ -1212,11 +888,7 @@ Primary evidence:
 | Prototype used the same execution skills | Header of the 04-16 plan names `superpowers:subagent-driven-development` |
 | Plans authored the commit messages | Task steps contain literal `git commit -m "..."` commands matching the observed log |
 
-A second copy of the same repository (identical first commit `e70fcbf`, identical 177-commit
-count) exists at
-`C:\Users\matts\OneDrive - Koehler Partners\Projects\IMPACT\Internship Assessment\IMPACT Intretnship Assessment Portal`,
-alongside the original client feedback documents — including a session dated 2026-04-20, which
-falls inside the April 16 → May 6 calendar gap and confirms that gap was stakeholder review.
+A second copy of the same repository (identical first commit `e70fcbf`, identical 177-commit count) exists at `C:\Users\matts\OneDrive - Koehler Partners\Projects\IMPACT\Internship Assessment\IMPACT Intretnship Assessment Portal`, alongside the original client feedback documents — including a session dated 2026-04-20, which falls inside the April 16 → May 6 calendar gap and confirms that gap was stakeholder review.
 
 Companion documents:
 
