@@ -34,6 +34,8 @@ exists to answer whether the prospects are good enough to keep building.
 | Brand artifact | ❌ Not gathered — *separate input from references, see §4.1* |
 | Tech stack outline | 🔜 **Matt** — closes §10.3, feeds Stage B2 |
 | Domain source material | ✅ 76 solicitations banded; all 11 band A bundles pulled (`corpus/`) |
+| Calibration material | ✅ 140 closed federal solicitations, two samplings (`corpus/calibration/`) |
+| Contract history + expiry dates | ✅ 2,160 Indiana contracts expiring within 18 months (`corpus/indiana-contracts/`) |
 
 **The outline format changed.** IMPACT's terse `SHELL` / `SCREEN` / `VIEW` composition list did
 not suit this project. Matt is supplying instead:
@@ -224,6 +226,49 @@ its predecessor.
 | **SP7** | Live ingestion *(on GO)* | 2C, 2D, 2E, 2J, 2K, 1B, 1D | Scheduled runs; state portals flowing; health alarms firing |
 | **SP8** | Radars + reporting *(on GO)* | 3J, 3K, 3L, 4E, 4F, 4G, 4H, 4I, 4K | Expiration radar producing pre-RFP leads; feedback loop closing |
 
+### 6.0 Open tension — SP8's radar may not belong in SP8
+
+*Raised 2026-08-10 by the Indiana contract probe. Not resolved; flagged for the same
+reconciliation pass as the rest of §6.*
+
+The slice table puts the Expiration Radar in **SP8** — last, and gated on a GO at SP6. That
+placement assumed the radar depended on solicitation ingestion, extraction, and matching being
+in place first.
+
+It does not. `corpus/indiana-contracts/` establishes that every contract Indiana holds publishes
+its `endDate` through one anonymous JSON endpoint, no scraping, no credentials, no extraction.
+The radar's whole input is **already collected and in the repo.**
+
+That produces an awkward ordering:
+
+| | Expiration Radar | Everything before it |
+|---|---|---|
+| Dependencies | One endpoint and the entity graph (SP1) | Ingestion, fetch, extraction, matching |
+| Lead time it buys | **6–18 months ahead of an RFP** | Days to weeks |
+| Answers §1 problem | #2, *finding out too late* | #1 and #3 |
+| Current slice | SP8, post-gate | SP3–SP6 |
+
+So the feature that most directly answers the problem the project exists to solve is scheduled
+last, behind a gate, and its data is the easiest to get.
+
+**Arguments for leaving it in SP8.** SP6 is the honest go/no-go; moving attractive work in front
+of the gate weakens it. The radar produces *leads*, not scored opportunities, so it does not
+demonstrate the matching engine works — which is the thing actually in doubt. And contract-expiry
+leads are unvalidated: nobody has confirmed KP would act on one.
+
+**Arguments for pulling it forward.** It is cheap, its data is in hand, and it is the one output
+KP could use before the engine is trustworthy. It also exercises the Organization ↔ Vendor ↔
+Contract path of the entity graph early, which SP1 otherwise only asserts.
+
+**A third option, probably the right one:** leave the slice where it is, and add the contract
+register as a *source* in SP1's demo criterion — the real contracts load into the real schema
+alongside the real solicitations. That gets the data model tested against contract records early
+without moving a post-gate feature in front of the gate.
+
+**Do not resolve this from the plan alone.** It turns on how much KP would actually act on a
+pre-RFP lead, which is Matt's judgment, and it should be settled in the same pass that
+reconciles §6 against his effort/impact priorities.
+
 ### 6.1 Why these boundaries
 
 **SP1 is where the prototype cashes in.** Per Proto2PRD §4.1.1, the production data model
@@ -292,14 +337,19 @@ Everything else is buildable without blocking on him.
 2. **Matt:** area outline + descriptions + effort/impact + priority, and the user stories.
 3. **Matt:** inspiration images. No KP branding — Tenderfoot carries its own identity (§4.1.1).
 4. **Matt:** tech stack outline.
-5. **Matt:** the hand-run (A2) — fill Verdict and Reason in `corpus/manifest.md`. **This blocks
-   on nothing else and is the only step that can invalidate the project cheaply.** It does not
-   have to wait for the outline.
-6. **Claude:** reconcile §6's slice order against Matt's priorities; draft the workflow spec
-   from the stack outline.
-7. **Then:** the bake-off.
+5. **Matt:** the hand-run (A2). **This blocks on nothing else and is the only step that can
+   invalidate the project cheaply.** It does not have to wait for the outline. Now runs in a
+   click-through page rather than by editing markdown — 216 rows across three corpora, exporting
+   back to `corpus/manifest.md` format. The live band A/B rows (24) are the priority; calibration
+   is for depth of examples, not for the go/no-go.
+6. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension
+   about where the Expiration Radar belongs; draft the workflow spec from the stack outline.
+7. **Claude, unblocked:** test whether one licensed platform (Periscope, Ivalua, CGI Advantage)
+   retains closed solicitations. Under §5.7 a single answer covers Illinois, Ohio, Michigan, and
+   Kentucky at once. This is the last unexplored source question.
+8. **Then:** the bake-off.
 
-Steps 2 through 5 are independent of each other.
+Steps 2 through 5 are independent of each other, and step 7 is independent of all of them.
 
 ---
 

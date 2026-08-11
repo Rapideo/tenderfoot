@@ -42,9 +42,26 @@ the training signal.
 corpus/
   README.md            this file
   manifest.md          the index — one row per solicitation, with hand-run columns
+  FINDINGS.md          what the real documents taught us
   indiana/             fetched detail + documents
   federal/             fetched detail + documents
+  calibration/         24 months of closed federal solicitations, added 2026-08-10
+  indiana-contracts/   Indiana's executed-contract register, added 2026-08-10
 ```
+
+**Three corpora, and they are not interchangeable.** Mixing their samplings would produce
+measurements that look rigorous and mean nothing, so each directory states its own regime:
+
+| Directory | What it is | Sampling | May produce a precision figure |
+|---|---|---|---|
+| this one (`manifest.md`) | Open solicitations, fetched 2026-08-04 | Everything published that day | Yes |
+| `calibration/` — enriched | 80 closed federal solicitations | Ranked toward KP's service lines | **No** |
+| `calibration/` — unbiased | 60 closed federal solicitations | Seeded random | Yes |
+| `indiana-contracts/` | 2,160 contracts expiring within 18 months | All matching agencies in window | N/A — not solicitations |
+
+`indiana-contracts/` is a different *kind* of record: executed contracts, not opportunities. It
+feeds the Expiration Radar (§4.6) and Winnability (incumbent identity, whether the work was
+competitively bid, incumbent M/WBE status), not the bid/no-bid hand-run.
 
 ## Source access notes
 

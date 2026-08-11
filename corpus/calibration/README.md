@@ -102,10 +102,31 @@ weakest:
 |---|---|---|
 | SAM.gov | Back to 2019, no credentials | Working, and now demonstrably the wrong market |
 | Indiana IDOA solicitations | **None** — closed events disappear | Established 2026-08-04 |
-| Indiana contract data | Unknown | `secure.in.gov/apps/idoa/contractsearch/` returns 200 — **unprobed** |
+| Indiana contract data | **Back to 2005 — 204,439 contracts** | **Probed 2026-08-10 — open. See [`../indiana-contracts/`](../indiana-contracts/README.md)** |
 | Periscope / Ivalua / CGI states | Unknown | Platform-bound adapters (§5.7) make this one investigation covering several states |
 
-**Recommended next:** probe Indiana's contract search, then test whether one licensed platform
-retains closed solicitations. Under §5.7 a single positive answer there covers Illinois, Ohio,
-Michigan, and Kentucky at once — which is both better calibration material and the actual
-market.
+### Update, 2026-08-10 — the contract probe answered this
+
+Probing Indiana's contract search the same day changed the picture materially, and this document
+should not be read without it.
+
+Indiana publishes no solicitation archive, but it publishes **every executed contract back to
+2005** through an undocumented JSON API, anonymously, including the `endDate` of each one. So the
+Indiana coverage gap is real for *solicitations* and does not exist for *contracts*.
+
+That splits the original recommendation in two, and only one half still stands:
+
+- ~~Probe Indiana's contract search~~ — **done, and it is the better source.** 2,160 distinct
+  contracts expire within 18 months across KP's sectors, each with a retrievable PDF.
+- **Still open:** whether a licensed platform (Periscope, Ivalua, CGI Advantage) retains closed
+  solicitations. Under §5.7 one positive answer covers Illinois, Ohio, Michigan, and Kentucky.
+
+**What this means for the sets in this directory.** They are unaffected as *calibration material*
+— judging 140 closed federal solicitations still teaches the adjudicator Matt's voice, and the
+unbiased slice still yields an honest base rate for that population. But the framing above, that
+state and local **archive depth** is the missing piece, is now too narrow. The missing piece was
+never archive depth as such. It was **a source that records what the state actually bought**, and
+for Indiana that turns out to be the contract register rather than any solicitation archive.
+
+Worth keeping as a caution about this document's own reasoning: "we lack an archive" was the
+right observation attached to the wrong remedy, and one afternoon of probing distinguished them.
