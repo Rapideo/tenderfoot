@@ -56,3 +56,39 @@ August 4, 2026:
 
 
 
+
+August 10, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+1. Cleaned up first. That NotebookLM infographic from Aug 3 was built on the pre-correction spec — still says Phase 0 exists to justify a BD hire, still defines Timing as whether current staff can survive the window. Both things we struck. Archived rather than deleted; the delta between it and the current spec is the clearest record of what the scope correction actually changed.
+
+2. Asked for more calibration examples since only 5-10 of the 76 are plausible yeses. Got 3,357 archived federal solicitations over 24 months, split into two sets that must never be mixed — 80 enriched for teaching the adjudicator my voice, 60 random for measuring. A precision number off the enriched set would be fiction; its base rate is wrong by construction.
+
+3. But the real finding was the opposite of what I asked for. Across all 3,357 federal solicitations in our own service-line codes, ZERO have an Indiana place of performance. It's all DC, Maryland, Virginia, plus USAID. The thin positive class isn't a collection problem, it's the market. More federal archive would not have helped.
+
+4. So Claude probed Indiana's contract search. This is the find of the week. Undocumented JSON API behind the public search page — 204,439 contracts back to 2005, no credentials, and every record carries the contract END DATE. That's the field the spec calls the highest-value one in the system. Pulled 2,160 contracts expiring within 18 months across our sectors, every one with a PDF.
+
+5. 231 contracts across 149 vendors all expire 2026-12-31 — including the Medicaid MCO capitation book, Anthem and MDwise and Coordinated Care. Same programme the FSSA EQR RFP exists to review. That re-procurement is visible right now, four months out, from a public endpoint.
+
+6. Two traps in that data worth remembering. The end-date filter is an upper bound only, so an expiry window has to be bracketed client-side. And `amount` is EDS field 6, "total amount this action" — a per-amendment delta that goes NEGATIVE. Summing it double-counts. The running total is field 7 and only exists inside the PDF.
+
+7. Also: the PDFs open with State Form 41221, which publishes method of source selection AND M/WBE status for the prime and the sub with percentages. Incumbent WBE status is public for every contract the state holds. That turns the teaming question from guesswork into a query.
+
+8. Third government API in a row that silently ignores parameters it doesn't recognise. SAM.gov ignores `q=`, ignores every spelling of a date filter, and ignores `sort=-publishDate` while honouring `sort=-modifiedDate`. Indiana ignores `description` and `vendor`. Rule now: vary one parameter, watch the total move. Two requests, catches all of it.
+
+9. Claude drafted the SVRC in the IDE8 format. I'm adopting it — might have small edits but it's good. Worth noting it was used to generate the prototype BEFORE I adopted it, which is the real argument for it: precise enough to build from.
+
+10. Cut past-performance citation from the brief. I don't have access to those records. That was the brief's strongest claim — connecting an RFP to our past projects is the tedious part of every bid/no-bid call, and it's the clearest answer to why open an app instead of reading the RFP. Gone. What's left is a well-organised summary. The app's case now rests on the triage queue's reason capture, which was always the bigger claim anyway.
+
+11. Built the prototype in Claude Design straight from the SVRC. It turned out freaking amazing — nearly every screen, and it carried decisions we made hours earlier: the past-performance cut, sector-match and renewal columns on the expiration radar, a legal column on the source registry. It even produced a TENDERFOOT wordmark, which we'd defined as a Phase 0 output.
+
+12. Claude pulled it apart. Real mock data in there — cited scores, gate reasons, a modelled deadline conflict. But zero comments, zero tokens, 342 inline styles, ten different radius values. Lesson generalised into the playbook: Claude Design buys you the direction, not the specification. The extraction is real work on the far side of the handoff.
+
+13. Extracted the mock layer and the palette into src/, with the business rules written in as comments — that's the part a generator can't do, because it can't know a field exists because a real bundle shipped two deadlines and the wrong one nearly killed our best opportunity. Wrote the whole procedure up as ClaudeDesign_Proto_Cleanup.md so we don't rediscover it.
+
+14. Claude got two things wrong tonight and corrected both in place rather than quietly. Said nothing planned a past-performance library (the spec does plan it). Said the prototype had no mock layer — that one came from counting markup instead of opening the generator's script, where the data actually was. Second one is now a method note in the playbook.
+
+15. DECISION: no inspiration images. The prototype establishes the design language, so slot 3 closes unfilled. Slot 4 is the loose end — the palette came out of the generator and was never measured from a named source, which means colour is still a preference and still arguable. Either designate the frozen bundle retroactively or make a mark from the direction and sample it.
+
+16. NEXT: updated prototype tomorrow. I still owe user stories and the tech stack. Open: does the rendering get rebuilt in the repo or do we keep iterating in Design and re-extract each round; the radius scale; and the reason chips, which have to come from the hand-run rather than the generator. Claude can test whether Periscope/Ivalua/CGI retain closed solicitations without me.

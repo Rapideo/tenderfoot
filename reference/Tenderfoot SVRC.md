@@ -1,15 +1,19 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.1.2, 2026-08-10.**
-Work in progress. Not canonical.
+**Tenderfoot SVRC — version 0.2.0, 2026-08-10.**
+**Adopted.** This is the working outline, not a draft.
 
-> **This is Claude's draft, not Matt's document.** It exists to be overwritten. Three things about it need saying before anything else:
+> **Adopted 2026-08-10** (Matt), pending small edits. It was drafted by Claude from the design spec and used to generate the first prototype direction before adoption — which is the strongest thing that can be said for it: **it was precise enough to build from.**
 >
-> **The register is wrong on purpose.** IDE8's SVRC is dictated in Matt's voice, and its hedges carry which decisions are settled and which are not — the 0.2.0 revision note says so explicitly. Writing Tenderfoot's in that voice would put opinions in his mouth and, worse, would make my guesses indistinguishable from his rulings. This is written plainly instead.
+> Three things a reader still needs to know.
 >
-> **The scores are proposals.** `Imp` and `Pri` are Matt's judgments and nobody else's; I have filled them because the scoring key forbids a half-filled grid, not because I know them. `Eff` I can estimate from the build. `Proto` is **0% on every node** — that is not a guess, no prototype exists yet, and it is the one column here that is simply true.
+> **`Imp` and `Pri` were placeholders and are now load-bearing.** They were filled because the scoring key forbids a half-filled grid, not because they were known. Adoption promotes them from guesses to inputs — `docs/Tenderfoot-Plan-of-Action.md` §6 reconciles slice ordering against `Pri`. **They should be reviewed once with that consequence in mind**, because a placeholder that silently becomes a build order is exactly the failure the `·` convention exists to prevent. `Eff` is a genuine estimate. `Conc` reflects how settled the spec is.
 >
-> **Everything traces to the design spec.** Every Overview below comes from `docs/superpowers/specs/2026-08-03-tenderfoot-design.md` §7 and the component inventory in `reference/Tenderfoot - Concept Outline.md`, cited inline as `§x.y` and component IDs like `4A`. Where I invented rather than derived, the node says so in Open questions.
+> **`Proto` is stale everywhere.** Every node reads 0%, which was true when written and is not now — a direction exists at `../prototype/`. The column means *how close the prototype is to what we actually want*, so it can only be filled by looking at the prototype and judging, node by node. Left at 0% rather than guessed.
+>
+> **The register is plain, deliberately.** IDE8's SVRC is dictated in Matt's voice, and its hedges carry which decisions are settled — the 0.2.0 revision note there says so explicitly. Writing Tenderfoot's in that voice would have made a guess indistinguishable from a ruling. Now that it is adopted, edits in his own voice are the natural next layer.
+>
+> **Everything traces to the design spec.** Every Overview comes from `docs/superpowers/specs/2026-08-03-tenderfoot-design.md` §7 and the component inventory in `reference/Tenderfoot - Concept Outline.md`, cited inline as `§x.y` and component IDs like `4A`. Where something was invented rather than derived, the node says so in Open questions.
 
 # Overview
 
@@ -488,6 +492,13 @@ Levels 3 and below take no grid and no labels.
 - **`Imp` and `Pri` are proposals and should be treated as noise until Matt overwrites them.** They are filled only because the key forbids a half-filled grid. `Eff` is a genuine estimate; `Conc` reflects how settled the spec is, which I can judge.
 - **Three nodes carry findings the spec predates**, and they are the parts of this draft most worth keeping: the gated-items drawer (1.1.5) is justified by a real near-miss rather than a principle; the expiration radar (3.1) has its data already collected; and the teaming radar (3.2) turns out to be easier than the spec assumed, because Indiana publishes prime and sub M/WBE status on every contract.
 - **The largest gap found while writing this is not a UI gap.** The brief (2.1) rests entirely on a past-performance library that has been planned in one line and collected not at all.
+
+*Revision note, 0.1.2 → 0.2.0 — adopted. 2026-08-10.*
+
+- **Adopted as the working outline** (Matt, 2026-08-10), pending small edits. Filename loses the draft marker; the preamble no longer says "exists to be overwritten."
+- **It was used before it was adopted.** The first prototype direction was generated from this document in Claude Design, covering nearly every node — which is the evidence for adoption rather than a consequence of it. Recorded in `docs/Proto2PRD.md` §4.3.2.1.
+- **`Imp` and `Pri` are now load-bearing and were never verified.** Flagged prominently in the preamble. Adoption turns placeholder scores into the input to slice ordering, and that transition is exactly what the `·` convention exists to prevent happening silently.
+- **`Proto` is knowingly stale at 0% throughout.** A prototype now exists; the column can only be filled by judging each node against it. Left rather than guessed.
 
 *Revision note, 0.1.1 → 0.1.2 — a cut, and what it costs. 2026-08-10.*
 

@@ -24,8 +24,9 @@ Component IDs throughout (`0A`, `2B`, `5C`…) refer to the build inventory. Sec
 | Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred. Past-performance citation cut 2026-08-10 (§7.3) |
 | Component inventory | ✅ 48 in-scope components with dependencies |
 | Source research | ✅ Platform-bound adapters, verified archive depths (§5.7–5.8). One question left: do licensed platforms retain closed solicitations |
-| UI outline + user stories | ◐ **Claude drafted an SVRC** — `../reference/Tenderfoot SVRC V0.1.0 (CLAUDE DRAFT).md`, structure derived from spec §7. **Matt owns the real one**; the draft exists to be overwritten, and its `Imp`/`Pri` columns are placeholders. **User stories still outstanding.** |
-| Design references | 🔜 **Matt** — inspiration images |
+| UI outline | ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`. Drafted by Claude, used to generate the prototype, then adopted. **`Imp`/`Pri` were placeholders and are now inputs to §6 — review once.** |
+| User stories | 🔜 **Matt** — no draft, no stand-in |
+| Design references | ✅ **Closed 2026-08-10 without gathering any** — the prototype direction establishes the design language. Slot 3 of the two-slot model, legitimately empty (§A1.1) |
 | Brand artifact | ❌ Not gathered — *separate input from references, see §4.1* |
 | Tech stack outline | 🔜 **Matt** — closes §10.3, feeds Stage B2 |
 | Prototype | ◐ **First direction in the repo, 2026-08-10.** Generated in Claude Design from the SVRC; bundle frozen at `prototype/PROTOTYPE/`, mock layer and tokens extracted to `src/`. **Rendering untouched** — see §A7 |
@@ -61,9 +62,9 @@ Both are `Proto2PRD.md` §2.1 boundary conditions, and both change the plan.
 | # | Input | Tenderfoot's version | Owner |
 |---|---|---|---|
 | 1 | PRD | The design spec — already written | ✅ |
-| 2 | Area outline + user stories | **SVRC format** (IDE8 grammar) + user stories. Claude draft exists; Matt owns the real one | **Matt** |
-| 3 | Design conventions | Inspiration images — one coherent system | **Matt** |
-| 4 | Palette source | Open. May be a mark, a named image, or something else — see A1.1 | **Matt** |
+| 2 | Area outline + user stories | ✅ SVRC adopted. **User stories still owed** | **Matt** |
+| 3 | Design conventions | ✅ Closed unfilled — the prototype direction supplies this | — |
+| 4 | Palette source | ⚠️ Never filled; palette came from the generator and has no anchor — see A1.1 | **Matt** |
 | 5 | Domain source material | 76 real solicitations, 11 bundles pulled | ✅ `corpus/` |
 
 ### A1.1 Tenderfoot is its own brand, and that breaks a mechanism
@@ -74,20 +75,29 @@ This is architecturally consistent — §2.1's first portability rule says no fa
 
 **Both visual input slots stay open.** Proto2PRD §4.5 keeps design conventions and palette source as **two permanent, independent inputs** — either may be absent, either may be pre-existing or created for the project, and one artifact filling both is a convenience rather than the expected case. Tenderfoot is not an exception to that model; it is one configuration of it.
 
-- **Slot 3 — design conventions.** Filled: inspiration images.
-- **Slot 4 — palette source.** **Open.** There is no Tenderfoot mark yet. It may end up a mark created for the project, one named inspiration image, or something else. Keep the slot; decide the filling later.
+- **Slot 3 — design conventions.** **Closed unfilled, 2026-08-10.** No inspiration images will be gathered. The generated prototype direction establishes the design language directly, so the input the images existed to supply has already been delivered by other means. This is a legitimate configuration of the two-slot model, not a skipped step — the slot stays in the playbook for the next project.
+- **Slot 4 — palette source.** **Never filled, and the mechanism it carries never ran.** The palette came out of the generator: 59 colours, now named in `../prototype/PROTOTYPE/src/tokens.css`, none of them measured from a designated artifact.
 
-What matters is not provenance but **naming before sampling**. Proto2PRD §7.2 is about relitigation:
+  This matters more than slot 3 does, and it should be recorded rather than shrugged off. Proto2PRD §4.5's value is not the colour, it is the *anchoring*:
 
-> "Deriving the palette from an artifact nobody controls removes colour from the space of things that can be relitigated. There is no 'what if the blue were softer' conversation, because the blue is not a preference — it is a measurement."
+  > "Deriving the palette from an artifact nobody controls removes colour from the space of things that can be relitigated. There is no 'what if the blue were softer' conversation, because the blue is not a preference — it is a measurement."
 
-Someone chose IMPACT's logo too, at some point. So whatever fills slot 4:
+  A generated palette has no such anchor. `#1b6a8c` is a preference, and preferences can be relitigated indefinitely — which is precisely the conversation §4.5 exists to end. Two ways out, both cheap:
+
+  1. **Designate the frozen bundle as the source retroactively.** It is an artifact nobody is going to re-open, which is most of what §4.5 asks for. The tokens then cite it, and the rule becomes *do not revisit*.
+  2. **Produce a Tenderfoot mark from the chosen direction** and sample it, closing the loop the way IMPACT's did. The wordmark was always a Phase 0 output (below); this makes it the palette's source as well.
+
+  Either works. Doing neither leaves colour permanently arguable.
+
+What matters is not provenance but **naming before sampling**. Someone chose IMPACT's logo too, at some point. So whichever route closes slot 4:
 
 1. **Designate one specific source before sampling anything** — one file, not a set.
 2. **Sample per token, with a comment naming the source element**, exactly as IMPACT did.
 3. **Do not revisit it.** The discipline is in the not-revisiting, not in the provenance.
 
-**And one thing moves from input to output:** IMPACT got a wordmark free with its logo. Tenderfoot's **name treatment is a Phase 0 deliverable**, produced by the bake-off rather than supplied to it. Each design direction should render the name in its own register — that is part of what is being chosen.
+Step 2 is the one already half-done: `tokens.css` names every colour by role, and says in its own header that no source is cited because none was designated. Closing slot 4 is mostly a matter of adding that line and meaning it.
+
+**And one thing moved from input to output — and has now been delivered.** IMPACT got a wordmark free with its logo. Tenderfoot's name treatment was defined as a Phase 0 *deliverable*, produced by the bake-off rather than supplied to it. **The generated direction rendered a `TENDERFOOT` wordmark**, so that output exists; whether it is the final mark is a separate question, and it is a candidate for the slot-4 source under route 2 above.
 
 Input 5 is where Tenderfoot differs most usefully. IMPACT's mock data was realistic but *invented* — Eskenazi Health, Indy Tech Trades. Ours can be **real**: pull actual solicitations from SAM.gov and Indiana, PDFs and all.
 
@@ -289,12 +299,8 @@ Everything else is buildable without blocking on him.
 ## 8. Immediate next actions
 
 1. ~~**Claude:** collect real solicitations with documents.~~ ✅ Done — `corpus/`, 76 banded, 11 band A bundles pulled, findings in `corpus/FINDINGS.md`.
-2. **Matt:** the SVRC — area outline with descriptions, effort/impact, priority — plus the user
-   stories. The format is now IDE8's SVRC grammar (shell/screen/view/region, six-column grid,
-   grids at levels 1–2 only). A Claude draft exists at
-   `../reference/Tenderfoot SVRC V0.1.0 (CLAUDE DRAFT).md` as a starting point to overwrite, not
-   a substitute. **User stories are not drafted and have no stand-in.**
-3. **Matt:** inspiration images. No KP branding — Tenderfoot carries its own identity (§4.1.1).
+2. ~~**Matt:** the SVRC.~~ ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`, pending small edits. **Two follow-ups:** review `Imp`/`Pri`, which were placeholders and are now the input to §6 slice ordering; and fill `Proto`, stale at 0% now that a direction exists. **User stories are still owed and have no stand-in.**
+3. ~~**Matt:** inspiration images.~~ ✅ **Closed 2026-08-10 without gathering any** — the prototype direction supplies the design language (§A1.1).
 4. **Matt:** tech stack outline.
 5. **Matt, in progress 2026-08-10:** the prototype. Per §A3 the bake-off may run in Claude
    Design; the build-out returns to the repo (Proto2PRD §4.3.2). Note this runs *ahead* of the
