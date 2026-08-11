@@ -2,11 +2,22 @@
 
 **Collected:** 2026-08-04 · **Hand-run status:** not started
 
-Fill in **Verdict** (`BID` / `NO` / `?`) and **Reason** (one line, your words). Leave Band alone
-— disagreement between Band and Verdict is the point. See `README.md`.
+**The hand-run no longer happens by editing this file.** As of 2026-08-10 it runs in a
+click-through page — 216 rows across three corpora, keyboard-driven, saving to the browser as
+you go — which exports markdown in this file's format to be transferred back here. The Verdict
+and Reason columns below stay as the destination and the versioned record.
+
+Verdict is `BID` / `NO` / `?`; Reason is one line in the scorer's own words. Leave Band alone —
+disagreement between Band and Verdict is the point.
 
 Work bands **A and B** in full. Spot-check **C** — a real fit hiding in C is the most valuable
 finding available.
+
+**Two scorers, and exports are attributed.** Matt and one KP colleague are scoring
+independently. Every export is stamped with who produced it, because two people's judgment
+cannot be merged into a single ground truth without knowing whose is whose. Where both scored
+the same row, the disagreement rate is worth more than either verdict: it is the ceiling on
+what any scorer can achieve, since no model beats human disagreement.
 
 ---
 

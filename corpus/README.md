@@ -20,6 +20,17 @@ and neat data hides every problem the extraction layer has to survive.
 
 This is why the hand-run (Stage A2) comes before any code: one pass produces all four.
 
+**How the hand-run is actually run, as of 2026-08-10.** Not by editing `manifest.md` — in a
+click-through page covering all 216 rows across the three corpora, keyboard-driven, persisting
+to the browser, exporting markdown in `manifest.md`'s format. Two people are scoring
+independently and **every export is attributed**, because two judgments cannot be merged into
+one ground truth without knowing whose is whose.
+
+**Score the same rows twice where you can.** Inter-rater disagreement is the ceiling on
+achievable precision — no scorer beats the rate at which two experienced people disagree — and
+the rows they split on are the most valuable few-shot examples in the set. Knowing that number
+before the engine exists is worth more than the hour it costs.
+
 ## The band column is a prediction, not a filter
 
 Every row carries a **band** — my guess at whether KP could plausibly bid it:

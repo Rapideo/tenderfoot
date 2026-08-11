@@ -20,14 +20,15 @@ Component IDs throughout (`0A`, `2B`, `5C`…) refer to the build inventory. Sec
 
 | Playbook input | Status |
 |---|---|
-| Requirements / rules / non-goals | ✅ The design spec — stronger than a PRD, 746 lines |
-| Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred |
+| Requirements / rules / non-goals | ✅ The design spec — stronger than a PRD |
+| Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred. Past-performance citation cut 2026-08-10 (§7.3) |
 | Component inventory | ✅ 48 in-scope components with dependencies |
-| Source research | ✅ Platform-bound adapters, verified archive depths (§5.7–5.8) |
-| UI outline + user stories | 🔜 **Matt, tomorrow** — his own format (see below) |
-| Design references | 🔜 Matt, tomorrow — inspiration images |
+| Source research | ✅ Platform-bound adapters, verified archive depths (§5.7–5.8). One question left: do licensed platforms retain closed solicitations |
+| UI outline + user stories | ◐ **Claude drafted an SVRC** — `../reference/Tenderfoot SVRC V0.1.0 (CLAUDE DRAFT).md`, structure derived from spec §7. **Matt owns the real one**; the draft exists to be overwritten, and its `Imp`/`Pri` columns are placeholders. **User stories still outstanding.** |
+| Design references | 🔜 **Matt** — inspiration images |
 | Brand artifact | ❌ Not gathered — *separate input from references, see §4.1* |
 | Tech stack outline | 🔜 **Matt** — closes §10.3, feeds Stage B2 |
+| Prototype | 🔜 **Matt, in progress as of 2026-08-10** |
 | Domain source material | ✅ 76 solicitations banded; all 11 band A bundles pulled (`corpus/`) |
 | Calibration material | ✅ 140 closed federal solicitations, two samplings (`corpus/calibration/`) |
 | Contract history + expiry dates | ✅ 2,160 Indiana contracts expiring within 18 months (`corpus/indiana-contracts/`) |
@@ -60,7 +61,7 @@ Both are `Proto2PRD.md` §2.1 boundary conditions, and both change the plan.
 | # | Input | Tenderfoot's version | Owner |
 |---|---|---|---|
 | 1 | PRD | The design spec — already written | ✅ |
-| 2 | Area outline + user stories | Descriptions, effort/impact, priority | **Matt** |
+| 2 | Area outline + user stories | **SVRC format** (IDE8 grammar) + user stories. Claude draft exists; Matt owns the real one | **Matt** |
 | 3 | Design conventions | Inspiration images — one coherent system | **Matt** |
 | 4 | Palette source | Open. May be a mark, a named image, or something else — see A1.1 | **Matt** |
 | 5 | Domain source material | 76 real solicitations, 11 bundles pulled | ✅ `corpus/` |
@@ -99,7 +100,9 @@ That single act pays four times over:
 
 ### A2. The hand-run — do this before anything is built
 
-Sit with those 30–50 real solicitations and mark each one: **would bid / would not bid / unclear**, with a one-line reason.
+Mark each solicitation **would bid / would not bid / unclear**, with a one-line reason.
+
+**As built, 2026-08-10:** 216 rows across three corpora in a click-through page, not 30–50 in a markdown table. The 24 live band A/B rows are the priority and the only ones the go/no-go depends on; the 140 calibration rows add example depth; band C is a spot-check. Two people score independently and exports are attributed — see `corpus/README.md` for why inter-rater disagreement is worth measuring before the engine exists.
 
 This is the cheapest signal available anywhere in the project, and it is a genuine feasibility test. If a human expert cannot reliably separate fits from non-fits by reading the documents, no scorer will either — and that is worth knowing on day two rather than at SP6.
 
@@ -276,13 +279,22 @@ Everything else is buildable without blocking on him.
 ## 8. Immediate next actions
 
 1. ~~**Claude:** collect real solicitations with documents.~~ ✅ Done — `corpus/`, 76 banded, 11 band A bundles pulled, findings in `corpus/FINDINGS.md`.
-2. **Matt:** area outline + descriptions + effort/impact + priority, and the user stories.
+2. **Matt:** the SVRC — area outline with descriptions, effort/impact, priority — plus the user
+   stories. The format is now IDE8's SVRC grammar (shell/screen/view/region, six-column grid,
+   grids at levels 1–2 only). A Claude draft exists at
+   `../reference/Tenderfoot SVRC V0.1.0 (CLAUDE DRAFT).md` as a starting point to overwrite, not
+   a substitute. **User stories are not drafted and have no stand-in.**
 3. **Matt:** inspiration images. No KP branding — Tenderfoot carries its own identity (§4.1.1).
 4. **Matt:** tech stack outline.
-5. **Matt:** the hand-run (A2). **This blocks on nothing else and is the only step that can invalidate the project cheaply.** It does not have to wait for the outline. Now runs in a click-through page rather than by editing markdown — 216 rows across three corpora, exporting back to `corpus/manifest.md` format. The live band A/B rows (24) are the priority; calibration is for depth of examples, not for the go/no-go.
-6. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline.
-7. **Claude, unblocked:** test whether one licensed platform (Periscope, Ivalua, CGI Advantage) retains closed solicitations. Under §5.7 a single answer covers Illinois, Ohio, Michigan, and Kentucky at once. This is the last unexplored source question.
-8. **Then:** the bake-off.
+5. **Matt, in progress 2026-08-10:** the prototype. Per §A3 the bake-off may run in Claude
+   Design; the build-out returns to the repo (Proto2PRD §4.3.2). Note this runs *ahead* of the
+   SVRC and the hand-run rather than after them, which is a departure from the stated order —
+   worth watching, since §A2 puts the hand-run before anything is built precisely because it is
+   the cheap way to find out the premise is wrong.
+6. **Matt:** the hand-run (A2). **This blocks on nothing else and is the only step that can invalidate the project cheaply.** It does not have to wait for the outline. Now runs in a click-through page rather than by editing markdown — 216 rows across three corpora, exporting back to `corpus/manifest.md` format. The live band A/B rows (24) are the priority; calibration is for depth of examples, not for the go/no-go.
+7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline.
+8. **Claude, unblocked:** test whether one licensed platform (Periscope, Ivalua, CGI Advantage) retains closed solicitations. Under §5.7 a single answer covers Illinois, Ohio, Michigan, and Kentucky at once. This is the last unexplored source question.
+9. **Then:** the bake-off.
 
 Steps 2 through 5 are independent of each other, and step 7 is independent of all of them.
 
