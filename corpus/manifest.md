@@ -152,7 +152,8 @@ the highest-consequence extracted field (§8.4).
 
 ### SAM.gov adapter findings — retrieve by facet, not by keyword
 
-Three things learned the hard way, all of which shape the tier-1 adapter (2B):
+Five things learned the hard way, all of which shape the tier-1 adapter (2B). Items 4 and 5 were
+added 2026-08-10 while pulling the calibration archive.
 
 **1. The `q=` keyword parameter is silently ignored.** `q="program evaluation"` and
 `q="managed care" OR "quality review"` returned *identical* result sets — furniture, grease
@@ -167,6 +168,38 @@ the scoring principle happen to agree: pull broadly on structured facets, judge 
 
 **3. `is_active=true` does not exclude awarded notices.** Three of fifteen came back already
 awarded. Award state has to be checked in the record, not trusted from the query.
+
+**4. No date parameter works. All of them fail silently.** Three separate spellings were tried
+against the same query — `date.publish.from/to`, `postedFrom/postedTo`, `date.modified.from/to`,
+and `publishDate.from/to`. **Every one returned an identical `totalElements` of 2,159 and
+identical 2026 records**, against a requested window of Aug 2024 – Aug 2025. No error, no
+warning, no empty result — just the unfiltered set wearing the shape of a filtered one.
+
+This is the second confirmed instance of the §5.4 silent-failure mode on the *same endpoint*.
+The pattern is now established well enough to state as a source-level fact: **on SAM.gov's
+`sgs/v1` search, an unrecognized parameter is discarded rather than rejected.** Any adapter that
+assumes otherwise will believe it is reading a window when it is reading the head of the index.
+
+**5. What works, and what does not, within `sort` itself.** `notice_type=o|k|p|r` genuinely
+filters — verified by confirming every returned record carries the requested type.
+`sort=-modifiedDate` is genuinely monotonic descending across pages, and pagination reaches back
+to 2019. But **`sort=-publishDate` is silently ignored**: it returns non-monotonic results led by
+2009-era notices. So the failure is not per-parameter but per-*value* — `sort` is a real
+parameter that accepts an unreal field and discards it. Verifying the parameter name is not
+enough; the value has to be verified too.
+
+**The resulting retrieval rule.** Date bounding must be done **client-side**: request a verified
+facet, sort by `-modifiedDate`, paginate, and cut locally. Because `modifiedDate >= publishDate`
+always holds, paginating until *modifiedDate* passes the cutoff is guaranteed to have already
+seen every record *published* inside the window — the ordering key and the filter key must be
+reconciled deliberately, or the run stops early and silently under-samples.
+
+This is the same conclusion §6.2 reaches from a different direction — pull broadly on structured
+facets, judge locally — and it now has two independent reasons behind it.
+
+**How to test a facet before trusting it.** Vary only the parameter under test and compare
+`totalElements`. If it does not move, the parameter is being ignored. This check costs two
+requests and would have caught every failure above.
 
 ### Where KP's work actually lives
 
