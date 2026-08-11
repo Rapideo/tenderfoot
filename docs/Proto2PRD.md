@@ -476,7 +476,9 @@ Each task decomposes into checkbox steps carrying complete code, a concrete veri
 Place at top of `Prototypes/PROTOTYPE/app.js`:
 
   ```js
-(function (window) { // -------- Mock dataset (single source of truth for demo) -------- const COHORTS = [ ... ]
+  (function (window) {
+    // -------- Mock dataset (single source of truth for demo) --------
+    const COHORTS = [ ... ]
   ```
 
 - [ ] **Step 2: Verify module loads**
@@ -489,7 +491,8 @@ the `<script src="app.js">` import.
 - [ ] **Step 3: Commit**
 
   ```bash
-git add Prototypes/PROTOTYPE/app.js Prototypes/PROTOTYPE/readiness-detail.html git commit -m "Add shared app.js with mock dataset and modal helper"
+  git add Prototypes/PROTOTYPE/app.js Prototypes/PROTOTYPE/readiness-detail.html
+  git commit -m "Add shared app.js with mock dataset and modal helper"
   ```
 ```
 
