@@ -13,14 +13,26 @@ prototype/
   PROTOTYPE/
     Tenderfoot UI Mockups V1,1.html  CURRENT — Claude Design export, frozen source
     Tenderfoot UI Mockups.html       V1 — superseded, kept for the diff
-    src/app.js                       mock layer — EXTRACTED FROM V1, now stale
-    src/tokens.css                   palette — EXTRACTED FROM V1, now superseded
+    src/tokens.css                   palette + radii — RE-EXTRACTED FROM V1.1, current
+    src/app.js                       mock layer — EXTRACTED FROM V1, still stale
+  tools/extract-tokens.py            regenerates src/tokens.css from the bundle
+  tools/verify-tokens.py             checks every token round-trips to the bundle
   archive/       the losing bake-off directions, kept unmodified
   CLAUDE.md      the prototype's own source-of-truth document (§4.6) — to be written
   README.md      this file
 ```
 
-> ### `src/` is stale as of V1.1 — read this before using it
+## Decisions taken 2026-08-11
+
+Three questions that V1.1 raised were left open overnight and are now closed. All three were Matt's calls.
+
+**1. The radius scale is twelve steps, adopted as-is.** V1 used ten values; V1.1 added a 2 and a 12 rather than converging. Extracting the usage settled it the other way from what "no scale" suggested — **the ramp tracks element size.** An 8×8 checkbox mark takes 1px, a 22×22 checkbox 3px, a chip 4px, a button 7px, a card 9px, a 540px modal 12px. That is a legible rule, just a dense one, so the tokens are named for the element (`--radius-chip`, `--radius-modal`) and a new component picks its radius by asking what it *is*. `--radius-round: 50%` is a separate primitive, not a thirteenth step.
+
+**2. Tokens are named by role, and the generated names are kept as aliases.** `src/tokens.css` now defines all 67 colours under role names and maps every generated name onto its role name in a compatibility block at the foot. The frozen bundle keeps rendering unchanged; new code is written against role names; when nothing references a generated name the block deletes in one step. **No value changed** — a verifier resolves the alias chain back to the bundle and asserts byte-equality.
+
+**3. The prototype stays in this repo.** Not split into its own, notwithstanding the IMPACT precedent recorded below. The cost stands as written: iteration commits interleave with planning commits, and "frozen" stays a convention rather than a property of the filesystem.
+
+> ### `src/tokens.css` is current. `src/app.js` is still stale.
 >
 > **V1.1 landed hours after the V1 extraction, and moved underneath it.** This is the re-extraction cost that `../docs/Tenderfoot-Plan-of-Action.md` §9 question 5 raised, arriving immediately and answering itself: **every Design iteration invalidates the extraction.**
 >
@@ -33,15 +45,23 @@ prototype/
 > | Distinct radii | 10 | **12** |
 > | DSL comments | 0 | **0** |
 >
-> **The generator closed the token gap by itself.** V1.1 defines 67 tokens and uses them 774 times. `src/tokens.css` — extraction-by-hand from V1 — is therefore **superseded as a token layer.** Its only remaining value is as a *naming* proposal: the generated names are terse and positional (`--acc`, `--brd`, `--text3b`, `--brdctl4`, `--accbg2/3/4`), which tells you a value was added when one was needed rather than designed as a scale. Mine name by role. Neither is authoritative until someone decides.
->
-> **The radius problem got worse, not better** — twelve values now, including a new 2 and 12. Still no scale.
+> **The generator closed the token gap by itself**, which is why step 3 of the cleanup procedure is now scripted rather than hand-run: `tools/extract-tokens.py` reads values out of the bundle, so a re-extraction costs one command instead of an afternoon. What the script cannot produce is the comment on each token, and that is the part worth keeping.
 >
 > **The gap that did not close is the one that matters.** V1.1's DSL is 25 KB larger, gained an `ENTITIES` structure, and still carries **zero comments**. That is exactly the finding in `../docs/Proto2PRD.md` §4.3.2.1: the generator produces data, not rules. It will keep producing better data and never produce a rule, because the rules are things only a person in the room knows.
 >
-> So `src/app.js` needs re-extracting against V1.1 — the data moved — but **the comments in it are still the only copy of the reasoning** and must be carried forward, not regenerated. That is the shape of every future round.
+> So `src/app.js` still needs re-extracting against V1.1 — the data moved — but **the comments in it are the only copy of the reasoning** and must be carried forward, not regenerated. That is the shape of every future round.
 >
 > **Also unchanged in V1.1:** the `fonts.googleapis.com` preconnect, and the `Capacity` reason chip that contradicts §1's capacity-agnostic rule.
+
+## What the token extraction turned up
+
+Two findings recorded in `src/tokens.css` rather than fixed, on the standing rule that cleanup never changes a colour.
+
+**Ninety colour pairs sit below the just-noticeable-difference threshold** (ΔE76 < 2.3). Most are harmless — a background and a border may share a value. Four are the same job at an indistinguishable distance, and one looks like an actual defect: `--ground-hover` is 0.44 ΔE from `--ground-recess-3`, which means a hover state a fifth of a JND away from a resting surface and will not read as feedback.
+
+**`--signal-neg` is doing three jobs**: the data-conflict flag (*DEADLINE DISAGREEMENT — NOT RESOLVED*), destructive actions (*Delete view*), and low scores. Those don't co-occur — a record can carry a deadline conflict and still score well — so one red means the interface cannot distinguish "this is wrong" from "this is bad news." That matters more here than it would elsewhere, in a system where §4.5 holds that the reason outranks the decision.
+
+Both are handed back, same as the radii were.
 
 `PROTOTYPE/src/` is the one that moves. The bundle and `archive/` never do.
 
@@ -64,6 +84,8 @@ Tenderfoot's seed data should be a curated subset of the real corpus — actual 
 > **Deviation from IMPACT, recorded deliberately.** IMPACT's prototype was its **own git repo**, nested inside the production repo and tracked independently — which gave 177 iteration commits their own history and made the freeze a hard boundary rather than a convention. Tenderfoot's lives in this repo instead, decided 2026-08-10, because there is no production repo to nest inside yet.
 >
 > **What that costs:** prototype iteration commits interleave with planning and corpus commits, and "frozen" becomes a rule people follow rather than a property of the filesystem. If the log gets noisy, splitting this directory into its own repo later is the fix — and doing it after a hundred commits is more annoying than doing it now. Resolves `docs/Tenderfoot-Plan-of-Action.md` §9 item 3.
+>
+> **Reaffirmed 2026-08-11**, with the "do it now or regret it later" argument put explicitly and declined. The cost above is accepted rather than unnoticed.
 
 ## Bake-off notes
 

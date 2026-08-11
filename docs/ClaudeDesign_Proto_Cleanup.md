@@ -72,19 +72,33 @@ Since the production data model is *this dataset normalized* (§4.1.1), a field 
 
 ### 3. Name the colours
 
-Extract every hex literal, count occurrences, and write a token file. Expect 40–60 distinct values from a generated direction.
+Extract every hex literal, count occurrences, and write a token file. Expect 40–60 distinct values from a generated direction — or, on a later iteration, expect the generator to have produced its own token layer, in which case **the job is renaming rather than extracting.**
 
 Group by **role, not by hue**: accent, semantic (verdict/health — always separate from the accent), ink ramp, surfaces, borders. A hex used 88 times is carrying meaning that the literal does not record.
 
+**Derive the role from behaviour, not from the prefix the generator gave it.** Which CSS property is the token assigned to, and which elements carry it? On Tenderfoot this changed three names: `--text7` turned out to be the ALL-CAPS mono microlabel colour and the second-most-used foreground in the direction; the `--ink*` family turned out to be a *dark inverted ground* (toasts, command bar, tour) rather than a dark text ramp; and `--yellow` got renamed for its job, because a token named for its hue cannot be changed without lying.
+
 **Extraction only. Do not change a colour.** The direction belongs to whoever chose it.
+
+**Where the generator already produced tokens, alias rather than rewrite.** Define the role names with the values, then map every generated name onto its role name in a compatibility block. The frozen bundle keeps rendering, new code uses role names, and there is never a third state in which the two disagree. Delete the block when nothing references a generated name.
+
+**Script it, and verify with different code than you generated with.** Reading values out of the bundle rather than transcribing them makes re-extraction a single command, which matters because it will run every round. Then check the result *independently* — resolve the alias chain in the written file back to the bundle and assert byte-equality. On Tenderfoot that check immediately caught a generator bug that emitted 67 declarations with no colons; the file was invalid CSS and looked fine. See `prototype/tools/` for both scripts. This is the same lesson as the code-fence incident: **a verification that shares a bug with the thing it verifies will confirm it every time.**
+
+**Measure the near-duplicates and report them; do not merge them.** Compute ΔE between same-family pairs. Below ~2.3 the two colours are perceptually identical, and a pair doing the *same job* at that distance buys nothing. Tenderfoot had 90 such pairs, including a hover state 0.44 ΔE from a resting surface — which is a defect, not a redundancy, because it cannot read as feedback. Report and hand back; merging changes the design.
+
+**Watch for one semantic colour doing several jobs.** Tenderfoot's negative red carried a data-conflict flag, destructive actions, and low scores. Those do not co-occur, so a single value leaves the interface unable to distinguish "this is wrong" from "this is bad news." Flag it; splitting introduces a colour, which is a design decision.
 
 §4.5 also wants each token to name the element it was sampled from. That only applies when a slot-4 palette source exists; where the palette came out of the generator rather than a measured artifact, **say so in the file** — the tokens then record *what* but not *why*, and the not-revisiting discipline has nothing to anchor to until a source is named.
 
-### 4. Tokenise the radii — but do not collapse them
+### 4. Tokenise the radii — and find out whether there is a scale before assuming there isn't
 
-Generated directions do not use a scale. Tenderfoot's had **ten values**: 1/3/4/5/6/7/8/9/10/20px.
+Generated directions look like they do not use a scale. Tenderfoot's V1 had **ten values** (1/3/4/5/6/7/8/9/10/20px) and V1.1 had **twelve**, having added a 2 and a 12 rather than converging.
 
-Tokenise them **as they are**, and write the proposed scale into a comment. Collapsing radii visibly changes the design, which makes it a design decision and not a cleanup. Hand it back.
+The obvious reading is noise. **Check it before believing it** — sample what carries each value, and read the box dimensions and padding alongside it. On Tenderfoot the ramp turned out to track element size almost monotonically: an 8×8 mark took 1px, a 22×22 checkbox 3px, a chip 4px, a button 7px, a card 9px, a 540px modal 12px. That is a rule, just a dense one, and it survives being written down as `--radius-chip` / `--radius-button` / `--radius-modal`, where a new component picks its radius by asking what it *is*.
+
+So the guidance is **tokenise as-is and name for the element.** Collapsing radii visibly changes the design, which makes it a design decision and not a cleanup — hand that back either way. But do not present "no scale" as the finding until you have looked, because on this evidence the generator's twelve values encoded a real logic that a proposed five-step scale would have destroyed.
+
+Keep `50%` out of the numeric scale; it is a separate primitive.
 
 ### 5. Sweep the small things
 
@@ -116,6 +130,8 @@ One direction, 401-line bundle, 114KB decoded template, 692-line DSL script.
 
 Output: `src/app.js` (482 lines, 5 opportunity records with cited scores, gate reasons, a modelled deadline conflict) and `src/tokens.css` (59 colours named by role).
 
+**Second measurement, V1.1, one day later.** Steps 3 and 4 rerun against the newer bundle, this time scripted end to end: `prototype/tools/extract-tokens.py` writes the file, `verify-tokens.py` checks it. 67 colours and 13 radius tokens, all values read from the bundle rather than transcribed. **The mechanical half went from minutes to seconds and is now free to repeat.** What did not compress: deciding the names, working out what each token was actually doing, and writing the two findings the extraction surfaced. That ratio is the whole point of the procedure — the part a script can do keeps getting cheaper, and the part it cannot stays exactly as expensive as it was.
+
 **The honest verdict on the fork.** Generation was fast and the coverage was startling — a working prototype off an outline, carrying decisions made hours earlier. Cleanup was cheap for tokens and data, and the expensive part was writing down rules that were never in the artifact to begin with. **Those rules would have had to be written either way** — building in the repo from the start does not avoid them, it just writes them earlier and interleaved with the design.
 
 So on this evidence the fork holds. Worth re-measuring on a project where the bake-off runs three directions rather than one, since that is where generation should pay most and where the archiving discipline is most at risk.
@@ -130,9 +146,11 @@ What changed between two versions a few hours apart: template 114 KB → 160 KB,
 
 Three lessons, and the third is the important one.
 
-**1. The generator will close the mechanical gaps by itself, given another pass.** The token layer that step 3 of this procedure creates by hand appeared in V1.1 unprompted — 67 tokens, 774 `var()` usages. So hand-tokenising an early version can be wasted work. **If more iterations are expected, defer step 3** and keep only the naming proposal, since generated token names tend to be positional (`--acc`, `--brdctl4`, `--accbg2/3/4`) where a human names by role.
+**1. The generator will close the mechanical gaps by itself, given another pass.** The token layer that step 3 of this procedure creates by hand appeared in V1.1 unprompted — 67 tokens, 774 `var()` usages. So hand-tokenising an early version is wasted work. **The fix is to script step 3 rather than defer it**: an extraction script reads values out of whichever bundle is current, so the mechanical part costs one command per round and the generator closing the gap costs nothing. What stays hand-written is the *naming* and the per-token comment, since generated names are positional (`--acc`, `--brdctl4`, `--accbg2/3/4`) where a human names by role.
 
-**2. It will not fix what it cannot know.** The radius count went *up*, 10 values to 12. Nothing that requires a decision gets decided by iterating.
+> **Superseding an earlier version of this note**, which advised deferring step 3 while iteration continued. That was the right call when the step was manual and wrong once it was scripted — the cost that justified deferring is gone.
+
+**2. It will not fix what it cannot know — but do not mistake "unfixed" for "wrong."** The radius count went *up*, 10 values to 12, and this document originally read that as the generator failing to converge. Extracting the usage showed the opposite: the values track element size, and the twelve-step ramp is a rule rather than noise. **Nothing that requires a decision gets decided by iterating** — that part holds. What does not hold is inferring disorder from a count. Sample what carries the value before judging it. Same error as counting `style=` attributes and concluding there was no mock layer (§4.3.2.1); both times the correction came from opening the artifact instead of measuring its surface.
 
 **3. Comments never regenerate, and they are the only thing that must survive.** V1.1's DSL was 25 KB larger and still carried **zero comments**. A generator produces better data every round and never produces a rule, because rules are facts about why a field exists — a real bundle shipped two deadlines, a spec section forbids a category, a chip contradicts a stated non-goal. **So re-extraction is not re-running the script. It is diffing the new data against the old, then carrying the previous round's comments forward onto shapes that may have moved.**
 
