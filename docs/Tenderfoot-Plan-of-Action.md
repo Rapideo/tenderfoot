@@ -265,9 +265,30 @@ register as a *source* in SP1's demo criterion — the real contracts load into 
 alongside the real solicitations. That gets the data model tested against contract records early
 without moving a post-gate feature in front of the gate.
 
-**Do not resolve this from the plan alone.** It turns on how much KP would actually act on a
-pre-RFP lead, which is Matt's judgment, and it should be settled in the same pass that
-reconciles §6 against his effort/impact priorities.
+### Resolved 2026-08-10 — Matt's answer
+
+> *"It's not likely, but it is possible, especially for Medicaid-related RFPs."*
+
+That is a narrower answer than either argument above assumed, and it settles the slice question
+cleanly: **the Expiration Radar stays in SP8, behind the gate.** A capability KP would use
+rarely does not justify moving work in front of the go/no-go.
+
+But "rarely, except in one sector" is not the same as "no", and the exception is specific enough
+to design for:
+
+1. **The radar is sector-weighted, not global.** A contract expiring in Medicaid managed care is
+   a lead. The same contract expiring in facilities or IT maintenance is a row in a table. When
+   SP8 arrives, expiry alone must not generate a lead — expiry **within a Firm-Profile sector of
+   interest** does. Otherwise the radar produces 2,160 leads a year and gets muted in a week,
+   which is failure mode #3 (noise) rebuilt in a new place.
+2. **The third option still stands, and is now the whole of the near-term work.** Fold the
+   contract register into **SP1's demo criterion**: real contracts load into the real schema
+   beside real solicitations. That tests Organization ↔ Vendor ↔ Contract early, costs nothing
+   extra, and moves no post-gate feature forward.
+3. **The 2026-12-31 Medicaid cliff is a live instance, not a hypothetical.** 231 contracts
+   across 149 vendors, including the MCO capitation book, all expiring on one date inside KP's
+   single strongest sector. Whatever the radar would have said about it can be checked by hand
+   now, which makes it the natural fixture for the SP8 seam test.
 
 ### 6.1 Why these boundaries
 

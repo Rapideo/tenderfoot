@@ -1,0 +1,699 @@
+# Tenderfoot
+
+**Tenderfoot SVRC — version 0.1.0, 2026-08-10.**
+Work in progress. Not canonical.
+
+> **This is Claude's draft, not Matt's document.** It exists to be overwritten. Three things
+> about it need saying before anything else:
+>
+> **The register is wrong on purpose.** IDE8's SVRC is dictated in Matt's voice, and its hedges
+> carry which decisions are settled and which are not — the 0.2.0 revision note says so
+> explicitly. Writing Tenderfoot's in that voice would put opinions in his mouth and, worse,
+> would make my guesses indistinguishable from his rulings. This is written plainly instead.
+>
+> **The scores are proposals.** `Imp` and `Pri` are Matt's judgments and nobody else's; I have
+> filled them because the scoring key forbids a half-filled grid, not because I know them. `Eff`
+> I can estimate from the build. `Proto` is **0% on every node** — that is not a guess, no
+> prototype exists yet, and it is the one column here that is simply true.
+>
+> **Everything traces to the design spec.** Every Overview below comes from
+> `docs/superpowers/specs/2026-08-03-tenderfoot-design.md` §7 and the component inventory in
+> `reference/Tenderfoot - Concept Outline.md`, cited inline as `§x.y` and component IDs like
+> `4A`. Where I invented rather than derived, the node says so in Open questions.
+
+# Overview
+
+Tenderfoot finds government contract opportunities Koehler Partners could plausibly win, and
+does it early enough to matter. The application is where a person decides. Everything upstream —
+adapters, extraction, scoring — exists to make a ten-second decision possible and well-informed.
+
+The shape of the product follows from one asymmetry: **the expensive part is not finding
+documents, it is judging them**, and judging cannot be automated away because there is no bid
+history to learn from (§8.2). So the app is built around capturing judgment cheaply and
+repeatedly, and around showing enough evidence that the judgment is fast.
+
+There are six screens plus a shell. Five use the shell; the triage queue uses a reduced variant
+of it, for reasons recorded on that screen. One screen — the pipeline board — is specified and
+deliberately not built, because pursuit *management* is deferred to a later phase (§9) while
+pursuit *seeking* is the current project.
+
+A note on what is missing from this outline by design. The scoring engine, the adapters, the
+entity graph, and the backtest are the bulk of the work and appear nowhere below, because they
+have no UI. `docs/Tenderfoot-Plan-of-Action.md` §6 carries them. This document is only the part
+a person looks at.
+
+#######################################################
+
+# Shell A
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 4   | 5   | 2   | 0%    | 70%  |
+
+**Overview** — The persistent application frame. Tenderfoot is a small app with a strong daily
+habit attached to one screen, so the shell's job is mostly to stay out of the way and to make
+the queue count visible from anywhere. It is scored as a parent because it says something its
+regions do not: it is built once, early, and everything else assumes it.
+
+**Known gaps** — Navigation model is unsettled. Six screens is too few for a sidebar and too
+many for a flat header bar, and I have assumed a header. If the area outline disagrees, this
+is the cheapest thing in the document to change.
+
+**Open questions** — Does Tenderfoot need authentication in the first version? It is an internal
+tool with one customer and, eventually, a portability story (§1). Single-user with no login is
+defensible now and expensive to retrofit later.
+
+## Region A.1 : Main Header — side: top
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 4   | 5   | 2   | 0%    | 75%  |
+
+**Overview** — Wordmark, primary navigation, and the queue counter.
+
+**Known gaps** — The wordmark does not exist. Per the branding decision recorded in
+`docs/Tenderfoot-Plan-of-Action.md` §A1.1, Tenderfoot carries its own identity rather than KP's,
+and the wordmark is an **output of the design bake-off**, not an input to it. Until the bake-off
+runs, this region has a hole in it that is scheduled rather than forgotten.
+
+### Region A.1.1 : Wordmark
+
+Tenderfoot's own mark. Not KP's. See §A1.1 of the plan of action for why this is a rule and not
+a preference — no fact about Koehler Partners appears in the product, and a KP-branded header
+was the largest remaining violation of that.
+
+### Region A.1.2 : Primary Nav
+
+Triage, Opportunities, Radars, Entities, Reports, Admin. The pipeline board joins this list when
+the management phase starts and not before.
+
+### Region A.1.3 : Queue Counter
+
+How many opportunities are waiting. This is the single most important element in the shell,
+because the working habit the whole system depends on is **"clear the queue"** (§7.1), and a
+count that is visible from every screen is what makes a queue reaching zero feel like an
+accomplishment rather than a coincidence.
+
+It should show zero proudly. An empty queue is the goal state, not an empty state.
+
+## Region A.2 : Status Bar — side: bottom
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 3   | 3   | 3   | 0%    | 60%  |
+
+**Overview** — Ingestion health at a glance: when adapters last ran, and whether any are
+failing.
+
+**Known gaps** — What counts as "failing" is not defined anywhere yet. §5.4 specifies rot
+detection — an adapter that returns plausible results for a query it is silently ignoring — and
+we now have three confirmed live instances of exactly that on two different government APIs
+(`corpus/manifest.md`, `corpus/indiana-contracts/README.md`). The status bar is where that
+surfaces, and the detection rule it displays does not exist yet.
+
+**Open questions** — Should a silent-failure suspicion be shown here, or is it too alarming for
+a persistent chrome element? A source that has quietly stopped returning real results is the
+worst failure the system has, and it is also the one least suited to a small red dot.
+
+### Region A.2.1 : Source Health Indicator
+
+Green, degraded, or failing, deep-linking into the Source Registry (`4J`). Derived from the
+per-source yield figures §5.4 requires the adapters to record.
+
+### Region A.2.2 : Last Run
+
+When ingestion last completed. Deliberately a timestamp rather than a relative string — "2 hours
+ago" hides a clock that stopped yesterday.
+
+#######################################################
+
+# Screen 1 - Triage Queue
+
+#######################################################
+
+**Overview** — The daily driver, and the screen the product lives or dies on. One opportunity at
+a time, keyboard-driven, decision in under ten seconds (§7.1). Responsive, because a ten-second
+decision should work on a phone.
+
+The app earns its login over a daily email by capturing three things email cannot: the four
+scores **with their supporting evidence**, the pursuit-cost fact panel that makes the
+light/moderate/heavy judgment possible on the spot, and — most importantly — **the no-bid reason
+as one tap on a chip.** Email reduces a no-bid to a binary and loses the reason, which is the
+single most valuable training signal in the system (`4B`, §4.5).
+
+That last point is worth stating sharply because it inverts the obvious priority: **the reason
+chip matters more than the decision.** With no bid history to seed the scorer, reasons are
+load-bearing from decision one.
+
+**Uses Shell** — YES, reduced. The queue wants the full width and no competing affordances;
+primary nav collapses while triaging. This is the one place I have departed from the shell being
+uniform, and it is an assumption worth challenging.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 1.1 : The Queue
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 5   | 5   | 2   | 0%    | 85%  |
+
+**Overview** — The card stack itself. One opportunity fills the screen; a decision advances to
+the next; the count in the shell decrements. Keyboard first — the whole design assumes someone
+clearing forty items, not browsing three.
+
+This is the best-specified screen in the document because §7.1 is the most-argued part of the
+spec, and because the hand-run is currently doing this job by hand in a published page, which
+has already taught us things about it.
+
+**Known gaps** — Queue ordering is undecided. Ranked by score is the obvious answer and probably
+wrong: it front-loads the easy yeses and leaves a long tail of borderline items for when
+attention is worst, which is exactly backwards if the goal is capturing good reasons. Worth
+considering interleaving, or surfacing the genuinely ambiguous first.
+
+**Open questions** — Should a decision be undoable, and for how long? At ten seconds per item a
+mis-tap is certain, and a system whose entire value is decision quality cannot silently keep a
+wrong one.
+
+### Region 1.1.1 : Opportunity Card
+
+Title, buyer, deadline, and estimated value — the four facts that decide most items without
+anything else being read.
+
+Deadline gets special treatment. It is the highest-consequence extracted field (§8.4), and the
+FSSA bundle in `corpus/` demonstrated that a bundle can ship three documents carrying two
+different deadlines with the correct one in the least-specifically-named file
+(`corpus/FINDINGS.md`). Where the listing metadata and the document text disagree, the card
+shows the disagreement rather than silently picking a winner.
+
+### Region 1.1.2 : Score Strip
+
+The four machine scores — Fit, Winnability, Value, Timing (§6.3) — each expandable to its
+citation. Collapsed by default. The scores are a reading aid, not a verdict, and a strip that
+demands attention would turn triage into score-review.
+
+### Region 1.1.3 : Pursuit-Cost Fact Panel
+
+Not a score. A panel of countable facts that lets a person make the light/moderate/heavy
+judgment themselves: number of required forms, whether a pre-proposal conference is mandatory,
+how many references are demanded, whether anything needs notarizing.
+
+These are directly countable from a bundle — `corpus/FINDINGS.md` established that on real
+documents — which is why this is facts rather than a fifth score. Cost-to-pursue is the one
+input the spec deliberately leaves human (§6.3).
+
+### Region 1.1.4 : Decision Bar
+
+Interested / Pass, and the reason chips. Reason capture is mandatory on Pass and optional on
+Interested, because a rejection with no reason is the one event that teaches nothing.
+
+Chips need a free-text escape hatch. The hand-run is currently producing reasons in Matt's own
+words precisely because pre-set categories would have flattened them, and the chip vocabulary
+should be *derived from* that hand-run rather than invented before it.
+
+### Region 1.1.5 : Gated Items Drawer
+
+Items eliminated by Stage 0 hard gates (§6.1), filed rather than deleted.
+
+This region exists because of a documented near-miss, not a principle. A stale deadline
+extracted from the wrong PDF would have silently killed KP's single best-fit opportunity three
+weeks before it actually closed. §6.2's "gated items are filed, not deleted" is the only thing
+that makes that recoverable, and a rejection you cannot inspect is a bug you will never find.
+
+Low traffic by design. It needs to exist, not to be prominent.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 1.2 : Saved Views
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 2   | 2   | 3   | 0%    | 45%  |
+
+**Overview** — Persisted custom queries (§7.7, `4I`). Scope the queue to a sector, a
+jurisdiction, a value band.
+
+**Known gaps** — Nothing establishes that anyone wants this yet. It is in the spec as a
+convenience and it is the kind of feature that gets built because it is easy rather than because
+it is needed. Genuinely a candidate for cutting.
+
+**Open questions** — Is this a queue filter or a first-class saved object? The second is a much
+larger commitment and the spec does not distinguish.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 1.3 : Queue Cleared
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 1   | 3   | 4   | 2   | 0%    | 55%  |
+
+**Overview** — What the screen shows at zero. Treated as a real view rather than an empty state
+because reaching zero is the habit the product is trying to build, and the moment it happens is
+the only reward the system has to offer.
+
+Cheap to build and disproportionately worth getting right.
+
+**Known gaps** — What it should actually say. "Nothing to review" is a dead end; something
+pointing at the radars, or at what is coming, keeps the session alive. Undesigned.
+
+#######################################################
+
+# Screen 2 - Opportunity Detail
+
+#######################################################
+
+**Overview** — Everything known about one opportunity, and the screen a real bid/no-bid
+conversation happens in front of. Reached from the queue, from search, or from a radar.
+
+The centrepiece is the **brief** (§7.3, `4D`), and its value is easy to mistake. The brief is
+not a summary of the RFP — anyone can read an RFP. It is the connection between the RFP and
+**KP's past performance library**: which specific past projects to cite, what is missing that
+would need a partner, what the real risks are. That connection is the tedious part of every
+bid/no-bid call, and it is the part a machine can genuinely do.
+
+**Uses Shell** — YES
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 2.1 : Brief
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 4   | 5   | 4   | 4   | 0%    | 60%  |
+
+**Overview** — What it is, why it fits, which past projects to cite, what is missing, key dates,
+key risks, and a recommended posture.
+
+**Known gaps** — **The past performance library does not exist.** The brief's whole value rests
+on it and nothing in the corpus, the spec, or the plan currently produces one. This is the
+largest single gap in this document and it is not a UI gap — it is a missing data source that a
+UI has been designed on top of.
+
+**Open questions** — Is the recommended posture useful or presumptuous? A machine recommending
+"pursue as prime" to a firm with one competitive bid in its history may be claiming authority it
+has not earned. Showing the ingredients and withholding the recommendation is a defensible
+alternative.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 2.2 : Scores and Evidence
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 4   | 4   | 3   | 0%    | 70%  |
+
+**Overview** — The four scores at full width, each with the evidence that produced it, quoted
+and linked back into the source document.
+
+A score without a citation is an assertion, and the spec's position throughout is that
+assertions are worth nothing here — this is the screen that enforces it.
+
+**Known gaps** — Assessments are versioned by scorer version (§6.4) and this view has no
+treatment for that. When a rescore changes a verdict, the previous one and the reason for the
+change are more interesting than the current number, and there is nowhere to show it.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 2.3 : Extracted Fields
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 4   | 4   | 2   | 0%    | 75%  |
+
+**Overview** — Every extracted field with its confidence and a pointer to where it came from.
+Deadlines, values, set-asides, eligibility requirements, contacts.
+
+**Known gaps** — Disagreement between sources needs a visual treatment and does not have one.
+Real bundles disagree with themselves — established, not hypothetical — and the honest display
+is both values with their provenance, not a resolved winner. A field that quietly picked one is
+how the near-miss in `corpus/FINDINGS.md` would have happened in production.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 2.4 : Documents
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 4   | 3   | 3   | 3   | 0%    | 55%  |
+
+**Overview** — The bundle inline, with extraction highlights pointing back into the source.
+
+**Known gaps** — There is no such thing as "the document." Real bundles run to 22 files across
+`.pdf`, `.docx`, `.xlsx`, `.pptx`, and nested `.zip`, and **the scope of work — the single most
+important file for fit scoring — is frequently a `.docx`** (`corpus/FINDINGS.md`). An inline
+viewer that handles PDF only covers about half of what matters. Whether non-PDF formats render
+inline or download is undecided and materially changes the effort.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 2.5 : Timeline
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 4   | 3   | 2   | 0%    | 80%  |
+
+**Overview** — Every Sighting and addendum in order. This is what the Sighting table exists for
+(§4.4), and it is what makes an extracted deadline trustworthy in seconds — you can see when it
+changed, in which source, and whether anything said so.
+
+**Known gaps** — Addenda cannot be trusted to describe themselves. A real addendum in the corpus
+enumerates its own changes, omits the deadline move entirely, and quietly renames the
+solicitation. So the timeline shows a **diff**, not a summary-of-changes, and the diffing does
+not exist yet.
+
+#######################################################
+
+# Screen 3 - Radars
+
+#######################################################
+
+**Overview** — Pre-RFP intelligence (§7.4, §4.6). Pure graph queries with no email equivalent;
+they exist only because of the entity model.
+
+Both radars are **post-gate work** — slice SP8, after the go/no-go — and the reasoning is
+recorded in `docs/Tenderfoot-Plan-of-Action.md` §6.0. The short version: Matt's answer to
+whether KP would act on a lead a year early was *"not likely, but possible, especially for
+Medicaid-related RFPs."* A capability used rarely does not justify jumping the gate; a
+capability used decisively in one sector does justify designing for that sector specifically.
+
+**Uses Shell** — YES
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 3.1 : Expiration Radar
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 4   | 2   | 3   | 0%    | 75%  |
+
+**Overview** — Contracts approaching their end date, read as predicted re-competes months ahead
+of any RFP (`4E`). The lead-time advantage, and the direct answer to problem #2, *finding out
+too late* (§1).
+
+Its data is already collected. `corpus/indiana-contracts/` holds 2,160 Indiana contracts
+expiring within 18 months, each with a retrievable PDF, pulled from one anonymous endpoint. Low
+effort, and unusually low for something this far down the priority list — the score reflects the
+gate, not the difficulty.
+
+**Known gaps** — **Expiry alone must not generate a lead.** 2,160 expiring contracts a year
+would produce a feed that gets muted inside a week, which is problem #3 — noise — rebuilt in a
+new place. The radar fires on expiry **within a Firm-Profile sector of interest**, and that
+sector-matching rule does not exist yet.
+
+There is a live fixture waiting for it: 231 contracts across 149 vendors all expire
+2026-12-31, including Indiana's Medicaid MCO capitation book. Whatever this radar would have
+said about that date can be checked by hand now, which makes it the natural seam test.
+
+**Open questions** — Does an end date mean a re-compete? EDS field 33 records whether renewal
+language exists, so the answer is retrievable per contract — but it lives in the PDF, not the
+search index, and nothing reads it yet.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 3.2 : Teaming Radar
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 3   | 2   | 4   | 0%    | 50%  |
+
+**Overview** — Who wins work KP could sub on. KP's WBE certification makes it attractive to
+primes carrying participation goals (`4F`, §4.6), which turns some unreachable opportunities
+into reachable ones.
+
+**Known gaps** — Better than it looked when the spec was written. Indiana's EDS form publishes
+M/WBE status for **the prime and the subcontractor, with percentages**, on every executed
+contract. That makes "which primes carry participation and on what work" a query rather than
+guesswork. The spec assumed this had to be inferred; it does not, at least in Indiana. The
+extraction that would read it does not exist.
+
+**Open questions** — Is this a radar or a report? It is browsed occasionally, not monitored,
+which is a different shape from the expiration radar it is currently paired with.
+
+#######################################################
+
+# Screen 4 - Entity Browser
+
+#######################################################
+
+**Overview** — Organizations and Vendors with their histories (§7.5, `4G`). *This agency
+competes work every four years and the incumbent has never lost* is worth knowing before writing
+anything, and it is the kind of fact that only exists once awards and contracts are modelled as
+entities rather than fields.
+
+Win history infers capability without anyone maintaining a taxonomy — which is the argument for
+the entity model generally, made visible in one screen.
+
+**Uses Shell** — YES
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 4.1 : Organizations
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 3   | 3   | 2   | 0%    | 65%  |
+
+**Overview** — Buyers, with what they have bought, from whom, how often, and on what cycle.
+
+**Known gaps** — The buyer is not always the jurisdiction hosting the listing. The first corpus
+pull surfaced a NASPO ValuePoint RFP issued by New York State OGS and listed on Indiana's
+portal — inside the first 61 records. The Organization ↔ Solicitation relationship has to carry
+that, and this view has to display it without implying Indiana is buying.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 4.2 : Vendors
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 3   | 3   | 2   | 0%    | 65%  |
+
+**Overview** — Competitors, incumbents, and potential primes. KP is a Vendor row too (§4.2),
+which is what makes the Firm Profile a configuration record rather than a special case — and
+what makes the whole thing portable to another firm.
+
+**Known gaps** — Vendor identity resolution is unaddressed. Government data spells the same
+company several ways, and 1,293 distinct vendor names in the Indiana pull is certainly an
+overcount. Nothing in the spec says how names collapse into one entity.
+
+#######################################################
+
+# Screen 5 - Reports
+
+#######################################################
+
+**Overview** — Phase 0 market sizing as a live view (§7.6, `4H`): how many qualified prospects
+exist, at what value, from which sources. Plus source-yield reporting.
+
+Win rate becomes a report once there is enough history to populate one. **It is never a system
+objective** (§8.6) — a scorer optimised for win rate learns to recommend only safe bids, which
+is the opposite of the point.
+
+**Uses Shell** — YES
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 5.1 : Market Sizing
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 5   | 3   | 3   | 0%    | 70%  |
+
+**Overview** — The backtest as a standing view. The output the whole project is judged against:
+*"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You saw one of
+them."* (§3.1)
+
+Highest impact in the document and mid priority, which is not a contradiction — it is the SP6
+go/no-go artifact, so it arrives when the gate does.
+
+**Known gaps** — The report states a recall figure, and recall requires knowing what was missed.
+That is only knowable for the population that was adjudicated, so the honest version carries its
+own denominator and this view has no treatment for that yet. A market-sizing number quoted
+without its sampling basis is exactly the failure `corpus/README.md` exists to prevent.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 5.2 : Source Yield
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 2   | 4   | 3   | 2   | 0%    | 80%  |
+
+**Overview** — What each source actually produced: records ingested, survived gates, reached
+triage, marked interested. Retires sources that do not earn their maintenance.
+
+**Known gaps** — Yield measures a working adapter. It does not detect one that has silently
+started returning plausible nonsense, which is the failure mode we have now hit three times on
+two government APIs. The detection §5.4 asks for — vary one parameter, watch the total move —
+is cheap, specified nowhere, and belongs here.
+
+#######################################################
+
+# Screen 6 - Admin
+
+#######################################################
+
+**Overview** — Firm Profile and Source Registry (§7.8, `4J`). Unglamorous and structurally
+load-bearing: these two screens are the entire portability story.
+
+**Uses Shell** — YES
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 6.1 : Firm Profile
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 5   | 4   | 2   | 0%    | 80%  |
+
+**Overview** — **A real screen, not a config file.** This is what makes the system portable
+(§7.8). Capabilities and service lines as free text, certifications and set-aside status,
+geography, and the eligibility facts — headcount, revenue — that exist here *only* as gate
+inputs and never as capacity judgments (§1).
+
+The rule this screen enforces: no fact about Koehler Partners appears in code. All of it lives
+here. A second customer is a second row, not a fork.
+
+**Known gaps** — Whose profile is it? If the hand-run's ground truth comes from a more senior
+decision-maker at KP, the profile should encode that person's judgment rather than whoever
+opens the editor first. Currently unowned, and it should not be settled by default.
+
+---------------------------------------------------------------------------------------------------------------
+
+## View 6.2 : Source Registry
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 3   | 4   | 4   | 2   | 0%    | 80%  |
+
+**Overview** — Sources as **data rows, not code** (§5). Each carries its adapter tier, platform,
+archive depth, legal posture, and health. Adding a source is a row and a config, not a deploy.
+
+The platform field is what makes this scale: states mostly license about five platforms rather
+than building portals, so adapters bind to platform plus config rather than to jurisdiction
+(§5.7). One Periscope adapter covers several states.
+
+**Known gaps** — Legal posture is a first-class field (robots.txt, terms of service, rate
+limits) and has no interface. Paywalled aggregators are excluded by their terms, and that
+exclusion should be visible and enforced in the registry rather than remembered.
+
+**Open questions** — Should the registry record *verified facets* per source? We have learned
+the hard way that a parameter can be accepted and silently ignored, and that knowledge currently
+lives in markdown rather than anywhere the adapter can read.
+
+#######################################################
+
+# Screen 7 - Pipeline Board
+
+#######################################################
+
+| Eff | Imp | Pri | Vol | Proto | Conc |
+|:---:|:---:|:---:|:---:|:-----:|:----:|
+| 4   | 3   | 1   | 5   | 0%    | 30%  |
+
+**Overview** — Pursuits across their states: `Watching → Bid/No-Bid → Submitted → Won/Lost`,
+with ownership and assignment (§7.2, `4C`). The system of record, and the answer to problem #4 —
+opportunities living in email and memory.
+
+**Specified and deliberately not built.** Pursuit management is deferred to a later phase (§9).
+Tenderfoot's current job is contract *seeking*; seeking *and* management comes later. It is
+scored as a leaf because it has no views yet, and `Pri 1` is the whole point.
+
+**Known gaps** — Everything below the state machine. Volatility is 5 because a year of using the
+triage queue will change what this needs to be, and designing it now would mostly produce
+something to throw away.
+
+**Open questions** — Does the triage decision's lifecycle stub (`4B`: `New → Triaged →
+Interested / Not Interested`) grow into this, or get replaced by it? The stub ships in the
+current phase and the answer changes what it should record.
+
+**Uses Shell** — YES
+
+#######################################################
+
+# ENDNOTES:
+
+**Email is not a screen and is not in this document.** §7.9 gives it two jobs — a scheduled
+summary saying whether the queue is worth opening, and genuinely time-critical tripwires
+(a deadline moved on an active pursuit, an addendum posted, an award announced). Two kinds of
+interruption and only two; everything else is pull. It has no views, so it has no home here, but
+it is real work and `4K` carries it.
+
+**No landing or launch screen is specified.** IDE8 has one because a project has to be chosen.
+Tenderfoot has one customer and one dataset, so the queue is the landing screen. If
+authentication arrives, this changes.
+
+**Search is absent deliberately.** The shell has no global search because six screens do not
+need one and the filters inside each view are more useful. Worth revisiting only if the entity
+browser grows.
+
+**What is scored `Pri 5` and why.** Only the shell, its header, and the triage queue. Everything
+else waits, because the queue is the only screen that can be used before the scoring engine is
+trustworthy — someone can clear a queue of badly-ranked opportunities and their reasons still
+make the next version better.
+
+#######################################################
+
+# Scoring key
+
+Scored nodes carry the same six-column grid. **All 1–5 scales run low to high** — `5` is the
+most of the thing, so `Pri 5` means do it first and `Eff 5` means it is expensive. **`·` means
+not yet scored**, which is deliberately not the same as `0`.
+
+**Scores sit at the level where the judgment is made.** Every *leaf* carries a grid — a node
+with nothing scored beneath it. A screen whose views each carry their own scores is deliberately
+left without one: a screen-level grid would only roll up judgments already made a level down,
+and one judgment kept in two places can disagree with itself. Scoring a parent as well is
+allowed where it says something its children do not — the Shell does. **What is never allowed is
+an unscored leaf, a half-filled grid, or an ungridded parent whose children are not themselves
+finished.**
+
+**No build-order column, deliberately.** This document is a reference for what the application
+*is*; `docs/Tenderfoot-Plan-of-Action.md` §6 is the plan for what gets built *when*. Priority is
+the input; the slice assignment is worked out from it, once, in the plan.
+
+| Col | Field | Range | What it records |
+|---|---|---|---|
+| `Eff` | Effort | 1–5 | Cost to build. 5 = expensive. |
+| `Imp` | Impact | 1–5 | Value to the user. 5 = high. |
+| `Pri` | Priority | 1–5 | How soon this should be built, all things considered. 5 = soonest. |
+| `Vol` | Volatility | 1–5 | How likely this is to change. 5 = expect churn. Independent of `Conc`. |
+| `Proto` | Prototype accuracy | 0–100% | How close the prototype is to what we actually want. **0% throughout — no prototype exists.** |
+| `Conc` | Conceptual completeness | 0–100% | How settled the idea is, whether or not anything is drawn. |
+
+Beneath the grid, four labels, **bold rather than headings** so they never enter the heading tree.
+
+**`Overview` is required on every node; the other three are optional, and omitting one means
+there is nothing to report.** Silence is the answer, not a gap waiting to be filled.
+
+| Label | What goes in it |
+|---|---|
+| **Overview** | What this is, and why it exists. |
+| **Known UI issues** | What is wrong with it as currently drawn. *Omitted throughout — nothing is drawn yet.* |
+| **Known gaps** | What is missing and needs **filling**. |
+| **Open questions** | What is undecided and needs **deciding**. Not the same as a gap. |
+
+Levels 3 and below take no grid and no labels.
+
+#######################################################
+
+# Revision history
+
+*Revision note, — → 0.1.0 — first draft. Claude, 2026-08-10.*
+
+- **Structure derived from spec §7**, not invented. Six screens plus a deferred seventh, mapped
+  from §7.1–§7.8 and cross-referenced to component IDs in the concept outline.
+- **`Known UI issues` omitted on every node.** Per the scoring key, omission means nothing to
+  report — and with no prototype, there is nothing drawn to have issues with. `Proto` is 0%
+  throughout for the same reason. These are the two columns in this document that are certainly
+  correct.
+- **`Imp` and `Pri` are proposals and should be treated as noise until Matt overwrites them.**
+  They are filled only because the key forbids a half-filled grid. `Eff` is a genuine estimate;
+  `Conc` reflects how settled the spec is, which I can judge.
+- **Three nodes carry findings the spec predates**, and they are the parts of this draft most
+  worth keeping: the gated-items drawer (1.1.5) is justified by a real near-miss rather than a
+  principle; the expiration radar (3.1) has its data already collected; and the teaming radar
+  (3.2) turns out to be easier than the spec assumed, because Indiana publishes prime and sub
+  M/WBE status on every contract.
+- **The largest gap found while writing this is not a UI gap.** The brief (2.1) rests entirely
+  on a past-performance library that does not exist and that nothing currently plans to build.
