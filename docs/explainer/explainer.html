@@ -1,0 +1,284 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tenderfoot — How it works</title>
+<style>
+  @font-face{font-family:'Plex';src:url('fonts/IBMPlexSans-400.woff2')format('woff2');font-weight:400}
+  @font-face{font-family:'Plex';src:url('fonts/IBMPlexSans-500.woff2')format('woff2');font-weight:500}
+  @font-face{font-family:'Plex';src:url('fonts/IBMPlexSans-600.woff2')format('woff2');font-weight:600}
+  @font-face{font-family:'Plex';src:url('fonts/IBMPlexSans-700.woff2')format('woff2');font-weight:700}
+  @font-face{font-family:'PlexM';src:url('fonts/IBMPlexMono-400.woff2')format('woff2');font-weight:400}
+  @font-face{font-family:'PlexM';src:url('fonts/IBMPlexMono-500.woff2')format('woff2');font-weight:500}
+  @font-face{font-family:'PlexM';src:url('fonts/IBMPlexMono-600.woff2')format('woff2');font-weight:600}
+
+  :root{
+    --accent:#1b6a8c; --accent-deep:#12506b; --accent-wash:#e7f1f6; --accent-wash-2:#f2f8fb;
+    --ink:#0f1a20; --ink-2:#22333d; --on-ink:#e6eef2; --on-ink-mute:#8fa3ad;
+    --tx:#14181c; --tx-2:#3d474e; --tx-3:#5a666e; --mute:#6d7c85; --label:#93a0a8;
+    --canvas:#eaeef0; --surface:#fff; --line:#dfe4e8; --line-soft:#edf1f3;
+    --pos:#2e7d5b; --caution:#b5761a; --neg:#a33a2e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  @page{size:8.5in 11in;margin:0}
+  html,body{font-family:'Plex',system-ui,sans-serif;color:var(--tx);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .pg{width:8.5in;height:11in;position:relative;overflow:hidden;page-break-after:always;
+      background:var(--surface);padding:0.72in 0.68in 0.92in;
+      display:flex;flex-direction:column}
+  .pg:last-child{page-break-after:auto}
+  /* Slack collects in one deliberate gap above the closing block, rather than
+     pooling as dead space at the foot of the page. Two traps here, both hit:
+     :last-of-type matches by element TYPE not class, so .foot always won; and a
+     bare .tail ties on specificity with .note/.warn/.facts, which are declared
+     later and so win. .pg > .tail beats both. */
+  .pg > .tail{margin-top:auto}
+  /* Two auto margins split the free space evenly, so the screenshot sits centred
+     in its band instead of the whole slack pooling in one gap. The caption keeps
+     its own small margin and stays hugged to the image it describes. */
+  .pg > .shot{margin-top:auto}
+
+  .lbl{font-family:'PlexM';font-size:8pt;letter-spacing:.13em;text-transform:uppercase;color:var(--label);font-weight:500}
+  .accentlbl{color:var(--accent);font-weight:600}
+  h1{font-size:30pt;line-height:1.07;font-weight:600;letter-spacing:-.017em}
+  h2{font-size:21pt;line-height:1.13;font-weight:600;letter-spacing:-.013em;margin-bottom:.11in}
+  .lede{font-size:11.6pt;line-height:1.5;color:var(--tx-2);max-width:6.5in}
+  p{font-size:10.4pt;line-height:1.58;color:var(--tx-2)}
+  strong{color:var(--tx);font-weight:600}
+  .rule{height:2.5px;width:.62in;background:var(--accent);margin:.16in 0 .2in}
+
+  .shot{width:100%;border:1px solid var(--line);border-radius:9px;display:block;
+        box-shadow:0 10px 26px -14px rgba(20,24,28,.4)}
+  .cap{font-size:8.6pt;line-height:1.45;color:var(--mute);margin-top:.11in;font-style:italic}
+
+  .foot{position:absolute;left:.68in;right:.68in;bottom:.42in;display:flex;justify-content:space-between;
+        border-top:1px solid var(--line-soft);padding-top:.09in}
+  .foot span{font-family:'PlexM';font-size:7.4pt;letter-spacing:.1em;color:var(--label);text-transform:uppercase}
+
+  /* cover */
+  .cover{background:var(--ink);color:var(--on-ink);display:flex;flex-direction:column;justify-content:space-between;padding:1.05in .85in .8in}
+  .cover h1{font-size:47pt;color:#fff;letter-spacing:-.026em}
+  .mark{width:.42in;height:.42in;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:.3in}
+  .mark i{width:.14in;height:.14in;background:#fff;border-radius:2.5px;display:block}
+  .cover .tag{font-size:15pt;color:var(--on-ink);margin-top:.22in;line-height:1.42;max-width:5.4in;font-weight:400}
+  .cover .meta{font-family:'PlexM';font-size:8.2pt;letter-spacing:.13em;color:var(--on-ink-mute);text-transform:uppercase;line-height:2}
+
+  /* problem cards */
+  .probs{display:grid;grid-template-columns:1fr 1fr;gap:.17in;margin:.26in 0}
+  .prob{border:1px solid var(--line);border-radius:9px;padding:.19in .21in;background:var(--surface)}
+  .prob .n{font-family:'PlexM';font-size:8pt;color:var(--accent);font-weight:600;letter-spacing:.1em}
+  .prob h3{font-size:11.4pt;margin:.05in 0 .06in;font-weight:600;letter-spacing:-.008em}
+  .prob p{font-size:9.4pt;line-height:1.5;color:var(--tx-3)}
+
+  .facts{background:var(--ink);border-radius:10px;padding:.26in .28in;margin-top:.06in}
+  .facts .lbl{color:var(--on-ink-mute);margin-bottom:.15in;display:block}
+  .fact{display:flex;gap:.2in;padding:.115in 0;border-top:1px solid rgba(255,255,255,.11)}
+  .fact:first-of-type{border-top:none}
+  .fact b{font-family:'PlexM';font-size:14pt;color:#fff;font-weight:600;min-width:1.25in;line-height:1.15}
+  .fact span{font-size:9.5pt;color:var(--on-ink);line-height:1.46;opacity:.93}
+
+  /* three moves */
+  .moves{display:flex;flex-direction:column;gap:.15in;margin:.28in 0}
+  .move{display:flex;gap:.26in;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:.22in .24in}
+  .move .k{font-family:'PlexM';font-size:23pt;font-weight:600;color:var(--accent);line-height:.92;min-width:.52in}
+  .move h3{font-size:13pt;font-weight:600;margin-bottom:.05in;letter-spacing:-.01em}
+  .move p{font-size:9.8pt;line-height:1.52}
+
+  .pull{border-left:3px solid var(--accent);padding:.03in 0 .03in .21in;margin:.2in 0;
+        font-size:12.4pt;line-height:1.42;color:var(--tx);font-weight:500;letter-spacing:-.008em}
+
+  .note{background:var(--accent-wash-2);border:1px solid #cfe4ee;border-radius:9px;padding:.18in .2in;margin-top:.16in}
+  .note p{font-size:9.5pt;line-height:1.5;color:var(--tx-2)}
+  .note .lbl{display:block;margin-bottom:.06in;color:var(--accent);font-weight:600}
+
+  .warn{background:#fdf6e7;border:1px solid #f0e2c2;border-radius:9px;padding:.18in .2in;margin-top:.16in}
+  .warn p{font-size:9.5pt;line-height:1.5;color:var(--tx-2)}
+  .warn .lbl{display:block;margin-bottom:.06in;color:#8a6a2a;font-weight:600}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:.24in;margin-top:.2in}
+  .two p{font-size:9.8pt}
+  .two h4{font-size:10.4pt;font-weight:600;margin-bottom:.05in;color:var(--tx)}
+
+  .status{display:grid;grid-template-columns:auto 1fr;gap:.1in .22in;margin:.24in 0;font-size:10pt}
+  .status dt{font-family:'PlexM';font-size:8.2pt;letter-spacing:.09em;text-transform:uppercase;
+             color:var(--pos);font-weight:600;padding-top:.035in}
+  .status dt.soon{color:var(--caution)}
+  .status dd{color:var(--tx-2);line-height:1.5}
+</style>
+
+<!-- 1 ---------------------------------------------------------------- -->
+<section class="pg cover">
+  <div>
+    <div class="mark"><i></i></div>
+    <h1>Tenderfoot</h1>
+    <div class="tag">Find the work before it finds you.</div>
+  </div>
+  <div class="meta">
+    Contract opportunity discovery<br>
+    Built for Koehler Partners<br>
+    <span style="color:#5d7079">Design prototype · August 2026</span>
+  </div>
+</section>
+
+<!-- 2 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl">The problem</div>
+  <div class="rule"></div>
+  <h2>Four ways good work gets missed</h2>
+  <p class="lede">None of them are anyone's fault. They are what happens when opportunity discovery lives in an inbox and a memory.</p>
+
+  <div class="probs">
+    <div class="prob"><div class="n">01</div><h3>It is never seen</h3>
+      <p>Qualified work is published, sits open for three weeks, and closes without anyone at the firm knowing it existed.</p></div>
+    <div class="prob"><div class="n">02</div><h3>It is seen too late</h3>
+      <p>By the time an RFP publishes, the incumbent has been positioning for months. The document is the end of the race, not the start.</p></div>
+    <div class="prob"><div class="n">03</div><h3>It arrives buried</h3>
+      <p>Portal alerts are overwhelmingly irrelevant. The signal is real, but it costs an hour a day to find and nobody has the hour.</p></div>
+    <div class="prob"><div class="n">04</div><h3>Nothing is remembered</h3>
+      <p>Decisions live in email. Six months on, nobody can say what was passed on, or why.</p></div>
+  </div>
+
+  <div class="facts tail">
+    <span class="lbl">Measured, not estimated — from 24 months of real solicitations</span>
+    <div class="fact"><b>9 of 61</b><span>Indiana solicitations open on a single day that were plausibly Koehler work. The rest was stone, dog food, and walleye fingerlings.</span></div>
+    <div class="fact"><b>38 days</b><span>All that remained on the best-matching opportunity in the entire sample when it was finally found — by a person, reading a portal, by hand.</span></div>
+    <div class="fact"><b>231</b><span>Indiana contracts expiring on one day this December, including the whole Medicaid managed care book. Every one of them a re-compete nobody has announced yet.</span></div>
+  </div>
+
+  <div class="foot"><span>Tenderfoot</span><span>02</span></div>
+</section>
+
+<!-- 3 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl">What it does</div>
+  <div class="rule"></div>
+  <h2>Three moves, and only one of them is yours</h2>
+  <p class="lede">Tenderfoot is not an alerting service and it is not an autopilot. It does the part that is tedious and mechanical, and hands you the part that needs judgment.</p>
+
+  <div class="moves">
+    <div class="move"><div class="k">01</div><div>
+      <h3>It collects — everything, from every source you switch on</h3>
+      <p>Federal and state portals, contract registers, award data. One solicitation appearing on three sources becomes one record, not three. Nothing is filtered out on your behalf, because a filter's mistakes are invisible and unrecoverable.</p></div></div>
+    <div class="move"><div class="k">02</div><div>
+      <h3>It prepares — documents pulled, facts extracted, every claim sourced</h3>
+      <p>The bundle is downloaded and read: deadlines, set-asides, required forms, references, page limits, whether the pre-proposal conference is mandatory. Every extracted fact carries a pointer back to the page it came from.</p></div></div>
+    <div class="move"><div class="k">03</div><div>
+      <h3>You decide — in about ten seconds, with a reason</h3>
+      <p>One opportunity at a time. Interested or Pass, and a line about why. The reason takes a moment and becomes the thing the firm actually owns.</p></div></div>
+  </div>
+
+  <div class="pull tail">Tenderfoot never decides whether to bid. It removes every reason that decision is currently slow.</div>
+
+  <div class="foot"><span>Tenderfoot</span><span>03</span></div>
+</section>
+
+<!-- 4 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl accentlbl">The daily driver</div>
+  <div class="rule"></div>
+  <h2>Clear the queue</h2>
+  <p class="lede">One opportunity, full width, nothing competing for attention. The four facts that settle most decisions are above the fold: what it is, who is buying, when it closes, what it is worth.</p>
+  <img class="shot" src="shots/01-triage-hero.png" alt="Tenderfoot triage queue">
+  <p class="cap">The triage queue. Navigation collapses while you work — the queue is the only thing on screen. <strong>I</strong> for interested, <strong>P</strong> for pass, <strong>U</strong> to undo. Never touch the mouse.</p>
+  <div class="note tail">
+    <span class="lbl">Note the amber line</span>
+    <p>This solicitation is listed on Indiana's portal, but the buyer is New York. A keyword search on "Indiana" would have shown it to you as a local opportunity; a filter on state would have hidden it entirely. Tenderfoot shows it and tells you why it is odd.</p>
+  </div>
+  <div class="foot"><span>Tenderfoot</span><span>04</span></div>
+</section>
+
+<!-- 5 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl accentlbl">Evidence</div>
+  <div class="rule"></div>
+  <h2>Every number shows its work</h2>
+  <p class="lede">Scores are a reading aid, never a verdict. Open any one and it quotes the sentence that produced it, and names the file and section it came from.</p>
+  <img class="shot" src="shots/02-triage-scores.png" alt="Score strip expanded showing citations">
+  <p class="cap">Winnability is low here because cooperative awards favour vendors holding an existing multi-state contract vehicle — and the firm profile records none. That is a checkable claim, not an opinion.</p>
+  <div class="note tail">
+    <span class="lbl">Why this matters more than the score</span>
+    <p>A number you cannot interrogate is a number you either obey or ignore, and both are wrong. A cited number is one you can overrule in a second, with confidence, because you can see exactly what it read.</p>
+  </div>
+  <div class="foot"><span>Tenderfoot</span><span>05</span></div>
+</section>
+
+<!-- 6 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl accentlbl">The brief</div>
+  <div class="rule"></div>
+  <h2>The ten minutes of digging, already done</h2>
+  <p class="lede">What the work is. Why it fits. What is missing that would need a partner. Key dates, key risks, and a recommended posture that stays quiet when the evidence is thin.</p>
+  <img class="shot" src="shots/04-detail.png" alt="Opportunity brief">
+  <p class="cap">Three tabs deeper sit the scores with their evidence, every extracted field with its confidence, the document bundle, and the timeline of every change since it was first seen.</p>
+  <div class="note tail">
+    <span class="lbl">Written to be argued with</span>
+    <p>"What is missing" is the most useful panel on this screen. It names the gap between the solicitation and the firm — platform engineering, a multi-state vehicle, a fifth reference — which turns a no-bid into a teaming call.</p>
+  </div>
+  <div class="foot"><span>Tenderfoot</span><span>06</span></div>
+</section>
+
+<!-- 7 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl accentlbl">The headline feature</div>
+  <div class="rule"></div>
+  <h2>See the work a year before the RFP</h2>
+  <p class="lede">Every contract the state holds publishes its end date. A contract ending is a re-compete beginning — and it is visible six to eighteen months before anything is advertised.</p>
+  <img class="shot" src="shots/06-radars.png" alt="Expiration radar and teaming radar">
+  <p class="cap">Below it, the Teaming Radar: primes already carrying M/WBE participation on work the firm could sub on, with real percentages read from filed contract records.</p>
+  <div class="note tail">
+    <span class="lbl">This screen is not a mockup of an idea — the data is already collected</span>
+    <p>2,160 Indiana contracts expiring inside eighteen months, pulled from a public register of 204,439 contracts going back to 2005. No account, no licence, no scraping. The December cliff shown here is real, and the Medicaid managed care book is on it.</p>
+  </div>
+  <div class="foot"><span>Tenderfoot</span><span>07</span></div>
+</section>
+
+<!-- 8 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl accentlbl">Recall</div>
+  <div class="rule"></div>
+  <h2>Rejected is not deleted</h2>
+  <p class="lede">Anything ruled out is filed with the reason it was ruled out, and can be restored in one click. A rejection you cannot inspect is a mistake you will never find.</p>
+  <img class="shot" src="shots/03-gated.png" alt="Gated items drawer">
+  <p class="cap">Out of state. No code match. Deadline passed. Set-aside ineligible. Four defensible reasons — and every one of them recoverable if the fact behind it was wrong.</p>
+  <div class="warn tail">
+    <span class="lbl">Why this drawer exists — a real near-miss</span>
+    <p>The best-matching opportunity found in 24 months shipped a bundle containing three documents with <strong>two different deadlines</strong>. The correct date lived in the most generically named file; the document named after the solicitation carried a date three weeks early. Every obvious rule for picking the right file picks the wrong one. Acting on the stale date would have closed out the firm's strongest prospect three weeks before it actually closed — silently, with nothing to show it had happened.</p>
+  </div>
+  <div class="foot"><span>Tenderfoot</span><span>08</span></div>
+</section>
+
+<!-- 9 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl accentlbl">Configuration</div>
+  <div class="rule"></div>
+  <h2>Your firm is a row, not a rewrite</h2>
+  <p class="lede">No fact about Koehler Partners lives in the code. Service lines, certifications, geography, eligibility thresholds — all of it is data you edit, and all of it changes what surfaces tomorrow morning.</p>
+  <img class="shot" src="shots/09-admin.png" alt="Firm profile and source registry">
+  <p class="cap">Below the profile, the Source Registry: every source with its platform, access tier, legal posture and current health. Adding a state is a row and a configuration.</p>
+  <div class="two tail">
+    <div><h4>Sources are the control</h4>
+      <p>Turning a source on or off is the whole configuration of what you see. No hidden filter sits between a source and you.</p></div>
+    <div><h4>Sources rot, visibly</h4>
+      <p>A portal that quietly stops returning results is the worst possible failure. Health is tracked per source and a silence is an incident, not a calm week.</p></div>
+  </div>
+  <div class="foot"><span>Tenderfoot</span><span>09</span></div>
+</section>
+
+<!-- 10 --------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl">Where this stands</div>
+  <div class="rule"></div>
+  <h2>What is real today</h2>
+  <p class="lede">This document shows a working design prototype. Being straight about what exists is worth more than a good impression, so:</p>
+
+  <dl class="status">
+    <dt>Done</dt><dd><strong>The data is real and already collected.</strong> 24 months of federal solicitations, every open Indiana solicitation, and 2,160 expiring Indiana contracts — with the public interfaces to keep pulling them found, tested, and documented.</dd>
+    <dt>Done</dt><dd><strong>Every screen in this document is designed and built as a prototype</strong>, precise enough that the production system is built by reading it.</dd>
+    <dt class="soon">Next</dt><dd><strong>The first release collects and prepares; it does not rank.</strong> Everything from every source you switch on, deduplicated, documents pulled, facts extracted — read in the order you choose.</dd>
+    <dt class="soon">Later</dt><dd><strong>Judgment comes last, deliberately.</strong> Nobody yet knows how much these sources publish each week, and a scoring system designed against a guess would be designed against fiction. First measure, then decide.</dd>
+  </dl>
+
+  <div class="pull">The opportunities are already there. The only question is whether anyone sees them in time.</div>
+
+  <p class="tail" style="padding-top:.1in">Everything in this document was produced from real solicitations and real contract records — genuine titles, genuine deadlines, genuine dollar figures. Nothing here is invented sample data, because invented data is neat, and neat data hides every problem worth finding.</p>
+
+  <div class="foot"><span>Tenderfoot · Design prototype · August 2026</span><span>10</span></div>
+</section>
