@@ -36,6 +36,7 @@ Two rules follow, and both are easy to violate while feeling productive:
 | *(CS)* | `case-study-2026-08-02.md` — the IMPACT post-mortem |
 | **(R)** | **Recovered 2026-08-04 from `C:\projects\impact-internship-portal\impact-prototype` git history — not previously documented anywhere** |
 | *(N)* | **New** — a decision or option that postdates IMPACT. Not evidence from the build, and not yet validated by a project. Marked so it is never mistaken for a proven mechanism. |
+| **(T)** | **Validated on Tenderfoot, August 2026** — a mechanism exercised on a real project and found to work, on evidence recorded at the time. Weaker than **(R)**, which is recovered from a shipped build; stronger than *(N)*, which is untested. **Added 2026-08-12**, when the second such mechanism appeared and *(N)* stopped being honest for either of them. |
 
 Where the recovered record *contradicts* the written documents, that is called out explicitly.
 
@@ -548,6 +549,37 @@ Two sections carry disproportionate weight. **"Data flow — sessionStorage"** i
 **CLAUDE.md is updated as part of the change**, in the same commit sequence — not afterwards, and not "when we get round to it."
 
 **The prototype is not a lower-discipline environment.** It is the same discipline applied where mistakes are cheap. That is the whole point of doing it first.
+
+#### 4.7.5 The prototype decides things the specification didn't — audit them, don't inherit them **(T)**
+
+**You cannot draw a screen without deciding things the outline left open.** Column order, empty-state copy, what a control does when the data is missing, which of two defensible orderings to use. A specification that pinned all of it would be a build, not a specification. So a prototype — generated or hand-built — **always arrives carrying answers to questions nobody asked it.**
+
+This is the central value of the review phase, and it is easy to mistake for a nuisance. **Those answers are not noise. Some are better than what you would have written.** The review exists to sort them, and sorting them is a different activity from checking that the prototype matches the spec.
+
+**Three things a prototype does with an unresolved question. All three appeared on Tenderfoot in a single review pass.**
+
+**1. It closes a gap you wrote down — sometimes better than you would have.** The Tenderfoot outline recorded that queue ordering was undecided, and argued *against* ranking by score: that front-loads the easy yeses and leaves the borderline items for when attention is worst, which is backwards if the goal is capturing good reasons. It proposed no replacement. The generated prototype shipped `ORDER · AMBIGUITY FIRST`. Another node's gap read *"'Nothing to review' is a dead end; something pointing at the radars keeps the session alive. Undesigned."* The prototype's cleared state shows a large zero and then *"3 contracts expire inside your sectors."* **Six documented gaps were closed this way, from a document that only named them.**
+
+**2. It answers an open question silently. This is the dangerous one.** One Tenderfoot node asked outright: *is this a queue filter, or a first-class saved object?* — noting the second is a much larger commitment. The prototype drew a first-class object with named views, counts, and a create affordance. **A good answer, chosen by a generator, that nobody ratified.** Left alone it becomes the design by inheritance, and the larger commitment gets made by default.
+
+**3. It declines to decide, and says so on the screen.** Tenderfoot's document viewer renders `DOCUMENT RENDER — PLACEHOLDER` and prints the unresolved question in the interface: *whether `.docx` / `.xlsx` render inline or download is undecided and materially changes effort.* **This is the best behaviour of the three and it scores worst on any fidelity metric**, because the screen genuinely is further from what you want. Score it as a gap and record why, so a low number is never read as sloppiness.
+
+> **The risk is not the wrong answer. It is the unratified one.** A wrong decision drawn on a screen gets argued with, because it is visible. A *right* decision drawn on a screen gets adopted without anyone noticing a decision was made — and the record then shows an open question that was never closed, sitting next to an implementation that closed it.
+
+**The method: audit against your own stated gaps, node by node.**
+
+The outline already lists, per node, what is missing (`Known gaps`) and what is undecided (`Open questions`). **That list is the audit checklist.** It converts a vague "does this look right" into a specific question per node: *for each thing this document said was unresolved, what did the artifact do about it?* — which has only the four answers above (closed it, answered it silently, declined, or ignored it).
+
+Run it with the prototype open and the outline beside it. On Tenderfoot, twenty nodes took under an hour and produced findings that no amount of looking at screenshots would have surfaced, because **the value is in the pairing** — the gap text is what makes the screen legible as an answer.
+
+**Four rules that make the audit worth running.**
+
+- **Use a fidelity column and fill it.** Tenderfoot's outline carries `Proto` — *how close the prototype is to what we actually want*, 0–100% per node. A single number per node forces you to look at every one, including the boring ones, which is where silent answers hide.
+- **Ratify or overturn every silent answer explicitly.** Say so in the node. Silence is adoption, and it is indistinguishable in the record from a decision someone made.
+- **Never let the fidelity score be the whole verdict.** Restraint scores low; a confident wrong guess scores high. The number ranks work, the prose carries the judgment.
+- **Refill at each freeze, not continuously.** The column describes one build of the prototype and expires the moment the next one lands. Filling it every iteration is waste; filling it once per freeze is a genuine checkpoint.
+
+**Why this belongs in the playbook rather than in one project's notes.** The bake-off (§4.3) chooses a *direction*. The cleanup (§4.3.2) extracts *tokens and data*. Neither captures the thing that made the review phase worth its calendar time on Tenderfoot: **the prototype had opinions, several of them better than the specification's, and the only mechanism that surfaces those is a deliberate node-by-node audit against the document's own admissions of doubt.**
 
 ### 4.8 The rhythm **(R)**
 
