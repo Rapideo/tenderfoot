@@ -158,3 +158,13 @@ August 11, 2026:
 46. Live example of exactly that: View 1.2 asked outright whether saved views are a queue filter or a first-class object, and noted the second is a much bigger commitment. The prototype drew a first-class object. Good answer. Nobody chose it. That one needs ratifying rather than inheriting.
 
 47. Also added a (T) provenance marker to Proto2PRD — validated on Tenderfoot. Weaker than (R) recovered-from-a-shipped-build, stronger than (N) untested. We'd accumulated two mechanisms where (N) had stopped being honest.
+
+48. Went through the twelve prototype decisions Claude surfaced and ruled on nine. SVRC is now 0.4.0.
+
+49. Ratified four where the prototype answered a question we'd asked: queue ordering (and the switchable part is the good bit — we were trying to pick one order and would have picked wrong for somebody), scorer version stamped on every score, Drafting added to the pipeline, and reason-on-Pass demoted from law to default. That last one I decided to keep as a toggle. A queue of forty where three are obvious junk shouldn't stall on a required text field. The cost is real and it's written down — switch it off and you silently lose the corpus a chip vocabulary would come from.
+
+50. Promoted four net-new things nobody asked for. The best is incumbent retention per buyer — 9 OF 11 — because it answers whether a buyer ever actually switches vendors before any scoring happens. That's a stronger winnability input than anything in our scoring model and it's computed, not judged. Procurement cycle alongside it generalises the expiration radar to buyers we hold no contract for. Both need data-model work that doesn't exist yet and that's flagged in the node rather than assumed.
+
+51. Left three unratified on purpose — saved views as a first-class object, rot suspicion in the status bar, the cleared state pointing at the radar. All good answers nobody chose, and the whole point of 4.7.5 is that the unratified answer is the dangerous one. They're listed in the preamble so silence can't adopt them.
+
+52. Opened prototype/PUNCH-LIST.md. One item on it: the wordmark. The review produced no other prototype changes, because we adopted its answers rather than overturning them — the work went into the SVRC, not back into the artifact. Also recorded what is NOT a punch item, so nobody "fixes" the three low Proto scores: those are low because the prototype refused to invent a decision, and they resolve when we answer the question, not when the pixels change.

@@ -1,7 +1,25 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.3.1, 2026-08-12.**
+**Tenderfoot SVRC — version 0.4.0, 2026-08-12.**
 **Adopted.** This is the working outline, not a draft.
+
+> ### Eight decisions adopted from the prototype — 2026-08-12
+>
+> Matt, reviewing the `Proto` audit: *"the prototype fleshes out details that aren't specified. Sometimes they're wrong, sometimes they're right, but that's exactly why we're doing this review process."* The method is now written up as `docs/Proto2PRD.md` §4.7.5.
+>
+> **Four ratified** — the prototype answered a question this document asked, and the answer stands: queue ordering (View 1.1, and *switchable* is the part worth having), scorer version stamped on every score (View 2.2), reason-on-Pass demoted from law to default (Region 1.1.4), and `Drafting` added to the pipeline state machine (Screen 7).
+>
+> **Four promoted** — net-new, asked for by nobody: per-buyer incumbent retention and procurement cycle (View 4.1), vendor aliases with an explicit *"no aliases found"* (View 4.2), absence distinguished from low confidence (View 2.3), and the timeline recording entity-resolution decisions rather than only document changes (View 2.5).
+>
+> **Three left open deliberately, and none should be adopted by silence:**
+>
+> | | What the prototype did | Why it is still open |
+> |---|---|---|
+> | **View 1.2 — saved views** | Drew a **first-class object**: named views, counts, a create affordance | This node asked *filter or first-class object?* and noted the second is **a much larger commitment**. A generator settled it. Nobody chose it. |
+> | **Region A.2 — rot in the chrome** | Shows `1 ROT SUSPECTED` as words in the status bar | The node asked whether a silent-failure suspicion belongs in persistent chrome at all. The prototype's answer is good; it has not been ruled on. |
+> | **View 1.3 — the cleared state** | Points at the expiration radar: *"3 contracts expire inside your sectors"* | The gap read *"undesigned."* It is now designed, by the prototype. Same status: an answer exists, awaiting a decision. |
+>
+> **The `Proto` scores were filled before these decisions and are unaffected by them** — they measure distance from what we wanted at the time of V1.1, and adopting a prototype behaviour does not retroactively make the artifact more faithful.
 
 > ### V1 has no scores — read this before the screen tree
 >
@@ -129,7 +147,11 @@ That is a thinner claim than the one above and it should be allowed to look thin
 
 This is the best-specified screen in the document because §7.1 is the most-argued part of the spec, and because the hand-run is currently doing this job by hand in a published page, which has already taught us things about it.
 
-**Known gaps** — Queue ordering is undecided. Ranked by score is the obvious answer and probably wrong: it front-loads the easy yeses and leaves a long tail of borderline items for when attention is worst, which is exactly backwards if the goal is capturing good reasons. Worth considering interleaving, or surfacing the genuinely ambiguous first.
+~~**Known gaps** — Queue ordering is undecided.~~ **CLOSED 2026-08-12 — the prototype's answer is adopted, and it is better than the one this node was reaching for.**
+
+The gap argued against ranking by score (it front-loads easy yeses and leaves the borderline items for when attention is worst) and proposed no replacement. The prototype ships **`ORDER · AMBIGUITY FIRST` as the default, and makes the order user-switchable** — *ambiguity first / score, highest first / deadline, soonest first*.
+
+**Switchable is the part worth ratifying.** This node was trying to pick one ordering and would have picked wrong for somebody: a person clearing forty items wants ambiguity first, a person checking what closes this week wants deadlines. Making it a control ends the argument instead of settling it — and the default still carries the opinion. **Ambiguity-first is the default, and that is a decision rather than a fallback.**
 
 **Open questions** — Should a decision be undoable, and for how long? At ten seconds per item a mis-tap is certain, and a system whose entire value is decision quality cannot silently keep a wrong one.
 
@@ -153,7 +175,9 @@ These are directly countable from a bundle — `corpus/FINDINGS.md` established 
 
 ### Region 1.1.4 : Decision Bar
 
-Interested / Pass, and the reason chips. Reason capture is mandatory on Pass and optional on Interested, because a rejection with no reason is the one event that teaches nothing.
+Interested / Pass, and the reason chips. Reason capture defaults to mandatory on Pass and optional on Interested, because a rejection with no reason is the one event that teaches nothing.
+
+**Mandatory-on-Pass is a default, not a law — decided 2026-08-12.** The prototype exposes `requireReasonOnPass` as a setting, and that is adopted rather than removed. The rule was stated absolutely in this document; in practice a queue of forty items where three are obvious junk should not be able to stall on a required text field. **The cost is real and accepted:** a firm that switches it off loses the corpus a reason vocabulary would later be derived from, and loses it silently. Default on, and the setting should say plainly what turning it off gives up.
 
 Chips need a free-text escape hatch. The hand-run is currently producing reasons in Matt's own words precisely because pre-set categories would have flattened them, and the chip vocabulary should be *derived from* that hand-run rather than invented before it.
 
@@ -255,7 +279,9 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 **What survives the parking** — the principle, applied one layer down. V1 has no scores to cite, but every *extracted field* has exactly the same obligation: a deadline without a pointer to the document and page it came from is an assertion. View 2.3 inherits this view's job, and §8.4 makes it measurable.
 
-**Known gaps** — Assessments are versioned by scorer version (§6.4) and this view has no treatment for that. When a rescore changes a verdict, the previous one and the reason for the change are more interesting than the current number, and there is nowhere to show it.
+**Known gaps** — ~~Assessments are versioned by scorer version (§6.4) and this view has no treatment for that.~~ **Half closed 2026-08-12, adopted from the prototype:** every score carries its scorer version inline — `Fit 43 · scorer v0.3.1` — so a number is never shown without the thing that produced it. Ratified.
+
+**The other half is still open, and it is the harder half.** When a rescore *changes* a verdict, the previous value and the reason for the change are more interesting than the current number, and there is still nowhere to show that. Stamping the version makes the comparison possible; it does not make it visible.
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -266,6 +292,8 @@ A score without a citation is an assertion, and the spec's position throughout i
 | 3   | 4   | 4   | 2   | 75%   | 75%  |
 
 **Overview** — Every extracted field with its confidence and a pointer to where it came from. Deadlines, values, set-asides, eligibility requirements, contacts.
+
+**Absence is a distinct state from low confidence — adopted from the prototype, 2026-08-12.** Estimated value renders as `—` with the source `absent from bundle`, sitting beside fields at 72% and 94%. *"We looked and it is not there"* is a different fact from *"we are unsure what we read"*, and collapsing them into one low number is how a missing ceiling quietly becomes a guessed one. **Three states, not two: found with a confidence, absent, and not yet looked for.**
 
 **Known gaps** — Disagreement between sources needs a visual treatment and does not have one. Real bundles disagree with themselves — established, not hypothetical — and the honest display is both values with their provenance, not a resolved winner. A field that quietly picked one is how the near-miss in `corpus/FINDINGS.md` would have happened in production.
 
@@ -290,6 +318,10 @@ A score without a citation is an assertion, and the spec's position throughout i
 | 3   | 4   | 3   | 2   | 65%   | 80%  |
 
 **Overview** — Every Sighting and addendum in order. This is what the Sighting table exists for (§4.4), and it is what makes an extracted deadline trustworthy in seconds — you can see when it changed, in which source, and whether anything said so.
+
+**Scope widened 2026-08-12, adopting the prototype.** The timeline also records **what the system decided about the record**, not only what the documents did. The prototype's own example: *"Buyer resolved to NY OGS, not the hosting jurisdiction — Organization link corrected on ingest."*
+
+That is a machine decision with consequences — it moves the opportunity under a different Organization, and every buyer-level number in View 4.1 moves with it. **Entity resolution is the least visible thing the system does and the easiest to get silently wrong**, and this is the only place a person would ever watch it happen. Cheap to add while the timeline is being built; effectively impossible to reconstruct afterwards.
 
 **Known gaps** — Addenda cannot be trusted to describe themselves. A real addendum in the corpus enumerates its own changes, omits the deadline move entirely, and quietly renames the solicitation. So the timeline shows a **diff**, not a summary-of-changes, and the diffing does not exist yet.
 
@@ -359,6 +391,14 @@ Win history infers capability without anyone maintaining a taxonomy — which is
 
 **Overview** — Buyers, with what they have bought, from whom, how often, and on what cycle.
 
+**Two columns promoted from the prototype, 2026-08-12. Both are net-new — neither this document nor the spec asked for them.**
+
+**`INCUMBENT RETAINED` — a per-buyer retention rate, shown as `9 OF 11`.** How often this buyer re-awards to the sitting vendor. **This is the most useful thing the prototype invented**, because it answers the question that decides most bid/no-bid calls before any scoring happens: *does this buyer ever actually switch?* A buyer at 9-of-11 and a buyer at 4-of-9 are different propositions at identical nominal fit, and nothing else in the system carries that distinction. It is a stronger winnability input than anything in §6.3, and it is computed from award history rather than judged.
+
+**`CYCLE` — the buyer's procurement cadence, shown as `≈4 years`.** This generalises the expiration radar (View 3.1). Where a contract record exists you know the end date; where one does not, cadence predicts roughly when the work comes round again. It extends pre-RFP lead time to buyers you hold no contract for — which is most of them.
+
+> **Both carry a dependency this document cannot satisfy.** Retention needs award history with the incumbent resolved to a Vendor entity; cadence needs enough award history per buyer to be more than noise. **Neither has a component in `reference/Tenderfoot - Concept Outline.md`.** Promoted here as screen intent; the data-model work behind them is a separate and currently unwritten item.
+
 **Known gaps** — The buyer is not always the jurisdiction hosting the listing. The first corpus pull surfaced a NASPO ValuePoint RFP issued by New York State OGS and listed on Indiana's portal — inside the first 61 records. The Organization ↔ Solicitation relationship has to carry that, and this view has to display it without implying Indiana is buying.
 
 ---------------------------------------------------------------------------------------------------------------
@@ -371,7 +411,11 @@ Win history infers capability without anyone maintaining a taxonomy — which is
 
 **Overview** — Competitors, incumbents, and potential primes. KP is a Vendor row too (§4.2), which is what makes the Firm Profile a configuration record rather than a special case — and what makes the whole thing portable to another firm.
 
-**Known gaps** — Vendor identity resolution is unaddressed. Government data spells the same company several ways, and 1,293 distinct vendor names in the Indiana pull is certainly an overcount. Nothing in the spec says how names collapse into one entity.
+**Known gaps** — Vendor identity resolution is unaddressed *as a mechanism*. Government data spells the same company several ways, and 1,293 distinct vendor names in the Indiana pull is certainly an overcount. Nothing in the spec says how names collapse into one entity.
+
+**The display half is settled, adopted from the prototype 2026-08-12.** A vendor row carries its absorbed spellings inline — *"also: MAXIMUS INC · Maximus Federal Services"* — so a merge is visible on the row rather than buried in the pipeline that performed it.
+
+**The part worth keeping is the negative state:** *"no aliases found."* That separates *this vendor has one spelling* from *nobody has looked*, and without it an unmerged duplicate is indistinguishable from a clean record. **A merge is a claim the system makes about the world, and it should be as inspectable as any extracted field** — View 2.2's argument, applied to entities instead of scores.
 
 #######################################################
 
@@ -461,7 +505,12 @@ The platform field is what makes this scale: states mostly license about five pl
 |:---:|:---:|:---:|:---:|:-----:|:----:|
 | 4   | 3   | 1   | 5   | 60%   | 30%  |
 
-**Overview** — Pursuits across their states: `Watching → Bid/No-Bid → Submitted → Won/Lost`, with ownership and assignment (§7.2, `4C`). The system of record, and the answer to problem #4 — opportunities living in email and memory.
+**Overview** — Pursuits across their states: `Watching → Bid/No-Bid → Drafting → Submitted → Outcome`, with ownership and assignment (§7.2, `4C`). The system of record, and the answer to problem #4 — opportunities living in email and memory.
+
+**State machine revised 2026-08-12, adopting the prototype's.** It was `Watching → Bid/No-Bid → Submitted → Won/Lost`. Two changes, both kept:
+
+- **`Drafting` added.** The gap between deciding to bid and submitting is where a pursuit actually dies, and the original machine had no state for it — a decided-but-unwritten proposal was indistinguishable from one nobody had started. This is the longest-lived state on the board and it was missing.
+- **`Won/Lost` → `Outcome`.** One state holding a result, rather than two terminal states. It also absorbs the results the original pair could not express: withdrawn, cancelled by the buyer, no award made. All three occur in real procurement records.
 
 **Specified and deliberately not built.** Pursuit management is deferred to a later phase (§9). Tenderfoot's current job is contract *seeking*; seeking *and* management comes later. It is scored as a leaf because it has no views yet, and `Pri 1` is the whole point.
 
@@ -518,6 +567,16 @@ Levels 3 and below take no grid and no labels.
 #######################################################
 
 # Revision history
+
+*Revision note, 0.3.1 → 0.4.0 — eight decisions adopted from the prototype. Claude, 2026-08-12.*
+
+- **The review phase produced content, not just scores.** The `Proto` audit surfaced twelve prototype decisions this document had not made; Matt ruled on nine of them in one pass. Method generalised into `docs/Proto2PRD.md` §4.7.5 and marked **(T)**.
+- **`View 1.1` — queue ordering closed.** The gap argued against ranking by score and offered no replacement; the prototype defaults to ambiguity-first **and makes the order switchable**. The switch is the real contribution: this node was trying to pick one ordering and would have picked wrong for somebody.
+- **`Region 1.1.4` — mandatory-on-Pass demoted to a default.** Stated absolutely here, exposed as a setting in the prototype, and the setting is adopted. The cost is recorded rather than waved off: switching it off silently forfeits the corpus a chip vocabulary would later be derived from.
+- **`Screen 7` — state machine revised.** `Drafting` added, because the gap between deciding to bid and submitting is where pursuits actually die and there was no state for it. `Won/Lost` became `Outcome`, which also absorbs withdrawn, cancelled, and no-award — all of which occur in the corpus.
+- **`View 4.1` — two net-new columns, and one of them may be the best idea in the artifact.** Per-buyer **incumbent retention** (`9 OF 11`) answers *does this buyer ever actually switch?* before any scoring happens, and is a stronger winnability input than anything in §6.3. **Procurement cycle** (`≈4 years`) generalises the expiration radar to buyers holding no current contract. **Both lack a component in the concept outline** — flagged in the node, not silently assumed.
+- **`View 4.2`, `View 2.3`, `View 2.5` — three small promotions that share one principle:** make the machine's claims inspectable. Aliases show what a merge absorbed and say *"no aliases found"* when it absorbed nothing; extracted fields separate *absent* from *unsure*; the timeline records the entity-resolution decision that moved a record under a different buyer.
+- **Three answers left unratified on purpose** — saved views as a first-class object, rot suspicion in the chrome, and the cleared state's radar pointer. All three are good answers nobody chose, and §4.7.5's whole argument is that the unratified answer is the dangerous one. Listed in the preamble so silence cannot ratify them.
 
 *Revision note, 0.3.0 → 0.3.1 — `Proto` filled against V1.1. Claude, 2026-08-12.*
 

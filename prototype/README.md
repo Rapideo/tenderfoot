@@ -18,6 +18,7 @@ prototype/
   tools/extract-tokens.py            regenerates src/tokens.css from the bundle
   tools/verify-tokens.py             checks every token round-trips to the bundle
   archive/       the losing bake-off directions, kept unmodified
+  PUNCH-LIST.md  changes wanted in the next Design iteration
   CLAUDE.md      the prototype's own source-of-truth document (§4.6) — to be written
   README.md      this file
 ```
