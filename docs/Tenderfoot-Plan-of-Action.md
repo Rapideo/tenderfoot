@@ -346,6 +346,7 @@ Everything else is buildable without blocking on him.
 2. ~~**Matt:** the SVRC.~~ ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`, pending small edits. **Two follow-ups:** review `Imp`/`Pri`, which were placeholders and are now the input to §6 slice ordering; and fill `Proto`, stale at 0% now that a direction exists. **User stories are still owed and have no stand-in.**
 3. ~~**Matt:** inspiration images.~~ ✅ **Closed 2026-08-10 without gathering any** — the prototype direction supplies the design language (§A1.1).
 4. **Matt:** tech stack outline.
+4b. **Matt owes answers — [`../three_open_questions.md`](../three_open_questions.md), pinned 2026-08-12.** The SVRC's `Imp`/`Pri` columns: whether `Pri` is product or build priority, how a parked node should be scored, and how much re-scoring to do. **These gate the `Imp`/`Pri` review, which in turn gates any reconciliation of §6 slice ordering** — so item 7 below is blocked behind them.
 5. **Matt, in progress 2026-08-10:** the prototype. Per §A3 the bake-off may run in Claude
    Design; the build-out returns to the repo (Proto2PRD §4.3.2). It ran *ahead* of the SVRC,
    which was flagged as a departure from the stated order — **the objection is now moot**, since
