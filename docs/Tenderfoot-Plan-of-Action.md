@@ -97,7 +97,13 @@ What matters is not provenance but **naming before sampling**. Someone chose IMP
 
 Step 2 is the one already half-done: `tokens.css` names every colour by role, and says in its own header that no source is cited because none was designated. Closing slot 4 is mostly a matter of adding that line and meaning it.
 
-**And one thing moved from input to output — and has now been delivered.** IMPACT got a wordmark free with its logo. Tenderfoot's name treatment was defined as a Phase 0 *deliverable*, produced by the bake-off rather than supplied to it. **The generated direction rendered a `TENDERFOOT` wordmark**, so that output exists; whether it is the final mark is a separate question, and it is a candidate for the slot-4 source under route 2 above.
+**And one thing moved from input to output — and has *not* been delivered.** IMPACT got a wordmark free with its logo. Tenderfoot's name treatment was defined as a Phase 0 *deliverable*, produced by the bake-off rather than supplied to it. The generated direction does render a `TENDERFOOT` wordmark, and it remains a candidate for the slot-4 source under route 2 above.
+
+> **Corrected 2026-08-12.** This paragraph previously read *"has now been delivered… so that output exists."* **It does not.** The prototype sets the name in a typeface and labels it, in the artifact itself, `WORDMARK — PLACEHOLDER`. A placeholder that says it is a placeholder is not a delivered mark, and reading it as one would have closed a Phase 0 output that is still open.
+>
+> **Caught by building the explainer PDF** (`docs/explainer/`), where the placeholder appears in the header of all six screenshots and is the one visible sign the product is unfinished. **That makes it a gating item for anything shown outside the firm**, which is a shorter deadline than "before launch."
+>
+> **On the V1.2 prototype punch list** (Matt, 2026-08-12). Sequence: V1.2 lands with a real mark → re-run `docs/explainer/build.py` → the explainer becomes externally shareable. Until then it stays internal.
 
 Input 5 is where Tenderfoot differs most usefully. IMPACT's mock data was realistic but *invented* — Eskenazi Health, Indy Tech Trades. Ours can be **real**: pull actual solicitations from SAM.gov and Indiana, PDFs and all.
 

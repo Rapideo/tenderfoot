@@ -134,3 +134,11 @@ August 11, 2026:
 34. Also asked Claude to write me a prompt for a side project — a glossary of the terms of art it uses when we talk about building software, ~100 terms, built by a team of specialist agents and pulled together. Saved to the Desktop, to run in its own folder. Came out of the "chip" conversation. The category I care most about is what Claude called false friends — words where the everyday meaning actively misleads.
 
 35. Still owed by me: tech stack outline, user stories, small SVRC edits. And Imp/Pri in the SVRC is now overdue rather than pending — those columns feed slice ordering and slice ordering changed materially today when SP5 came out.
+
+36. Had Claude build the explainer PDF. Ten pages, real screenshots driven out of the frozen V1.1 bundle in headless Chrome, typeset in the actual IBM Plex faces pulled from the bundle's own manifest so it matches the product instead of approximating it. Sells the finished product rather than V1, since we'd already established the prototype IS the demo artifact. Written for us internally — me and whoever signs off.
+
+37. Every number in it is real and traceable: 9-of-61, the 38-day margin, 231 December expiries, 2,160 expiring contracts, the 204,439-row register. Page 7 is the strongest page in the document and it's strongest because none of it is hypothetical. Page 10 says plainly what isn't built and why judgment comes last — that page is the one not to cut, because a deck that oversells becomes a liability the first time someone opens the real thing.
+
+38. It's regenerable — one command, and it refuses to emit a PDF if any page overflows its box, so a copy edit that pushes content off a page fails loudly instead of silently truncating.
+
+39. Building it caught a documentation error I'd have shipped. The plan of action claimed the wordmark had "now been delivered." It hasn't — the prototype literally labels it WORDMARK — PLACEHOLDER, and it shows up in the header of all six screenshots. A placeholder that says it's a placeholder is not a delivered mark. Corrected, and it's on my V1.2 punch list. Sequence is: V1.2 with a real mark, re-run the build, then it can go outside the firm. Until then it stays internal.
