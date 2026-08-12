@@ -102,7 +102,8 @@ Institute, IDOA.
 
 KP lists **AI governance** as a service line. A recurring, standardized AI-requirements
 attachment across an entire state's procurements is both a **fit signal** worth detecting and a
-possible **positioning advantage**. Worth a look during the hand-run.
+possible **positioning advantage**. ~~Worth a look during the hand-run.~~ The hand-run is
+retired (plan of action §A2); this now belongs to whoever reads the first real ingest.
 
 ---
 

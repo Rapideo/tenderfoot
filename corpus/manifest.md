@@ -1,17 +1,27 @@
 # Corpus manifest
 
-**Collected:** 2026-08-04 · **Hand-run status:** not started
+**Collected:** 2026-08-04 · **Hand-run status: RETIRED PERMANENTLY, 2026-08-11 — never run**
 
-**The hand-run no longer happens by editing this file.** As of 2026-08-10 it runs in a
-click-through page — 216 rows across three corpora, keyboard-driven, saving to the browser as
-you go — which exports markdown in this file's format to be transferred back here. The Verdict
-and Reason columns below stay as the destination and the versioned record.
+> **The hand-run is retired** (plan of action §A2). Not deferred. **The Verdict and Reason
+> columns below are empty and will stay empty**, and the click-through scoring page built for
+> them is obsolete.
+>
+> **The columns are kept rather than dropped.** They cost nothing, they document what was
+> intended, and the corpus is still fully scoreable if anyone ever wants the numbers. What has
+> gone is the plan to fill them, not the ability to.
+>
+> **Read the Band column as a description, not a verdict.** It was a hypothesis to be falsified
+> by exactly the comparison that no longer happens, so it now records how the corpus was sorted
+> and nothing more. That matters for the 85%-irrelevant figure at the foot of this file, which
+> rests on the banding being roughly right and is no longer going to be checked.
 
-Verdict is `BID` / `NO` / `?`; Reason is one line in the scorer's own words. Leave Band alone —
-disagreement between Band and Verdict is the point.
+*The original instructions are kept below as the record of what was intended.*
 
-Work bands **A and B** in full. Spot-check **C** — a real fit hiding in C is the most valuable
-finding available.
+~~Verdict is `BID` / `NO` / `?`; Reason is one line in the scorer's own words. Leave Band alone —
+disagreement between Band and Verdict is the point.~~
+
+~~Work bands **A and B** in full. Spot-check **C** — a real fit hiding in C is the most valuable
+finding available.~~
 
 **Two scorers, and exports are attributed.** Matt and one KP colleague are scoring
 independently. Every export is stamped with who produced it, because two people's judgment

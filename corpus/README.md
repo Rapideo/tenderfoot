@@ -1,7 +1,13 @@
-# Corpus — real solicitations for the hand-run
+# Corpus — real solicitations
 
 **Started:** 2026-08-04
 **Purpose:** Phase 0 input #5 (`docs/Proto2PRD.md` §4.2, `docs/Tenderfoot-Plan-of-Action.md` A1)
+
+> **Retitled 2026-08-11.** This was *"real solicitations for the hand-run."* **The hand-run is retired permanently** (plan of action §A2) — not deferred — so the corpus is no longer collected *for* it.
+>
+> **The corpus keeps its value and loses none of its content.** It had four consumers; the hand-run was one. The other three are untouched and one was promoted the same day: realistic prototype data, **the hand-labeled extraction test set (5D) — now the most valuable thing here**, and real documents to develop ingestion against.
+>
+> Nothing in this directory is deleted. The scoring columns in `manifest.md` stay and stay empty. The corpus remains fully scoreable if anyone ever wants the numbers back.
 
 Real, downloaded solicitations — not invented samples. IMPACT's prototype used realistic-but-
 fictional data; Tenderfoot's can be genuine, and should be, because the entire product is about
@@ -26,25 +32,32 @@ and neat data hides every problem the extraction layer has to survive.
 >
 > **Extraction is promoted.** With no scores, extracted fields are the only thing V1 can be right or wrong about, which makes hand-labeled ground truth the most valuable thing this corpus holds.
 
-This is why the hand-run (Stage A2) comes before any code: one pass produces all four.
+~~This is why the hand-run (Stage A2) comes before any code: one pass produces all four.~~
 
-**How the hand-run is actually run, as of 2026-08-10.** Not by editing `manifest.md` — in a
+> ## The hand-run is retired — permanently, 2026-08-11
+>
+> Matt's call. Not deferred, not reduced, not waiting on anything. The click-through scoring page built on 2026-08-10 is obsolete and the reasoning is in plan of action §A2.
+>
+> **What that costs, recorded here because this is the file that made the argument.**
+>
+> **Inter-rater agreement will never be measured.** The paragraph below argued it is the ceiling on achievable precision — no scorer beats the rate at which two experienced people disagree — and the plan was to get it by having two people score the same rows. There is now no occasion on which that happens. When qualification is eventually designed, *"how much better than two disagreeing experts does this need to be?"* has no answer, and the honest response will be that nobody measured it. It is recoverable at any time, since the corpus is still here and still scoreable, but it does not happen by default.
+>
+> **The negative profile has no source.** §4.2 wants what KP will never bid and why. Past proposals were cut on 2026-08-10 for lack of access; §8.2 rerouted it to the hand-run's no-bid reasons; that reroute is now gone too. It stays empty until V1 accumulates real decisions.
+>
+> **The band-vs-verdict comparison below never happens.** Bands were a hypothesis to falsify and nothing now falsifies them. They remain a useful description of the corpus and stop being a claim that was going to be tested.
+>
+> The paragraphs that follow are kept as the record of what was intended and why it mattered.
+
+**How the hand-run was to be run, as of 2026-08-10.** Not by editing `manifest.md` — in a
 click-through page covering all 216 rows across the three corpora, keyboard-driven, persisting
-to the browser, exporting markdown in `manifest.md`'s format. Two people are scoring
-independently and **every export is attributed**, because two judgments cannot be merged into
+to the browser, exporting markdown in `manifest.md`'s format. Two people scoring
+independently with **every export attributed**, because two judgments cannot be merged into
 one ground truth without knowing whose is whose.
 
 **Score the same rows twice where you can.** Inter-rater disagreement is the ceiling on
 achievable precision — no scorer beats the rate at which two experienced people disagree — and
 the rows they split on are the most valuable few-shot examples in the set. Knowing that number
 before the engine exists is worth more than the hour it costs.
-
-> **Still true 2026-08-11, and worth more than before.** V1 has no scorer (spec §1.1), so there
-> is no precision ceiling to measure *yet* — but that is exactly why this number should be
-> captured now. It is a fact about **KP and the market**, not about any engine, and it does not
-> expire. When qualification is eventually designed, the first honest question anyone can ask is
-> *how much better than two disagreeing experts does this need to be*, and that answer will
-> either exist already or be unobtainable in retrospect.
 
 ## The band column is a prediction, not a filter
 
@@ -61,6 +74,14 @@ silent-recall failure the whole system is designed to prevent (§6.2).
 
 **Disagreements between the band and the verdict are the most informative rows here.** They are
 the training signal.
+
+> **Nothing falsifies them now** (2026-08-11). With the hand-run retired there are no verdicts, so
+> there are no band-vs-verdict disagreements and the hypothesis stands untested. **Treat the band
+> column as a description of how the corpus was sorted, not as a claim about what KP would bid.**
+>
+> Worth keeping in view, because the untested claim is load-bearing elsewhere: `manifest.md`
+> reports that ~85% of an Indiana day is categorically irrelevant, and that figure rests on the
+> banding being roughly right. It is probably roughly right. It is no longer going to be checked.
 
 ## Structure
 

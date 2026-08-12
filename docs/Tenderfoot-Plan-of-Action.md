@@ -108,21 +108,31 @@ That single act pays four times over:
 3. It becomes the hand-labeled extraction test set (5D) the spec already requires. **Promoted 2026-08-11:** with no scores in V1, extraction is the only thing the system can be right or wrong about, so this is now the first payoff rather than the third.
 4. ~~It seeds the few-shot example set (3K).~~ **Parked 2026-08-11** — nothing consumes examples (spec §1.1). It still accumulates real decisions with real reasons, which is what qualification eventually gets designed *against*; that is a slower and better payoff than seeding a scorer.
 
-### A2. The hand-run — reframed 2026-08-11
+### A2. The hand-run — RETIRED PERMANENTLY, 2026-08-11
 
-Mark each solicitation **would bid / would not bid / unclear**, with a one-line reason.
+**Matt's call, and it is not a deferral.** The hand-run is removed from the plan. It is not rescheduled, not reduced in scope, and not waiting on anything. The click-through scoring artifact is obsolete.
 
-**As built, 2026-08-10:** 216 rows across three corpora in a click-through page, not 30–50 in a markdown table. The 23 live band A/B rows are the priority; the 140 calibration rows add example depth; band C is a spot-check. Two people score independently and exports are attributed — see `corpus/README.md`.
+**Why it holds up.** Every job this stage existed to do has either been parked or has moved into V1 itself:
 
-> **What changed.** This section used to open *"do this before anything is built"* and called the hand-run a feasibility test for the scorer: if a human expert cannot separate fits from non-fits, no scorer will either. **That argument is parked with the scorer** (spec §1.1). V1 does not separate anything — it returns everything — so there is no longer a scorer whose feasibility this establishes.
+| What A2 was for | Where it went |
+|---|---|
+| Feasibility test — *can a human separate fits from non-fits?* | Parked with the scorer (spec §1.1). V1 separates nothing. |
+| Few-shot example set (3K) | Parked. Nothing consumes examples. |
+| Reason-chip vocabulary | Parked. V1 records free text. |
+| Adjudication answer key | Parked. Nothing to be an answer key *for*. |
+| A read on whether the market holds work KP would pursue | **SP6 answers this with live data**, which is a better answer than scoring a frozen corpus. |
+
+The remaining argument for keeping it was that it rehearsed V1's daily loop. **Rehearsing a loop you are about to build is not worth a day**, and it was the weakest of the six reasons.
+
+> **Two things die with it. Both are real losses and neither is being quietly absorbed.**
 >
-> **The deeper change is that the hand-run is no longer a precursor to the product. It *is* the product.** V1's normal operation is exactly this: read what arrived, mark a verdict, give a reason. Doing it now against a frozen corpus is a rehearsal of the application's daily loop, using real documents, before any of it is built.
+> **1. The negative profile has no source.** §4.2 wants *what KP will never bid, and why*. Past proposals were cut on 2026-08-10 for lack of access, and §8.2 rerouted it to the hand-run's no-bid reasons. **That reroute is now also gone**, so the negative profile is empty until V1 accumulates real decisions. The field stays in the model and stays empty — same treatment as past performance, and for the same reason: if a source appears, the capability returns without a migration.
 >
-> **What it still produces:** a read on whether the market contains work KP would pursue — which is the question SP6's gate now asks — and a body of real decisions with real reasons, which is the corpus qualification will eventually be designed *against* rather than *into*.
+> **2. Inter-rater agreement will never be measured.** `corpus/README.md` argues it is the ceiling on achievable precision — no scorer beats the rate at which two experienced people disagree — and the plan was to get it by having Matt and his boss score the same rows. **There is now no occasion on which that happens.** When qualification is eventually designed, *"how much better than two disagreeing experts does this need to be"* will be unanswerable, and the honest response will be that nobody measured it.
 >
-> **What it no longer produces, because both are parked:** the few-shot example set, and the reason vocabulary.
->
-> **Still a day, still blocks on nothing, no longer the thing that can cheaply invalidate the project.** That role now belongs to SP6.
+> Recorded rather than solved. Both are cheap to recover later if wanted — the corpus is still in the repo and still scoreable — but neither happens by default now.
+
+**The corpus itself stays and is not affected.** `corpus/` was collected for four consumers; the hand-run was one. The other three — realistic prototype data, the hand-labeled extraction test set (5D), and real documents to develop ingestion against — are untouched, and 5D was promoted this same day to the most valuable thing the corpus holds.
 
 > **If the hand-run is hard, that is the most important finding the project will produce.** Stop and reconsider before building anything.
 
@@ -312,11 +322,13 @@ This is why 5A and 3I get built as infrastructure in SP5–SP6 rather than as fe
 | **Tomorrow** | Inspiration images | In progress |
 | Tomorrow | Tech stack outline — closes §10.3 | In progress |
 | Stage A3 | Name **one** inspiration image as the palette source (§4.1.1) — Tenderfoot has no logo to measure | Minutes |
-| **Stage A2** | **The hand-run** — verdicts on the 24 band A/B rows in `corpus/manifest.md` | **A day. Highest-value item here, and it blocks on nothing.** |
+| ~~Stage A2~~ | ~~**The hand-run**~~ | **Retired permanently 2026-08-11 — see §A2** |
 | Stage A4 | Pick a design direction | Minutes |
 | Stage A8 | Prototype iteration feedback | Recurring |
 | SP2 gate | Design system sign-off | An hour |
 | **SP6** | **Adjudication session** — the gate | A day |
+
+**With A2 retired, SP6 is the only place Matt's judgment enters the project** — and it now sits behind every slice of build work rather than in front of it. That is a real change in shape: there is no longer a cheap early read on whether the premise holds, and the first honest signal arrives at the gate. Deliberate, and worth seeing plainly.
 
 Everything else is buildable without blocking on him.
 
@@ -329,14 +341,14 @@ Everything else is buildable without blocking on him.
 3. ~~**Matt:** inspiration images.~~ ✅ **Closed 2026-08-10 without gathering any** — the prototype direction supplies the design language (§A1.1).
 4. **Matt:** tech stack outline.
 5. **Matt, in progress 2026-08-10:** the prototype. Per §A3 the bake-off may run in Claude
-   Design; the build-out returns to the repo (Proto2PRD §4.3.2). Note this runs *ahead* of the
-   SVRC and the hand-run rather than after them, which is a departure from the stated order —
-   worth watching, since §A2 puts the hand-run before anything is built precisely because it is
-   the cheap way to find out the premise is wrong.
-6. **Matt:** the hand-run (A2). Runs in a click-through page — 216 rows across three corpora, exporting back to `corpus/manifest.md` format. The live band A/B rows (23) are the priority.
-   > **Downgraded 2026-08-11, and this is a real change of status.** The hand-run was *"the only step that can invalidate the project cheaply"* because it tested whether a scorer could work. **With qualification parked (spec §1.1), it is no longer a feasibility test and no longer blocks anything** — not the reason vocabulary, not the few-shot set, both of which are parked with it.
-   >
-   > It stays worth doing for a different and narrower reason: **it is the fastest read on whether the market contains work KP would pursue at all**, which is the question SP6's gate now asks. Judgement about the market, not about the software. Still roughly a day, still blocks on nothing, no longer urgent in the way it was yesterday.
+   Design; the build-out returns to the repo (Proto2PRD §4.3.2). It ran *ahead* of the SVRC,
+   which was flagged as a departure from the stated order — **the objection is now moot**, since
+   the thing it was supposed to run behind was the hand-run, and that is retired (§A2).
+6. ~~**Matt:** the hand-run (A2).~~ **RETIRED PERMANENTLY 2026-08-11.** Not deferred, not
+   reduced. Every job it did is either parked with qualification or has moved into SP6, and the
+   scoring artifact is obsolete. Two losses recorded in §A2 rather than absorbed: the negative
+   profile has no source until V1 accumulates decisions, and inter-rater agreement will never be
+   measured.
 7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline. **Note the radar's position improves under the V1 decision:** with the matching engine parked, the argument that SP8 sits behind a scorer that must be proven first no longer applies, and §6.0's "third option" — loading the contract register into the graph early — becomes the obvious call rather than a compromise.
 8. **Claude, unblocked:** test whether one licensed platform (Periscope, Ivalua, CGI Advantage) retains closed solicitations. Under §5.7 a single answer covers Illinois, Ohio, Michigan, and Kentucky at once. This is the last unexplored source question.
 9. **Then:** the bake-off.
@@ -348,7 +360,7 @@ Steps 2 through 5 are independent of each other, and step 7 is independent of al
 ## 9. Open questions
 
 1. ~~**Stack, hosting, deployment.**~~ Matt is supplying a tech stack outline; it becomes the input to the workflow spec (B2).
-2. ~~**Where the hand-run's labels live.**~~ Settled: `corpus/manifest.md`, versioned from the start, with Verdict and Reason columns already in place.
+2. ~~**Where the hand-run's labels live.**~~ **Moot 2026-08-11** — the hand-run is retired (§A2) and produces no labels. The Verdict and Reason columns stay in `corpus/manifest.md` unfilled; the first real labels now come from V1 itself.
 3. ~~**Prototype repo location.**~~ **Resolved 2026-08-10: a tracked subdirectory, `prototype/`.** IMPACT used a nested independent repo, which worked — 177 iteration commits kept out of the production log, and a freeze enforced by the filesystem rather than by discipline. Tenderfoot takes the simpler route because there is no production repo to nest inside yet. **The cost is real and accepted:** prototype commits interleave with planning and corpus commits, and "frozen" (§4.9) becomes a rule rather than a property. Splitting it out later is the remedy, and it gets more annoying the longer it waits. Layout and rules in `../prototype/README.md`.
 4. **How many design directions in the bake-off, and what register does each represent?** IMPACT ran three — warm-editorial, civic-minimal, modular-dashboard — but the brief itself was lost, which Proto2PRD §4.3 flags as the one part of Phase 0 that did not survive. **Overtaken by events 2026-08-10:** one direction was generated and is in the repo; `prototype/archive/` is empty. Either other directions exist and should be committed there before this one is promoted (§4.4), or the bake-off effectively ran with N=1 — which is a legitimate choice but should be *recorded as* a choice, since §4.3.1's argument is that the comparison is what makes the selection mean something.
 5. **Does the rendering get rebuilt repo-native, or does iteration stay in Claude Design with a re-extract each round?** Raised 2026-08-10 by the first extraction, and **partly answered within hours by V1.1.** Re-extraction is not free and is not one-off: every Design iteration invalidates it. But the cost is narrower than feared — the generator closed the token gap by itself, so only the mock layer genuinely needs re-extracting, and only its **comments** must be carried forward by hand. **Narrower again as of 2026-08-11:** the token half is now scripted (`prototype/tools/`), so it costs one command per round. Measured in `ClaudeDesign_Proto_Cleanup.md`. The question that remains is whether the visual artifact ever becomes the specification, as IMPACT's was, or stays disposable with `src/app.js` carrying the spec. See §A7.

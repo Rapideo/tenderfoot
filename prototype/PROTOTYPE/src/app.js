@@ -21,18 +21,23 @@
  * every active source returns: no ranking, no scoring, no filtering. Qualification
  * will be re-imagined after ingestion is running, and §6 does not describe it.
  *
- * WHAT THAT MEANS HERE. The `scores` array on every opportunity below, and the
- * PASS_CHIPS vocabulary at the foot of this file, model a layer V1 does not have.
- * They are NOT deleted, because this file is a record of a generated direction and
- * the bundle still renders them. But they are NOT schema either -- and since
- * Proto2PRD §4.1.1 says the production model is this dataset normalized, that
- * distinction is the whole reason this note exists. A field that survives into a
- * migration because nobody flagged it is exactly the failure this file guards.
+ * WHAT THAT MEANS HERE -- AND WHAT IT DOES NOT MEAN. The `scores` array on every
+ * opportunity below, and the chip vocabularies at the foot of this file, model a
+ * layer V1 does not have.
  *
- * PARKED, do not migrate: `scores[]`, `PASS_CHIPS`, `YES_CHIPS`.
- * REAL SCHEMA, keep: everything else -- and `conflict` and the pursuit-cost fact
- * fields get MORE important, not less, because with no scores the extracted facts
- * are the only thing V1 can be right or wrong about (§8.4).
+ * They STAY. Matt, 2026-08-11: the prototype represents the final released product
+ * and doubles as demo material, so it is measured against the destination rather
+ * than against the first shippable slice. Nothing here is trimmed to match V1, and
+ * a later Design iteration adding more intelligence surface is on-plan.
+ *
+ * So this is a PHASING note, not a defect report. The distinction that matters is
+ * schema: Proto2PRD §4.1.1 makes the production data model this dataset normalized,
+ * and V1's migrations should not carry fields that nothing populates for a year.
+ *
+ * LATER-PHASE, not V1 schema: `scores[]`, `PASS_CHIPS`, `YES_CHIPS`.
+ * V1 SCHEMA: everything else -- and `conflict` plus the pursuit-cost fact fields
+ * get MORE important, not less, because with no scores the extracted facts are the
+ * only thing V1 can be right or wrong about (§8.4).
  *
  * ONE RISK THIS CREATES. The deadline-conflict model below was justified partly by
  * the gated-items drawer (SVRC 1.1.5) making a bad extraction recoverable. That

@@ -7,7 +7,9 @@
 >
 > **Decided 2026-08-11.** The application returns everything every active source returns: no ranking, no scoring, no filtering (spec §1.1). Qualification is parked and will be re-imagined after ingestion runs.
 >
-> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). Their grids are left filled rather than blanked — the scoring key forbids a half-filled grid, and blanking them would misreport parked work as unscored work. **Read their `Pri` as zero regardless of what the number says.**
+> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). Their grids are left filled rather than blanked — the scoring key forbids a half-filled grid, and blanking them would misreport parked work as unscored work. **Read their `Pri` as zero for V1, and unchanged for the product.**
+>
+> **Parked for V1, not removed from the product.** Matt, 2026-08-11: the prototype represents the final released product and serves as demo material, and it renders all three of these. **This outline describes the destination; V1 builds a subset of it.** So these nodes are not candidates for deletion in a later revision, and a Design iteration that develops them further is on-plan rather than scope creep.
 >
 > **What replaces them in V1 is already in this document and needs no new nodes.** Region 1.1.1 (the four deciding facts), Region 1.1.3 (the pursuit-cost fact panel), Region 1.1.4 (the decision bar), and View 2.3 (extracted fields) carry the entire triage screen on their own. That is worth noticing: **the outline survives the removal of the scoring layer largely intact**, which suggests the screens were built around facts and decisions rather than around scores.
 >

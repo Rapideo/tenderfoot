@@ -71,9 +71,15 @@ The extraction procedure is written down: [`../docs/ClaudeDesign_Proto_Cleanup.m
 
 **What `src/` hands back rather than decides.** The radius scale — resolved 2026-08-11, see above. And the reason-chip vocabulary, which the generator invented — **now parked rather than pending** (spec §1.1): with qualification deferred, nothing consumes reasons, so V1 records free text and there is no vocabulary to derive.
 
-> **The prototype renders a scoring layer V1 does not have.** Score strips, four-component scores, gated items. That is not a defect in the direction — it was generated from an SVRC that described the full system — but it means **the prototype is now ahead of V1 in scope**, and the parked regions are marked in `../reference/Tenderfoot SVRC.md` (1.1.2, 1.1.5, 2.2) rather than in the bundle, which stays frozen.
+> ### The prototype shows the finished product, not V1
 >
-> Read the header of `src/app.js` before treating any field here as schema. `scores[]` and the chip vocabularies are explicitly flagged do-not-migrate, because Proto2PRD §4.1.1 makes this dataset the production model and a parked field that nobody flagged is exactly how it ends up in a migration.
+> **Stated by Matt 2026-08-11 and it settles a question this document was about to get wrong.** The prototype renders a scoring layer V1 does not have — score strips, four-component scores, gated items. **Those stay. All of them.** The prototype represents the final released product and doubles as demo material, so it is measured against the destination rather than against the first shippable slice.
+>
+> **So the prototype is not ahead of the plan; it is the plan's endpoint.** V1 (spec §1.1) builds a subset of what is drawn here. That is a normal relationship between a specification and a first release, and it is worth naming because the obvious reading — *the prototype is out of date, trim it* — is exactly backwards. **Nothing here gets trimmed to match V1's scope.**
+>
+> **Two things follow.** Iteration in Claude Design continues against the full product, not against V1, so a future version adding more intelligence surface is on-plan rather than scope creep. And the SVRC's parked nodes (1.1.2, 1.1.5, 2.2) are parked **for V1**, not removed from the product — they describe screens that ship eventually and are drawn already.
+>
+> **The one place this still needs care is the schema.** Proto2PRD §4.1.1 makes this dataset the production data model, and V1's migrations should not carry fields nothing populates for a year. Read the header of `src/app.js`: `scores[]` and the chip vocabularies are flagged as **later-phase, not V1 schema** — a phasing note, not a defect report.
 
 ## Three rules, all from the recovered IMPACT record
 

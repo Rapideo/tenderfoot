@@ -81,7 +81,7 @@ That is a consulting engagement, not an insurance contract, and it sits on the s
 
 ## 4. What would make this list shorter and better
 
-**The hand-run.** Twenty-three open band A/B rows, none scored. Until they are, this list is *everything plausible* rather than *what to pursue*, and the difference is roughly a day of reading.
+~~**The hand-run.**~~ **Retired permanently 2026-08-11** (plan of action §A2). This list therefore stays *everything plausible* rather than *what to pursue*, and nothing is now scheduled that would narrow it. **That is the correct reading of this document from here on** — it surfaces, it does not recommend, and no filtered version of it is coming.
 
 **The EQR teaming question.** One phone call establishes whether an NCQA-certified HEDIS auditor relationship is reachable, and that single answer decides whether the best-matching opportunity in the corpus is bidable at all.
 
