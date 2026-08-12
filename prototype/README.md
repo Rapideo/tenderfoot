@@ -63,9 +63,17 @@ Two findings recorded in `src/tokens.css` rather than fixed, on the standing rul
 
 Both are handed back, same as the radii were.
 
-`PROTOTYPE/src/` is the one that moves. The bundle and `archive/` never do.
+> ## The whole directory is reference. Nothing in it is edited.
+>
+> **Matt, 2026-08-11:** *"the prototype is a reference ONLY. We can copy code from it as a starting point, but we never change the prototype itself."*
+>
+> That is stronger than the frozen-bundle rule this file previously carried, and it supersedes it. **Every file under `prototype/` is read-only** — the bundle, `archive/`, and `src/`. Production code **copies out** into the production tree and evolves there. Nothing is edited in place, and the production tree never points back into this directory at runtime.
+>
+> **New Design versions arrive as new files alongside the old ones**, which is not a change to anything existing. `src/` is regenerated wholesale from the current bundle by `tools/extract-tokens.py` rather than hand-patched.
+>
+> **One consequence that needs a home and does not have one yet.** `src/app.js` carries the rule-bearing comments — the business rules behind each field, which `../docs/ClaudeDesign_Proto_Cleanup.md` identifies as the only artifact in the whole cleanup that *accumulates* rather than being replaced. **A frozen reference cannot accumulate anything.** So when the production tree exists, those comments move with the code on the first copy-out and live there from then on, and this file's copy stops being the authority. Until that tree exists, `src/app.js` is the only home they have — worth knowing, because it is the one place where "reference only" and "the comments must accumulate" genuinely pull against each other.
 
-**Why the bundle is frozen.** Its template is a JSON string inside a `<script>` tag; editing it in place is possible and pointless, because a re-export from Claude Design discards the edits. It stays as the record of what the direction looked like before anyone cleaned it up. Extraction goes *out* of it, into `src/`.
+**Why the bundle in particular can never be edited.** Its template is a JSON string inside a `<script>` tag; editing it in place is possible and pointless, because a re-export from Claude Design discards the edits. It stays as the record of what the direction looked like before anyone cleaned it up. Extraction goes *out* of it, into `src/`.
 
 The extraction procedure is written down: [`../docs/ClaudeDesign_Proto_Cleanup.md`](../docs/ClaudeDesign_Proto_Cleanup.md).
 

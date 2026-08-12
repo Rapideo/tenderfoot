@@ -157,3 +157,17 @@ Three lessons, and the third is the important one.
 That reframes the procedure. Steps 3 and 4 are provisional and may be worth skipping while iteration continues. **Step 2 is the durable one**, and its comment block is the only artifact in the whole cleanup that accumulates value rather than being replaced.
 
 **Practical consequence for step 0:** keep every version, not just the current one. The diff between them is what tells you which comments still apply.
+
+---
+
+## The prototype directory is reference-only — and that has a sharp edge
+
+**Recorded on Tenderfoot, 2026-08-11.** The rule the customer set: *the prototype is a reference only; code can be copied out as a starting point, but the prototype itself is never changed.* New generated versions arrive as new files; extracted artifacts are regenerated wholesale rather than hand-patched; production copies out and evolves in its own tree.
+
+That is the right rule, and it collides with step 2 of this procedure.
+
+**Step 2's comments are the one thing that accumulates.** Everything else in the cleanup gets replaced each round — data, tokens, radii, all regenerable from whichever bundle is current. The comments do not regenerate, because they encode why a field exists, and they are the reason the whole procedure pays.
+
+**A read-only directory cannot accumulate anything.** So the comment block has a home only until the production tree exists, and then it has to move — carried out with the first copy-out and maintained there, with the extracted copy demoted to a historical artifact.
+
+**Get this wrong in either direction and it costs.** Leave the comments as the authority in a frozen reference and they go stale while still looking canonical. Move them too early, before there is production code to attach them to, and they are homeless. **The transfer point is the first copy-out, and it should be deliberate rather than incidental** — it is the moment the specification stops living in the prototype and starts living in the code, which is the entire arc this document describes, arriving at its end.
