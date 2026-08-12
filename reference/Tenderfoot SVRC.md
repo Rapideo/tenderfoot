@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.3.0, 2026-08-11.**
+**Tenderfoot SVRC — version 0.3.1, 2026-08-12.**
 **Adopted.** This is the working outline, not a draft.
 
 > ### V1 has no scores — read this before the screen tree
@@ -21,7 +21,11 @@
 >
 > **`Imp` and `Pri` were placeholders and are now load-bearing.** They were filled because the scoring key forbids a half-filled grid, not because they were known. Adoption promotes them from guesses to inputs — `docs/Tenderfoot-Plan-of-Action.md` §6 reconciles slice ordering against `Pri`. **They should be reviewed once with that consequence in mind**, because a placeholder that silently becomes a build order is exactly the failure the `·` convention exists to prevent. `Eff` is a genuine estimate. `Conc` reflects how settled the spec is.
 >
-> **`Proto` is stale everywhere.** Every node reads 0%, which was true when written and is not now — a direction exists at `../prototype/`. The column means *how close the prototype is to what we actually want*, so it can only be filled by looking at the prototype and judging, node by node. Left at 0% rather than guessed.
+> ~~**`Proto` is stale everywhere.**~~ **Filled 2026-08-12 against V1.1** by driving the bundle and comparing each node's `Overview` and `Known gaps` to what is actually drawn. **Mean 84%; twelve of twenty at 90% or above; nothing below 55%.**
+>
+> Three nodes score low and all three for the same honest reason — *the prototype declines to draw what has not been decided.* View 2.4 renders `DOCUMENT RENDER — PLACEHOLDER` and states the undecided question on the screen. That is not a shortfall; it is the artifact refusing to invent a decision. **Scored as a gap anyway, because `Proto` measures distance from what we want, not the prototype's good judgment.**
+>
+> **This column goes stale on every prototype iteration.** V1.2 invalidates it. Fill it once at each freeze rather than continuously.
 >
 > **The register is plain, deliberately.** IDE8's SVRC is dictated in Matt's voice, and its hedges carry which decisions are settled — the 0.2.0 revision note there says so explicitly. Writing Tenderfoot's in that voice would have made a guess indistinguishable from a ruling. Now that it is adopted, edits in his own voice are the natural next layer.
 >
@@ -43,7 +47,7 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 0%    | 70%  |
+| 2   | 4   | 5   | 2   | 90%   | 70%  |
 
 **Overview** — The persistent application frame. Tenderfoot is a small app with a strong daily habit attached to one screen, so the shell's job is mostly to stay out of the way and to make the queue count visible from anywhere. It is scored as a parent because it says something its regions do not: it is built once, early, and everything else assumes it.
 
@@ -55,7 +59,7 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 0%    | 75%  |
+| 2   | 4   | 5   | 2   | 70%   | 75%  |
 
 **Overview** — Wordmark, primary navigation, and the queue counter.
 
@@ -79,7 +83,7 @@ It should show zero proudly. An empty queue is the goal state, not an empty stat
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 3   | 0%    | 60%  |
+| 2   | 3   | 3   | 3   | 90%   | 60%  |
 
 **Overview** — Ingestion health at a glance: when adapters last ran, and whether any are failing.
 
@@ -119,7 +123,7 @@ That is a thinner claim than the one above and it should be allowed to look thin
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 5   | 5   | 2   | 0%    | 85%  |
+| 3   | 5   | 5   | 2   | 95%   | 85%  |
 
 **Overview** — The card stack itself. One opportunity fills the screen; a decision advances to the next; the count in the shell decrements. Keyboard first — the whole design assumes someone clearing forty items, not browsing three.
 
@@ -175,7 +179,7 @@ Low traffic by design. It needs to exist, not to be prominent.
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 2   | 2   | 3   | 0%    | 45%  |
+| 2   | 2   | 2   | 3   | 85%   | 45%  |
 
 **Overview** — Persisted custom queries (§7.7, `4I`). Scope the queue to a sector, a jurisdiction, a value band.
 
@@ -189,7 +193,7 @@ Low traffic by design. It needs to exist, not to be prominent.
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 1   | 3   | 4   | 2   | 0%    | 55%  |
+| 1   | 3   | 4   | 2   | 90%   | 55%  |
 
 **Overview** — What the screen shows at zero. Treated as a real view rather than an empty state because reaching zero is the habit the product is trying to build, and the moment it happens is the only reward the system has to offer.
 
@@ -215,7 +219,7 @@ The centrepiece is the **brief** (§7.3, `4D`), and its value is easy to mistake
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 3   | 3   | 2   | 0%    | 75%  |
+| 3   | 3   | 3   | 2   | 95%   | 75%  |
 
 **Overview** — What it is, why it fits, what is missing and would need a partner, key dates, key risks, the pursuit-cost fact panel, and a recommended posture.
 
@@ -241,7 +245,7 @@ The app's remaining case is the triage queue's reason capture (§7.1), which is 
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 3   | 0%    | 70%  |
+| 3   | 4   | 4   | 3   | 90%   | 70%  |
 
 **Parked 2026-08-11** with spec §6. V1 has no scores and this view does not ship. The grid is left as scored rather than blanked — per the scoring key a half-filled grid is forbidden, and zeroing it would misreport parked work as unestimated work. **Read `Pri` as zero for V1 regardless of the 4.**
 
@@ -259,7 +263,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 2   | 0%    | 75%  |
+| 3   | 4   | 4   | 2   | 75%   | 75%  |
 
 **Overview** — Every extracted field with its confidence and a pointer to where it came from. Deadlines, values, set-asides, eligibility requirements, contacts.
 
@@ -271,7 +275,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 3   | 3   | 3   | 0%    | 55%  |
+| 4   | 3   | 3   | 3   | 55%   | 55%  |
 
 **Overview** — The bundle inline, with extraction highlights pointing back into the source.
 
@@ -283,7 +287,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 3   | 2   | 0%    | 80%  |
+| 3   | 4   | 3   | 2   | 65%   | 80%  |
 
 **Overview** — Every Sighting and addendum in order. This is what the Sighting table exists for (§4.4), and it is what makes an extracted deadline trustworthy in seconds — you can see when it changed, in which source, and whether anything said so.
 
@@ -307,7 +311,7 @@ Both radars are **post-gate work** — slice SP8, after the go/no-go — and the
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 2   | 3   | 0%    | 75%  |
+| 2   | 4   | 2   | 3   | 95%   | 75%  |
 
 **Overview** — Contracts approaching their end date, read as predicted re-competes months ahead of any RFP (`4E`). The lead-time advantage, and the direct answer to problem #2, *finding out too late* (§1).
 
@@ -325,7 +329,7 @@ There is a live fixture waiting for it: 231 contracts across 149 vendors all exp
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 3   | 2   | 4   | 0%    | 50%  |
+| 3   | 3   | 2   | 4   | 80%   | 50%  |
 
 **Overview** — Who wins work KP could sub on. KP's WBE certification makes it attractive to primes carrying participation goals (`4F`, §4.6), which turns some unreachable opportunities into reachable ones.
 
@@ -351,7 +355,7 @@ Win history infers capability without anyone maintaining a taxonomy — which is
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 2   | 0%    | 65%  |
+| 2   | 3   | 3   | 2   | 95%   | 65%  |
 
 **Overview** — Buyers, with what they have bought, from whom, how often, and on what cycle.
 
@@ -363,7 +367,7 @@ Win history infers capability without anyone maintaining a taxonomy — which is
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 2   | 0%    | 65%  |
+| 2   | 3   | 3   | 2   | 90%   | 65%  |
 
 **Overview** — Competitors, incumbents, and potential primes. KP is a Vendor row too (§4.2), which is what makes the Firm Profile a configuration record rather than a special case — and what makes the whole thing portable to another firm.
 
@@ -387,7 +391,7 @@ Win rate becomes a report once there is enough history to populate one. **It is 
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 5   | 3   | 3   | 0%    | 70%  |
+| 3   | 5   | 3   | 3   | 90%   | 70%  |
 
 **Overview** — The backtest as a standing view. The output the whole project is judged against: *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You saw one of them."* (§3.1)
 
@@ -401,7 +405,7 @@ Highest impact in the document and mid priority, which is not a contradiction �
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 3   | 2   | 0%    | 80%  |
+| 2   | 4   | 3   | 2   | 80%   | 80%  |
 
 **Overview** — What each source actually produced: records ingested, survived gates, reached triage, marked interested. Retires sources that do not earn their maintenance.
 
@@ -423,7 +427,7 @@ Highest impact in the document and mid priority, which is not a contradiction �
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 5   | 4   | 2   | 0%    | 80%  |
+| 3   | 5   | 4   | 2   | 95%   | 80%  |
 
 **Overview** — **A real screen, not a config file.** This is what makes the system portable (§7.8). Capabilities and service lines as free text, certifications and set-aside status, geography, and the eligibility facts — headcount, revenue — that exist here *only* as gate inputs and never as capacity judgments (§1).
 
@@ -437,7 +441,7 @@ The rule this screen enforces: no fact about Koehler Partners appears in code. A
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 2   | 0%    | 80%  |
+| 3   | 4   | 4   | 2   | 95%   | 80%  |
 
 **Overview** — Sources as **data rows, not code** (§5). Each carries its adapter tier, platform, archive depth, legal posture, and health. Adding a source is a row and a config, not a deploy.
 
@@ -455,7 +459,7 @@ The platform field is what makes this scale: states mostly license about five pl
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 3   | 1   | 5   | 0%    | 30%  |
+| 4   | 3   | 1   | 5   | 60%   | 30%  |
 
 **Overview** — Pursuits across their states: `Watching → Bid/No-Bid → Submitted → Won/Lost`, with ownership and assignment (§7.2, `4C`). The system of record, and the answer to problem #4 — opportunities living in email and memory.
 
@@ -514,6 +518,15 @@ Levels 3 and below take no grid and no labels.
 #######################################################
 
 # Revision history
+
+*Revision note, 0.3.0 → 0.3.1 — `Proto` filled against V1.1. Claude, 2026-08-12.*
+
+- **All twenty `Proto` values written**, replacing 0% throughout. Judged by driving the V1.1 bundle screen by screen and comparing each node's `Overview` and `Known gaps` against what is actually rendered — not by recollection. **Mean 84%, twelve nodes at 90%+, lowest 55%.**
+- **The prototype closed six documented gaps by itself.** `View 1.1` implements *ambiguity-first* ordering, which that node's `Known gaps` proposed and argued for against ranking by score. `View 1.3` points at the expiration radar from the cleared state, which its gap called *"undesigned."* `View 2.2` stamps `scorer v0.3.1` on every score, which its gap said had no treatment. `View 3.1` shows `2,160 EXPIRING` beside `14 SECTOR MATCH`, which is the sector-matching rule its gap said did not exist. `View 4.1` labels NY OGS *"Indiana is not the buyer."* `View 6.2` shows GovWin as `EXCLUDED` with legal posture as a column. **Six gaps written in this document, closed in an artifact generated from it.**
+- **The three lowest scores are all the same phenomenon, and it is not a defect.** `View 2.4` (55%) renders `DOCUMENT RENDER — PLACEHOLDER` and prints the undecided question on screen. `Screen 7` (60%) draws a state machine that differs from the one specified, on a screen whose `Conc` is 30%. `View 2.5` (65%) shows two sightings and no addendum, because the diffing the node requires does not exist. **In each case the generator declined to invent a decision.** Scored as gaps regardless, because `Proto` measures distance from what we want, not the artifact's restraint.
+- **`Region A.1` at 70% is the outlier worth acting on.** Structurally complete — wordmark slot, nav, queue counter — but the wordmark reads `WORDMARK — PLACEHOLDER`, which is the one unclosed gap the node itself names. On Matt's V1.2 punch list.
+- **`View 1.2` at 85% carries a caution.** The prototype answers that node's open question — *filter or first-class object?* — by drawing a first-class object with named views, counts, and a create affordance. **That is a decision made by a generator, not by anyone.** High fidelity to something nobody chose.
+- **This column expires.** It describes V1.1 and nothing else. Re-run at each prototype freeze.
 
 *Revision note, 0.2.0 → 0.3.0 — V1 has no scores. Claude, 2026-08-11.*
 
