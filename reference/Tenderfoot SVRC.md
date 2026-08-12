@@ -1,7 +1,17 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.2.0, 2026-08-10.**
+**Tenderfoot SVRC — version 0.3.0, 2026-08-11.**
 **Adopted.** This is the working outline, not a draft.
+
+> ### V1 has no scores — read this before the screen tree
+>
+> **Decided 2026-08-11.** The application returns everything every active source returns: no ranking, no scoring, no filtering (spec §1.1). Qualification is parked and will be re-imagined after ingestion runs.
+>
+> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). Their grids are left filled rather than blanked — the scoring key forbids a half-filled grid, and blanking them would misreport parked work as unscored work. **Read their `Pri` as zero regardless of what the number says.**
+>
+> **What replaces them in V1 is already in this document and needs no new nodes.** Region 1.1.1 (the four deciding facts), Region 1.1.3 (the pursuit-cost fact panel), Region 1.1.4 (the decision bar), and View 2.3 (extracted fields) carry the entire triage screen on their own. That is worth noticing: **the outline survives the removal of the scoring layer largely intact**, which suggests the screens were built around facts and decisions rather than around scores.
+>
+> **One node gets more important, not less.** View 2.3, Extracted Fields. With no scores, extraction accuracy is the only thing V1 can be right or wrong about (§8.4), and this is where a person sees it.
 
 > **Adopted 2026-08-10** (Matt), pending small edits. It was drafted by Claude from the design spec and used to generate the first prototype direction before adoption — which is the strongest thing that can be said for it: **it was precise enough to build from.**
 >
@@ -95,6 +105,10 @@ The app earns its login over a daily email by capturing three things email canno
 
 That last point is worth stating sharply because it inverts the obvious priority: **the reason chip matters more than the decision.** With no bid history to seed the scorer, reasons are load-bearing from decision one.
 
+**Revised 2026-08-11 — the argument for this screen changes, and gets weaker before it gets clearer.** With matching parked (spec §1.1), two of the three things above are gone: there are no scores, and the reason is free text feeding nothing rather than a training signal. **Stated honestly, V1's triage queue earns its login on the pursuit-cost panel, the extracted facts, and being a system of record** — problem #4, which email genuinely cannot do.
+
+That is a thinner claim than the one above and it should be allowed to look thin, because the alternative is pretending a parked feature is still carrying the argument. **The reason still matters more than the decision** — it is just no longer true that it matters because it teaches the scorer. It matters because in six months the question *"why did we pass on this"* has an answer, and because the accumulated answers are what qualification eventually gets designed against.
+
 **Uses Shell** — YES, reduced. The queue wants the full width and no competing affordances; primary nav collapses while triaging. This is the one place I have departed from the shell being uniform, and it is an assumption worth challenging.
 
 ---------------------------------------------------------------------------------------------------------------
@@ -119,9 +133,11 @@ Title, buyer, deadline, and estimated value — the four facts that decide most 
 
 Deadline gets special treatment. It is the highest-consequence extracted field (§8.4), and the FSSA bundle in `corpus/` demonstrated that a bundle can ship three documents carrying two different deadlines with the correct one in the least-specifically-named file (`corpus/FINDINGS.md`). Where the listing metadata and the document text disagree, the card shows the disagreement rather than silently picking a winner.
 
-### Region 1.1.2 : Score Strip
+### Region 1.1.2 : Score Strip — PARKED
 
 The four machine scores — Fit, Winnability, Value, Timing (§6.3) — each expandable to its citation. Collapsed by default. The scores are a reading aid, not a verdict, and a strip that demands attention would turn triage into score-review.
+
+**Parked 2026-08-11** with §6. V1 has no scores, so this region does not render. **Nothing takes its place in the card** — the deciding facts are already in 1.1.1 and the cost facts in 1.1.3, and inventing a substitute strip would be adding a judgment surface by the back door. The row is shorter in V1, which is the honest consequence.
 
 ### Region 1.1.3 : Pursuit-Cost Fact Panel
 
@@ -135,13 +151,19 @@ Interested / Pass, and the reason chips. Reason capture is mandatory on Pass and
 
 Chips need a free-text escape hatch. The hand-run is currently producing reasons in Matt's own words precisely because pre-set categories would have flattened them, and the chip vocabulary should be *derived from* that hand-run rather than invented before it.
 
-### Region 1.1.5 : Gated Items Drawer
+**Revised 2026-08-11 — chips are parked; free text is V1.** With qualification parked, no recorded reason feeds anything, so there is no vocabulary to get right and the argument above resolves itself: V1 records free text only. **Mandatory-on-Pass still holds**, for the system-of-record reason rather than the training reason. The accumulating free-text reasons become the corpus a chip vocabulary is eventually derived from — which is the order this node was already arguing for, now enforced by circumstance rather than discipline.
+
+### Region 1.1.5 : Gated Items Drawer — PARKED, AND THE REASON IT EXISTS DID NOT GO AWAY
 
 Items eliminated by Stage 0 hard gates (§6.1), filed rather than deleted.
 
 This region exists because of a documented near-miss, not a principle. A stale deadline extracted from the wrong PDF would have silently killed KP's single best-fit opportunity three weeks before it actually closed. §6.2's "gated items are filed, not deleted" is the only thing that makes that recoverable, and a rejection you cannot inspect is a bug you will never find.
 
 Low traffic by design. It needs to exist, not to be prominent.
+
+**Parked 2026-08-11.** V1 has no gates, so nothing is gated and the drawer has no contents.
+
+**But the near-miss it was built for is an extraction failure, not a gating failure**, and V1 is fully exposed to it. A bundle shipping two deadlines still ships two deadlines; the wrong one still kills the best-fit opportunity three weeks early. What protects against it in V1 is Region 1.1.1's rule — *show the disagreement rather than silently picking a winner* — which is now carrying this risk alone. **Reinstate this drawer the same day anything gates**, and until then treat 1.1.1's conflict display as the higher-priority node it has become.
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -211,15 +233,19 @@ The app's remaining case is the triage queue's reason capture (§7.1), which is 
 
 ---------------------------------------------------------------------------------------------------------------
 
-## View 2.2 : Scores and Evidence
+## View 2.2 : Scores and Evidence — PARKED
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
 | 3   | 4   | 4   | 3   | 0%    | 70%  |
 
+**Parked 2026-08-11** with spec §6. V1 has no scores and this view does not ship. The grid is left as scored rather than blanked — per the scoring key a half-filled grid is forbidden, and zeroing it would misreport parked work as unestimated work. **Read `Pri` as zero for V1 regardless of the 4.**
+
 **Overview** — The four scores at full width, each with the evidence that produced it, quoted and linked back into the source document.
 
 A score without a citation is an assertion, and the spec's position throughout is that assertions are worth nothing here — this is the screen that enforces it.
+
+**What survives the parking** — the principle, applied one layer down. V1 has no scores to cite, but every *extracted field* has exactly the same obligation: a deadline without a pointer to the document and page it came from is an assertion. View 2.3 inherits this view's job, and §8.4 makes it measurable.
 
 **Known gaps** — Assessments are versioned by scorer version (§6.4) and this view has no treatment for that. When a rescore changes a verdict, the previous one and the reason for the change are more interesting than the current number, and there is nowhere to show it.
 
@@ -484,6 +510,15 @@ Levels 3 and below take no grid and no labels.
 #######################################################
 
 # Revision history
+
+*Revision note, 0.2.0 → 0.3.0 — V1 has no scores. Claude, 2026-08-11.*
+
+- **Matching parked in full** (Matt, 2026-08-11). V1 returns everything every active source returns — no ranking, no scoring, no filtering. Recorded in spec §1.1 and §6; SP5 removed from the plan of action's slice sequence rather than reordered.
+- **Three nodes parked, none cut**: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), Region 1.1.5 (Gated Items Drawer). **Grids left filled deliberately.** The scoring key forbids a half-filled grid, and blanking a parked node would report it as unestimated rather than as descoped — a different and worse claim. Each carries a prose note instead, and the preamble says to read their `Pri` as zero.
+- **The outline survived the removal of its scoring layer largely intact**, which is the most interesting thing this revision found. Screen 1 loses one region of four and still works, because 1.1.1, 1.1.3, and 1.1.4 were built around facts and decisions rather than around scores. That is evidence the structure was sound, reached by deleting a third of the machine's output and seeing what broke.
+- **Region 1.1.5's parking exposed a live risk rather than closing one.** The drawer was justified by a real near-miss — a bundle shipping two deadlines, the wrong one three weeks early — but that near-miss is an *extraction* failure, not a *gating* failure. V1 is fully exposed to it and the drawer is gone, so Region 1.1.1's show-the-disagreement rule is now carrying that risk alone and is more load-bearing than its grid suggests.
+- **Reason chips parked; V1 records free text.** Region 1.1.4 already argued the vocabulary should be derived from the hand-run rather than invented ahead of it. With nothing consuming reasons, that ordering is enforced by circumstance instead of discipline.
+- **`Imp`/`Pri` review is now overdue rather than pending.** Those columns feed slice ordering, and slice ordering just changed materially. Reviewing them against a sequence that no longer contains SP5 is a different exercise from the one flagged at adoption.
 
 *Revision note, — → 0.1.0 — first draft. Claude, 2026-08-10.*
 

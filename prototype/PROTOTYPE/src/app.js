@@ -13,6 +13,32 @@
  * are new, and are the point.
  *
  * Sources cited as §x.y are `docs/superpowers/specs/2026-08-03-tenderfoot-design.md`.
+ *
+ * ===========================================================================
+ * SCOPE CHANGE 2026-08-11 — V1 HAS NO SCORES. READ BEFORE TRUSTING THIS FILE.
+ * ===========================================================================
+ * Matching is parked in full (spec §1.1, §6). The application returns everything
+ * every active source returns: no ranking, no scoring, no filtering. Qualification
+ * will be re-imagined after ingestion is running, and §6 does not describe it.
+ *
+ * WHAT THAT MEANS HERE. The `scores` array on every opportunity below, and the
+ * PASS_CHIPS vocabulary at the foot of this file, model a layer V1 does not have.
+ * They are NOT deleted, because this file is a record of a generated direction and
+ * the bundle still renders them. But they are NOT schema either -- and since
+ * Proto2PRD §4.1.1 says the production model is this dataset normalized, that
+ * distinction is the whole reason this note exists. A field that survives into a
+ * migration because nobody flagged it is exactly the failure this file guards.
+ *
+ * PARKED, do not migrate: `scores[]`, `PASS_CHIPS`, `YES_CHIPS`.
+ * REAL SCHEMA, keep: everything else -- and `conflict` and the pursuit-cost fact
+ * fields get MORE important, not less, because with no scores the extracted facts
+ * are the only thing V1 can be right or wrong about (§8.4).
+ *
+ * ONE RISK THIS CREATES. The deadline-conflict model below was justified partly by
+ * the gated-items drawer (SVRC 1.1.5) making a bad extraction recoverable. That
+ * drawer is parked with the gates. The conflict display is now the ONLY thing
+ * standing between a wrongly-extracted deadline and a silently missed bid.
+ * ===========================================================================
  */
 (function (window) {
   'use strict';
@@ -474,6 +500,22 @@
    * eligibility facts stay, capacity judgments go. A solicitation demanding 50
    * employees is a hard gate; "we are too busy" is not modelled anywhere.
    * Either this chip goes, or §1 changes — but not both quietly.
+   *
+   * UPDATE 2026-08-11 — PARKED, AND THE CONTRADICTION WENT DORMANT RATHER THAN
+   * GETTING RESOLVED. Qualification is parked (spec §1.1); no recorded reason
+   * feeds any model, so there is no vocabulary to get right and nothing learns
+   * from a capacity judgment. V1 records free text against the decision instead.
+   *
+   * The §1 conflict is therefore ASLEEP, NOT FIXED. It wakes the moment recorded
+   * reasons become model input again, and whoever designs qualification has to
+   * re-check it then. Writing it down here because a dormant contradiction that
+   * nobody wrote down is indistinguishable from one that was resolved.
+   *
+   * The wider version of the problem, worth carrying forward: three of these
+   * chips are facts about KP at a moment rather than facts about the opportunity
+   * -- "Too small", "Capacity — too large", "Cost to pursue too high". Those do
+   * not generalize, because the same solicitation next quarter is a different
+   * answer. Any future design that learns from reasons needs that split.
    */
   TENDERFOOT.PASS_CHIPS = ["Out of geography", "No capability match", "Incumbent locked", "Too small", "Capacity — too large", "Deadline too close", "Set-aside ineligible", "Cost to pursue too high"];;
   TENDERFOOT.YES_CHIPS = ["Strong fit", "Sub / teaming play", "Known buyer", "Watch only"];;

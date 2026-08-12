@@ -69,7 +69,11 @@ Both are handed back, same as the radii were.
 
 The extraction procedure is written down: [`../docs/ClaudeDesign_Proto_Cleanup.md`](../docs/ClaudeDesign_Proto_Cleanup.md).
 
-**Two things `src/` hands back rather than decides.** The radius scale — the direction used ten values and collapsing them changes how it looks, which makes it a design call. And the reason-chip vocabulary, which the generator invented and which must be replaced by categories that emerge from the hand-run, in the scorer's own words.
+**What `src/` hands back rather than decides.** The radius scale — resolved 2026-08-11, see above. And the reason-chip vocabulary, which the generator invented — **now parked rather than pending** (spec §1.1): with qualification deferred, nothing consumes reasons, so V1 records free text and there is no vocabulary to derive.
+
+> **The prototype renders a scoring layer V1 does not have.** Score strips, four-component scores, gated items. That is not a defect in the direction — it was generated from an SVRC that described the full system — but it means **the prototype is now ahead of V1 in scope**, and the parked regions are marked in `../reference/Tenderfoot SVRC.md` (1.1.2, 1.1.5, 2.2) rather than in the bundle, which stays frozen.
+>
+> Read the header of `src/app.js` before treating any field here as schema. `scores[]` and the chip vocabularies are explicitly flagged do-not-migrate, because Proto2PRD §4.1.1 makes this dataset the production model and a parked field that nobody flagged is exactly how it ends up in a migration.
 
 ## Three rules, all from the recovered IMPACT record
 

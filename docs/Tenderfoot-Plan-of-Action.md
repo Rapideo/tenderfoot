@@ -21,7 +21,7 @@ Component IDs throughout (`0A`, `2B`, `5C`…) refer to the build inventory. Sec
 | Playbook input | Status |
 |---|---|
 | Requirements / rules / non-goals | ✅ The design spec — stronger than a PRD |
-| Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred. Past-performance citation cut 2026-08-10 (§7.3) |
+| Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred. Past-performance citation cut 2026-08-10 (§7.3). **Matching parked 2026-08-11 — V1 returns everything active sources return (spec §1.1)** |
 | Component inventory | ✅ 48 in-scope components with dependencies |
 | Source research | ✅ Platform-bound adapters, verified archive depths (§5.7–5.8). One question left: do licensed platforms retain closed solicitations |
 | UI outline | ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`. Drafted by Claude, used to generate the prototype, then adopted. **`Imp`/`Pri` were placeholders and are now inputs to §6 — review once.** |
@@ -105,18 +105,24 @@ That single act pays four times over:
 
 1. Realistic data of realistic length, per Proto2PRD §4.1.1 — real RFP titles are 140 characters and real scopes are ugly. Invented ones are neat, and neat data hides every layout problem.
 2. It forces the schema to survive real-world mess before a migration exists.
-3. It becomes the hand-labeled extraction test set (5D) the spec already requires.
-4. It seeds the few-shot example set (3K).
+3. It becomes the hand-labeled extraction test set (5D) the spec already requires. **Promoted 2026-08-11:** with no scores in V1, extraction is the only thing the system can be right or wrong about, so this is now the first payoff rather than the third.
+4. ~~It seeds the few-shot example set (3K).~~ **Parked 2026-08-11** — nothing consumes examples (spec §1.1). It still accumulates real decisions with real reasons, which is what qualification eventually gets designed *against*; that is a slower and better payoff than seeding a scorer.
 
-### A2. The hand-run — do this before anything is built
+### A2. The hand-run — reframed 2026-08-11
 
 Mark each solicitation **would bid / would not bid / unclear**, with a one-line reason.
 
-**As built, 2026-08-10:** 216 rows across three corpora in a click-through page, not 30–50 in a markdown table. The 24 live band A/B rows are the priority and the only ones the go/no-go depends on; the 140 calibration rows add example depth; band C is a spot-check. Two people score independently and exports are attributed — see `corpus/README.md` for why inter-rater disagreement is worth measuring before the engine exists.
+**As built, 2026-08-10:** 216 rows across three corpora in a click-through page, not 30–50 in a markdown table. The 23 live band A/B rows are the priority; the 140 calibration rows add example depth; band C is a spot-check. Two people score independently and exports are attributed — see `corpus/README.md`.
 
-This is the cheapest signal available anywhere in the project, and it is a genuine feasibility test. If a human expert cannot reliably separate fits from non-fits by reading the documents, no scorer will either — and that is worth knowing on day two rather than at SP6.
-
-It also produces, for a day of work: the adjudication answer key, the few-shot examples, the negative profile in Matt's own words, and a concrete sense of what the brief needs to surface.
+> **What changed.** This section used to open *"do this before anything is built"* and called the hand-run a feasibility test for the scorer: if a human expert cannot separate fits from non-fits, no scorer will either. **That argument is parked with the scorer** (spec §1.1). V1 does not separate anything — it returns everything — so there is no longer a scorer whose feasibility this establishes.
+>
+> **The deeper change is that the hand-run is no longer a precursor to the product. It *is* the product.** V1's normal operation is exactly this: read what arrived, mark a verdict, give a reason. Doing it now against a frozen corpus is a rehearsal of the application's daily loop, using real documents, before any of it is built.
+>
+> **What it still produces:** a read on whether the market contains work KP would pursue — which is the question SP6's gate now asks — and a body of real decisions with real reasons, which is the corpus qualification will eventually be designed *against* rather than *into*.
+>
+> **What it no longer produces, because both are parked:** the few-shot example set, and the reason vocabulary.
+>
+> **Still a day, still blocks on nothing, no longer the thing that can cheaply invalidate the project.** That role now belongs to SP6.
 
 > **If the hand-run is hard, that is the most important finding the project will produce.** Stop and reconsider before building anything.
 
@@ -204,10 +210,24 @@ Nine sub-projects. Each ≤50 tasks, each ending in something demo-able, each de
 | **SP2** | Design system | — *(tokens + primitives from the frozen prototype)* | Every primitive on a dev-only route. **Sign-off gate.** |
 | **SP3** | Federal ingestion | 2A, 2B, 2F, 2G, 5E | `--since 24mo` pulls real SAM.gov + USASpending into the graph; dedup works; per-source yield visible |
 | **SP4** | Fetch and extraction | 2H, 2I, 5D | Documents pulled and parsed; every field carries confidence + a source pointer; accuracy measured against A1's labels |
-| **SP5** | Matching engine | 3A, 3B, 3C, 3D, 3F, 3H, 3I | A ranked, scored, **cited** list of real opportunities |
-| **SP6** | Triage + adjudication | 4A, 4B, 4D, 3E, 3G, 5A, 5B, 5C | **The answer.** Backtest over 24 months, adjudicate the top N, produce precision and discovery. **← GO / NO-GO** |
+| **SP5** | ~~Matching engine~~ **PARKED** | — | **Removed from the sequence 2026-08-11.** V1 returns everything (spec §1.1); qualification is undesigned and will be re-imagined after ingestion runs. |
+| **SP6** | Triage + record | 4A, 4B, 4D, 5A, 5B, 5C | **The answer.** Everything from active sources, read and decided in the app. Produces **discovery and volume**, not precision. **← GO / NO-GO** |
 | **SP7** | Live ingestion *(on GO)* | 2C, 2D, 2E, 2J, 2K, 1B, 1D | Scheduled runs; state portals flowing; health alarms firing |
-| **SP8** | Radars + reporting *(on GO)* | 3J, 3K, 3L, 4E, 4F, 4G, 4H, 4I, 4K | Expiration radar producing pre-RFP leads; feedback loop closing |
+| **SP8** | Radars + reporting *(on GO)* | 3J, 3K, 3L, 4E, 4F, 4G, 4H, 4I, 4K | Expiration radar producing pre-RFP leads |
+
+### 6.-1 What the parking of SP5 changes
+
+**Decided 2026-08-11.** The application returns all results from every active source — no ranking, no scoring, no filtering. Reasoning in spec §1.1.
+
+**SP5 is removed rather than reordered.** It is not "later in the list"; it is undesigned. Components 3A–3I have no home in the current sequence and should not be treated as pending work with a known shape.
+
+**SP6 survives and stays the gate, but the gate's question changes.** It was: *is the scorer's top N precise enough?* It is now: **does reading everything from active sources surface work KP would pursue and had not otherwise seen?** That is the discovery number from §8.5, and it is a fair test — arguably a fairer one, since it asks whether the sources and the collection are worth anything before any judgment layer can flatter them.
+
+**A negative result stays valid, and the shape of it changes too** (§8.7). The old failure mode was *"the scorer cannot separate fits from non-fits."* The new one is *"everything the active sources return, read exhaustively, contained almost nothing worth pursuing"* — which would be a finding about the market rather than about the software, reached faster and with less machinery.
+
+**What SP6 must now also produce, because nothing else will:** volume per source per week, and Interested-per-hundred per source. Those two numbers are the input to designing qualification, and V1 is the only thing that can generate them.
+
+> **Watch this, because it is the risk the ordering creates.** If volume turns out to be high, SP6's demo is a person reading a great many irrelevant rows, and the tool will feel worse than the portal alerts it replaces — while measuring exactly the thing that would fix it. That is a real possibility and it is accepted deliberately (§1.1). **It is not, however, a reason to quietly reintroduce a filter**; if volume forces the issue, that is the trigger to design qualification properly, not to bolt on a threshold.
 
 ### 6.0 Open tension — SP8's radar may not belong in SP8
 
@@ -264,17 +284,23 @@ Per Proto2PRD §8.3, the places where Tenderfoot fails **silently**:
 
 | Seam | Failure mode | Test lands in |
 |---|---|---|
-| **Hard gates** | A wrong gate deletes a qualified opportunity and nothing reports it | SP5 |
+| ~~**Hard gates**~~ | ~~A wrong gate deletes a qualified opportunity and nothing reports it~~ | ~~SP5~~ — **parked with SP5.** V1 has no gate, so it has no gate seam |
 | **Sighting identity** | One solicitation from three sources becomes three records — or two different ones merge | SP3 |
 | **Dates + eligibility extraction** | A wrong deadline is a missed bid | SP4 |
 
 The spec already requires gated items be *filed, not deleted* (§6.2) precisely so the first one is inspectable. The test makes that promise real.
 
-### 6.3 The regression gate
+> **The gate seam comes back the day anything gates.** It is parked, not retired, and it is the single most dangerous seam in the design — a wrong gate is a loss nothing reports. Reinstate this row before the first filter ships, not after.
+>
+> **Sighting identity gets more load-bearing, not less.** With everything returned, duplicate suppression is the only volume control V1 has, and it is the honest kind: one solicitation reaching the user once is not a judgment about whether it deserves attention. Weight SP3's test accordingly.
+
+### 6.3 The regression gate — PARKED WITH SP5
 
 From SP5 onward, every scorer change re-runs the backtest and compares against the previous scorer version. The gate is **"precision did not regress against version N−1"** — the substitute for a green test on a component that is never simply correct.
 
 This is why 5A and 3I get built as infrastructure in SP5–SP6 rather than as features later.
+
+> **There is no scorer in V1, so there is no scorer regression gate.** What replaces it is narrower and still worth having: **ingestion regression.** A source that silently returns fewer records than last run is the V1 equivalent of a scorer regression — invisible, and a direct hit on the one pain V1 exists to solve. Spec §5.4 already requires instrumenting for source rot; that instrument *is* the regression gate for V1, and it should be built in SP3 rather than inherited later.
 
 ---
 
@@ -307,8 +333,11 @@ Everything else is buildable without blocking on him.
    SVRC and the hand-run rather than after them, which is a departure from the stated order —
    worth watching, since §A2 puts the hand-run before anything is built precisely because it is
    the cheap way to find out the premise is wrong.
-6. **Matt:** the hand-run (A2). **This blocks on nothing else and is the only step that can invalidate the project cheaply.** It does not have to wait for the outline. Now runs in a click-through page rather than by editing markdown — 216 rows across three corpora, exporting back to `corpus/manifest.md` format. The live band A/B rows (24) are the priority; calibration is for depth of examples, not for the go/no-go.
-7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline.
+6. **Matt:** the hand-run (A2). Runs in a click-through page — 216 rows across three corpora, exporting back to `corpus/manifest.md` format. The live band A/B rows (23) are the priority.
+   > **Downgraded 2026-08-11, and this is a real change of status.** The hand-run was *"the only step that can invalidate the project cheaply"* because it tested whether a scorer could work. **With qualification parked (spec §1.1), it is no longer a feasibility test and no longer blocks anything** — not the reason vocabulary, not the few-shot set, both of which are parked with it.
+   >
+   > It stays worth doing for a different and narrower reason: **it is the fastest read on whether the market contains work KP would pursue at all**, which is the question SP6's gate now asks. Judgement about the market, not about the software. Still roughly a day, still blocks on nothing, no longer urgent in the way it was yesterday.
+7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline. **Note the radar's position improves under the V1 decision:** with the matching engine parked, the argument that SP8 sits behind a scorer that must be proven first no longer applies, and §6.0's "third option" — loading the contract register into the graph early — becomes the obvious call rather than a compromise.
 8. **Claude, unblocked:** test whether one licensed platform (Periscope, Ivalua, CGI Advantage) retains closed solicitations. Under §5.7 a single answer covers Illinois, Ohio, Michigan, and Kentucky at once. This is the last unexplored source question.
 9. **Then:** the bake-off.
 
@@ -325,5 +354,7 @@ Steps 2 through 5 are independent of each other, and step 7 is independent of al
 5. **Does the rendering get rebuilt repo-native, or does iteration stay in Claude Design with a re-extract each round?** Raised 2026-08-10 by the first extraction, and **partly answered within hours by V1.1.** Re-extraction is not free and is not one-off: every Design iteration invalidates it. But the cost is narrower than feared — the generator closed the token gap by itself, so only the mock layer genuinely needs re-extracting, and only its **comments** must be carried forward by hand. **Narrower again as of 2026-08-11:** the token half is now scripted (`prototype/tools/`), so it costs one command per round. Measured in `ClaudeDesign_Proto_Cleanup.md`. The question that remains is whether the visual artifact ever becomes the specification, as IMPACT's was, or stays disposable with `src/app.js` carrying the spec. See §A7.
 6. ~~**The radius scale.**~~ **Resolved 2026-08-11: twelve steps, adopted as-is, named for the element they sit on.** Sampling what carried each value showed the ramp tracks element size rather than being arbitrary — 1px on an 8×8 mark, 3px on a 22×22 checkbox, 7px on a button, 12px on a 540px modal — so a proposed five-step scale would have destroyed a real logic. `50%` is kept out of the scale as a separate primitive.
 7. ~~**Token naming.**~~ **Resolved 2026-08-11: by role, with the generated names kept as aliases** so the frozen bundle keeps rendering. `prototype/PROTOTYPE/src/tokens.css`.
-8. **The reason-chip vocabulary.** Still handed back. **Must come from the hand-run, in the scorer's own words** — not from the generator, which invented a plausible list including one chip that contradicts §1.
+8. ~~**The reason-chip vocabulary.**~~ **Parked 2026-08-11 with qualification.** Chips were going to feed few-shot examples; nothing feeds anything now, so there is no vocabulary to get right and no urgency to derive one. V1 records a reason as free text against the decision. **The `Capacity` contradiction with §1 goes dormant rather than resolved** — it becomes live again the moment recorded reasons become model input, and must be re-checked then.
+10. **What V1's queue is ordered by, given that nothing ranks it.** Newest-first and soonest-deadline-first are both defensible and neither is a judgment; the user picks. Flagged rather than decided, because it is a prototype question and the prototype already has an opinion.
+11. **When does volume force the question?** V1 measures rows per source per week (§8.3). Nobody knows the number. There should be a figure above which qualification stops being deferred work and becomes urgent work — but picking it before the first measurement would be inventing it, so it stays open deliberately.
 9. **Two findings from the token extraction, both handed back rather than fixed** (cleanup never changes a colour). Ninety colour pairs sit below the just-noticeable-difference threshold, one of which is a hover state 0.44 ΔE from a resting surface and so cannot read as feedback. And `--signal-neg` carries three unrelated jobs — data-conflict flag, destructive action, and low score — which leaves the interface unable to distinguish "this is wrong" from "this is bad news." Both are documented in `tokens.css`.

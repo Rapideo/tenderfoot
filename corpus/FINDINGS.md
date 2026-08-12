@@ -144,7 +144,7 @@ Attachments are two API hops: `/opportunities/{uuid}/resources` for the manifest
 | # | Finding | Change |
 |---|---|---|
 | 1 | Deadline discrepancy | Add an extraction precedence rule to §5.3: **listing metadata outranks document text for dates.** Flag disagreement rather than silently choosing. |
-| 1 | Stale-date hard gate | Confirm §6.2's file-don't-delete rule is implemented from the first gate, and make the deadline seam test (SP4) use this exact bundle. |
+| 1 | Stale-date hard gate | ~~Confirm §6.2's file-don't-delete rule is implemented from the first gate~~ — **no gate in V1** (spec §1.1), so there is nothing to file and the drawer that would have caught this is parked (SVRC 1.1.5). **The bundle still ships two deadlines, so the risk is undiminished and now rests entirely on flagging the disagreement (finding 1 above).** Reinstate the moment anything gates. **Still make the deadline seam test (SP4) use this exact bundle** — that part gets *more* important, not less. |
 | 1 | Addendum self-description | Change detection diffs documents; it never trusts a summary-of-changes. |
 | 2 | Multi-format bundles | Extraction must handle `.docx` and `.xlsx` from day one, not as a follow-up. The SOW is often `.docx`. |
 | 4 | RFIs are not bids | Pursuit needs a non-bid response state; RFIs score as lead-time signal. |

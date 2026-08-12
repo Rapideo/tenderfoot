@@ -11,12 +11,20 @@ and neat data hides every problem the extraction layer has to survive.
 
 ## What this feeds — four downstream consumers, one collection effort
 
-| Consumer | Component | What it needs from here |
-|---|---|---|
-| Prototype mock layer | Stage A7 | Realistic records of realistic length and messiness |
-| Extraction accuracy test | 5D | Hand-labeled field values to measure against |
-| Few-shot example set | 3K | Bid/no-bid decisions with reasons, in Matt's words |
-| Adjudication baseline | 5B / 5C | Ground truth for precision and discovery |
+| Consumer | Component | What it needs from here | V1? |
+|---|---|---|---|
+| Prototype mock layer | Stage A7 | Realistic records of realistic length and messiness | Yes |
+| Extraction accuracy test | 5D | Hand-labeled field values to measure against | **Yes — and it is now the main event** |
+| ~~Few-shot example set~~ | ~~3K~~ | ~~Bid/no-bid decisions with reasons, in Matt's words~~ | **No — parked 2026-08-11** |
+| Adjudication baseline | 5B / 5C | Ground truth for ~~precision and~~ **discovery** | Yes, narrowed |
+
+> **Revised 2026-08-11 — matching is parked; V1 returns everything** (spec §1.1). Two consumers change.
+>
+> **The few-shot set has no consumer.** Nothing scores, so nothing takes examples. Reasons are still recorded — they are problem #4, the system of record — but as free text feeding no model.
+>
+> **Precision leaves the adjudication baseline; discovery stays.** A system that returns everything makes no selection to be judged, so its Interested rate is just the base rate of the sources. Discovery — *would have pursued, had not otherwise seen* — is unaffected by the parking and becomes the whole measure (§8.3).
+>
+> **Extraction is promoted.** With no scores, extracted fields are the only thing V1 can be right or wrong about, which makes hand-labeled ground truth the most valuable thing this corpus holds.
 
 This is why the hand-run (Stage A2) comes before any code: one pass produces all four.
 
@@ -30,6 +38,13 @@ one ground truth without knowing whose is whose.
 achievable precision — no scorer beats the rate at which two experienced people disagree — and
 the rows they split on are the most valuable few-shot examples in the set. Knowing that number
 before the engine exists is worth more than the hour it costs.
+
+> **Still true 2026-08-11, and worth more than before.** V1 has no scorer (spec §1.1), so there
+> is no precision ceiling to measure *yet* — but that is exactly why this number should be
+> captured now. It is a fact about **KP and the market**, not about any engine, and it does not
+> expire. When qualification is eventually designed, the first honest question anyone can ask is
+> *how much better than two disagreeing experts does this need to be*, and that answer will
+> either exist already or be unobtainable in retrospect.
 
 ## The band column is a prediction, not a filter
 

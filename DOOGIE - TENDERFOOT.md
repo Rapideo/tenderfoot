@@ -96,3 +96,25 @@ August 10, 2026:
 17. V1.1 of the prototype landed a couple of hours after Claude extracted V1, which answered an open question by accident. Re-extraction isn't one-off — every Design iteration invalidates it. But it's narrower than I feared: the generator ADDED a 67-token CSS layer on its own, so Claude's hand-built tokens.css is already superseded. It also went from 10 radius values to 12, so it fixes what's mechanical and never fixes what needs a decision. Still zero comments in 70KB of script. That's the real line — a generator produces better data every round and never produces a rule, because rules are things only someone in the room knows. So the comments are the one artifact that accumulates instead of being replaced, and re-extraction means carrying them forward onto shapes that moved.
 
 18. Also asked for a possible-immediate-opportunities writeup. 23 open band A/B rows with direct document links, plus the Medicaid cliff. Best single row in it: Milliman's FSSA contract, a professional services engagement for service delivery modelling on the fee-for-service to managed care transition, expiring 12/31 with everything else. That's our service line almost word for word, and it's visible 143 days early.
+
+August 11, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+19. Closed the three prototype questions V1.1 left open. Radius scale: keep all twelve. Turns out that wasn't sloppiness — the values track element size almost monotonically, 1px on an 8x8 mark up to 12px on a 540px modal, so a five-step scale would have destroyed a real logic. Named them for the element instead, so a new component picks its radius by asking what it is. Tokens: renamed all 67 by role, kept the generator's names as aliases so the frozen bundle still renders. And the prototype stays in this repo — argument for splitting it out was put to me explicitly and I declined.
+
+20. Two things fell out of the token extraction that I didn't ask for. Ninety colour pairs are below the just-noticeable-difference threshold, including a hover state that's 0.44 dE from a resting surface — which means it can't read as feedback. And the negative red is doing three unrelated jobs at once: data-conflict flag, destructive action, and low score. So the interface can't say "this is wrong" and "this is bad news" differently. Both recorded, neither fixed, because cleanup doesn't change a colour.
+
+21. Claude's verifier caught its own generator emitting 67 CSS declarations with no colons. Invalid file that looked completely fine. That's the second time this week the same lesson has come up: the check has to be different code from the thing being checked.
+
+22. DECISION, and it's the big one. We are NOT determining smart matching now. V1 returns ALL results from every active source — no scoring, no ranking, no filtering. Once ingestion is actually running we'll re-imagine qualification from scratch. I don't want it half-designed in the docs where it can quietly become the design.
+
+23. What that means: SP5 comes out of the slice sequence entirely, not reordered. SP6 stays the go/no-go but the question changes — it's no longer "is the scorer precise enough," it's "does reading everything surface work we'd pursue and hadn't seen." Precision stops being a measure of anything, since returning everything means the Interested rate is just the base rate of the sources. Discovery is the whole measure now.
+
+24. The part I like: nobody actually knows what these sources return per week. Volume, composition, duplication rate — all guesses. So V1 is the instrument that measures the problem qualification exists to solve, and that measurement is the input to designing it. Designing matching first would have been designing against fiction.
+
+25. Accepted cost, stated plainly: problem #3, the noise problem, is untouched in V1. If the sources turn out to be loud then reading them is real work and the tool will feel like the portal alerts it was supposed to replace. That's the finding, and I'd rather measure it than assume it.
+
+26. Side effect I didn't expect — the hand-run stops being a precursor and becomes what the application DOES. Read what arrived, mark a verdict, give a reason. It's no longer a feasibility test for a scorer that doesn't exist in V1, and it no longer blocks anything. Still worth doing for what it says about the market.
+
+27. Also dormant rather than fixed: the Capacity chip that contradicts our capacity-agnostic rule. Nothing consumes reasons now, so nothing learns a capacity judgment. It wakes up the moment reasons feed a model again. Written into the prototype comments so it isn't mistaken for resolved.

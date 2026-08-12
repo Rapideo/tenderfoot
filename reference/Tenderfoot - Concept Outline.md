@@ -6,6 +6,17 @@
 **Scope, in one line:** deliver the most accurate, most likely prospects for consideration.
 The system is capacity-agnostic and does not manage pursuits — both deliberately (§1, §9).
 
+> **Revised 2026-08-11 — §3 Matching is parked in full.** V1 returns *everything* every active
+> source returns: no ranking, no scoring, no filtering (spec §1.1). Qualification will be
+> re-imagined once ingestion is running, and the components in §3 do not describe it.
+>
+> **This changes what the one-line scope means for V1.** "Most accurate, most likely prospects"
+> is the eventual goal and not the first version. V1's promise is narrower and checkable:
+> *everything the active sources published, collected once, deduplicated, with documents pulled
+> and facts extracted.* Accuracy in V1 is a claim about **extraction**, not about selection.
+>
+> Every ✅ and ◐ in §3 should be read as parked. §1, §2, §4, and §5 are unaffected.
+
 This is the *build inventory* — every component, what it does, and what it depends on. The
 design rationale lives in `docs/superpowers/specs/2026-08-03-tenderfoot-design.md`; section
 references below point there. This document exists to be sliced into phases.
@@ -77,9 +88,18 @@ measured yield.*
 
 ---
 
-## 3. Matching
+## 3. Matching — PARKED IN FULL, 2026-08-11
 
-*Original §3. Structure preserved; the scoring model changed substantially.*
+> **None of the components in this section are in the build sequence.** V1 returns everything active sources return, unranked and unfiltered (spec §1.1); qualification will be re-imagined after ingestion is running, and nothing here binds it. SP5 was removed from §6 of the plan of action rather than reordered.
+>
+> **Two components in this table are not really matching and survive the parking**, listed here only because the original outline grouped them this way:
+>
+> - **3E, the cost-to-pursue panel** — explicitly *not machine-scored*. It extracts facts (page limits, forms, mandatory meetings, submission quirks) and the user judges. That is extraction, it belongs with SP4, and V1 wants it.
+> - **3I, assessment versioning** — a schema decision, not a scoring one. Keep it from the first migration for the reason in §2.2: retrofitting a version column onto recorded judgments is the same expensive mistake as retrofitting foreign keys, and V1's entire output is recorded judgments.
+>
+> **3H is parked but its rule is not.** *Codes are a signal, never a filter* — including upstream, where a portal's own subscription is code-filtered. V1 has no filter at all, so the rule is satisfied trivially; it binds again the moment anything narrows, and it binds on source *registration* immediately, since a code-filtered subscription is a filter someone else applied.
+
+*Original §3. Structure preserved; the scoring model changed substantially — and is now parked.*
 
 | ID | Component | What it is | Needs | P0 |
 |---|---|---|---|---|
@@ -125,9 +145,9 @@ digests (§2.4).*
 
 | ID | Component | What it is | Needs | P0 |
 |---|---|---|---|---|
-| 5A | **Backtest harness** | `since = 24 months ago` over the archive. Not a throwaway import — it is the permanent test suite, re-run on every scoring change (§8.1). | 2A, 3D | ✅ |
-| 5B | **Adjudication tool** | The user reads the ranked list and marks *would have bid* / *would not* / *unclear*. **There is no answer key** — KP has competitively bid once, so this is the only ground truth available (§8.2). Doubles as the few-shot example set. | 5A | ✅ |
-| 5C | **Accuracy report** | Two numbers from adjudication: **precision** (what fraction of the top N would actually have been bid) and **discovery** (how many of those KP had never seen). **Value-weighted, never count-weighted** — KP engagements span roughly 50×. No workload overlay (§1). | 5B | ✅ |
+| 5A | **Backtest harness** | `since = 24 months ago` over the archive. ~~Re-run on every scoring change (§8.1)~~ — **no scorer in V1**, so its job is narrower: replay the archive through ingestion and extraction. Still not a throwaway import. | 2A, ~~3D~~ | ✅ |
+| 5B | **Adjudication tool** | ~~The user reads the ranked list~~ → **the user reads everything that arrived** and marks *would have bid* / *would not* / *unclear*. **There is no answer key** — KP has competitively bid once, so this is the only ground truth available (§8.2). ~~Doubles as the few-shot example set.~~ **Parked with §3** — nothing consumes examples. | 5A | ✅ |
+| 5C | **Accuracy report** | ~~Two numbers~~ **One number that means anything in V1: discovery** — how much of what surfaced KP would pursue and had not seen. **Precision is not a measure of a system that returns everything** (§8.3); it is the base rate of the sources, reported per-source as source yield (5E) rather than as accuracy. **Value-weighted, never count-weighted** — KP engagements span roughly 50×. No workload overlay (§1). | 5B | ✅ |
 | 5D | **Extraction accuracy** | ~50 hand-labeled solicitations, field by field. Dates and eligibility flags tested hard; estimated value merely annoying (§8.4). | 2I | ◐ |
 | 5E | **Source yield** | Records per source, survival rate through the funnel, staleness. Feeds 1D and 2K. | 2G | ◐ |
 

@@ -147,8 +147,11 @@ bullseyes are two or three. The rest is walleye fingerlings, toilet paper, stone
 
 This is direct empirical support for two design decisions:
 
-- **Stage 0 hard gates eliminating most volume at zero cost** (§6.1). Most of band C dies on a
-  single deterministic check. No model should ever read a stone-delivery notice.
+- ~~**Stage 0 hard gates eliminating most volume at zero cost** (§6.1).~~ **Parked 2026-08-11**
+  (spec §1.1) — V1 returns everything, so the stone-delivery notices arrive too. The observation
+  stands and is now a *measurement*: ~85% of an Indiana day is not remotely relevant, and V1 will
+  show exactly what that costs a reader. **This row is the strongest single argument for
+  qualification existing eventually, and it is deliberately not being acted on yet.**
 - **"Drowning in noise" as a named pain** (§1). A human clearing this queue daily would burn
   most of their attention on things no consulting firm could ever bid.
 

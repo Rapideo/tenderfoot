@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-03
 **Revised:** 2026-08-04 — answer key removed (§8.2); platform-bound adapters and verified source facts added (§5.7–5.8); **scope narrowed to prospect discovery only (§1)** — the system is capacity-agnostic, and pipeline management is deferred (§9)
-**Status:** Design approved
+**Revised:** 2026-08-11 — **§6 Matching is parked in full.** V1 returns everything active sources return, unranked and unfiltered (§1.1). Qualification is not deferred-as-designed but deferred-as-*undesigned*: it will be re-imagined once ingestion is running, and nothing in §6 binds that work.
+**Status:** Design approved, with §6 parked
 **Author:** Matt Smith, Koehler Partners (with Claude)
 
 ---
@@ -37,6 +38,24 @@ One distinction has to stay sharp, because it is easy to blur:
 Headcount and revenue therefore remain in the Firm Profile (§4.2) strictly as eligibility thresholds. They never become a reason to rank one qualified prospect above another.
 
 **Later — explicitly not now — Tenderfoot becomes a contract seeking *and management* tool.** Pipeline state, ownership, workload planning, and win/loss analytics all belong to that phase (§9). This document describes the seeking half, and the seeking half is judged on one thing: are the prospects it surfaces accurate and likely?
+
+### 1.1 V1 returns everything
+
+**Decided 2026-08-11.** The application, at start, **returns all results from every active source.** No ranking, no scoring, no filtering, no suppression. If a source is switched on in the Source Registry, everything it yields reaches the user.
+
+Qualification comes later, after ingestion is running, and it is **not** the design in §6. That section is parked, not scheduled.
+
+**Why this is the right first version, and not merely the cheapest.**
+
+The four problems in §1 are not equally urgent, and only one of them is a matching problem. *Missing opportunities entirely* and *no system of record* are solved by collecting and showing; *finding out too late* is solved by the expiration radar; only *noise* needs a scorer. Returning everything attacks three of four immediately, and it attacks the first one — recall, the first-named pain — more completely than any scorer can, because **a system that returns everything cannot have a recall bug.**
+
+It also removes the deepest risk in the project. Every filter is a silent-loss mechanism: §6.2 makes this argument about codes, and it generalizes. A V1 with no filter has no invisible losses, which means the ingestion layer can be trusted on its own terms before any judgment sits on top of it. Debugging a scorer stacked on unverified ingestion is a bad position that this ordering never enters.
+
+And there is a sequencing argument that is stronger than either. **Nobody currently knows what the sources actually return.** Not the volume per week, not the composition, not the duplication rate, not how much of it is obviously irrelevant on sight. Matching designed against a guess about that distribution would be designed against fiction. **V1 is therefore an instrument: it measures the problem that qualification exists to solve, and that measurement is the input to designing it.**
+
+**What this costs, stated plainly.** Problem #3 — *"portal alerts are overwhelmingly irrelevant"* — is untouched in V1. If active sources yield hundreds of rows a week, reading them is real work, and the tool will feel like the portals it was meant to replace. That is accepted knowingly: the volume is the finding, and it is better measured than assumed.
+
+**One consequence to carry.** With everything returned, *precision* is no longer a meaningful measure of the system — it is just the base rate of the sources. The measure that survives is **discovery**: how much of what surfaces is work KP would pursue and had not otherwise seen. See §8.3.
 
 That framing drives the sequencing in §3.1.
 
@@ -278,7 +297,21 @@ The Indiana archive gap resolves in a useful direction. The state's *contract* s
 
 ---
 
-## 6. Matching
+## 6. Matching — PARKED 2026-08-11
+
+> ### Read this before reading the rest of §6
+>
+> **This section is parked in full. It does not describe what will be built.**
+>
+> V1 returns everything active sources return (§1.1). Qualification happens after ingestion is running, and when it does it will be **re-imagined from scratch** rather than resumed from here. That is a deliberate instruction, not a scheduling note: nothing below is a commitment, an interface, or a starting point.
+>
+> **Why it is kept rather than deleted.** Everything here is reasoning about a problem that has not gone away, and some of it is durable independent of any particular design — §6.2's argument that a filter's losses are invisible, §6.4's observation that wired bids are a *winnability* signal rather than a *fit* signal, §6.7's case for calibrating to a volume rather than a threshold. Deleting it would cost those arguments and save nothing. **But a parked design that stays legible is a design that gets resumed by accident**, so the boundary is drawn loudly here rather than politely.
+>
+> **What is actually in force from this section:** nothing structural. The four score components, the funnel, the stage ordering, the feedback loop, and the reason vocabulary are all open questions again.
+>
+> **One rule survives the parking, promoted out of here so it does not get lost:** *hard gates and soft scores never mix, and gated items are filed rather than deleted* (§6.2). That is not a matching decision, it is a data-integrity decision, and it holds regardless of what qualification eventually looks like.
+>
+> Reason chips are also parked. A chip vocabulary was going to feed few-shot examples (§6.6), which made the *"Capacity — too large"* chip a live contradiction with §1. **With qualification parked, no chip feeds anything**, so the contradiction is dormant rather than resolved — and it must be re-checked the moment recorded reasons become model input again. See the note in `prototype/PROTOTYPE/src/app.js`.
 
 ### 6.1 The funnel
 
@@ -355,11 +388,17 @@ The fastest thing in the product. One opportunity per screen, keyboard-driven, d
 
 The app earns its login by capturing what email cannot:
 
-- Four scores **with their supporting evidence**
+- ~~Four scores **with their supporting evidence**~~ — **parked with §6.** V1 shows extracted facts, not judgments.
 - The **pursuit-cost fact panel**, enabling the light/moderate/heavy judgment on the spot
-- The **no-bid reason**, as one tap on a reason chip — the single most valuable training signal in the system, and something email can only ever reduce to a binary
+- The **decision and its reason**, recorded against the opportunity — something email can only ever reduce to a binary
 
 Responsive, so ten-second triage decisions work on a phone.
+
+> **What the queue is in V1 (2026-08-11).** Everything active sources returned, in a defensible order that is **not a judgment** — newest first, or soonest deadline first, chosen by the user. No score strip, no ranking, nothing suppressed.
+>
+> The ten-second decision still stands, but it now rests on **extracted facts** rather than on scores: deadline, buyer, set-aside status, dollar figures, the pursuit-cost panel, and the documents themselves. That is a lower bar than the spec originally set and a much more honest one — every one of those is a fact the system can be right or wrong about in a checkable way, which is exactly what §8.4 measures.
+>
+> **The reason is still recorded, and it is still worth recording** — it is problem #4, the system of record, and it costs one tap. What changed is that it no longer feeds anything automatically, so recording it is journalism rather than training. When qualification is designed, this is the corpus it gets designed against, and **that is a better position than designing the vocabulary first and collecting into it.**
 
 ### 7.2 Pipeline board
 
@@ -419,6 +458,8 @@ Two kinds of interruption and only two. Everything else is pull.
 
 Phase 0 does not end. Every scoring change is re-run over the archive and compared, which is only possible because Assessments are versioned by scorer version.
 
+> **V1 has no scorer, so it has nothing to backtest** — but the archive it runs over is exactly what V1 accumulates. Keep the versioning discipline in the schema from the first migration regardless (§2.2): retrofitting a version column onto recorded judgments is the same expensive mistake as retrofitting foreign keys, and V1's whole output is judgments.
+
 ### 8.2 There is no answer key; validation is human adjudication
 
 This section originally assumed KP's bid/win/loss history could seed Pursuit records and serve as ground truth. It cannot. KP has competitively bid **one** solicitation — a small Indiana University engagement. Recalled success across all past proposals is roughly 30%, but that is a recollection rather than a record, and it counts a $100K job identically to a $5M one.
@@ -429,6 +470,14 @@ Validation therefore works as follows.
 
 **Adjudication.** The backtest produces a ranked list; the user reads the top N and marks each *would have bid* / *would not have bid* / *unclear*. Slower than scoring against history, but it is the only ground truth available — and it produces the few-shot example set (§6.6) as a byproduct rather than as separate work.
 
+> **Restated for V1 (2026-08-11), and it gets simpler.** With everything returned there is no ranked list and no top N — the user reads *what arrived* and marks it. Same three verdicts, same one-line reason, no sampling decision to get wrong.
+>
+> **This dissolves the distinction between the hand-run and the application.** The hand-run (plan of action §A2) was conceived as a precursor: score a corpus by hand to find out whether the premise holds before building a scorer. V1 has no scorer, so **the hand-run is not a precursor to V1 — it is what V1 does**, continuously, on live data, as its normal operation.
+>
+> Two consequences worth stating. The hand-run **stops blocking anything** — it was gating the reason vocabulary and the few-shot set, both of which are now parked. And it stops being a one-day push against a frozen corpus and becomes an accumulating record, which is a better corpus for designing qualification against than any amount of retrospective scoring, because it is generated by the actual workflow rather than by an exercise.
+>
+> The 23 live band A/B rows are still worth scoring by hand — see §A2 — but now for what they say about *the market*, not as a feasibility test for a scorer that no longer exists in V1.
+
 **Accuracy is the whole measure.** Per §1, the only question Phase 0 answers is whether the prospects surfaced are good ones. Two numbers come out of adjudication: what fraction of the top N the user would actually have bid (precision), and how many of those KP had never seen (discovery). Nothing is grouped against a workload calendar — the system has no opinion about whether KP had room.
 
 **Value-weighted, never count-weighted.** With roughly a 50× spread between KP's smallest and largest engagements, any metric treating bids as equal units is wrong. Report expected value, not hit count. This applies to every number in this section.
@@ -437,7 +486,18 @@ Validation therefore works as follows.
 
 **Known limitation:** true recall remains unmeasurable — what was published but never seen is unknown. If that gap needs closing, the method is to pick one jurisdiction and one year, exhaustively enumerate everything published, and score all of it. Done once, not annually.
 
-### 8.3 Precision, measured live
+### 8.3 Precision, measured live — SUPERSEDED FOR V1
+
+> **Precision is not a measure of a system that returns everything.** With no ranking and no filter (§1.1), the Interested rate is simply the base rate of the active sources. It says something about the *sources* — which is worth knowing, and §5.6 already tracks per-source yield — but nothing whatever about Tenderfoot, because Tenderfoot made no selection to be judged.
+>
+> **The measure that survives is discovery**, and it is the right one anyway: of what surfaced, how much was work KP would pursue *and had not otherwise seen*? That number is meaningful with or without a scorer, it maps directly onto problem #1, and unlike precision it cannot be gamed by returning less.
+>
+> Two supporting numbers, both free once everything is collected:
+>
+> - **Volume**, per source and per week. This is the finding that determines whether qualification is urgent or academic, and nobody currently knows it.
+> - **Base rate**, per source. Interested-per-hundred-surfaced. When qualification is eventually designed, this is what it has to beat.
+>
+> The paragraph below applies again the moment anything ranks or filters. Kept for that reason.
 
 Of what the queue surfaced this period, what fraction was marked Interested? Roughly 30–50% is healthy. Ten percent is noise and predicts abandonment. Ninety percent means the scorer is too conservative and quietly missing things — the failure mode that feels like success, and the reason codes never gate.
 
@@ -447,12 +507,14 @@ Hand-label ~50 solicitations and measure field by field. **Dates and eligibility
 
 ### 8.5 Acceptance criteria
 
-| Pain | Metric |
-|---|---|
-| Missing things entirely | Discovery — qualified opportunities surfaced that would not have been seen, weighted by value |
-| Finding out too late | Median lead time from first sighting to deadline; expiration-radar leads converted |
-| Drowning in noise | Triage precision (Interested rate) |
-| No system of record | Whether the Pursuit board is current — a usage question, not a software one |
+| Pain | Metric | In V1? |
+|---|---|---|
+| Missing things entirely | Discovery — qualified opportunities surfaced that would not have been seen, weighted by value | **Yes — and it is the whole measure** |
+| Finding out too late | Median lead time from first sighting to deadline; expiration-radar leads converted | Yes |
+| Drowning in noise | ~~Triage precision (Interested rate)~~ → **volume and base rate per source** | **No.** V1 does not address this pain; it measures it |
+| No system of record | Whether the Pursuit board is current — a usage question, not a software one | Yes |
+
+**Three of four pains are addressed in V1, and the fourth is instrumented rather than solved** (§1.1). That is the honest reading of this table and it should not be softened: a user drowning in irrelevant rows is a real failure mode, and V1's answer is to find out how bad it actually is before designing against it.
 
 ### 8.6 What not to measure
 
