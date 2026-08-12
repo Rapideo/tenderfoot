@@ -37,6 +37,29 @@ One distinction has to stay sharp, because it is easy to blur:
 
 Headcount and revenue therefore remain in the Firm Profile (§4.2) strictly as eligibility thresholds. They never become a reason to rank one qualified prospect above another.
 
+#### The rule binds the machine, not the person
+
+**Clarified by Matt 2026-08-11, and it resolves a contradiction that had been read the wrong way round.**
+
+Capacity-agnostic is a **mandate on the system**. It is not a rule about what a user may think, say, or write down.
+
+| | May consider capacity? |
+|---|---|
+| The system — inferring, scoring, ranking, gating, suppressing | **Never.** |
+| A person reading an opportunity and deciding | **Yes — and they should.** |
+
+A user looking at a $5M solicitation is entitled to conclude *this is too big for us right now*, and **the record should capture that in their words**. It is a real reason, it is often the true reason, and a system of record that cannot hold it is lying about why things were passed on. §7.1 already argues the reason matters more than the decision; refusing to accept the most honest reason available would gut that.
+
+**So the constraint is on data flow, not on vocabulary.** Nothing is forbidden from being *said*. What is forbidden is the machine consuming it:
+
+> **A recorded capacity judgment is a journal entry. It may never become model input, a score, a weight, a filter, or a learned rule.**
+
+That is a narrower and more enforceable rule than banning the category, and it protects the thing §1 actually cares about — the invisible miss — without pretending a real workflow does not exist.
+
+**Where this bites, and it is not hypothetical.** §4.5 proposed that *every* recorded no-bid reason become a few-shot example automatically. Applied to a capacity reason, that converts a human judgment into a machine one silently — the user records an honest fact about this quarter, and the system generalizes it into a standing preference against large contracts. **The defect was the automatic pipe, not the reason.** Any future qualification design must classify reasons on the way in and exclude the capacity class from anything that learns.
+
+**Corollary worth stating, since it follows and is easy to miss.** If a person passes on capacity grounds often enough to matter, *that* is a finding — about the firm, not about the opportunities. The system may surface the count. It may not act on it.
+
 **Later — explicitly not now — Tenderfoot becomes a contract seeking *and management* tool.** Pipeline state, ownership, workload planning, and win/loss analytics all belong to that phase (§9). This document describes the seeking half, and the seeking half is judged on one thing: are the prospects it surfaces accurate and likely?
 
 ### 1.1 V1 returns everything
@@ -311,7 +334,7 @@ The Indiana archive gap resolves in a useful direction. The state's *contract* s
 >
 > **One rule survives the parking, promoted out of here so it does not get lost:** *hard gates and soft scores never mix, and gated items are filed rather than deleted* (§6.2). That is not a matching decision, it is a data-integrity decision, and it holds regardless of what qualification eventually looks like.
 >
-> Reason chips are also parked. A chip vocabulary was going to feed few-shot examples (§6.6), which made the *"Capacity — too large"* chip a live contradiction with §1. **With qualification parked, no chip feeds anything**, so the contradiction is dormant rather than resolved — and it must be re-checked the moment recorded reasons become model input again. See the note in `prototype/PROTOTYPE/src/app.js`.
+> Reason chips are also parked as a *vocabulary* — V1 records free text. **The capacity question that hung over them is now resolved rather than dormant** (§1, *the rule binds the machine, not the person*): a user may record a capacity reason and should, and the defect was never the chip but §6.6's automatic pipe from every recorded reason into few-shot context. **Whatever replaces this section must classify reasons on the way in and exclude the capacity class from anything that learns.** That is the one requirement §6 hands forward.
 
 ### 6.1 The funnel
 

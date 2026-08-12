@@ -155,6 +155,8 @@ Chips need a free-text escape hatch. The hand-run is currently producing reasons
 
 **Revised 2026-08-11 — chips are parked; free text is V1.** With qualification parked, no recorded reason feeds anything, so there is no vocabulary to get right and the argument above resolves itself: V1 records free text only. **Mandatory-on-Pass still holds**, for the system-of-record reason rather than the training reason. The accumulating free-text reasons become the corpus a chip vocabulary is eventually derived from — which is the order this node was already arguing for, now enforced by circumstance rather than discipline.
 
+**And one constraint the eventual vocabulary inherits.** §1 is a mandate on the *system*, not on the user: a person may record *"too big for us right now"* and should, because it is often the true reason. What may never happen is that reason becoming model input. **So when chips return, they carry a class on the way in**, and the capacity class is excluded from anything that learns. A count may be surfaced; it may not be acted on. This is a data-flow rule, not a word ban — nothing is forbidden from being said here.
+
 ### Region 1.1.5 : Gated Items Drawer — PARKED, AND THE REASON IT EXISTS DID NOT GO AWAY
 
 Items eliminated by Stage 0 hard gates (§6.1), filed rather than deleted.

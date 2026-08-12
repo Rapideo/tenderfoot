@@ -506,21 +506,26 @@
    * employees is a hard gate; "we are too busy" is not modelled anywhere.
    * Either this chip goes, or §1 changes — but not both quietly.
    *
-   * UPDATE 2026-08-11 — PARKED, AND THE CONTRADICTION WENT DORMANT RATHER THAN
-   * GETTING RESOLVED. Qualification is parked (spec §1.1); no recorded reason
-   * feeds any model, so there is no vocabulary to get right and nothing learns
-   * from a capacity judgment. V1 records free text against the decision instead.
+   * RESOLVED 2026-08-11, AND THE NOTE ABOVE HAD IT BACKWARDS. Matt: §1 is a
+   * mandate on the SYSTEM, not on the user. The system may never infer, score,
+   * rank, gate, or learn from capacity. A person reading an opportunity may
+   * absolutely conclude "too big for us right now" -- and the record SHOULD
+   * capture that, because it is frequently the true reason and a system of
+   * record that cannot hold it is lying about why things were passed on.
    *
-   * The §1 conflict is therefore ASLEEP, NOT FIXED. It wakes the moment recorded
-   * reasons become model input again, and whoever designs qualification has to
-   * re-check it then. Writing it down here because a dormant contradiction that
-   * nobody wrote down is indistinguishable from one that was resolved.
+   * SO THE CHIP IS CORRECT AND STAYS. The defect was never the vocabulary. It
+   * was §6.6's pipe: every recorded reason automatically becoming a few-shot
+   * example. That is what silently converts one honest human judgment about
+   * this quarter into a standing machine preference against large contracts.
    *
-   * The wider version of the problem, worth carrying forward: three of these
-   * chips are facts about KP at a moment rather than facts about the opportunity
-   * -- "Too small", "Capacity — too large", "Cost to pursue too high". Those do
-   * not generalize, because the same solicitation next quarter is a different
-   * answer. Any future design that learns from reasons needs that split.
+   * THE RULE, restated as a data-flow constraint rather than a word ban:
+   *   a recorded capacity judgment is a JOURNAL ENTRY. It may never become
+   *   model input, a score, a weight, a filter, or a learned rule.
+   *
+   * Whoever designs qualification has to classify reasons on the way in and
+   * exclude the capacity class from anything that learns. Surfacing a COUNT is
+   * fine and is arguably useful -- "you passed on capacity nine times this
+   * quarter" is a finding about the firm. Acting on it is not.
    */
   TENDERFOOT.PASS_CHIPS = ["Out of geography", "No capability match", "Incumbent locked", "Too small", "Capacity — too large", "Deadline too close", "Set-aside ineligible", "Cost to pursue too high"];;
   TENDERFOOT.YES_CHIPS = ["Strong fit", "Sub / teaming play", "Known buyer", "Watch only"];;
