@@ -94,3 +94,93 @@ Whatever B2 specifies must cover **CI, environments, deploys, secrets, and branc
 ## What is deliberately absent
 
 **No performance targets, no scale numbers, no availability requirement.** One customer, one user, tens of thousands of records, batch ingestion. **Nothing here is a scale problem**, and specifying scale requirements for it would be inventing constraints. If a candidate stack is being justified on throughput, that is a signal something has been misread.
+
+---
+
+# Candidate assessment — the IDE8 stack
+
+**Assessed 2026-08-12** against the requirements above. Matt proposed reusing the stack from **ideate / IDE8**, his other active project, with the explicit goal of keeping the two common.
+
+> **Verdict: appropriate, with one genuine gap.** Adopt it, drop one library, decide three things, and treat document extraction as the item that needs a real answer rather than an assumption.
+
+**Commonality is a first-class reason, not a compromise.** One set of idioms, one set of muscle memory, one debugging vocabulary, and components that can move between projects. That is worth real weight on its own — enough that the bar for deviating from IDE8 should be a requirement this project actually has, not a preference.
+
+## The candidate
+
+| Layer | | |
+|---|---|---|
+| **Client** | React 19 · Vite 6 | UI and dev server |
+| | Zustand 5 + Immer 10 | application state |
+| | @dnd-kit | drag and drop |
+| | *no router, no CSS framework* | styling is hand-written CSS against design tokens |
+| **Server** | Express 4 | the API |
+| | better-sqlite3 13 | persistence — one SQLite file per project, local-first |
+| | tsx | runs the server directly, no build step |
+| | cors, multer | cross-origin, file uploads |
+
+## Carries over with no concerns
+
+**React + Vite + Zustand + Immer.** Tenderfoot's client state is modest — queue position, saved views, filter state, decisions in flight. Zustand is comfortably sized for it, and Immer suits the shape of triage, which is overwhelmingly *change one field on one record*.
+
+**Express + tsx.** The API surface is small: list, detail, record a decision, run an ingest, read and edit source config.
+
+## Drop @dnd-kit — the prototype already made this decision
+
+The only screen that would want drag is the Pipeline Board, and **the prototype moves cards with `←` `→` arrow buttons rather than drag.** That is the better call for a keyboard-first product, and Screen 7 is deferred regardless (`Pri 1`, `Conc 30%`).
+
+## Three things to decide
+
+### 1. A router — recommended, and IDE8 does not have one
+
+Tenderfoot has **seven screens, and an opportunity detail with five tabs**, plus `Open full detail →` and `← Back to queue` as explicit affordances in the prototype. All of that is achievable in Zustand alone.
+
+**What is lost without routes is deep links** — no URL that opens one opportunity. For a system of record whose stated job is answering *what did we decide about this, and why* (problem #4), being unable to point at a record is a real loss. It is cheap now and awkward to retrofit once the state shape has settled.
+
+### 2. Where documents live
+
+**Filesystem, with paths in SQLite.** Thousands of bundles reaching 21 MB. This is not really a decision so much as a thing to write down before someone puts a blob column in a migration.
+
+### 3. One SQLite file per firm, or one shared database
+
+IDE8's pattern is one file per project. The Tenderfoot analogue is **one file per firm** — which maps onto §2.1's portability rule (*a second customer is a second row, not a fork*) in an interesting way, arguably more cleanly than a shared multi-tenant table.
+
+**Worth deciding deliberately rather than inheriting**, because it is the kind of choice that is invisible until the second customer exists and expensive immediately afterwards.
+
+## Local-first SQLite is a good fit — better than a server database
+
+Measured against the requirements above: eleven objects with foreign keys, tens of thousands of records, batch ingestion, one user, no availability requirement. **Nothing about Tenderfoot is a scale problem**, as stated at the foot of this document. Local-first buys zero infrastructure, no database secrets, and backup by copying a file.
+
+**One caveat is near-term and two are not.** Documents belong on disk (above). The other two are genuinely deferred:
+
+- **Scheduled live ingestion needs something always on.** A closed laptop does not scrape. That is SP7, post-GO, and already gated — but it is the constraint that eventually forces a hosting decision, and it should not arrive as a surprise.
+- **A second reader means a second copy.** Single-file local-first has no story for two people seeing the same data. Nothing currently needs it — the two-scorer hand-run was retired 2026-08-11 — but the portability story eventually implies it.
+
+## The real gap — document extraction
+
+**This is the one place the candidate is under-specified, and it lands squarely on the highest-stakes requirement in this document.**
+
+With no scores in V1, **extraction accuracy is the only thing the system can be right or wrong about** (§8.4). And the corpus demands `.pdf`, `.docx`, `.xlsx`, `.xls`, `.pptx` and nested `.zip` — with the scope of work, the file that decides fit, *frequently a `.docx`*.
+
+**Node is the weakest major runtime for this.** The libraries exist; they are thinner and less battle-tested than Python's equivalents, particularly for `.xlsx` and `.pptx`. IDE8 has presumably never had to parse a 22-file government bundle, so this requirement is new to the stack rather than already answered by it.
+
+Three ways out — **and this is precisely where mechanical-vs-smart modes stop being decorative** (`Pinned-Ingestion-Scaffolding.md`, proposal 4):
+
+| Option | Cost |
+|---|---|
+| **Node libraries throughout** | One language, one runtime. You will fight `.xlsx` and `.pptx`. |
+| **A Python sidecar for extraction only** | A second runtime, confined to one job behind a clean boundary. Strongest parsing story. |
+| **Extraction as a smart-mode action** | An API call handles arbitrary formats. Costs money per document, and §8.4's accuracy number stops being stable between runs. |
+
+**Mechanical mode needs real parsers. Smart mode needs a request.** The modes design does not remove this decision, but it does mean the answer can be *both*, with the data recording which one produced each field — which is the only way the comparison ever gets made.
+
+## On frameworks — no CSS framework; build the primitives instead
+
+Matt asked whether the finalized prototype argues for adopting a framework, possibly as an early development task.
+
+**It argues the opposite.** The prototype is not a rough sketch to be fleshed out — it is fully specified: **67 role-named colour tokens, a 12-step radius scale, a considered type scale**, all verified byte-identical to the frozen bundle by `prototype/tools/verify-tokens.py`. A CSS framework arrives with its own opinions, and the work becomes overriding them.
+
+**What is worth doing early is already a slice.** `SP2 — Design system` ends with *"every primitive on a dev-only route"* and carries a **sign-off gate**. Proto2PRD §7 is emphatic that primitives come before features, because getting that order wrong is the documented failure on IMPACT.
+
+**So the prototype being finalized does not argue for a framework — it argues that SP2 will be unusually cheap.** The tokens are extracted and verified; the primitives are already drawn: button, chip, card, table row, score bar, fact panel, keycap, status pill. SP2 is mostly transcription rather than design.
+
+**One consequence for the earlier note about hand-written CSS.** IDE8's *"every view is bespoke"* cost does not transfer at the same rate. Tenderfoot's views are bespoke against **a token layer that already exists and a component set that will exist after SP2** — which is a different proposition from bespoke-from-nothing.
