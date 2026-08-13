@@ -1,9 +1,13 @@
 -- SP1. The eleven objects of design spec §4, in one transaction.
--- FKs are enforced (PRAGMA set in db/index.ts). §2.2: retrofitting them is
--- the expensive mistake, and they are worth nothing unenforced.
+-- FKs are enforced UNCONDITIONALLY by Postgres -- no PRAGMA, no per-connection
+-- toggle a second client could fail to set, which was the SQLite arrangement
+-- this replaces. §2.2: retrofitting them is the expensive mistake, and they
+-- are worth nothing unenforced.
 --
--- Money is integer cents. Dates are ISO-8601 text. SQLite has neither type,
--- and floats for money are a defect waiting to be found.
+-- Money is integer cents, because floats for money are a defect waiting to
+-- be found. Dates are ISO-8601 text -- not a deliberate absence of a `date`
+-- type, but a deliberate choice against one; see the comment above
+-- CREATE TABLE solicitation.
 
 -- ---------- BUYER SIDE ----------------------------------------------------
 CREATE TABLE organization (
