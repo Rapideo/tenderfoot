@@ -250,7 +250,7 @@ This section used to open *"we have no hosting platform, so it has no properties
 | **Vercel** | Function `maxDuration` ceiling on the chosen plan | §5.3 ingestion "runs for minutes." Configurable per function in `vercel.json`; the ceiling is not | — |
 | **Vercel** | Cron minimum frequency and behaviour on the chosen plan | SP7 is scheduled ingestion. This is the whole reason for the host | — |
 | **Vercel** | Request/response body limits | 21 MB bundles pass through the API on the way to blob storage, unless they don't — which is itself a design decision | — |
-| **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | **Partial 2026-08-13** — see below |
+| **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | ✅ **~5 min, measured 2026-08-13.** Cold-start latency still unmeasured — see below |
 | **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | ✅ **2026-08-13 — pooled by default, confirmed.** `DATABASE_URL` resolves to the `-pooler` host and `DATABASE_URL_UNPOOLED` to the direct one. **The integration got this right without being asked**, so the requirement is satisfied by construction rather than by discipline. The connection *count* ceiling is still unread |
 | **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | **Partial 2026-08-13** — see below |
 
@@ -299,7 +299,20 @@ This section used to open *"we have no hosting platform, so it has no properties
 
 > **The compute default is worth noting as a platform property rather than a preference.** A fixed floor of 1 CU on a database that idles most of the day is the wrong end of the trade for one user, and **nothing about the provisioning flow surfaces that choice** — it is simply what you get. That is the same class of fact as an auto-pausing free tier: a documented default with a cost, invisible unless someone reads it.
 
-> **One value deliberately left unresolved.** `kp-web-prod`'s `suspend_timeout_seconds` reads **`0`**. In Neon's API `0` means *use the default* and `-1` means *never suspend* — **but this section exists precisely because reading a value's meaning from memory is the failure mode it guards against.** The effective delay is confirmed against the console or by observation before it is written here as a number.
+> ### ✅ RESOLVED BY OBSERVATION, 2026-08-13 — the database autosuspends after ~5 minutes
+>
+> `suspend_timeout_seconds` reads **`0`** on both projects. In Neon's API `0` means *use the default* and `-1` means *never suspend*, and this section was left blank rather than guess which.
+>
+> **It answered itself within the hour.** Tenderfoot's compute was created at `13:27:52`, last active at `13:27:57`, and reported `suspended_at: 13:33:16` — **5 minutes 19 seconds after its last activity.** So `0` is *the default*, and the default is five minutes. **Not "never."**
+>
+> **This is the IMPACT failure's shape, now confirmed rather than suspected.** Production went down thirteen days after launch because free-tier Supabase auto-pauses — *"a documented property of the plan, never written down."* **Tenderfoot's database suspends after five minutes idle, and with one user it will be idle nearly always.** The suspended state is the normal state, not the exception.
+>
+> **Two consequences, and the second is the one that bites:**
+>
+> 1. **Cold start is the common path for triage.** `Stack-Requirements.md` requires the queue to *"feel instant"* — ten seconds per item, forty items in a sitting. **The first query of every session pays the resume.** That number is still unmeasured and is taken at SP1.5 Task 14.
+> 2. **A cron-driven ingestion run wakes a suspended database every time.** Harmless for a nightly job; worth knowing before anyone concludes a scheduled run is "slow."
+>
+> **What this does NOT justify is disabling autosuspend.** Suspension is why a one-user database is cheap, and paying for an always-on compute to save one resume per session is the wrong trade. **Measure the resume first** (§9.6's sibling question), then decide.
 | **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |
 
 ### 10.2 Other people's platforms — already measured
