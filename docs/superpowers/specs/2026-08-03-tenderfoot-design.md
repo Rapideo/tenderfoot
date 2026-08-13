@@ -520,7 +520,25 @@ Two kinds of interruption and only two. Everything else is pull.
 
 **1. The mandate names a version.** Parity is against **`Tenderfoot UI Mockups V1,1.html`**, the frozen bundle. Not "the prototype", which iterates — V1.2 is expected. **When a new version lands, re-pointing this mandate is a deliberate act**, taken with the `Proto` audit (`Proto2PRD` §4.7.5), not an automatic consequence of a file appearing. An unversioned parity requirement is unfalsifiable.
 
-**2. Parity applies to what V1 builds, not to everything drawn.** The prototype shows the **finished product**; V1 ships a subset (§1.1). Region 1.1.2 (Score Strip), Region 1.1.5 (Gated Items Drawer) and View 2.2 (Scores and Evidence) are parked and **are not built**. **The mandate does not require building them — it requires that when they are built, they match.** Nothing is trimmed from the prototype to reflect V1's scope.
+**2. ~~Parity applies to what V1 builds, not to everything drawn.~~ SUPERSEDED 2026-08-13 by Matt — the intelligence chrome IS built, inert.**
+
+> ~~The prototype shows the **finished product**; V1 ships a subset (§1.1). Region 1.1.2 (Score Strip), Region 1.1.5 (Gated Items Drawer) and View 2.2 (Scores and Evidence) are parked and **are not built**. The mandate does not require building them — it requires that when they are built, they match.~~
+
+**The revised rule.** Matt's direction, in his words: *"I want us to keep those in as we build the application and build them into the UI even though they're not active… They will be vestigial until we activate them."*
+
+**So the parked intelligence layer is BUILT as interface and left non-functional.** Score strips, AI-assessment panels, smart-filter controls, the settings that govern them, and any prototype element serving qualification — all constructed, all rendered, none wired. **Nothing is trimmed from the prototype to reflect V1's scope, and nothing is deferred out of the UI either.**
+
+**Why he is right, stated so the reasoning survives the decision.** The prototype represents the finished product and doubles as demo material. A build that omits every parked element would not be a subset of the product — **it would be a different product**, with holes where the screens were designed around content. Views composed to carry a score strip look broken without one, and "looks broken" is indistinguishable from "is broken" to anyone being shown it.
+
+> ### The guard this creates, and it is the important half
+>
+> **A rendered control may never become an active filter, ranking, or score without qualification being designed first.**
+>
+> §1.1 parks matching as **undesigned**, not as pending work. Shipping inert filter chrome puts a wired-up switch one small commit away from existing — and that commit would be exactly the failure `Proto2PRD` §4.7.5 names: *the risk is not the wrong answer, it is the unratified one.*
+>
+> **This is the same shape as the Capacity resolution** (§9 item 8): the artifact is permitted, the data flow is forbidden. There, a recorded capacity judgment may be a journal entry and may never become model input. Here, an intelligence control may be an interface element and may never become a live filter until the thing it filters by has been designed.
+>
+> **Two consequences worth naming.** The `assessment` table already exists and stays empty by design, so score surfaces render from genuine emptiness rather than fixtures — **do not seed fake scores to make the chrome look alive.** And whatever visual treatment "vestigial" takes — disabled, empty-state, explicitly labelled as inactive — **is undesigned and stays that way until Matt specifies it.** It is a real design question with several defensible answers, and pre-specifying it here would be inventing.
 
 **3. The wordmark is exempt until it exists.** The header renders `WORDMARK — PLACEHOLDER`. Pixel parity with a placeholder is not a goal. On the V1.2 punch list; the exemption ends when the mark does.
 

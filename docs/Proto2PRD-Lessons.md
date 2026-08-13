@@ -177,6 +177,18 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 
 **Why not promoted yet.** One instance. **But the mechanism is documented in the tool's own help text**, which is stronger evidence than a single incident usually carries, and it is not specific to Vercel or to this project. **This is a strong candidate for promotion on a second sighting**, and worth watching for on any CLI touching billing, deploys, or deletion.
 
+> ### SECOND SIGHTING, same day — 2026-08-13. This now meets the promotion bar.
+>
+> During SP1.5's deploy task, a bare `vercel --yes` — issued under an explicit "preview only, never production" instruction, and documented as producing a preview — **came back `target: production`.** Confirmed twice: by `vercel inspect` at the time, and afterwards by `vercel ls`, which still shows that deployment as **Environment: Production, Status: Error**.
+>
+> **Nothing was promoted only because it died at config validation in 3 seconds, before building.** That was luck. Had the config been valid, an instruction reading *"NEVER `vercel --prod`"* would have shipped to production anyway — because the dangerous default was not on the flag anyone was told to avoid.
+>
+> **Two independent instances, one session, one CLI**: an agent-detected `--non-interactive` that provisioned a paid subscription, and a `--yes` that targeted production. **The generalisation holds and should be promoted:**
+>
+> **Never infer a CLI's default from its documentation when the action is irreversible or billable. Verify the target *after* invoking and before relying on it** — `vercel inspect`, `--dry-run`, a status query, whatever the tool offers. And prefer explicitly passing the safe value (`--target=preview`) over trusting that it is the default, because a default is a policy the vendor may change and the docs may lag.
+>
+> **The deeper form, which is what makes it a playbook lesson rather than a Vercel note:** *a guard rail phrased as "do not use the dangerous flag" only works if the dangerous behaviour requires a flag.* Both instances here were dangerous behaviour reached by **omission**.
+
 ---
 
 ## 3. Watch items — open questions about the method itself
