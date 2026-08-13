@@ -72,13 +72,26 @@ function querier(exec: (sql: string, params: unknown[]) => Promise<pg.QueryResul
   };
 }
 
-/* An empty params array must not be passed to pg.query at all. Passing any
- * non-undefined `values` argument -- even [] -- selects the extended query
- * protocol, which cannot execute multi-statement SQL. Task 3 runs whole
- * .sql migration files (several statements each) through run(), so this is
- * not a style preference: with params always forwarded, every migration
- * breaks. */
-const base = querier((sql, params) => (params.length ? pool.query(sql, params as any[]) : pool.query(sql)));
+/* Structural, not pg's own type: matched by both Pool and PoolClient, which
+ * is what lets execQuery() below serve the pool-backed queries and the
+ * transaction-client-backed ones in tx() from one copy of this logic. */
+type Queryable = {
+  query(sql: string): Promise<pg.QueryResult<any>>;
+  query(sql: string, params: any[]): Promise<pg.QueryResult<any>>;
+};
+
+/* Omitting the params argument entirely when the list is empty runs the
+ * simple query protocol unconditionally -- true regardless of pg's version
+ * -- which is what multi-statement migration files need, since each is one
+ * call carrying several statements. (pg@8.23.0, the version installed here,
+ * happens to treat an empty array the same way, because it tests
+ * values.length rather than definedness -- but that's an internal detail of
+ * one minor version, not a contract this code relies on.) */
+function execQuery(target: Queryable, sql: string, params: unknown[]): Promise<pg.QueryResult<any>> {
+  return params.length ? target.query(sql, params as any[]) : target.query(sql);
+}
+
+const base = querier((sql, params) => execQuery(pool, sql, params));
 export const { all, one, run, insert } = base;
 
 /* One transaction, one client. better-sqlite3's db.transaction(fn)() was
@@ -90,9 +103,7 @@ export async function tx<T>(fn: (q: Querier) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const out = await fn(
-      querier((sql, params) => (params.length ? client.query(sql, params as any[]) : client.query(sql))),
-    );
+    const out = await fn(querier((sql, params) => execQuery(client, sql, params)));
     await client.query("COMMIT");
     return out;
   } catch (err) {
