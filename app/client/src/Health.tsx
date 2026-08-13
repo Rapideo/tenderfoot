@@ -21,7 +21,7 @@ export function Health() {
   return (
     <main>
       <h1>Tenderfoot — SP0</h1>
-      <p>Client → API → SQLite. No domain logic.</p>
+      <p>Client → API → Postgres. No domain logic.</p>
       <h2>Read</h2>
       <pre>{health ? JSON.stringify(health, null, 2) : "loading…"}</pre>
       <h2>Write</h2>

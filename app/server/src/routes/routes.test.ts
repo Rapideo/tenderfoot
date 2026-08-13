@@ -122,6 +122,40 @@ test("a source whose posture is not 'in' cannot be enabled", async () => {
   expect(status).toBe(400);
 });
 
+/* C2 (SP1.5 final review, CRITICAL). Postgres' boolean input parser
+ * coerces bound "true", "t", "yes", "on", "1" -- ALL of them -- to true.
+ * Under SQLite, `enabled` was an integer column and a string like "true"
+ * landed as opaque text that `WHERE enabled = 1` never matched: a
+ * malformed request was inert. Under Postgres the same request is a live
+ * bypass of §5.5.1 -- the one rule this project treats as non-negotiable
+ * -- unless the value that reaches the guard is the exact value that
+ * reaches the write. GovWin IQ's legal_posture is "out" (excluded by its
+ * terms of service), so every one of these must be refused with no row
+ * change, regardless of what Postgres itself would have coerced the value
+ * to. */
+test.each([
+  ["the string 'true'", "true"],
+  ["the string '1'", "1"],
+  ["the string 'yes'", "yes"],
+  ["the boolean true", true],
+  ["the number 1", 1],
+])("enabling GovWin IQ (posture 'out') with %s is refused", async (_label, value) => {
+  const [, sources] = await get("/sources");
+  const govwin = sources.find((s: any) => s.name === "GovWin IQ");
+  const [status] = await patch(`/sources/${govwin.id}`, {
+    enabled: value,
+    since_default: "P7D",
+  });
+  expect(status).toBe(400);
+
+  // Re-fetch and confirm nothing changed -- a 400 that still wrote the row
+  // would be the bypass with extra steps.
+  const [, refreshed] = await get("/sources");
+  const stillGovwin = refreshed.find((s: any) => s.id === govwin.id);
+  expect(stillGovwin.enabled).toBe(false);
+  expect(stillGovwin.legal_note).toBe(govwin.legal_note);
+});
+
 test("an in-posture source with a window can be enabled", async () => {
   const [, sources] = await get("/sources");
   const il = sources.find((s: any) => s.name === "Illinois BidBuy");

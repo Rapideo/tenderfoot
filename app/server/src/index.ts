@@ -1,9 +1,11 @@
 import cors from "cors";
 import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import { pathToFileURL } from "node:url";
 import type { HealthResponse, PingResponse } from "@tenderfoot/shared";
 import { all, run } from "./db/index.js";
 import { appliedMigrations, migrate } from "./db/migrate.js";
+import { asyncHandler } from "./lib/asyncHandler.js";
 import { api } from "./routes/index.js";
 
 const PORT = Number(process.env.PORT ?? 3003);
@@ -21,26 +23,48 @@ async function readMeta(): Promise<Record<string, string>> {
 }
 
 /* READ path. */
-app.get("/api/health", async (_req, res) => {
-  const body: HealthResponse = {
-    ok: true,
-    migrations: await appliedMigrations(),
-    meta: await readMeta(),
-  };
-  res.json(body);
-});
+app.get(
+  "/api/health",
+  asyncHandler(async (_req, res) => {
+    const body: HealthResponse = {
+      ok: true,
+      migrations: await appliedMigrations(),
+      meta: await readMeta(),
+    };
+    res.json(body);
+  }),
+);
 
 /* WRITE path. SP0's demo criterion needs both, or the slice proves half a
  * pipe. */
-app.post("/api/health/ping", async (_req, res) => {
-  const wroteAt = new Date().toISOString();
-  await run(
-    `INSERT INTO app_meta (key, value, updated_at) VALUES ('last_ping', $1, $2)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    [wroteAt, wroteAt],
-  );
-  const body: PingResponse = { ok: true, wroteAt };
-  res.json(body);
+app.post(
+  "/api/health/ping",
+  asyncHandler(async (_req, res) => {
+    const wroteAt = new Date().toISOString();
+    await run(
+      `INSERT INTO app_meta (key, value, updated_at) VALUES ('last_ping', $1, $2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      [wroteAt, wroteAt],
+    );
+    const body: PingResponse = { ok: true, wroteAt };
+    res.json(body);
+  }),
+);
+
+/* I3 (SP1.5 final review). Express 4 does not catch a promise rejected by
+ * an async handler -- every route above now forwards its rejection to
+ * next(err) via asyncHandler, and this is where those land. Registered
+ * after every route on purpose: Express only treats a four-argument
+ * middleware as an error handler, and only errors from layers registered
+ * BEFORE this one reach it.
+ *
+ * Never put the raw error -- message, stack, or any connection detail --
+ * into the response body. A Neon cold-start timeout, a dropped connection,
+ * or a malformed-payload SQLSTATE (22P02) all end up here, and none of
+ * that is safe to hand back to the caller. Logged server-side instead. */
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  res.status(500).json({ error: "Internal server error." });
 });
 
 /* Migrations no longer run at import. On one laptop that was convenient; on

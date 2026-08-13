@@ -114,12 +114,27 @@ export async function tx<T>(fn: (q: Querier) => Promise<T>): Promise<T> {
     await client.query("BEGIN");
     const out = await fn(querier((sql, params) => execQuery(client, sql, params)));
     await client.query("COMMIT");
+    client.release();
     return out;
   } catch (err) {
-    await client.query("ROLLBACK");
+    /* release(err) tells the pool to DESTROY this client rather than
+     * return it -- correct here regardless of which query inside the
+     * transaction failed, because pg cannot guarantee a connection that
+     * errored mid-transaction is clean. A bare release() on this path
+     * would hand a client of unknown state back to the pool for the next
+     * caller.
+     *
+     * ROLLBACK is best-effort and wrapped on its own: if it throws (the
+     * connection may already be gone), that second error must not replace
+     * -- and hide -- the original one, which is what the caller actually
+     * needs to see. */
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // client is already broken; err below is what matters.
+    }
+    client.release(err as Error);
     throw err;
-  } finally {
-    client.release();
   }
 }
 
