@@ -121,3 +121,78 @@ test("assessment exists and is empty", () => {
   const n = db.prepare("SELECT count(*) AS n FROM assessment").get() as { n: number };
   expect(n.n).toBe(0);
 });
+
+/* The Source Registry seed (003). These assert the RESEARCH survived into
+ * the database, not merely that rows exist -- the registry is V1's only
+ * control surface, and a seed that quietly loses a legal posture or a
+ * verified facet is worse than an empty table. */
+test("the source registry is seeded, and nothing is enabled yet", () => {
+  /* Assert the seeded rows BY NAME rather than a total count: earlier tests
+   * in this file insert their own sources, and a bare count would fail for a
+   * reason that has nothing to do with the seed. Same brittleness as the
+   * migration list this suite already learned about. */
+  const seeded = [
+    "SAM.gov",
+    "USASpending",
+    "Indiana IDOA solicitations",
+    "Indiana EDS contract register",
+    "Illinois BidBuy",
+    "Michigan SIGMA VSS",
+    "Kentucky eMARS VSS",
+    "Ohio OhioBuys",
+    "GovWin IQ",
+    "BidNet Direct",
+    "BidPrime",
+  ];
+  const names = db
+    .prepare("SELECT name FROM source")
+    .all()
+    .map((r: any) => r.name as string);
+  for (const n of seeded) expect(names, `${n} missing from the seed`).toContain(n);
+
+  /* SP3 turns the first one on deliberately, and only after the ingestion
+   * window exists in code. */
+  const on = db.prepare("SELECT count(*) AS n FROM source WHERE enabled = 1").get() as { n: number };
+  expect(on.n).toBe(0);
+});
+
+test("legal postures match the 2026-08-12 research", () => {
+  const posture = (name: string) =>
+    (db.prepare("SELECT legal_posture FROM source WHERE name = ?").get(name) as any)?.legal_posture;
+  expect(posture("Illinois BidBuy")).toBe("in");
+  expect(posture("Michigan SIGMA VSS")).toBe("in");
+  expect(posture("Kentucky eMARS VSS")).toBe("in");
+  expect(posture("Ohio OhioBuys")).toBe("manual-only");
+  for (const agg of ["GovWin IQ", "BidNet Direct", "BidPrime"]) {
+    expect(posture(agg), `${agg} must stay out`).toBe("out");
+  }
+});
+
+/* §5.5.1 -- the evidence is recorded ON THE ROW. A posture without a note
+ * is a decision nobody can audit, which is the thing the rule exists to
+ * prevent. */
+test("every non-default posture carries its evidence", () => {
+  const rows = db
+    .prepare("SELECT name, legal_note FROM source WHERE legal_posture != 'out' OR name LIKE '%Bid%' OR name LIKE '%GovWin%'")
+    .all() as { name: string; legal_note: string | null }[];
+  for (const r of rows) {
+    expect(r.legal_note, `${r.name} has no legal_note`).toBeTruthy();
+  }
+});
+
+test("verified_facets is valid JSON wherever it is present", () => {
+  const bad = db
+    .prepare("SELECT count(*) AS n FROM source WHERE verified_facets IS NOT NULL AND json_valid(verified_facets) = 0")
+    .get() as { n: number };
+  expect(bad.n).toBe(0);
+});
+
+/* §5.4. The silent-failure record is the most expensive thing we learned,
+ * and it lives here so an adapter author reads it before repeating it. */
+test("the silent-failure findings survived into the registry", () => {
+  const sam = db.prepare("SELECT verified_facets AS v FROM source WHERE name = 'SAM.gov'").get() as { v: string };
+  expect(JSON.parse(sam.v).silently_ignored).toContain("sort=-publishDate");
+
+  const mi = db.prepare("SELECT verified_facets AS v FROM source WHERE name = 'Michigan SIGMA VSS'").get() as { v: string };
+  expect(JSON.parse(mi.v).silently_ignored).toContain("Show Me");
+});

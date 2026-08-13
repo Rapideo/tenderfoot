@@ -2,7 +2,7 @@
 
 **Updated 2026-08-12.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now:** SP0 merged to `main`. The **SP1 plan is drafted** — schema specified, execution not started.
+> **Now:** SP1 in progress on `sp1-entity-graph` — eleven objects created, Source Registry seeded, 15 tests green.
 
 ---
 
@@ -34,7 +34,7 @@
 | | | Status |
 |---|---|---|
 | **SP0** | Infrastructure — client → API → SQLite, check gate green | ✅ **merged to `main`** 2026-08-12 |
-| **SP1** | Entity graph — real solicitations into the real schema | ◐ **plan drafted**, not executed |
+| **SP1** | Entity graph — real solicitations into the real schema | ◐ **schema + registry built.** Profile seed, API, corpus load remain |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
