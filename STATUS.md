@@ -2,7 +2,7 @@
 
 **Updated 2026-08-12.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now:** SP0 is built and green on branch `sp0-infrastructure`. Next action is **the SP1 plan — the entity graph**.
+> **Now:** SP0 merged to `main`. The **SP1 plan is drafted** — schema specified, execution not started.
 
 ---
 
@@ -27,14 +27,14 @@
 |---|---|---|
 | **B1** | Fidelity mandate + platform properties into the spec | ✅ 2026-08-12 |
 | **B2** | Workflow spec — stack, CI, deploy, secrets | ✅ 2026-08-12 |
-| **B3** | Implementation plans, one per slice | ◐ SP0 written **and executed**. SP1 next |
+| **B3** | Implementation plans, one per slice | ◐ SP0 done · SP1 drafted · SP2 next |
 
 ## Slices
 
 | | | Status |
 |---|---|---|
-| **SP0** | Infrastructure — client → API → SQLite, check gate green | ✅ **executed 2026-08-12**, branch `sp0-infrastructure` |
-| **SP1** | Entity graph — real solicitations into the real schema | — |
+| **SP0** | Infrastructure — client → API → SQLite, check gate green | ✅ **merged to `main`** 2026-08-12 |
+| **SP1** | Entity graph — real solicitations into the real schema | ◐ **plan drafted**, not executed |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
@@ -63,7 +63,8 @@
 | | |
 |---|---|
 | ~~B3 for SP0~~ | ✅ written 2026-08-12 |
-| B3 for SP1, SP2 | **Unblocked** — SP0 proved the workflow spec, with three corrections |
+| ~~B3 for SP1~~ | ✅ drafted 2026-08-12 |
+| B3 for SP2 | Unblocked |
 
 ---
 

@@ -262,3 +262,15 @@ August 11, 2026:
 98. One flag I need to answer: Claude specified Vitest as the test runner because the stack list I gave it didn't include one, and the workflow spec requires unit tests. If IDE8 already uses something else I should change it — commonality is worth more than the choice itself. Need to go look.
 
 99. The part I like most is the last section — what SP0 will teach us about the workflow spec. Does "npm run check" stay fast enough to actually run every time, because a skipped gate is worse than none. Is a three-package workspace worth its ceremony at this size. Does proxy-not-CORS hold, and if nothing ever needs cors do we drop it. That's the slice being used to test the plan while correcting it is still cheap, which is the whole reason we did SP0 first.
+
+100. Renamed master to main and merged SP0. Infrastructure is real: client on 5175, API on 3003, SQLite with WAL and foreign keys, idempotent migrations, and a check gate that runs typecheck, tests, build and token drift in a few seconds.
+
+101. SP0 found three defects through its own verification steps and all three would have shipped silently. The one worth remembering: the migration CLI did NOTHING on Windows because the entry guard compared import.meta.url against a backslashed argv path. Exit code zero, no output, no migrations — and the unit tests passed the whole time, because they call migrate() directly. It was caught only because the plan said the second run must PRINT "no pending migrations." An expectation about output, not exit status. "Check it works" would have sailed straight past it.
+
+102. Third one was quietly nasty too: the database landed in a different place depending on how you invoked it, because resolve() is cwd-relative and npm sets cwd to the workspace. That's how data goes missing. Anchored to the repo root now.
+
+103. SP1 plan drafted — the entity graph. This is the expensive slice: it writes the migration everything else assumes, and §2.2 is explicit that retrofitting entity FKs is THE mistake. Eleven objects plus two alias tables, in one transaction, foreign keys enforced and tested.
+
+104. Two things in it I like. The source registry seed is where today's research finally becomes executable rather than prose — Illinois in with archive depth to 2018, Michigan and Kentucky in with the account reading recorded in legal_note, Ohio manual-only with the CAPTCHA recorded, aggregators out by their terms. And the API will REJECT a legal_posture change that arrives without a legal_note, because a rule that says "evidence is recorded on the row" is unenforceable if the field can be left blank.
+
+105. It's honest about two tasks it can't pre-write: re-extracting the mock layer against V1.1 with the comments carried forward by hand, and the minimal admin UI. Both would be inventing. And it flags the real test — does the schema survive that re-extraction, or does V1.1's dataset contain fields the spec's §4 never mentioned? Nobody has checked whether those two agree.
