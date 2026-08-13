@@ -143,6 +143,22 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 
 **Why not promoted.** Domain-specific on its face. The underlying pattern — *a policy field needs a decision procedure or it becomes a debate* — may be much more general, but that broader claim has one instance.
 
+### 2.11 A deferred caveat that names its own trigger deserves one more question: *what if the trigger fires early?*
+
+**Observed 2026-08-13.** The stack assessment identified two caveats to local-first SQLite, reasoned both correctly, and filed both under *genuinely deferred*: **scheduled ingestion needs something always on** (marked *"it should not arrive as a surprise"*), and **a second reader means a second copy.** Both were retired within twenty-four hours by a hosting decision that also invalidated the choice they were caveats to.
+
+**Proposed generalisation.** When a deferred item states the condition that will end the deferral, **that condition is a question to ask now, not a note to read later.** The assessment was correct that the trigger existed and wrong only about when — and it never asked, because "deferred" reads as a decision rather than as a bet on timing.
+
+**Why not promoted.** One instance. **But the mechanism is stated and it is not domain-specific**: writing down a trigger creates the illusion the risk is handled, and the register of deferred items is exactly where nobody looks for a live question. Worth a second sighting before it goes in.
+
+### 2.12 Assess a stack against where it runs, not only against what it must do
+
+**Observed 2026-08-13.** The IDE8 stack was assessed in full against a requirements list — data model, ingestion, documents, application, delivery — and the assessment was *valid*: every claim in it held. It concluded local-first SQLite was **"a good fit, better than a server database."** The deployment target was never named, and when it was named the next morning — Vercel — the conclusion became unusable, because Vercel has no writable persistent filesystem.
+
+**Proposed generalisation.** **A stack assessment that never asks "where does this run" can be entirely correct and still wrong.** Hosting is not a downstream consequence of the stack; for persistence and for anything touching the filesystem, it is upstream of it. The requirements list should carry the deployment target as a hard requirement, and `Stack-Requirements.md` did not have a row for it.
+
+**Why not promoted.** One instance, and arguably a special case of 2.11. **The cheap fix is concrete though** — add "where does it run, and what can it write to" to the requirements template — and that may be worth promoting on its own before the lesson is.
+
 ---
 
 ## 3. Watch items — open questions about the method itself
@@ -156,6 +172,8 @@ Not lessons. Questions the project should be able to answer by the end, and woul
 **Does the three-package workspace earn its ceremony?** Asked by SP0 of itself. If the shared package is still two interfaces after SP1, the answer is no, and the playbook may want a note about premature structure.
 
 **Does the check gate stay fast enough to actually be run?** Currently a few seconds. A gate that gets skipped is worse than no gate, and this is the kind of thing that degrades silently.
+
+**Did building the database layer before the hosting decision cost anything real?** The SQLite→Postgres port cost roughly 600 lines and no data, because SP0 made the database a derived artifact rebuilt from files. **The claim to test is that "make the database rebuildable from committed inputs" is what made a reversal cheap** — not luck, and not the small size of the project. If a later reversal in a different layer is expensive, that tells us the property was specific rather than general.
 
 **Was parking the intelligence layer right?** The strongest claim in this project is that deferring qualification made the mechanical layer measurable. **If volume turns out to be low and the first release is pleasant to use, that claim looks wise. If volume is high and the tool is unpleasant for a month, it looks like a mistake that happened to be well argued.** Either way it is worth writing down which.
 

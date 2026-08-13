@@ -83,7 +83,7 @@ Whatever B2 specifies must cover **CI, environments, deploys, secrets, and branc
 
 > It changes cost, latency, determinism, and — most importantly — **whether §8.4's accuracy measurement is stable between runs.** A rules-based extractor that is 80% accurate is measurable and improvable; a model that averages 90% but varies per run is harder to hold to a number. This is worth deciding on purpose.
 
-**2. Where do the documents live?** Thousands of bundles up to 21 MB each. Blob storage versus the database is a fork with cost and backup consequences, and it is easier to choose now than to migrate.
+**2. Where do the documents live?** Thousands of bundles up to 21 MB each. Blob storage versus the database is a fork with cost and backup consequences, and it is easier to choose now than to migrate. **Narrowed 2026-08-13: blob storage, because there is no filesystem. Which provider is open, and it is now a recurring bill rather than free disk.**
 
 **3. Authentication in V1, or none?** `Shell A`'s open question, still open. Single-user with no login is defensible for an internal tool with one customer — and the SVRC notes it is **expensive to retrofit.** The portability story (§2.1) eventually implies multiple firms.
 
@@ -103,6 +103,12 @@ Whatever B2 specifies must cover **CI, environments, deploys, secrets, and branc
 
 > **Verdict: appropriate, with one genuine gap.** Adopt it, drop one library, decide three things, and treat document extraction as the item that needs a real answer rather than an assumption.
 
+> ### ⚠ PARTIALLY SUPERSEDED — 2026-08-13
+>
+> **The persistence half of this assessment is wrong, and the section arguing for it is wrong in an instructive way.** Matt chose **Vercel hosting with a Neon managed Postgres database** the following morning. Everything below about React, Vite, Zustand, Express, `@dnd-kit`, the router, CSS frameworks and document extraction **stands unchanged**. Everything about SQLite, local-first, and documents-on-the-filesystem does not.
+>
+> **The superseded passages are marked in place and kept**, per §4 of the workflow spec: the reasoning was sound given a premise that turned out not to hold, and deleting it would hide the one thing worth learning from it. **See "Revision — Vercel and Neon" at the foot of this document.**
+
 **Commonality is a first-class reason, not a compromise.** One set of idioms, one set of muscle memory, one debugging vocabulary, and components that can move between projects. That is worth real weight on its own — enough that the bar for deviating from IDE8 should be a requirement this project actually has, not a preference.
 
 ## The candidate
@@ -114,7 +120,7 @@ Whatever B2 specifies must cover **CI, environments, deploys, secrets, and branc
 | | @dnd-kit | drag and drop |
 | | *no router, no CSS framework* | styling is hand-written CSS against design tokens |
 | **Server** | Express 4 | the API |
-| | better-sqlite3 13 | persistence — one SQLite file per project, local-first |
+| | ~~better-sqlite3 13~~ | ~~persistence — one SQLite file per project, local-first~~ **⚠ superseded 2026-08-13 → Neon Postgres** |
 | | tsx | runs the server directly, no build step |
 | | cors, multer | cross-origin, file uploads |
 
@@ -136,24 +142,32 @@ Tenderfoot has **seven screens, and an opportunity detail with five tabs**, plus
 
 **What is lost without routes is deep links** — no URL that opens one opportunity. For a system of record whose stated job is answering *what did we decide about this, and why* (problem #4), being unable to point at a record is a real loss. It is cheap now and awkward to retrofit once the state shape has settled.
 
-### 2. Where documents live
+### 2. Where documents live ⚠ SUPERSEDED 2026-08-13
 
-**Filesystem, with paths in SQLite.** Thousands of bundles reaching 21 MB. This is not really a decision so much as a thing to write down before someone puts a blob column in a migration.
+> ~~**Filesystem, with paths in SQLite.** Thousands of bundles reaching 21 MB. This is not really a decision so much as a thing to write down before someone puts a blob column in a migration.~~
+>
+> **Vercel has no persistent filesystem.** The decision is now *which blob provider*, and it acquired a cost line it did not have.
 
-### 3. One SQLite file per firm, or one shared database
+### 3. One SQLite file per firm, or one shared database ⚠ RE-FORMED 2026-08-13
 
-IDE8's pattern is one file per project. The Tenderfoot analogue is **one file per firm** — which maps onto §2.1's portability rule (*a second customer is a second row, not a fork*) in an interesting way, arguably more cleanly than a shared multi-tenant table.
+> ~~IDE8's pattern is one file per project. The Tenderfoot analogue is **one file per firm**~~ — the question survives, the units change: a Neon **project** per firm, a database per firm, a schema per firm, or a `tenant_id` column.
 
-**Worth deciding deliberately rather than inheriting**, because it is the kind of choice that is invisible until the second customer exists and expensive immediately afterwards.
+The part that still holds: it maps onto §2.1's portability rule (*a second customer is a second row, not a fork*), and it is **the kind of choice that is invisible until the second customer exists and expensive immediately afterwards.** Worth deciding deliberately rather than inheriting.
 
-## Local-first SQLite is a good fit — better than a server database
+## ⚠ WRONG — "Local-first SQLite is a good fit, better than a server database"
 
-Measured against the requirements above: eleven objects with foreign keys, tens of thousands of records, batch ingestion, one user, no availability requirement. **Nothing about Tenderfoot is a scale problem**, as stated at the foot of this document. Local-first buys zero infrastructure, no database secrets, and backup by copying a file.
+> **Superseded 2026-08-13, and kept because the way it is wrong is worth more than the conclusion was.** The argument below is *valid* — every claim in it is still true — and its conclusion is *unusable*, because it was measured against the requirements list and never against the deployment target. **A stack assessment that never asks "where does this run" can be entirely correct and still wrong.**
 
-**One caveat is near-term and two are not.** Documents belong on disk (above). The other two are genuinely deferred:
+~~Measured against the requirements above: eleven objects with foreign keys, tens of thousands of records, batch ingestion, one user, no availability requirement. **Nothing about Tenderfoot is a scale problem**, as stated at the foot of this document. Local-first buys zero infrastructure, no database secrets, and backup by copying a file.~~
 
-- **Scheduled live ingestion needs something always on.** A closed laptop does not scrape. That is SP7, post-GO, and already gated — but it is the constraint that eventually forces a hosting decision, and it should not arrive as a surprise.
-- **A second reader means a second copy.** Single-file local-first has no story for two people seeing the same data. Nothing currently needs it — the two-scorer hand-run was retired 2026-08-11 — but the portability story eventually implies it.
+**All of that remains factually true and none of it survives contact with Vercel**, which has no writable persistent filesystem — so a SQLite file cannot outlive a request there. **The hosting choice decides the database; the database was never independently choosable.**
+
+**The two caveats below were filed as "genuinely deferred." Both were retired within twenty-four hours, one of them by the very decision that invalidated the section:**
+
+- ~~**Scheduled live ingestion needs something always on.** A closed laptop does not scrape.~~ **Answered by Vercel Cron.** Filed as the constraint that "eventually forces a hosting decision" and marked *should not arrive as a surprise* — it arrived the next morning, which is roughly the best case for something described that way.
+- ~~**A second reader means a second copy.**~~ **Answered by managed Postgres.**
+
+> **The lesson, and it is a candidate for the playbook.** Both caveats were correctly identified, correctly reasoned, and filed under *deferred*. **Neither was treated as a reason to question the choice** — and one of them was, in fact, the reason the choice was wrong. **A deferred caveat that names its own trigger deserves one more question: what if the trigger fires early?** Staged in `docs/Proto2PRD-Lessons.md`.
 
 ## The real gap — document extraction
 
@@ -184,3 +198,80 @@ Matt asked whether the finalized prototype argues for adopting a framework, poss
 **So the prototype being finalized does not argue for a framework — it argues that SP2 will be unusually cheap.** The tokens are extracted and verified; the primitives are already drawn: button, chip, card, table row, score bar, fact panel, keycap, status pill. SP2 is mostly transcription rather than design.
 
 **One consequence for the earlier note about hand-written CSS.** IDE8's *"every view is bespoke"* cost does not transfer at the same rate. Tenderfoot's views are bespoke against **a token layer that already exists and a component set that will exist after SP2** — which is a different proposition from bespoke-from-nothing.
+
+---
+
+# Revision — Vercel and Neon
+
+**Decided 2026-08-13 by Matt**, one day after the assessment above. **Hosting on Vercel, with a Neon managed Postgres database provisioned through the Vercel Marketplace.**
+
+> **This is one decision, not two.** Vercel has no writable persistent filesystem — `/tmp` is per-invocation and ephemeral. **A SQLite file cannot survive a request there.** Once hosting is Vercel, the database is managed by arithmetic rather than by preference, and the interesting question is only *which* managed database.
+
+## What was actually at risk, and what wasn't
+
+**No data.** `*.db` has been in `.gitignore` since SP0; `tenderfoot.db` was never committed. **The research lives in `corpus/` as files and in the seed migrations `003_seed_source_registry.sql` and `004_seed_firm_profile.sql`.** The database has always been a derived artifact, rebuilt from those by `npm run migrate` and the corpus loader. That was a deliberate property of SP0, and it is the reason this revision is inexpensive.
+
+**The code, and it is bounded.** SQLite reaches four TypeScript files and four SQL migrations — roughly 600 lines, all of it inside the one slice that has merged.
+
+| | |
+|---|---|
+| `app/server/src/db/index.ts` | The entire connection layer. Rewritten |
+| `app/server/src/db/migrate.ts` | The runner. Adapts; the design survives |
+| `app/server/src/routes/index.ts` | ~14 query sites, all becoming `await` |
+| `app/server/src/ingest/corpus.ts` | ~12 query sites and two transactions |
+| `app/server/migrations/*.sql` | Four files, translated |
+| four test files | Rewritten alongside |
+
+## The porting cost is the async boundary, not the SQL
+
+**`better-sqlite3` is synchronous by design; every Postgres driver is not.** That is the change that touches every call site — `db.prepare(...).get()` becomes `await`, and every route handler and helper that transitively calls one becomes async. **Mechanical, unavoidable, and larger than the SQL translation.**
+
+The SQL itself is small and every item has a direct equivalent:
+
+| SQLite | Postgres |
+|---|---|
+| `INTEGER PRIMARY KEY` | `GENERATED ALWAYS AS IDENTITY` |
+| `datetime('now')` on TEXT columns | `now()`, and the columns become `timestamptz` |
+| `INTEGER` used as boolean (`is_self`, `enabled`, `remote_ok`, `prebid_required`) | `boolean` |
+| `INSERT OR IGNORE` | `ON CONFLICT DO NOTHING` |
+| `lastInsertRowid` | `RETURNING id` |
+| `db.transaction(fn)()` | explicit `BEGIN` / `COMMIT` |
+| `PRAGMA foreign_keys = ON` | **Unnecessary. Postgres always enforces them** |
+| `PRAGMA journal_mode = WAL` | **Unnecessary.** MVCC gives concurrent reads during a long write for free |
+| `REAL` | `double precision` |
+
+**Two things get strictly better and are worth naming**, because they are the reason not to treat this as pure cost:
+
+- **Foreign keys are enforced unconditionally.** §2.2 calls entity FKs the expensive mistake to avoid, and the SQLite version depended on a `PRAGMA` set in application code — enforcement that a second connection opened anywhere else would silently lose. **That class of bug becomes impossible.**
+- **`TEXT` columns holding ISO-8601 dates become real `timestamptz`.** `closes_at`, `ends_at`, and `posted_at` carry the expiration radar and the highest-consequence extracted field in the system (§4.3, §8.4). **Date comparison stops being string comparison.**
+
+**One thing to watch.** `value_cents` is `INTEGER` and must become `bigint`, not `integer` — a contract over about $21 million overflows a 32-bit integer, and the corpus contains contracts in that range.
+
+## What this closes
+
+**Two risks recorded in `STATUS.md` are retired.**
+
+1. ~~"Deployment expires at SP7. A closed laptop does not scrape."~~ **Vercel Cron.** The largest anticipated change to the workflow spec has now happened, four slices early.
+2. ~~"A second reader means a second copy."~~ **Managed Postgres.**
+
+## What this opens
+
+**Detailed in the workflow spec §7 and §10.1, and summarised here because it is the honest other half of the ledger.** Every concern the local-first answer made vanish has come back: connection limits, cold starts, an ephemeral filesystem, function duration caps, and a deploy pipeline that can break.
+
+**Three carry real deadlines:**
+
+| | By |
+|---|---|
+| **Where long ingestion runs.** §5.3 fetches in three hops and assumed a process that could run for minutes. Function invocations are capped | **SP3** |
+| **Which blob provider.** `document.path` now means a blob key. Thousands of bundles to 21 MB — a bill, not free disk | **SP4** |
+| **Measure the plan limits** — function `maxDuration`, cron frequency, Neon autosuspend and compute hours — and write them into workflow spec §10.1 | **SP7, earlier if possible** |
+
+> **The IMPACT lesson stops being an analogy here.** Production went down thirteen days after launch because free-tier Supabase auto-pauses — *"not a bug, a documented property of the plan, never written down."* **Tenderfoot is now on a serverless Postgres that also suspends when idle.** Same shape, same class of platform. §10.1 of the workflow spec is a table of empty cells for exactly that reason: those numbers get **measured and dated**, not recalled.
+
+## What does not change
+
+**Everything above the database.** React 19, Vite 6, Zustand + Immer, the router, no CSS framework, `@dnd-kit` still dropped, and **document extraction is still the real gap** — Node remains the weakest major runtime for `.docx` / `.xlsx` / `.pptx`, and with no scores in V1 extraction accuracy is still the only thing the system can be right or wrong about.
+
+**One caveat on the extraction options, though.** The Python-sidecar option now costs more than it did: a second runtime was cheap when everything ran on one laptop. **On Vercel it is a second deployment target.** That does not settle the question — it moves the answer toward Node libraries or smart mode, and it should be weighed openly rather than discovered at SP4.
+
+**And commonality with IDE8 survives**, which was the reason for adopting this stack in the first place. The client is untouched; the server keeps its shape and changes its driver.

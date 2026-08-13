@@ -308,3 +308,31 @@ August 11, 2026:
 121. Also committed once with a red gate. Vitest doesn't typecheck, so 25 passing tests hid a tsc failure. Fixed next run and left in the plan's record rather than quietly amended, because "tests pass" and "the gate passes" turn out to be different claims.
 
 122. NEXT, first thing: I bring answers to the three open questions and the SVRC Imp/Pri review, then we start SP3. One prerequisite Claude flagged and I agree with — the ingestion scaffolding brainstorm is still pinned, and SP3 is the first slice touching a live source. Twenty minutes on that first or we'll be designing the candidate scrape while building it. Outstanding in SP1: the mock-layer re-extraction and the minimal admin UI.
+
+August 13, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+123. Caught a real mistake overnight. Listening back to the progress summary, it clicked that I'd let SQLite get written down as the database when I've been planning on Vercel hosting the whole time. Two decisions a day apart that can't both be true. Vercel has no writable persistent filesystem, so a SQLite file doesn't survive a request there — the hosting choice decides the database, and I'd been treating them as separate questions. Going with Neon Postgres through the Vercel marketplace.
+
+124. Best news: no data lost, and not by luck. *.db has been gitignored since SP0 and tenderfoot.db was never committed. The research lives in corpus/ as files and in the two seed migrations, and the database is rebuilt from those with one command. So the DB has never been a source of truth. That was a deliberate property of SP0 and it's the reason this reversal cost almost nothing.
+
+125. Cost is about 600 lines of server code and four migration files, all inside the slice we just merged. The real work isn't the SQL — every SQLite construct we used has a direct Postgres equivalent — it's that better-sqlite3 is synchronous and every Postgres driver isn't. So every query site and every handler that calls one becomes async. Mechanical, unavoidable, bigger than the translation.
+
+126. Timing was lucky and worth noticing. SP2 is the design system and touches no persistence. SP3 is where adapters start writing to the database in volume. One slice later this costs several times as much; after SP4 it's a rewrite. Claude flagged this as the last cheap moment and I agree.
+
+127. Two things actually get better. Foreign keys become unconditional — our SQLite version depended on a PRAGMA set in application code, which any second connection would silently lose, and §2.2 calls entity FKs THE expensive mistake. And the date columns stop being text, which matters because closes_at and ends_at carry the expiration radar and the highest-consequence extracted field in the system. Date comparison stops being string comparison.
+
+128. Two risks I'd written down as future problems are now closed. "Deployment expires at SP7, a closed laptop does not scrape" — Vercel Cron. And "a second reader means a second copy" — managed Postgres. Both were filed as deferred yesterday and both are gone today.
+
+129. But the other half of the ledger is real and I want it recorded honestly. Everything the local-first answer made vanish is back: connection limits, cold starts, no filesystem, function duration caps, a deploy pipeline that can break. Three have deadlines. Where long ingestion actually runs blocks SP3 — §5.3 fetches in three hops and was written assuming a process that could run for minutes, which a capped function invocation may not allow. Which blob provider blocks SP4, and thousands of 21MB bundles is now a bill instead of free disk. And the plan limits themselves need measuring.
+
+130. That last one is the uncomfortable part. We're now on a serverless database that suspends when idle, behind functions with plan-dependent limits. That is exactly the IMPACT failure — production down thirteen days after launch because free-tier Supabase auto-pauses, "a documented property of the plan, never written down." It's not an analogy anymore, it's the same shape on the same kind of platform. So workflow spec §10.1 is now a table of empty cells with a rule attached: those numbers get measured and dated, never recalled from memory. I'd rather have the blank table than a confident guess.
+
+131. Two lessons staged for the playbook and I think both are good ones. First: a deferred caveat that names its own trigger deserves one more question — what if the trigger fires early? Both of yesterday's caveats named their trigger, both were reasoned correctly, both were filed under deferred, and one of them was the reason the choice was wrong. Writing down a trigger creates the illusion the risk is handled. Second: assess a stack against where it runs, not only against what it has to do. Yesterday's assessment was valid — every claim in it still holds — and its conclusion was unusable, because the requirements list never had a row for the deployment target. The fix is one line in the template.
+
+132. Kept the superseded sections in place with strikethrough rather than deleting them. The reasoning was sound given a premise that didn't hold, and that's the part worth learning from. Our own commit convention says to say so plainly rather than quietly fixing it, so this seemed like the case it was written for.
+
+133. Scope discipline on the port: it swaps the driver and deploys, nothing else. Express-versus-route-handlers, the blob provider, and where ingestion runs all stay open. Claude recommended deciding Express after the port rather than with it, so the two changes stay reviewable separately, and that's right — conflating them would quietly design three things nobody decided.
+
+134. NEXT: SP1.5 is the port and it goes ahead of SP2. Plan first, per the standing rule. Still outstanding from before and not forgotten — my answers to the three open questions and the SVRC Imp/Pri review, SP1's T12-T15, and the ingestion scaffolding brainstorm before SP3.

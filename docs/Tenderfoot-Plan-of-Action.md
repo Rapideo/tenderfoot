@@ -210,7 +210,7 @@ When Matt stops asking for changes: **freeze it.** From that point it is a speci
 | | Task |
 |---|---|
 | ~~**B1**~~ | ✅ **Done 2026-08-12.** Fidelity mandate at spec **§7.10**, platform properties at **§5.9**. The mandate gained three clauses IMPACT's did not need: it **names a version** (V1.1, re-pointed deliberately when V1.2 lands), parity applies **only to what V1 builds** while requiring parked nodes to match when built, and the wordmark is exempt until it exists. **One hole named rather than discovered: the prototype specifies desktop only, so responsive behaviour has no reference** — a decision that would otherwise get made silently during the build. |
-| ~~**B2**~~ | ✅ **Done 2026-08-12** — [`superpowers/specs/2026-08-12-tenderfoot-workflow.md`](superpowers/specs/2026-08-12-tenderfoot-workflow.md). Closes §10.3. **Deliberately thin where thin is correct**: no hosting, no staging, no release process, nearly no secrets. Specific where the risk actually is — which is other people's platforms, not ours. |
+| ~~**B2**~~ | ✅ **Done 2026-08-12** — [`superpowers/specs/2026-08-12-tenderfoot-workflow.md`](superpowers/specs/2026-08-12-tenderfoot-workflow.md). Closes §10.3. **Revised 2026-08-13** for Vercel + Neon: §1, §2, §6, §7, §8, §9, §10, §12. The "no hosting, no staging, nearly no secrets" framing is superseded and marked in place rather than deleted — **there is now a host, preview deploys serve as staging, and `DATABASE_URL` is the first real secret.** Still thin on ceremony; no longer thin on platform properties. |
 | **B3** | Write one implementation plan per sub-project below, with complete code and per-task verification. Commit everything before any application code. |
 
 ---
@@ -223,6 +223,7 @@ Nine sub-projects. Each ≤50 tasks, each ending in something demo-able, each de
 |---|---|---|---|
 | **SP0** | Infrastructure | 0D + CI, hooks, environments | Hello-world through the **full** deploy path, touching the DB |
 | **SP1** | The entity graph | 0A, 0B, 0C, 1A, 1C, 1E, 1F, 4J *(minimal)* | The prototype's real solicitations load into the real schema; profile and source registry editable |
+| **SP1.5** | **Postgres port + first deploy** *(added 2026-08-13)* | — *(no new components)* | **The same 201 solicitations, in Neon, reached through a deployed URL.** Migrations run against Postgres, preview deploys get their own database branch, the check gate stays green |
 | **SP2** | Design system | — *(tokens + primitives from the frozen prototype)* | Every primitive on a dev-only route. **Sign-off gate.** |
 | **SP3** | Federal ingestion | 2A, 2B, 2F, 2G, 5E | `--since 24mo` pulls real SAM.gov + USASpending into the graph; dedup works; per-source yield visible |
 | **SP4** | Fetch and extraction | 2H, 2I, 5D | Documents pulled and parsed; every field carries confidence + a source pointer; accuracy measured against A1's labels |
@@ -230,6 +231,18 @@ Nine sub-projects. Each ≤50 tasks, each ending in something demo-able, each de
 | **SP6** | Triage + record | 4A, 4B, 4D, 5A, 5B, 5C | **The answer.** Everything from active sources, read and decided in the app. Produces **discovery and volume**, not precision. **← GO / NO-GO** |
 | **SP7** | Live ingestion *(on GO)* | 2C, 2D, 2E, 2J, 2K, 1B, 1D | Scheduled runs; state portals flowing; health alarms firing |
 | **SP8** | Radars + reporting *(on GO)* | 3J, 3K, 3L, 4E, 4F, 4G, 4H, 4I, 4K | Expiration radar producing pre-RFP leads |
+
+### 6.-2 What the persistence reversal changes — SP1.5
+
+**Decided 2026-08-13.** Hosting is Vercel; the database is Neon managed Postgres. Reasoning in §9 item 1 and `Stack-Requirements.md`.
+
+**Why it is a slice rather than a patch.** It has a demo-able ending that nothing else produces — **the application reachable at a URL, holding the same 201 solicitations** — and it changes the meaning of SP0's demo criterion, which was *"hello-world through the full deploy path."* That path grew a deployment. **A change that alters a completed slice's acceptance criterion is not a patch.**
+
+**Why here and not later.** SP2 is the design system and touches no persistence. **SP3 is where adapters begin writing to the database in volume** — every line written against the wrong driver between now and then is a line ported twice. This is the last cheap moment.
+
+**What it must not become.** The temptation is to also settle Express-versus-route-handlers, the blob provider, and where long ingestion runs. **Those are §9.2, §9.5 and §9.6 of the workflow spec and they stay open** — conflating them makes the port unreviewable and quietly designs three things nobody decided (`Proto2PRD` §4.7.5). **SP1.5 swaps the driver and deploys. Nothing else.**
+
+> **Ruled 2026-08-13, with the counter-argument on the record.** Because the port makes every query site `await`, it touches every handler anyway — so moving to route handlers *now* would cost one pass instead of two. **Matt chose the second touch deliberately**, keeping Express and keeping IDE8 commonality. The cost is real and small: roughly 180 lines rewritten again if §9.5 later goes the other way.
 
 ### 6.-1 What the parking of SP5 changes
 
@@ -345,7 +358,8 @@ Everything else is buildable without blocking on him.
 1. ~~**Claude:** collect real solicitations with documents.~~ ✅ Done — `corpus/`, 76 banded, 11 band A bundles pulled, findings in `corpus/FINDINGS.md`.
 2. ~~**Matt:** the SVRC.~~ ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`, pending small edits. **Two follow-ups:** review `Imp`/`Pri`, which were placeholders and are now the input to §6 slice ordering; and fill `Proto`, stale at 0% now that a direction exists. **User stories are still owed and have no stand-in.**
 3. ~~**Matt:** inspiration images.~~ ✅ **Closed 2026-08-10 without gathering any** — the prototype direction supplies the design language (§A1.1).
-4. **Matt:** tech stack outline — **in progress 2026-08-12.** Constraints it has to satisfy are written up in [`Stack-Requirements.md`](Stack-Requirements.md): a checklist pulled from decisions already made, naming no technology. **The V1 decision made this a much smaller problem** — no vector store, no LLM on the critical path for scoring, no job queue. What is left is a database, a scheduled fetcher, a document parser, and a web app. Four open questions in there will be forced by the choice, the largest being whether extraction is rules-based or model-based.
+4. ~~**Matt:** tech stack outline.~~ ✅ **Closed 2026-08-13.** The IDE8 stack above the database, **Vercel hosting with a Neon Postgres database below it.** Constraints in [`Stack-Requirements.md`](Stack-Requirements.md); the assessment and its 08-13 revision are at the foot of that file. **Six open questions now sit inside the choice** (workflow spec §9), two of them new and two carrying deadlines they did not have before: *where long ingestion runs* (SP3) and *which blob provider* (SP4). The largest is still whether extraction is rules-based or model-based.
+   > **One requirement the checklist was missing, worth fixing in the template rather than just here:** it never asked **where the thing runs, and what it is allowed to write to.** That omission is the whole reason the persistence answer had to be given twice. Staged as a playbook lesson (`Proto2PRD-Lessons.md` §2.12).
 4b. **Matt owes answers — [`../three_open_questions.md`](../three_open_questions.md), pinned 2026-08-12.** The SVRC's `Imp`/`Pri` columns: whether `Pri` is product or build priority, how a parked node should be scored, and how much re-scoring to do. **These gate the `Imp`/`Pri` review, which in turn gates any reconciliation of §6 slice ordering** — so item 7 below is blocked behind them.
 5. **Matt, in progress 2026-08-10:** the prototype. Per §A3 the bake-off may run in Claude
    Design; the build-out returns to the repo (Proto2PRD §4.3.2). It ran *ahead* of the SVRC,
@@ -359,6 +373,8 @@ Everything else is buildable without blocking on him.
 7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline. **Note the radar's position improves under the V1 decision:** with the matching engine parked, the argument that SP8 sits behind a scorer that must be proven first no longer applies, and §6.0's "third option" — loading the contract register into the graph early — becomes the obvious call rather than a compromise.
 8. ~~**Claude, unblocked:** test whether one licensed platform retains closed solicitations.~~ ✅ **Done 2026-08-12. The answer is yes, and it changes an assumption.** **Illinois/Periscope retains 2,155 closed solicitations back to 2018-02-23, anonymously, with awarded vendor on the row** — so solicitation-side backtesting is *not* federal-only, which is what the spec had assumed. Michigan/CGI Advantage browses anonymously and returns 3,762 award-history records; closed-solicitation retention is indicated there but unproven. **Ohio/Ivalua is gated behind a CAPTCHA and is not a tier-3 adapter candidate as things stand.** Recorded in spec §5.7, §5.8, and §10.1–10.2.
 9. **Then:** the bake-off.
+10. **Claude, next — SP1.5, the Postgres port.** Added 2026-08-13. **Write the B3 plan first**, per the standing rule that the plan is the review. Scope is deliberately narrow (§6.-2): swap the driver, translate four migrations, make every query site async, deploy, and give preview branches their own database branch. **Express-vs-route-handlers, the blob provider, and where long ingestion runs stay open and out of this slice.**
+    > **Two things the port must not lose**, because both were bought at some cost and neither is free in the new world: **foreign keys stay enforced** (they become unconditional in Postgres, which is strictly better than SP1's `PRAGMA`), and **`value_cents` becomes `bigint`, not `integer`** — a contract above roughly $21M overflows 32 bits, and the corpus holds contracts in that range.
 
 Steps 2 through 5 are independent of each other, and step 7 is independent of all of them.
 
@@ -366,7 +382,13 @@ Steps 2 through 5 are independent of each other, and step 7 is independent of al
 
 ## 9. Open questions
 
-1. ~~**Stack, hosting, deployment.**~~ Matt is supplying a tech stack outline; it becomes the input to the workflow spec (B2).
+1. ~~**Stack, hosting, deployment.**~~ **Answered twice, and the second answer reversed part of the first.**
+   > **2026-08-12:** the IDE8 stack, with local-first SQLite and no hosting.
+   > **2026-08-13:** **hosting is Vercel and the database is Neon managed Postgres.** Matt had intended Vercel throughout; the two decisions were made a day apart and could not both hold, because **Vercel has no writable persistent filesystem and a SQLite file cannot survive a request there.**
+   >
+   > **No data was lost** — `*.db` was gitignored from SP0 and the database has always been rebuilt from `corpus/` and the seed migrations. **The cost is ~600 lines of server code**, all inside the one merged slice, and it becomes **SP1.5** in §6. Everything above the database — React, Vite, Zustand, the router, no CSS framework — is unchanged.
+   >
+   > Recorded in `Stack-Requirements.md` ("Revision — Vercel and Neon") and the workflow spec §1, §7–§10. **Two lessons staged** in `Proto2PRD-Lessons.md` §2.11–2.12.
 2. ~~**Where the hand-run's labels live.**~~ **Moot 2026-08-11** — the hand-run is retired (§A2) and produces no labels. The Verdict and Reason columns stay in `corpus/manifest.md` unfilled; the first real labels now come from V1 itself.
 3. ~~**Prototype repo location.**~~ **Resolved 2026-08-10: a tracked subdirectory, `prototype/`.** IMPACT used a nested independent repo, which worked — 177 iteration commits kept out of the production log, and a freeze enforced by the filesystem rather than by discipline. Tenderfoot takes the simpler route because there is no production repo to nest inside yet. **The cost is real and accepted:** prototype commits interleave with planning and corpus commits, and "frozen" (§4.9) becomes a rule rather than a property. Splitting it out later is the remedy, and it gets more annoying the longer it waits. Layout and rules in `../prototype/README.md`.
 4. **How many design directions in the bake-off, and what register does each represent?** IMPACT ran three — warm-editorial, civic-minimal, modular-dashboard — but the brief itself was lost, which Proto2PRD §4.3 flags as the one part of Phase 0 that did not survive. **Overtaken by events 2026-08-10:** one direction was generated and is in the repo; `prototype/archive/` is empty. Either other directions exist and should be committed there before this one is promoted (§4.4), or the bake-off effectively ran with N=1 — which is a legitimate choice but should be *recorded as* a choice, since §4.3.1's argument is that the comparison is what makes the selection mean something.
