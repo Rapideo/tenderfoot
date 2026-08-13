@@ -52,7 +52,7 @@
 | | Blocks |
 |---|---|
 | `three_open_questions.md` — the SVRC `Imp`/`Pri` review | Slice order from SP3 on |
-| User stories | Nothing hard; no stand-in exists |
+| ~~User stories~~ | ✅ **93 drafted 2026-08-12** — `docs/user-stories-source.html` and the published story map. Yours to edit |
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |
 | Doc storage · one-file-per-firm · auth in V1 | Cheap now, expensive later |
 | Ingestion scaffolding brainstorm | **SP3** |
