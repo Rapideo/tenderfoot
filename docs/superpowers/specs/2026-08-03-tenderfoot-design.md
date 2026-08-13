@@ -441,7 +441,7 @@ The app earns its login by capturing what email cannot:
 - The **pursuit-cost fact panel**, enabling the light/moderate/heavy judgment on the spot
 - The **decision and its reason**, recorded against the opportunity — something email can only ever reduce to a binary
 
-Responsive, so ten-second triage decisions work on a phone.
+~~Responsive, so ten-second triage decisions work on a phone.~~ **CHANGED 2026-08-13: the web application is DESKTOP-ONLY. Phone triage is served by a separate mobile client against the same data, not by responsive web.** Reasoning and the measurement behind it are in `prototype/PUNCH-LIST.md` item 2. **Until that client exists there is no phone story at all** — that cost is accepted, not overlooked.
 
 > **What the queue is in V1 (2026-08-11).** Everything active sources returned, in a defensible order that is **not a judgment** — newest first, or soonest deadline first, chosen by the user. No score strip, no ranking, nothing suppressed.
 >
@@ -554,13 +554,17 @@ Two kinds of interruption and only two. Everything else is pull.
 
 > *"A mandate without an escape hatch gets quietly violated. A mandate with a documented escape hatch gets followed, because compliance is easier than the paperwork of deviating."* — `Proto2PRD` §5.2
 
-#### One gap in this mandate, named rather than discovered
+#### ~~One gap in this mandate~~ — **CLOSED 2026-08-13. The hole became a decision.**
 
-**The prototype specifies desktop only.** It was designed and captured at 1600px. But §7.1 requires the triage queue to work on a phone, and the SVRC repeats it.
+> ~~**The prototype specifies desktop only.** But §7.1 requires the triage queue to work on a phone… **So responsive behaviour has no reference to be faithful to.** Pixel parity is defined at desktop and undefined below it, which means the mobile layout will be *designed during the build* by whoever writes the component — silently, and without anyone deciding it. Two ways to close it, both cheap, neither yet chosen.~~
 
-**So responsive behaviour has no reference to be faithful to.** Pixel parity is defined at desktop and undefined below it, which means the mobile layout will be *designed during the build* by whoever writes the component — silently, and without anyone deciding it.
+**A third way was chosen: there is no mobile web layout to be faithful to, because there is no mobile web.** The application is **desktop-only by decision**, and phone triage is served by a **separate mobile client against the same data**.
 
-**That is exactly the unratified-answer problem** (`Proto2PRD` §4.7.5), arriving in advance for once. Two ways to close it, both cheap, neither yet chosen: put mobile breakpoints on the prototype punch list so the reference exists, or state here that mobile is the developer's call within the token system and accept it. **Until one is chosen, this is the mandate's known hole.**
+**Matt's rule was conditional and was tested rather than assumed** — *if the design system supports an easy path to responsiveness, make all of it responsive; if not, stay desktop-only.* Measured across the frozen bundle: **0 `@media` queries, 0 `clamp()`, 0 `auto-fit`, and 3 `flex-wrap` across 74 flex containers.** The layout is *fluid* — 69 `minmax()` uses, only 14 fixed pixel widths — but fluid within desktop widths is not responsive. Grids carry **fixed column counts**, and several mix fixed tracks: `190px minmax(0,1fr) 110px 150px` is 450px of column before content, which overflows a phone outright. Adding breakpoints means a collapse decision for ~33 grids, per screen. Full figures in `prototype/PUNCH-LIST.md` item 2.
+
+**So the mandate is now whole rather than holed.** Pixel parity is defined at desktop, and *undefined below it is no longer a gap* — it is out of scope for this client. **Nothing gets designed silently during the build**, which was the only thing the hole actually endangered.
+
+**The cost, stated so it is not discovered later:** V1 has **no phone story at all** until the separate client exists. Anyone needing to triage on a phone before then cannot. The mobile client is pinned in `docs/Pinned-Ingestion-Scaffolding.md` and is not scheduled.
 
 ---
 

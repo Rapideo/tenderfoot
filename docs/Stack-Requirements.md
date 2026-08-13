@@ -66,7 +66,7 @@ There is no scorer to regress, so the failure that matters is **a source silentl
 
 - **Seven screens**, one of them deferred. `reference/Tenderfoot SVRC.md` is the outline; `prototype/` is the visual specification.
 - **The triage queue is keyboard-driven** and must feel instant — the working habit is ten seconds per item, forty items in a sitting.
-- **Responsive.** Ten-second triage decisions should work on a phone (§7.1).
+- ~~**Responsive.** Ten-second triage decisions should work on a phone (§7.1).~~ **CHANGED 2026-08-13: desktop-only.** The web client targets desktop and nothing else; phone triage moves to a **separate mobile client against the same data**. Decided by measuring the frozen bundle rather than assuming — no responsive foundation exists (0 media queries, 0 `clamp`, 3 `flex-wrap` in 74 flex containers) and the grids carry fixed column counts, so retrofitting is per-screen design work. **This removes a requirement from the web stack and adds a client that does not exist yet.** Full figures in `prototype/PUNCH-LIST.md` item 2.
 - **Saved views persist** and are, per the prototype, first-class objects — *pending ratification, see the SVRC preamble.*
 
 ### Delivery

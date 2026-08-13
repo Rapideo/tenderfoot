@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.4.0, 2026-08-12.**
+**Tenderfoot SVRC — version 0.4.1, 2026-08-13.**
 **Adopted.** This is the working outline, not a draft.
 
 > ### Eight decisions adopted from the prototype — 2026-08-12
@@ -11,15 +11,17 @@
 >
 > **Four promoted** — net-new, asked for by nobody: per-buyer incumbent retention and procurement cycle (View 4.1), vendor aliases with an explicit *"no aliases found"* (View 4.2), absence distinguished from low confidence (View 2.3), and the timeline recording entity-resolution decisions rather than only document changes (View 2.5).
 >
-> **Three left open deliberately, and none should be adopted by silence:**
+> **~~Three left open deliberately~~ — ALL THREE RATIFIED 2026-08-13 by Matt.** They were held open for two days precisely so silence could not adopt them; they are now adopted **by decision**, which is the only difference that matters.
 >
-> | | What the prototype did | Why it is still open |
+> | | What the prototype did | Ratified |
 > |---|---|---|
-> | **View 1.2 — saved views** | Drew a **first-class object**: named views, counts, a create affordance | This node asked *filter or first-class object?* and noted the second is **a much larger commitment**. A generator settled it. Nobody chose it. |
-> | **Region A.2 — rot in the chrome** | Shows `1 ROT SUSPECTED` as words in the status bar | The node asked whether a silent-failure suspicion belongs in persistent chrome at all. The prototype's answer is good; it has not been ruled on. |
-> | **View 1.3 — the cleared state** | Points at the expiration radar: *"3 contracts expire inside your sectors"* | The gap read *"undesigned."* It is now designed, by the prototype. Same status: an answer exists, awaiting a decision. |
+> | **View 1.2 — saved views** | A **first-class object**: named views, counts, a create affordance | ✅ **Confirmed.** The node asked *filter or first-class object?* and flagged the second as a much larger commitment. **It is a schema decision wearing a UI costume** — a first-class object needs storage, naming, editing, deletion and eventually sharing; remembered filter state needs one blob. Taken with eyes open |
+> | **Region A.2 — rot in the chrome** | `1 ROT SUSPECTED` in words, in the persistent status bar | ✅ **Confirmed.** The node asked whether a silent-failure suspicion belongs in persistent chrome at all. **It does, and the reason is V1's entire failure mode:** a source quietly returning less than it used to. Persistent chrome says *this interrupts you*; a settings screen says *this is administration*. Those are different products |
+> | **View 1.3 — the cleared state** | Points at the expiration radar: *"3 contracts expire inside your sectors"* | ✅ **Confirmed.** Makes the radar the natural next action after triage, which **promotes it from a reporting feature to part of the daily loop.** That is a real claim about how the product is used, and it is now a claim we are making on purpose |
 >
 > **The `Proto` scores were filled before these decisions and are unaffected by them** — they measure distance from what we wanted at the time of V1.1, and adopting a prototype behaviour does not retroactively make the artifact more faithful.
+>
+> **Nothing changes in the prototype.** Ratification confirms what it already drew; had any been overturned it would have become a V1.2 punch item instead. **SP2 now builds against three decided answers rather than three provisional ones**, which was the point of asking before it starts.
 
 > ### V1 has no scores — read this before the screen tree
 >
@@ -576,7 +578,7 @@ Levels 3 and below take no grid and no labels.
 - **`Screen 7` — state machine revised.** `Drafting` added, because the gap between deciding to bid and submitting is where pursuits actually die and there was no state for it. `Won/Lost` became `Outcome`, which also absorbs withdrawn, cancelled, and no-award — all of which occur in the corpus.
 - **`View 4.1` — two net-new columns, and one of them may be the best idea in the artifact.** Per-buyer **incumbent retention** (`9 OF 11`) answers *does this buyer ever actually switch?* before any scoring happens, and is a stronger winnability input than anything in §6.3. **Procurement cycle** (`≈4 years`) generalises the expiration radar to buyers holding no current contract. **Both lack a component in the concept outline** — flagged in the node, not silently assumed.
 - **`View 4.2`, `View 2.3`, `View 2.5` — three small promotions that share one principle:** make the machine's claims inspectable. Aliases show what a merge absorbed and say *"no aliases found"* when it absorbed nothing; extracted fields separate *absent* from *unsure*; the timeline records the entity-resolution decision that moved a record under a different buyer.
-- **Three answers left unratified on purpose** — saved views as a first-class object, rot suspicion in the chrome, and the cleared state's radar pointer. All three are good answers nobody chose, and §4.7.5's whole argument is that the unratified answer is the dangerous one. Listed in the preamble so silence cannot ratify them.
+- ~~**Three answers left unratified on purpose**~~ **— ALL THREE RATIFIED 2026-08-13.** Saved views as a first-class object, rot suspicion in the chrome, and the cleared state's radar pointer. They were held open for two days so silence could not adopt them, and were then adopted by decision. **The method worked exactly as §4.7.5 intended: the answers did not change, the way they were held did.** Details in the preamble.
 
 *Revision note, 0.3.0 → 0.3.1 — `Proto` filled against V1.1. Claude, 2026-08-12.*
 

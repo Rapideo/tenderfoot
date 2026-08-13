@@ -93,4 +93,10 @@ The one piece with a hard deadline attached: **the ingestion window must exist, 
 
 **What to be careful about.** A second client is a second thing to keep faithful to the prototype (§7.10), and there is no mobile reference yet — which is exactly what punch-list item 2 is for. **Do the breakpoints first regardless**; they are needed either way, and they would tell us whether a separate app is warranted or whether responsive triage is simply enough.
 
-**Deliberately not decided.** Recorded so it survives, and so it is not built by accident while someone is doing the breakpoints.
+**~~Deliberately not decided.~~ PROMOTED 2026-08-13 — this is now the plan of record for mobile, not an interesting idea.**
+
+> **The breakpoints it was hedged against are not happening.** Matt's rule was *if the design system supports an easy path to responsiveness, do all of it; if not, stay desktop-only and build a mobile app later.* The bundle was measured: **0 media queries, 0 `clamp()`, 3 `flex-wrap` across 74 flex containers**, and grids with fixed column counts, several mixing fixed tracks that overflow a phone outright. **Not an easy path.** So the web client is desktop-only and this note stops being a hedge.
+>
+> **What that changes about the paragraph above.** *"Do the breakpoints first regardless"* is void — there are no breakpoints, and there is now no responsive reference to tell us whether a separate app is warranted. **The decision was taken without that evidence**, on the cost of building it instead.
+>
+> **Still not designed and still not scheduled.** Promoted in status, not in readiness. And the note about a second client being a second thing to keep faithful to the prototype (§7.10) now matters more, not less — because a mobile client has **no prototype at all** to be faithful to, which is the same hole in a new place.
