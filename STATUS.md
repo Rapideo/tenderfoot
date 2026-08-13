@@ -2,7 +2,7 @@
 
 **Updated 2026-08-12.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now:** SP0 merged to `main`. The **SP1 plan is drafted** — schema specified, execution not started.
+> **Now:** SP1 mostly done and merged — schema, seeds, API, and 201 real solicitations loaded. 33 tests green. Two tasks outstanding: the mock-layer re-extraction and a minimal admin UI.
 
 ---
 
@@ -34,7 +34,7 @@
 | | | Status |
 |---|---|---|
 | **SP0** | Infrastructure — client → API → SQLite, check gate green | ✅ **merged to `main`** 2026-08-12 |
-| **SP1** | Entity graph — real solicitations into the real schema | ◐ **plan drafted**, not executed |
+| **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
@@ -63,8 +63,8 @@
 | | |
 |---|---|
 | ~~B3 for SP0~~ | ✅ written 2026-08-12 |
-| ~~B3 for SP1~~ | ✅ drafted 2026-08-12 |
-| B3 for SP2 | Unblocked |
+| SP1 T12–T15 | Re-extraction + minimal admin |
+| B3 for SP2 / SP3 | Unblocked |
 
 ---
 
@@ -86,6 +86,10 @@
 
 ---
 
+## For a full narrative
+
+[`docs/Tenderfoot-Project-Overview-2026-08-12.md`](docs/Tenderfoot-Project-Overview-2026-08-12.md) — 7,100 words, written to be read aloud. Where the project is, how it got here, every significant decision and why, what was found that surprised us, what is next, and what is still open. Prepared for KP leadership.
+
 ## Where things live
 
-`STATUS.md` here · `DOOGIE - TENDERFOOT.md` session log · `docs/Tenderfoot-Plan-of-Action.md` the sequence and its reasoning · `docs/Proto2PRD.md` the reusable playbook · `docs/superpowers/specs/` design + workflow specs · `docs/superpowers/plans/` implementation plans · `reference/` SVRC + component inventory · `prototype/` frozen, reference-only · `corpus/` real solicitations and contracts
+`STATUS.md` here · `DOOGIE - TENDERFOOT.md` session log · `docs/Tenderfoot-Plan-of-Action.md` the sequence and its reasoning · `docs/Proto2PRD.md` the reusable playbook · `docs/Proto2PRD-Lessons.md` lessons staged for it · `docs/superpowers/specs/` design + workflow specs · `docs/superpowers/plans/` implementation plans · `reference/` SVRC + component inventory · `prototype/` frozen, reference-only · `corpus/` real solicitations and contracts

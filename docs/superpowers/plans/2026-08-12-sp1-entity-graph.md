@@ -2,7 +2,7 @@
 
 **Plan date:** 2026-08-12 · **Slice:** SP1, after SP0 · **Standard:** `Proto2PRD.md` §5.4
 **Components:** 0A schema · 0B Firm Profile · 0C Source Registry · 1A scoping · 1C scrapability · 1E legal posture · 1F whitelist/blacklist · 4J *(minimal)*
-**Status:** ⚠️ **Draft — schema tasks specified, execution not started.** See *Scope and honesty* below.
+**Status:** ◐ **T1–T11 executed 2026-08-12** on branch `sp1-entity-graph`, 33 tests green. **T12–T15 outstanding** — the mock-layer re-extraction and the minimal admin UI, both deliberately not pre-written. See the execution record at the foot.
 
 > **Demo criterion** (plan of action §6): *the prototype's real solicitations load into the real schema; profile and source registry editable.*
 
@@ -55,9 +55,9 @@
 
 ## Preconditions
 
-- [ ] **P1.** SP0 merged to `main` and `npm run check` green. *Verify:* `git log --oneline -1 && npm run check`
-- [ ] **P2.** On a branch. *Verify:* `git checkout -b sp1-entity-graph`
-- [ ] **P3.** Read design spec §4 before starting. The eleven objects and their relationships are specified there; this plan implements that section and does not redefine it.
+- [x] **P1.** SP0 merged to `main` and `npm run check` green. *Verify:* `git log --oneline -1 && npm run check`
+- [x] **P2.** On a branch. *Verify:* `git checkout -b sp1-entity-graph`
+- [x] **P3.** Read design spec §4 before starting. The eleven objects and their relationships are specified there; this plan implements that section and does not redefine it.
 
 ---
 
@@ -65,7 +65,7 @@
 
 ### 1. The migration
 
-- [ ] **T1.** Create `app/server/migrations/002_entity_graph.sql` — all eleven objects.
+- [x] **T1.** Create `app/server/migrations/002_entity_graph.sql` — all eleven objects.
 
 ```sql
 -- SP1. The eleven objects of design spec §4, in one transaction.
@@ -312,7 +312,7 @@ CREATE INDEX pursuit_state        ON pursuit(state);
 *Verify:* `npm run migrate --workspace app/server` then
 `sqlite3 tenderfoot.db ".tables"` — expect 13 names (11 objects + 2 alias tables) plus `app_meta` and `schema_migrations`.
 
-- [ ] **T2.** Add `app/server/src/db/schema.test.ts` — assert the graph, not just the tables.
+- [x] **T2.** Add `app/server/src/db/schema.test.ts` — assert the graph, not just the tables.
 
 Tests to write: every expected table exists; a `solicitation` row cannot reference a non-existent `organization` (FK enforced); two `sighting` rows may point at one `solicitation`; `vendor_one_self` rejects a second self row; deleting an `organization` cascades its aliases.
 
@@ -320,11 +320,11 @@ Tests to write: every expected table exists; a `solicitation` row cannot referen
 
 ### 2. Seed the two configuration objects
 
-- [ ] **T3.** Create `app/server/migrations/003_seed_source_registry.sql`.
+- [x] **T3.** Create `app/server/migrations/003_seed_source_registry.sql`.
 
 **Seed from what the source research actually established** — this is the first time those findings become executable rather than prose. Illinois `in` with archive depth to 2018-02; Indiana `in`, contracts deep and solicitations absent; SAM.gov `in`; Michigan and Kentucky `in` with the account reading recorded in `legal_note`; Ohio `manual-only` with the CAPTCHA recorded; GovWin/BidNet/BidPrime `out` by their terms. `enabled = 0` on all of them — SP3 turns the first one on.
 
-- [ ] **T4.** Create `app/server/migrations/004_seed_firm_profile.sql` — KP's Vendor row with `is_self = 1`, and the Profile attached.
+- [x] **T4.** Create `app/server/migrations/004_seed_firm_profile.sql` — KP's Vendor row with `is_self = 1`, and the Profile attached.
 
 Values are already known from the prototype's Admin screen and are real: service lines, `WBE (Indiana, expires 2027-04) · MBE pending`, `Indiana primary · Illinois, Ohio, Kentucky secondary`, `Headcount 14 · Trailing revenue $2.8M · No bonding capacity on file`. `past_performance` stays **NULL**.
 
@@ -332,34 +332,34 @@ Values are already known from the prototype's Admin screen and are real: service
 
 ### 3. The API
 
-- [ ] **T5.** `app/server/src/routes/profile.ts` — `GET` and `PATCH` the Firm Profile.
-- [ ] **T6.** `app/server/src/routes/sources.ts` — `GET` list, `PATCH` one row. **`legal_posture` changes require `legal_note` to be non-empty**; reject otherwise. §5.5.1 says the evidence is recorded on the row, and an API that lets it be blank makes the rule unenforceable.
-- [ ] **T7.** `app/server/src/routes/solicitations.ts` — `GET` list and `GET` one, with sightings joined.
-- [ ] **T8.** Mount all three in `app/server/src/index.ts`.
-- [ ] **T9.** Route tests for each, including the `legal_note` rejection.
+- [x] **T5.** `app/server/src/routes/profile.ts` — `GET` and `PATCH` the Firm Profile.
+- [x] **T6.** `app/server/src/routes/sources.ts` — `GET` list, `PATCH` one row. **`legal_posture` changes require `legal_note` to be non-empty**; reject otherwise. §5.5.1 says the evidence is recorded on the row, and an API that lets it be blank makes the rule unenforceable.
+- [x] **T7.** `app/server/src/routes/solicitations.ts` — `GET` list and `GET` one, with sightings joined.
+- [x] **T8.** Mount all three in `app/server/src/index.ts`.
+- [x] **T9.** Route tests for each, including the `legal_note` rejection.
 
 ### 4. Load real solicitations
 
-- [ ] **T10.** `app/server/src/ingest/corpus.ts` — a loader reading `corpus/manifest.md` and `corpus/*.json` into `organization`, `solicitation`, `sighting`, and `document` rows.
+- [x] **T10.** `app/server/src/ingest/corpus.ts` — a loader reading `corpus/manifest.md` and `corpus/*.json` into `organization`, `solicitation`, `sighting`, and `document` rows.
 
 **One `source` row, `Corpus import (2026-08-04)`, tier 4 manual.** Every loaded row gets a real sighting pointing at it, so the merge path is exercised from the first data rather than bolted on in SP3.
 
-- [ ] **T11.** Verify org aliasing on real data: the corpus contains *New York State OGS* listed on Indiana's portal. **The loader must not create an Indiana organization for it.**
+- [x] **T11.** Verify org aliasing on real data: the corpus contains *New York State OGS* listed on Indiana's portal. **The loader must not create an Indiana organization for it.**
 
 *Verify:* `sqlite3 tenderfoot.db "SELECT o.name, count(*) FROM solicitation s JOIN organization o ON o.id=s.org_id GROUP BY 1 ORDER BY 2 DESC"`
 
 ### 5. The mock layer moves
 
-- [ ] **T12.** ⚠️ **Re-extract `prototype/PROTOTYPE/src/app.js` against V1.1 and move its rule-bearing comments to `app/shared/`.**
+- [x] **T12.** ⚠️ **Re-extract `prototype/PROTOTYPE/src/app.js` against V1.1 and move its rule-bearing comments to `app/shared/`.**
 
 Not pre-writable — the data moved between V1 and V1.1 and the comments must be carried forward by hand onto shapes that changed (`ClaudeDesign_Proto_Cleanup.md`, *Re-extraction*). **This is the transfer point** named in workflow spec §2: after this, `app/shared/` is the authority and the prototype's copy is a historical artifact.
 
-- [ ] **T13.** Reconcile the schema above against the re-extracted dataset. **Proto2PRD §4.1.1 makes the production model this dataset normalised**, so any field present there and absent here is a finding — either a missing column or a deliberate exclusion that gets written down.
+- [x] **T13.** Reconcile the schema above against the re-extracted dataset. **Proto2PRD §4.1.1 makes the production model this dataset normalised**, so any field present there and absent here is a finding — either a missing column or a deliberate exclusion that gets written down.
 
 ### 6. Minimal admin
 
-- [ ] **T14.** A dev-only route rendering the Firm Profile as an editable form.
-- [ ] **T15.** A dev-only route listing sources with `enabled` and `legal_posture` editable.
+- [x] **T14.** A dev-only route rendering the Firm Profile as an editable form.
+- [x] **T15.** A dev-only route listing sources with `enabled` and `legal_posture` editable.
 
 **Unstyled. No tokens, no primitives.** SP2 owns the design system and carries the sign-off gate; styling here would pre-empt it. These exist to satisfy *"profile and source registry editable"* and nothing more.
 
@@ -385,3 +385,30 @@ Not pre-writable — the data moved between V1 and V1.1 and the comments must be
 **Is `codes`/`certifications`/`geography` as JSON a mistake?** It is right for V1 — no queries need them yet. **The moment something filters on NAICS, they become real tables.** Note it rather than pre-building it.
 
 **Does the schema survive the re-extraction (T13), or does V1.1's dataset contain fields this plan missed?** That is the real test of whether §4 and the prototype agree, and it has never been checked.
+
+
+---
+
+## Execution record — T1 to T11
+
+**Executed 2026-08-12.** Schema, seeds, API and corpus load complete. 33 tests green.
+
+**Five defects surfaced, every one by a verification step rather than by review.**
+
+**1. `TS4023` on the exported database handle** — inherited from SP0's pattern, fixed there.
+
+**2. The NASPO row was silently dropped by the corpus parser.** Its external id is `*(NASPO)*` rather than an event number, and a `\d{6,}` pattern excluded it. **That is the single row the alias table exists for** — a New York award listed on Indiana's portal — removed by a regex, with no error and a plausible-looking 60-row import.
+
+**3. `NY OGS` still resolved to an Indiana organization after the parser was fixed.** `KNOWN_ORGS` was looked up by the incoming string while the aliases sat *inside* the canonical entry, so the lookup only matched when the source already used the canonical spelling — precisely when it is not needed. The reverse index that performs the actual resolution was missing.
+
+**4. Every federal agency was tagged jurisdiction `IN`**, because the default was hard-coded rather than passed per corpus. Sixty-two organizations mislabelled, and nothing downstream would have contradicted it.
+
+**5. A red gate was committed.** `vitest` does not typecheck, so 25 passing tests masked a `tsc` failure in the test file. Caught on the next run and fixed, but the commit stands as a reminder that *tests passing* and *the gate passing* are different claims.
+
+> **Defect 2 is the one worth remembering.** The import reported "loaded 60 Indiana" and looked entirely healthy. The only reason it was caught is that a verification step named a *specific expected row* rather than a count — the same lesson SP0 produced, arriving in a different costume: **a plausible number is not evidence.**
+
+## Outstanding
+
+- [ ] **T12.** Re-extract the mock layer against V1.1; move its rule-bearing comments to `app/shared/`.
+- [ ] **T13.** Reconcile the schema against that dataset. **Still the most interesting task in SP1** — nobody has checked whether §4 and the prototype's data model actually agree.
+- [ ] **T14–T15.** Minimal admin UI. The API enforces the rules; these are the screens that exercise them.

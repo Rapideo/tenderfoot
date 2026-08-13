@@ -274,3 +274,23 @@ August 11, 2026:
 104. Two things in it I like. The source registry seed is where today's research finally becomes executable rather than prose — Illinois in with archive depth to 2018, Michigan and Kentucky in with the account reading recorded in legal_note, Ohio manual-only with the CAPTCHA recorded, aggregators out by their terms. And the API will REJECT a legal_posture change that arrives without a legal_note, because a rule that says "evidence is recorded on the row" is unenforceable if the field can be left blank.
 
 105. It's honest about two tasks it can't pre-write: re-extracting the mock layer against V1.1 with the comments carried forward by hand, and the minimal admin UI. Both would be inventing. And it flags the real test — does the schema survive that re-extraction, or does V1.1's dataset contain fields the spec's §4 never mentioned? Nobody has checked whether those two agree.
+
+106. Good day. Finished with the source registry seeded from the day's research — eleven sources, each carrying its legal posture, the evidence for it, and the record of which parameters were verified to actually work. None enabled; SP3 turns the first one on deliberately.
+
+107. Two brittle tests surfaced and both were the same mistake in different clothes: asserting a count or a hard-coded list that is SUPPOSED to grow. The migration test broke when SP1 added a migration, and the source count broke because earlier tests insert their own rows. Both now assert by name. Worth remembering as a pattern rather than two incidents.
+
+108. Asked for a 7,500-word overview to present to management and to check my own understanding. Came in at 7,100, no tables, no code blocks, written to be listened to. Twelve parts: what it is, the problem, where we stand, how we got here and why the order mattered, the seven decisions, what the prototype decided for us, what the research turned up, what's built, what's next, the risks, what's open, and the takeaways.
+
+109. The part I most wanted captured is in there — the arc. Specify, outline, generate, audit, refine, build. And why the obvious order is worse: show someone a screen and they react to the screen, so the questions that actually decide whether the project succeeds never come up because nobody can see them. Writing the spec first forces those while they're cheap. Every one of our seven decisions was made in a document, not in code. Two of them removed work; one removed an entire subsystem.
+
+110. It also says plainly that the same sequence is now running on the second project, which is the difference between a method and an anecdote. That's why the playbook lives outside both projects.
+
+111. NEXT: finish SP1 — profile seed, the three API routes, corpus loader, and the mock-layer re-extraction. Claude offered to draft user stories the same way it drafted the SVRC, for me to react to and edit rather than starting from a blank page. Worth doing; a draft to argue with beats a blank page.
+
+112. Asked for a lessons-learned document to improve the playbook at the end of this project. Claude made the case for keeping it SEPARATE from Proto2PRD rather than just adding to it, and I agree: we've been folding lessons in continuously, but not everything is ready. A playbook full of one-off observations stops being trustworthy. So this is the holding pen — things arrive when noticed and leave when they earn it.
+
+113. The promotion bar is the useful part: seen twice, OR seen once with a stated mechanism explaining why it MUST recur. Not a feeling that it will. And anything that hasn't earned promotion by the end of the project gets deleted rather than quietly kept, because an observation nobody could confirm across a whole project probably isn't a lesson.
+
+114. Seeded with ten candidates. The ones I'd bet on: never assert a count or list that's supposed to grow (already bit us twice in two days); a fidelity mandate has to NAME A VERSION or it's unfalsifiable; and instrument for silent failure in every external dependency, which is our four-instances-three-platforms finding generalised. That last one is held back only because all four were government procurement systems — one commercial API doing the same thing would settle it.
+
+115. Also five watch items, which are questions about the METHOD rather than lessons. The honest one: was parking the intelligence layer right? If volume turns out low and the first release is pleasant, that call looks wise. If volume is high and it's unpleasant for a month, it looks like a mistake that happened to be well argued. Worth writing down which, either way.

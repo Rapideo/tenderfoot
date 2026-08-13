@@ -1,0 +1,381 @@
+<title>Tenderfoot Story Map</title>
+<style>
+  @font-face{font-family:'Plex';src:url(__SANS400__)format('woff2');font-weight:400;font-display:swap}
+  @font-face{font-family:'Plex';src:url(__SANS600__)format('woff2');font-weight:600;font-display:swap}
+  @font-face{font-family:'PlexM';src:url(__MONO500__)format('woff2');font-weight:500;font-display:swap}
+
+  :root{
+    --canvas:#eaeef0; --surface:#ffffff; --recess:#f4f7f8; --chip:#f1f4f6;
+    --line:#dfe4e8; --line-soft:#edf1f3; --line-ctl:#dbe2e7;
+    --tx:#14181c; --tx2:#3d474e; --tx3:#5a666e; --mute:#6d7c85; --label:#93a0a8;
+    --accent:#1b6a8c; --accent-line:#17607f; --accent-wash:#e7f1f6; --accent-wash2:#f2f8fb;
+    --ink:#0f1a20; --on-ink:#e6eef2; --on-ink-mute:#8fa3ad;
+    --pos:#2e7d5b; --pos-wash:#eef7f2; --caution:#b5761a; --caution-wash:#fdf6e7;
+    --neg:#a33a2e; --neg-wash:#fdf3f1;
+    --r-chip:4px; --r-ctl:6px; --r-card:9px; --r-panel:10px;
+  }
+  :root:not([data-theme="light"]){ @media (prefers-color-scheme: dark){
+    --canvas:#0b1418; --surface:#111d23; --recess:#16242b; --chip:#1a2a32;
+    --line:#24363f; --line-soft:#1c2c34; --line-ctl:#2b3d46;
+    --tx:#e8eef1; --tx2:#c2ced4; --tx3:#9fb0b8; --mute:#8b9ca4; --label:#71858f;
+    --accent:#59a8cb; --accent-line:#3d8cb0; --accent-wash:#12303d; --accent-wash2:#0e2733;
+    --ink:#060d10; --on-ink:#dfe9ee; --on-ink-mute:#7f949e;
+    --pos:#5cb98d; --pos-wash:#10261d; --caution:#d9a04a; --caution-wash:#2a2113;
+    --neg:#d97a6c; --neg-wash:#2c1614;
+  }}
+  :root[data-theme="dark"]{
+    --canvas:#0b1418; --surface:#111d23; --recess:#16242b; --chip:#1a2a32;
+    --line:#24363f; --line-soft:#1c2c34; --line-ctl:#2b3d46;
+    --tx:#e8eef1; --tx2:#c2ced4; --tx3:#9fb0b8; --mute:#8b9ca4; --label:#71858f;
+    --accent:#59a8cb; --accent-line:#3d8cb0; --accent-wash:#12303d; --accent-wash2:#0e2733;
+    --ink:#060d10; --on-ink:#dfe9ee; --on-ink-mute:#7f949e;
+    --pos:#5cb98d; --pos-wash:#10261d; --caution:#d9a04a; --caution-wash:#2a2113;
+    --neg:#d97a6c; --neg-wash:#2c1614;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--canvas);color:var(--tx);
+       font-family:'Plex',system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .mono{font-family:'PlexM',ui-monospace,monospace}
+  .lbl{font-family:'PlexM',ui-monospace,monospace;font-size:9.5px;letter-spacing:.13em;
+       text-transform:uppercase;color:var(--label);font-weight:500}
+
+  /* ---- masthead ---- */
+  header{background:var(--ink);color:var(--on-ink);padding:26px 30px 22px;
+         border-bottom:1px solid var(--line)}
+  .mast{max-width:1280px;margin:0 auto;display:flex;gap:26px;
+        align-items:flex-end;flex-wrap:wrap;justify-content:space-between}
+  h1{margin:0;font-size:25px;font-weight:600;letter-spacing:-.02em;color:#fff;line-height:1.15}
+  header p{margin:7px 0 0;color:var(--on-ink-mute);font-size:13.5px;max-width:60ch;line-height:1.5}
+  .tally{display:flex;gap:22px;align-items:baseline}
+  .tally div{text-align:right}
+  .tally b{display:block;font-family:'PlexM',monospace;font-size:26px;font-weight:600;
+           color:#fff;line-height:1;font-variant-numeric:tabular-nums}
+  .tally span{font-family:'PlexM',monospace;font-size:9.5px;letter-spacing:.12em;
+              text-transform:uppercase;color:var(--on-ink-mute)}
+
+  /* ---- shell ---- */
+  .shell{max-width:1280px;margin:0 auto;padding:22px 30px 70px;
+         display:grid;grid-template-columns:216px 1fr;gap:28px;align-items:start}
+  @media (max-width:880px){ .shell{grid-template-columns:1fr;gap:16px;padding:16px} }
+
+  /* ---- filter rail ---- */
+  aside{position:sticky;top:16px;display:flex;flex-direction:column;gap:18px}
+  @media (max-width:880px){ aside{position:static} }
+  .grp{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
+       padding:13px 14px 15px}
+  .grp .lbl{display:block;margin-bottom:9px}
+  .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+       background:none;border:none;padding:5px 7px;margin:0 -7px;border-radius:var(--r-ctl);
+       font:inherit;font-size:13.5px;color:var(--tx2);cursor:pointer;text-align:left}
+  .opt:hover{background:var(--recess);color:var(--tx)}
+  .opt[aria-pressed="true"]{background:var(--accent-wash);color:var(--accent);font-weight:600}
+  .opt em{font-family:'PlexM',monospace;font-style:normal;font-size:11px;color:var(--label);
+          font-variant-numeric:tabular-nums}
+  .opt[aria-pressed="true"] em{color:var(--accent)}
+  .opt:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  input[type=search]{width:100%;padding:9px 11px;border:1px solid var(--line-ctl);
+    border-radius:var(--r-ctl);background:var(--surface);color:var(--tx);font:inherit;font-size:14px}
+  input[type=search]::placeholder{color:var(--label)}
+  .clear{width:100%;margin-top:10px;padding:7px;border:1px solid var(--line-ctl);
+    border-radius:var(--r-ctl);background:var(--surface);color:var(--tx3);font:inherit;
+    font-size:12.5px;cursor:pointer}
+  .clear:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* ---- stories ---- */
+  main{display:flex;flex-direction:column;gap:26px;min-width:0}
+  .area{scroll-margin-top:14px}
+  .area > h2{margin:0 0 3px;font-size:17.5px;font-weight:600;letter-spacing:-.012em;
+             display:flex;align-items:baseline;gap:10px}
+  .area > h2 em{font-family:'PlexM',monospace;font-style:normal;font-size:11px;
+                color:var(--label);font-weight:500;font-variant-numeric:tabular-nums}
+  .area > p{margin:0 0 12px;color:var(--mute);font-size:13.5px;max-width:70ch}
+
+  .rows{display:flex;flex-direction:column;gap:9px}
+  .row{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
+       padding:13px 15px;display:grid;grid-template-columns:58px 1fr;gap:14px;align-items:start}
+  @media (max-width:560px){ .row{grid-template-columns:1fr;gap:7px} }
+  .row.later{background:var(--recess);border-style:dashed}
+  .id{font-family:'PlexM',monospace;font-size:11px;color:var(--accent);font-weight:500;
+      padding-top:2px;letter-spacing:.02em}
+  .row.later .id{color:var(--mute)}
+  .say{margin:0;font-size:14.5px;line-height:1.5;color:var(--tx)}
+  .say b{font-weight:600}
+  .note{margin:7px 0 0;font-size:12.5px;line-height:1.5;color:var(--mute);
+        border-left:2px solid var(--line-soft);padding-left:10px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+  .tag{font-family:'PlexM',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+       padding:3px 7px;border-radius:var(--r-chip);background:var(--chip);color:var(--tx3);
+       border:1px solid transparent;white-space:nowrap}
+  .tag.v1{background:var(--pos-wash);color:var(--pos)}
+  .tag.later{background:transparent;color:var(--mute);border-color:var(--line-ctl)}
+  .tag.role{background:var(--accent-wash2);color:var(--accent)}
+  .tag.p{background:var(--caution-wash);color:var(--caution)}
+
+  .empty{background:var(--surface);border:1px dashed var(--line-ctl);border-radius:var(--r-card);
+         padding:34px;text-align:center;color:var(--mute);font-size:14px}
+  footer{max-width:1280px;margin:0 auto;padding:0 30px 46px;color:var(--mute);font-size:12.5px;
+         line-height:1.6;max-width:78ch}
+  footer b{color:var(--tx2);font-weight:600}
+</style>
+
+<header>
+  <div class="mast">
+    <div>
+      <h1>Tenderfoot Story Map</h1>
+      <p>Every capability the system is meant to have, written as something a person wants to do.
+         First draft — the temperature is set here and refined from your edits.</p>
+    </div>
+    <div class="tally">
+      <div><b id="tShown">0</b><span>Showing</span></div>
+      <div><b id="tV1">0</b><span>In V1</span></div>
+      <div><b id="tLater">0</b><span>Later</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside>
+    <div class="grp">
+      <span class="lbl">Search</span>
+      <input type="search" id="q" placeholder="deadline, reason, source…" aria-label="Search stories">
+      <button class="clear" id="reset">Reset all filters</button>
+    </div>
+    <div class="grp"><span class="lbl">Release</span><div id="fRelease"></div></div>
+    <div class="grp"><span class="lbl">Area</span><div id="fArea"></div></div>
+    <div class="grp"><span class="lbl">Who</span><div id="fRole"></div></div>
+    <div class="grp"><span class="lbl">Problem served</span><div id="fProblem"></div></div>
+  </aside>
+  <main id="out"></main>
+</div>
+
+<footer>
+  <p><b>How to read this.</b> Stories marked <b>V1</b> are in scope for the first release, which
+  returns everything active sources return without ranking or filtering. Stories marked
+  <b>Later</b> describe the finished product — the prototype draws them, and they are deferred
+  rather than cut.</p>
+  <p><b>Granularity, deliberately chosen.</b> One story per thing a person wants that has value on
+  its own. Not tasks, not epics. Where a story would only make sense alongside three others, it was
+  merged; where one hid two distinct wants, it was split. That is the temperature — say if it reads
+  too fine or too coarse and the whole set moves together.</p>
+  <p><b>Problem tags</b> map to the four named pains: <b>P1</b> missing opportunities entirely,
+  <b>P2</b> finding out too late, <b>P3</b> noise, <b>P4</b> no system of record. A story with no
+  problem tag serves the workflow rather than a stated pain — which is worth noticing when
+  prioritising.</p>
+</footer>
+
+<script>
+const AREAS = [
+  ["Shell","The frame around everything. Its job is mostly to stay out of the way and keep the queue count visible."],
+  ["Triage","The daily driver, and the screen the product lives or dies on. One opportunity, ten seconds, a decision and a reason."],
+  ["Opportunity","Everything known about one solicitation, and where every claim shows the document it came from."],
+  ["Radars","Work that has not been advertised yet. Contract expiry read as a predicted re-compete, and primes carrying participation goals."],
+  ["Entities","Buyers and vendors as accumulating records rather than names on a page."],
+  ["Reports","Whether any of this is working, measured honestly enough to be worth acting on."],
+  ["Admin","The firm's own facts, and the sources. In V1 the source registry is the entire configuration of what a user sees."],
+  ["Ingestion","Collection itself — bounded, resumable, and instrumented for the failure that does not announce itself."],
+  ["Pipeline","Pursuits after the decision. Deferred to the management phase."]
+];
+
+const S = [
+// ---- SHELL ----
+["SH-1","Shell","Triager","see how many opportunities are waiting from any screen, so I know whether this is a five-minute session or a half-hour one","V1","P4",""],
+["SH-2","Shell","Triager","see the queue count reach zero and have that read as an accomplishment, so clearing it becomes a habit rather than a chore","V1","",'An empty queue is the goal state, not an empty state.'],
+["SH-3","Shell","Analyst","see when collection last ran and whether any source is unhealthy, without going looking for it","V1","P1","Permanently visible. If the feed is quiet, I need to know whether that is the market or a broken adapter."],
+["SH-4","Shell","Analyst","be told when a source is suspected of returning plausible nonsense, not merely when it errors","V1","P1","Four confirmed instances across three platforms of a parameter accepted and silently ignored. This is the failure that looks like calm."],
+["SH-5","Shell","Triager","have navigation collapse while I am clearing the queue, so nothing competes with the decision in front of me","V1","P3",""],
+["SH-6","Shell","Triager","use the whole thing on a phone, so triage is not tied to my desk","V1","","Ten seconds per item should work standing up. The prototype specifies desktop only — a known gap."],
+["SH-7","Shell","Triager","switch between light and dark","Later","",""],
+["SH-8","Shell","Triager","be walked through the product the first time I open it","Later","",""],
+
+// ---- TRIAGE ----
+["TR-1","Triage","Triager","see one opportunity at a time, filling the screen, so I am deciding rather than browsing","V1","P3",""],
+["TR-2","Triage","Triager","reach a decision in about ten seconds, so forty items is a sitting and not an afternoon","V1","P3",""],
+["TR-3","Triage","Triager","drive the whole queue from the keyboard, so my hand never leaves the keys","V1","","I for interested, P for pass, U to undo."],
+["TR-4","Triage","Triager","undo a decision I just made, because at ten seconds an item a mis-tap is certain","V1","P4","A system whose value is decision quality cannot silently keep a wrong one."],
+["TR-5","Triage","Triager","record why I passed, so that in six months the firm can answer what it declined and why","V1","P4","Mandatory on pass by default. A rejection with no reason is the one event that teaches nothing."],
+["TR-6","Triage","Administrator","turn off the requirement to give a reason, for a queue where three items are obvious junk","V1","","Default on. Turning it off silently forfeits the record any future learning would be built from."],
+["TR-7","Triage","Triager","write the reason in my own words rather than picking from a list","V1","P4","V1 is free text. A preset vocabulary invented before the reasons exist would flatten the signal it is meant to capture."],
+["TR-8","Triage","Triager","see the title, the buyer, the deadline and the value before anything else, because those four settle most decisions","V1","P3",""],
+["TR-9","Triage","Triager","see how many days are left, not just a date, so urgency does not require arithmetic","V1","P2",""],
+["TR-10","Triage","Triager","be shown when the documents disagree about the deadline, rather than the system quietly picking one","V1","P1","A real bundle ships three PDFs with two deadlines, the correct one in the least specifically named file. Every obvious rule picks wrong."],
+["TR-11","Triage","Triager","be told when the buyer is not the jurisdiction hosting the listing, so I do not mistake a New York contract for an Indiana one","V1","","Found inside the first sixty-one records collected."],
+["TR-12","Triage","Triager","see what responding would actually cost — forms, references, notarisation, page limits — as counted facts rather than a score","V1","","The ten minutes of digging is done; the ten-second judgment stays mine."],
+["TR-13","Triage","Triager","choose the order the queue comes in, because ambiguity-first and deadline-first suit different sessions","V1","","Ambiguity first is the default, and that is a decision rather than a fallback."],
+["TR-14","Triage","Triager","see where I am in the queue, so I can judge whether to finish now or come back","V1","",""],
+["TR-15","Triage","Triager","be shown something useful when the queue is empty, rather than a dead end","V1","P2",'"Nothing to review" ends the session. Pointing at what expires inside my sectors keeps it alive.'],
+["TR-16","Triage","Triager","skip an item without deciding, so an unclear one does not force a bad decision","V1","P4",""],
+["TR-17","Triage","Triager","see how the machine scored an opportunity, as a reading aid rather than a verdict","Later","P3","Parked with qualification. The prototype draws it."],
+["TR-18","Triage","Triager","see what was ruled out and why, and restore anything ruled out wrongly","Later","P1","Rejected is not deleted. Returns when anything gates."],
+
+// ---- OPPORTUNITY ----
+["OP-1","Opportunity","Triager","read a plain summary of what the work actually is, so I do not have to open a PDF to find out","V1","P3",""],
+["OP-2","Opportunity","Triager","see why this was surfaced for us specifically, so I can disagree with it","V1","",""],
+["OP-3","Opportunity","Analyst","see what we are missing that a partner would have to bring, so a no-bid can become a teaming call","V1","","Often the most useful panel on the screen."],
+["OP-4","Opportunity","Triager","see every date that matters, including the question deadline, which is usually earlier and more binding","V1","P2","The Q&A cutoff often forecloses a real bid weeks before the proposal is due."],
+["OP-5","Opportunity","Analyst","see the risks in one place — no stated ceiling, fourteen forms against a seventeen-day window","V1","",""],
+["OP-6","Opportunity","Analyst","see every extracted field with how confident the system is about it","V1","",""],
+["OP-7","Opportunity","Analyst","see, for any fact, the document and section it came from, and open that document","V1","","A deadline without a pointer is an assertion."],
+["OP-8","Opportunity","Analyst","tell the difference between a value the system could not find and one it is unsure about","V1","","Three states, not two: found with a confidence, absent, or not yet looked for."],
+["OP-9","Opportunity","Analyst","see the whole document bundle with formats, not just the one file called the RFP","V1","","Bundles reach twenty-two files. The scope of work is frequently a Word document."],
+["OP-10","Opportunity","Analyst","see every time a source showed us this, in order, so an extracted date is trustworthy in seconds","V1","P4",""],
+["OP-11","Opportunity","Analyst","see when something changed and which source said so, rather than trusting an addendum's own summary","V1","P1","A real addendum enumerates its changes, omits the deadline move, and renames the solicitation."],
+["OP-12","Opportunity","Analyst","see when the system corrected its own understanding — a buyer reassigned, records merged","V1","","Entity resolution is the least visible thing the system does and the easiest to get silently wrong."],
+["OP-13","Opportunity","Triager","see a recommended posture that stays quiet when the evidence is thin","Later","","Parked. Its own open question: useful, or presumptuous from a machine?"],
+["OP-14","Opportunity","Analyst","see each score with the sentence that produced it and the scorer version that produced it","Later","",""],
+
+// ---- RADARS ----
+["RA-1","Radars","Analyst","see contracts ending inside our sectors in the next eighteen months, so I can position before anything is advertised","V1","P2","The direct answer to finding out too late. The data is already collected."],
+["RA-2","Radars","Analyst","see both the raw expiring count and the sector-matched count, so I can tell how much the filter removed","V1","P1","Two thousand one hundred and sixty expiring, fourteen matching. Both numbers, or the filter is unaccountable."],
+["RA-3","Radars","Analyst","see whether renewal options remain, because an exhausted contract is a far stronger lead","V1","P2",""],
+["RA-4","Radars","Analyst","open the actual contract document, because the scope and the real value only exist inside the PDF","V1","","The amount field in the register is a per-amendment delta that goes negative. It is not a contract value."],
+["RA-5","Radars","Analyst","see when many contracts share one expiry date, because that is a programme being re-procured rather than a contract ending","V1","P2","Two hundred and thirty-one contracts end on one day this December, including the whole Medicaid managed care book."],
+["RA-6","Radars","Analyst","see which prime contractors carry M/WBE participation, and at what percentage, so our certification becomes a route in","V1","","Published on every executed contract, prime and sub, with percentages. A query rather than guesswork."],
+["RA-7","Radars","Analyst","open a vendor's full record from the radar, to judge whether they are a partner or a competitor","V1","",""],
+["RA-8","Radars","Analyst","see a predicted re-compete scored the same way a published solicitation would be","Later","P2",""],
+
+// ---- ENTITIES ----
+["EN-1","Entities","Analyst","see what a buyer has bought, from whom, and how often","V1","",""],
+["EN-2","Entities","Analyst","see roughly how often a buyer competes its work, so I can anticipate agencies we hold no contract for","V1","P2","Extends the expiry idea to buyers with nothing currently on file — which is most of them."],
+["EN-3","Entities","Analyst","see how often a buyer re-awards to the incumbent, because that decides most bids before any scoring happens","V1","","Nine of eleven and four of nine are different propositions at identical nominal fit."],
+["EN-4","Entities","Analyst","see clearly when a buyer is not the jurisdiction hosting the listing","V1","",""],
+["EN-5","Entities","Analyst","see a large agency's buying units separately, because they behave differently","V1","",""],
+["EN-6","Entities","Analyst","see a vendor once, with its alternative spellings folded in and visible","V1","","1,293 distinct vendor names in one state pull is certainly an overcount."],
+["EN-7","Entities","Analyst","tell the difference between a vendor with one name and one nobody has checked","V1","",'"No aliases found" is a real state, and without it an unmerged duplicate looks like a clean record.'],
+["EN-8","Entities","Administrator","see our own firm as an ordinary vendor row, because that is what makes the system portable to another firm","V1","",""],
+["EN-9","Entities","Analyst","see a competitor's award history, so I can learn who actually wins this kind of work here","V1","",""],
+
+// ---- REPORTS ----
+["RE-1","Reports","Analyst","see how many eligible opportunities existed, how many were strong fits, what they were worth, and how many we saw","V1","P1","The output the whole project is judged against."],
+["RE-2","Reports","Analyst","see any recall figure with the population it was measured against","V1","","A market-sizing number quoted without its sampling basis is the failure the corpus discipline exists to prevent."],
+["RE-3","Reports","Administrator","see what each source actually produced — ingested, reached triage, marked interested","V1","",""],
+["RE-4","Reports","Administrator","see how much each source publishes per week, because nobody currently knows","V1","P3","This is the number that decides whether qualification is urgent or academic."],
+["RE-5","Reports","Administrator","retire a source that does not earn its maintenance","V1","","A source earns its slot with numbers rather than with intent."],
+["RE-6","Reports","Analyst","see figures weighted by value rather than counted, because our engagements span roughly fifty times","V1","",""],
+
+// ---- ADMIN ----
+["AD-1","Admin","Administrator","describe what we do in our own words, and have that be what the system matches on","V1","","No fact about the firm appears in code. All of it lives here."],
+["AD-2","Admin","Administrator","record our certifications and when they expire","V1","",""],
+["AD-3","Admin","Administrator","be warned before a certification lapses, because it is an eligibility fact and its expiry is silent","V1","P1",""],
+["AD-4","Admin","Administrator","set where we work, primary and secondary, without anyone changing code","V1","",""],
+["AD-5","Admin","Administrator","record our headcount, revenue and bonding as eligibility thresholds only","V1","","These answer whether we can legally bid, never whether we should take it on."],
+["AD-6","Admin","Administrator","be confident the system never uses those numbers to decide we are too busy","V1","P1","An opportunity suppressed because the calendar looked full is a miss that appears in no report."],
+["AD-7","Admin","Administrator","see plainly that the past-performance library is empty and why, rather than wondering whether it failed to load","V1","",""],
+["AD-8","Admin","Administrator","record what we will never bid and why","V1","P4","Currently sourceless. It fills from real decisions or not at all."],
+["AD-9","Admin","Administrator","see every source with its platform, access tier, legal posture and health in one list","V1","",""],
+["AD-10","Admin","Administrator","switch a source on or off myself, without a deploy","V1","P3","In V1 this is the entire configuration of what a user sees. When volume is wrong the fix is at 9am, not next release."],
+["AD-11","Admin","Administrator","be required to record the evidence when I change a source's legal standing","V1","","Ambiguous terms default a source out. A rule saying evidence is recorded on the row is unenforceable if the field can be blank."],
+["AD-12","Admin","Administrator","see which of a source's filters were actually verified to work","V1","P1",""],
+["AD-13","Admin","Administrator","see where that verification could not be run at all, so I do not mistake silence for health","V1","P1","One portal withholds result totals, which leaves nothing to watch move."],
+["AD-14","Admin","Administrator","see how far back a source's archive goes, because a source that cannot run backwards cannot be tested","V1","",""],
+["AD-15","Admin","Administrator","set how far back each collection reaches, per source","V1","",""],
+
+// ---- INGESTION ----
+["IN-1","Ingestion","Administrator","run a collection for one source on demand, so I can test a change without waiting for a schedule","V1","",""],
+["IN-2","Ingestion","Administrator","run a counting pass that fetches no documents, so I can find out how much is there before committing","V1","P3","Bundles reach twenty-one megabytes. Counts before documents."],
+["IN-3","Ingestion","Administrator","have every collection bounded by a window, so a first run cannot pull two years by accident","V1","",""],
+["IN-4","Ingestion","Administrator","have a source with no window configured refuse to run rather than default to everything","V1","","A missing setting that quietly means 'all' is how a first run pulls eight thousand records."],
+["IN-5","Ingestion","Administrator","have collection resume from the last successful run rather than a fixed lookback","V1","P1","A fixed seven-day window loses Tuesday permanently when Tuesday's run fails."],
+["IN-6","Ingestion","Administrator","load a long history by widening the same window, rather than through separate machinery","V1","","Backfill and live are the same code path, or the backfill is never tested."],
+["IN-7","Ingestion","Triager","see one opportunity once, even when three sources published it","V1","P3","With nothing filtered, deduplication is the only honest volume control there is."],
+["IN-8","Ingestion","Analyst","be told when something already seen has changed","V1","P1",""],
+["IN-9","Ingestion","Administrator","be alerted when a source returns materially less than it used to","V1","P1","With no scorer to regress, this is the closest thing V1 has to a failing test."],
+["IN-10","Ingestion","Analyst","know whether each extracted fact came from rules or from a model","V1","","Recorded in the data, not in configuration. Without it the two approaches can never be compared."],
+
+// ---- PIPELINE ----
+["PI-1","Pipeline","Triager","see everything I marked interested collected in one place","Later","P4",""],
+["PI-2","Pipeline","Triager","move a pursuit through its stages","Later","P4",""],
+["PI-3","Pipeline","Triager","record what happened, including withdrawn, cancelled, and no award made","Later","P4","All three occur in real procurement records, and won/lost cannot express them."],
+["PI-4","Pipeline","Analyst","see which pursuits are being written rather than merely decided","Later","","The gap between deciding to bid and submitting is where pursuits actually die."],
+["PI-5","Pipeline","Analyst","see the full decision history for a pursuit, with reasons","Later","P4",""]
+];
+
+const PROBLEMS = {P1:"Missing entirely",P2:"Too late",P3:"Noise",P4:"No record"};
+const F = {Release:new Set(),Area:new Set(),Role:new Set(),Problem:new Set()};
+const IDX = {Release:4,Area:1,Role:2,Problem:5};
+let q = "";
+
+const uniq = k => [...new Set(S.map(r=>r[IDX[k]]).filter(Boolean))];
+
+function passes(r, skip){
+  for (const k of ["Release","Area","Role","Problem"]){
+    if (k===skip || !F[k].size) continue;
+    if (!F[k].has(r[IDX[k]])) return false;
+  }
+  if (q){
+    const hay = (r[0]+" "+r[1]+" "+r[2]+" "+r[3]+" "+r[6]).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+function buildFilter(key, host, labeller){
+  host.innerHTML = "";
+  for (const v of uniq(key)){
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.type = "button";
+    b.setAttribute("aria-pressed", F[key].has(v));
+    const n = S.filter(r => r[IDX[key]]===v && passes(r, key)).length;
+    b.innerHTML = `<span>${labeller?labeller(v):v}</span><em>${n}</em>`;
+    b.onclick = () => { F[key].has(v) ? F[key].delete(v) : F[key].add(v); render(); };
+    host.appendChild(b);
+  }
+}
+
+function render(){
+  const shown = S.filter(r => passes(r));
+  const out = document.getElementById("out");
+  out.innerHTML = "";
+
+  for (const [name, blurb] of AREAS){
+    const rows = shown.filter(r => r[1]===name);
+    if (!rows.length) continue;
+    const sec = document.createElement("section");
+    sec.className = "area";
+    const v1 = rows.filter(r=>r[4]==="V1").length;
+    sec.innerHTML = `<h2>${name} <em>${rows.length} · ${v1} in V1</em></h2><p>${blurb}</p>`;
+    const list = document.createElement("div");
+    list.className = "rows";
+    for (const r of rows){
+      const [id,area,role,say,rel,prob,note] = r;
+      const el = document.createElement("article");
+      el.className = "row" + (rel==="Later" ? " later" : "");
+      el.innerHTML =
+        `<div class="id">${id}</div><div>` +
+        `<p class="say">As ${role==="Administrator"?"an":"a"} <b>${role}</b>, I want to ${say}.</p>` +
+        (note ? `<p class="note">${note}</p>` : "") +
+        `<div class="tags">` +
+          `<span class="tag ${rel==="V1"?"v1":"later"}">${rel}</span>` +
+          `<span class="tag role">${role}</span>` +
+          (prob ? `<span class="tag p">${prob} · ${PROBLEMS[prob]}</span>` : "") +
+        `</div></div>`;
+      list.appendChild(el);
+    }
+    sec.appendChild(list);
+    out.appendChild(sec);
+  }
+
+  if (!shown.length){
+    out.innerHTML = `<div class="empty">No stories match. <button class="clear" style="width:auto;display:inline-block;margin-left:8px" onclick="document.getElementById('reset').click()">Reset filters</button></div>`;
+  }
+
+  document.getElementById("tShown").textContent = shown.length;
+  document.getElementById("tV1").textContent = shown.filter(r=>r[4]==="V1").length;
+  document.getElementById("tLater").textContent = shown.filter(r=>r[4]==="Later").length;
+
+  buildFilter("Release", document.getElementById("fRelease"));
+  buildFilter("Area", document.getElementById("fArea"));
+  buildFilter("Role", document.getElementById("fRole"));
+  buildFilter("Problem", document.getElementById("fProblem"), v => `${v} · ${PROBLEMS[v]}`);
+}
+
+document.getElementById("q").addEventListener("input", e => { q = e.target.value.toLowerCase().trim(); render(); });
+document.getElementById("reset").addEventListener("click", () => {
+  for (const k in F) F[k].clear();
+  q = ""; document.getElementById("q").value = ""; render();
+});
+render();
+</script>
