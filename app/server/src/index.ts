@@ -3,6 +3,7 @@ import express from "express";
 import type { HealthResponse, PingResponse } from "@tenderfoot/shared";
 import { db } from "./db/index.js";
 import { appliedMigrations, migrate } from "./db/migrate.js";
+import { api } from "./routes/index.js";
 
 const PORT = Number(process.env.PORT ?? 3003);
 
@@ -11,6 +12,9 @@ migrate(false);
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+/* SP1: profile, source registry, solicitations. */
+app.use("/api", api);
 
 function readMeta(): Record<string, string> {
   const rows = db.prepare("SELECT key, value FROM app_meta").all() as {

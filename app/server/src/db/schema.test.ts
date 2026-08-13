@@ -70,7 +70,13 @@ test("many sightings may point at one solicitation", () => {
 /* §4.2 -- KP is one vendor row with is_self. A second would make "which
  * firm is this system for" ambiguous, which is the portability claim. */
 test("only one vendor may be is_self", () => {
-  db.prepare("INSERT INTO vendor (name, is_self) VALUES ('Koehler Partners', 1)").run();
+  /* Migration 004 already seeds the self vendor, so this asserts that a
+   * SECOND one is refused rather than creating the first. Written before that
+   * seed existed and corrected when it arrived. */
+  const selves = db.prepare("SELECT count(*) AS n FROM vendor WHERE is_self = 1").get() as {
+    n: number;
+  };
+  expect(selves.n).toBe(1);
   expect(() =>
     db.prepare("INSERT INTO vendor (name, is_self) VALUES ('Impostor', 1)").run(),
   ).toThrow(/UNIQUE/i);
