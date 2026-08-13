@@ -689,6 +689,22 @@ A task: *"create `src/lib/auth/session.ts` with the contents below, and verify w
 
 Commit everything before writing application code.
 
+#### Verify against expected OUTPUT, not against exit status **(T)**
+
+**Learned on Tenderfoot SP0, 2026-08-12, and it is the sharpest thing that slice produced.**
+
+A migration CLI shipped with a broken entry-point guard: it compared `import.meta.url` against `` `file://${process.argv[1]}` ``, which never matches on Windows because `argv[1]` is a backslashed path and `import.meta.url` is a `file:///C:/…` URL.
+
+**The command exited zero, printed nothing, and applied no migrations. The unit tests passed throughout**, because they called the function directly rather than through the CLI.
+
+It was caught by one thing only: the plan's verification step said **"run it twice — the second run must print `no pending migrations`."** An expectation about *output*. `&& echo OK`, a green suite, and a zero exit code all agreed the command worked.
+
+> **So write the expected result into the verification, not just the command.** *"Run `npm test`"* passes when the thing under test is never reached. *"Expect two passing tests"* does not. *"Run the migration twice; the second prints `no pending migrations`"* is a claim that can fail.
+>
+> **This is the same argument as §5.4's ban on "check it works", one level deeper.** A command with no expected output is a verification with no assertion — and the failures it misses are exactly the silent ones, which are the expensive ones.
+
+**Two supporting habits from the same slice.** Verify the *idempotent* path, not only the first run: applying a migration twice is where the interesting bug lives. And verify that a written value *survives a re-read*, rather than trusting the write's own response — SP0's health check reads back after its ping for that reason.
+
 ---
 
 ## 6. Phase 2 — Infrastructure
