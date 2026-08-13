@@ -4,10 +4,10 @@
 -- write, and it earns its place later as the home for last-run timestamps
 -- and schema version.
 CREATE TABLE app_meta (
-  key        TEXT PRIMARY KEY,
+  key        text PRIMARY KEY,
   value      TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at timestamptz NOT NULL
 );
 
 INSERT INTO app_meta (key, value, updated_at)
-VALUES ('schema_owner', 'sp0', datetime('now'));
+VALUES ('schema_owner', 'sp0', now());
