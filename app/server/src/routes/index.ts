@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../db/index.js";
+import { all, one, run, tx } from "../db/index.js";
 
 /* SP1 T5-T8. The API surface is deliberately small: read and edit the two
  * configuration objects, and read what has been collected. No scoring, no
@@ -23,19 +23,23 @@ const PROFILE_FIELDS = [
   "negative_profile",
 ] as const;
 
-api.get("/profile", (_req, res) => {
-  const row = db
-    .prepare(
-      `SELECT f.*, v.name AS vendor_name
-         FROM firm_profile f JOIN vendor v ON v.id = f.vendor_id
-        WHERE v.is_self = 1`,
-    )
-    .get();
+/* The four jsonb columns. A caller sending an object must not have it
+ * stringified as "[object Object]", and a caller sending a JSON string must
+ * not be double-encoded. pg serialises objects to jsonb correctly on its
+ * own; strings are passed through for the caller who already encoded. */
+const JSON_FIELDS = new Set(["codes", "certifications", "geography", "hard_limits"]);
+
+api.get("/profile", async (_req, res) => {
+  const row = await one(
+    `SELECT f.*, v.name AS vendor_name
+       FROM firm_profile f JOIN vendor v ON v.id = f.vendor_id
+      WHERE v.is_self`,
+  );
   if (!row) return res.status(404).json({ error: "No firm profile. Run migrations." });
   res.json(row);
 });
 
-api.patch("/profile", (req, res) => {
+api.patch("/profile", async (req, res) => {
   const updates = Object.entries(req.body ?? {}).filter(([k]) =>
     (PROFILE_FIELDS as readonly string[]).includes(k),
   );
@@ -45,14 +49,13 @@ api.patch("/profile", (req, res) => {
       editable: PROFILE_FIELDS,
     });
   }
-  const sets = updates.map(([k]) => `${k} = ?`).join(", ");
-  const info = db
-    .prepare(
-      `UPDATE firm_profile SET ${sets}, updated_at = datetime('now')
-        WHERE vendor_id = (SELECT id FROM vendor WHERE is_self = 1)`,
-    )
-    .run(...updates.map(([, v]) => v as any));
-  if (!info.changes) return res.status(404).json({ error: "No firm profile to update." });
+  const sets = updates.map(([k], i) => `${k} = $${i + 1}`).join(", ");
+  const changes = await run(
+    `UPDATE firm_profile SET ${sets}, updated_at = now()
+      WHERE vendor_id = (SELECT id FROM vendor WHERE is_self)`,
+    updates.map(([, v]) => v as any),
+  );
+  if (!changes) return res.status(404).json({ error: "No firm profile to update." });
   res.json({ ok: true, updated: updates.map(([k]) => k) });
 });
 
@@ -63,13 +66,13 @@ api.patch("/profile", (req, res) => {
 
 const POSTURES = new Set(["in", "manual-only", "out"]);
 
-api.get("/sources", (_req, res) => {
-  res.json(db.prepare("SELECT * FROM source ORDER BY legal_posture, name").all());
+api.get("/sources", async (_req, res) => {
+  res.json(await all("SELECT * FROM source ORDER BY legal_posture, name"));
 });
 
-api.patch("/sources/:id", (req, res) => {
+api.patch("/sources/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const current = db.prepare("SELECT * FROM source WHERE id = ?").get(id) as any;
+  const current = await one("SELECT * FROM source WHERE id = $1", [id]);
   if (!current) return res.status(404).json({ error: `No source ${id}.` });
 
   const { enabled, legal_posture, legal_note, since_default, health } = req.body ?? {};
@@ -124,56 +127,53 @@ api.patch("/sources/:id", (req, res) => {
 
   const patch: Record<string, unknown> = {};
   for (const [k, v] of Object.entries({ enabled, legal_posture, legal_note, since_default, health })) {
-    if (v !== undefined) patch[k] = typeof v === "boolean" ? (v ? 1 : 0) : v;
+    if (v !== undefined) patch[k] = v;
   }
   if (!Object.keys(patch).length) return res.status(400).json({ error: "Nothing to update." });
 
-  const sets = Object.keys(patch).map((k) => `${k} = ?`).join(", ");
-  db.prepare(`UPDATE source SET ${sets} WHERE id = ?`).run(...Object.values(patch), id);
-  res.json({ ok: true, source: db.prepare("SELECT * FROM source WHERE id = ?").get(id) });
+  const cols = Object.keys(patch);
+  const sets = cols.map((k, i) => `${k} = $${i + 1}`).join(", ");
+  await run(`UPDATE source SET ${sets} WHERE id = $${cols.length + 1}`, [...Object.values(patch), id]);
+  res.json({ ok: true, source: await one("SELECT * FROM source WHERE id = $1", [id]) });
 });
 
 /* ---- SOLICITATIONS ------------------------------------------------------
  * Everything, in a defensible order that is NOT a judgment (§1.1). The
  * caller picks; the default is soonest deadline first. */
 
-api.get("/solicitations", (req, res) => {
+api.get("/solicitations", async (req, res) => {
   const order = req.query.order === "newest" ? "posted_at DESC" : "closes_at ASC";
-  const rows = db
-    .prepare(
-      `SELECT s.*, o.name AS org_name, o.jurisdiction,
-              (SELECT count(*) FROM sighting g WHERE g.solicitation_id = s.id) AS sightings,
-              (SELECT count(*) FROM document d WHERE d.solicitation_id = s.id) AS documents
-         FROM solicitation s
-    LEFT JOIN organization o ON o.id = s.org_id
-     ORDER BY ${order}`,
-    )
-    .all();
+  const rows = await all(
+    `SELECT s.*, o.name AS org_name, o.jurisdiction,
+            (SELECT count(*) FROM sighting g WHERE g.solicitation_id = s.id) AS sightings,
+            (SELECT count(*) FROM document d WHERE d.solicitation_id = s.id) AS documents
+       FROM solicitation s
+  LEFT JOIN organization o ON o.id = s.org_id
+   ORDER BY ${order}`,
+  );
   res.json({ count: rows.length, order, solicitations: rows });
 });
 
-api.get("/solicitations/:id", (req, res) => {
+api.get("/solicitations/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const row = db
-    .prepare(
-      `SELECT s.*, o.name AS org_name, o.jurisdiction
-         FROM solicitation s LEFT JOIN organization o ON o.id = s.org_id
-        WHERE s.id = ?`,
-    )
-    .get(id);
+  const row = await one(
+    `SELECT s.*, o.name AS org_name, o.jurisdiction
+       FROM solicitation s LEFT JOIN organization o ON o.id = s.org_id
+      WHERE s.id = $1`,
+    [id],
+  );
   if (!row) return res.status(404).json({ error: `No solicitation ${id}.` });
 
   /* Sightings joined, because a solicitation is the canonical record produced
    * by merging them (§4.4) and the merge should be inspectable. */
   res.json({
     ...row,
-    sightings: db
-      .prepare(
-        `SELECT g.*, src.name AS source_name
-           FROM sighting g JOIN source src ON src.id = g.source_id
-          WHERE g.solicitation_id = ? ORDER BY g.seen_at`,
-      )
-      .all(id),
-    documents: db.prepare("SELECT * FROM document WHERE solicitation_id = ?").all(id),
+    sightings: await all(
+      `SELECT g.*, src.name AS source_name
+         FROM sighting g JOIN source src ON src.id = g.source_id
+        WHERE g.solicitation_id = $1 ORDER BY g.seen_at`,
+      [id],
+    ),
+    documents: await all("SELECT * FROM document WHERE solicitation_id = $1", [id]),
   });
 });
