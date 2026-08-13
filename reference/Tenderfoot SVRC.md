@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.4.1, 2026-08-13.**
+**Tenderfoot SVRC — version 0.5.0, 2026-08-13.**
 **Adopted.** This is the working outline, not a draft.
 
 > ### Eight decisions adopted from the prototype — 2026-08-12
@@ -41,11 +41,13 @@
 >
 > **`Imp` and `Pri` were placeholders and are now load-bearing.** They were filled because the scoring key forbids a half-filled grid, not because they were known. Adoption promotes them from guesses to inputs — `docs/Tenderfoot-Plan-of-Action.md` §6 reconciles slice ordering against `Pri`. **They should be reviewed once with that consequence in mind**, because a placeholder that silently becomes a build order is exactly the failure the `·` convention exists to prevent. `Eff` is a genuine estimate. `Conc` reflects how settled the spec is.
 >
-> ~~**`Proto` is stale everywhere.**~~ **Filled 2026-08-12 against V1.1** by driving the bundle and comparing each node's `Overview` and `Known gaps` to what is actually drawn. **Mean 84%; twelve of twenty at 90% or above; nothing below 55%.**
+> ~~**`Proto` is stale everywhere.**~~ **Filled 2026-08-12 against V1.1**, **re-pointed 2026-08-13 to V1.2**, by driving the bundle and comparing each node's `Overview` and `Known gaps` to what is actually drawn. **Mean 85.2%; thirteen of twenty at 90% or above; nothing below 55%.**
+>
+> **Only one node moved, and the re-score cost minutes rather than a day.** V1.2 changed six lines — deleting the wordmark placeholder and its now-single-child wrapper — so `Region A.1` went **70% → 95%** and the other nineteen nodes were confirmed unaffected by diffing the bundles rather than re-reading them. **That is the argument for re-scoring at every freeze**: against a surgical change it is nearly free, and skipping it is how the column silently stops describing anything.
 >
 > Three nodes score low and all three for the same honest reason — *the prototype declines to draw what has not been decided.* View 2.4 renders `DOCUMENT RENDER — PLACEHOLDER` and states the undecided question on the screen. That is not a shortfall; it is the artifact refusing to invent a decision. **Scored as a gap anyway, because `Proto` measures distance from what we want, not the prototype's good judgment.**
 >
-> **This column goes stale on every prototype iteration.** V1.2 invalidates it. Fill it once at each freeze rather than continuously.
+> **This column goes stale on every prototype iteration.** V1.3 will invalidate it. Fill it once at each freeze rather than continuously — and V1.2 showed the cost of doing so scales with the size of the diff, not the size of the outline.
 >
 > **The register is plain, deliberately.** IDE8's SVRC is dictated in Matt's voice, and its hedges carry which decisions are settled — the 0.2.0 revision note there says so explicitly. Writing Tenderfoot's in that voice would have made a guess indistinguishable from a ruling. Now that it is adopted, edits in his own voice are the natural next layer.
 >
@@ -79,11 +81,17 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 70%   | 75%  |
+| 2   | 4   | 5   | 2   | 95%   | 90%  |
 
 **Overview** — Wordmark, primary navigation, and the queue counter.
 
-**Known gaps** — The wordmark does not exist. Per the branding decision recorded in `docs/Tenderfoot-Plan-of-Action.md` §A1.1, Tenderfoot carries its own identity rather than KP's, and the wordmark is an **output of the design bake-off**, not an input to it. Until the bake-off runs, this region has a hole in it that is scheduled rather than forgotten.
+**Known gaps** — ~~The wordmark does not exist.~~ **CLOSED 2026-08-13 against V1.2.** `Proto` **70% → 95%**, `Conc` 75% → 90% — this node was the outlier, and the wordmark placeholder was the entire reason.
+
+> **The wordmark existed the whole time; only its label said otherwise.** V1.1's header carried a finished lockup — a 22×22 rounded square with a 1.5px accent border containing an 8×8 accent square, beside `TENDERFOOT` in IBM Plex Sans 600 / 13.5px / `.16em` — with an 8px mono line beneath reading `WORDMARK — PLACEHOLDER`. **The placeholder was announcing the mark next to it as provisional.** V1.2 deletes that line and the now-single-child wrapper; nothing else in the lockup moved.
+>
+> **The mark is a checkbox.** 22×22 outer at 3px radius, 8×8 filled centre at 1px radius — the exact geometry of a checked checkbox elsewhere in this design, which is why `--radius-mark` is commented *"the 8×8 inner square of a checked box."* For a product whose whole job is *take this one, pass on that one*, that is a good mark. **It was nearly redesigned away:** the punch item read "replace with a real mark," and a Design round given that instruction would very likely have thrown it out. It survived because the header was read rather than inferred from its own placeholder text.
+>
+> **Not 100%**, because §A1.1 still frames the mark as an *output of a design bake-off* that never ran with N>1. The mark is good and adopted; it was never comparatively chosen. That is a five-point gap between *this is right* and *this was selected*.
 
 ### Region A.1.1 : Wordmark
 
@@ -585,7 +593,7 @@ Levels 3 and below take no grid and no labels.
 - **All twenty `Proto` values written**, replacing 0% throughout. Judged by driving the V1.1 bundle screen by screen and comparing each node's `Overview` and `Known gaps` against what is actually rendered — not by recollection. **Mean 84%, twelve nodes at 90%+, lowest 55%.**
 - **The prototype closed six documented gaps by itself.** `View 1.1` implements *ambiguity-first* ordering, which that node's `Known gaps` proposed and argued for against ranking by score. `View 1.3` points at the expiration radar from the cleared state, which its gap called *"undesigned."* `View 2.2` stamps `scorer v0.3.1` on every score, which its gap said had no treatment. `View 3.1` shows `2,160 EXPIRING` beside `14 SECTOR MATCH`, which is the sector-matching rule its gap said did not exist. `View 4.1` labels NY OGS *"Indiana is not the buyer."* `View 6.2` shows GovWin as `EXCLUDED` with legal posture as a column. **Six gaps written in this document, closed in an artifact generated from it.**
 - **The three lowest scores are all the same phenomenon, and it is not a defect.** `View 2.4` (55%) renders `DOCUMENT RENDER — PLACEHOLDER` and prints the undecided question on screen. `Screen 7` (60%) draws a state machine that differs from the one specified, on a screen whose `Conc` is 30%. `View 2.5` (65%) shows two sightings and no addendum, because the diffing the node requires does not exist. **In each case the generator declined to invent a decision.** Scored as gaps regardless, because `Proto` measures distance from what we want, not the artifact's restraint.
-- **`Region A.1` at 70% is the outlier worth acting on.** Structurally complete — wordmark slot, nav, queue counter — but the wordmark reads `WORDMARK — PLACEHOLDER`, which is the one unclosed gap the node itself names. On Matt's V1.2 punch list.
+- ~~**`Region A.1` at 70% is the outlier worth acting on.**~~ **CLOSED 2026-08-13 against V1.2 — 70% → 95%.** The node was structurally complete all along; the wordmark it called missing **already existed**, and the `WORDMARK — PLACEHOLDER` line beneath it was labelling a finished mark as provisional. V1.2 deletes the label. **Worth keeping as a caution:** the punch item said *replace with a real mark*, and executing it literally would have discarded a checkbox mark that suits this product unusually well. It survived because the header was read rather than inferred from its own placeholder text.
 - **`View 1.2` at 85% carries a caution.** The prototype answers that node's open question — *filter or first-class object?* — by drawing a first-class object with named views, counts, and a create affordance. **That is a decision made by a generator, not by anyone.** High fidelity to something nobody chose.
 - **This column expires.** It describes V1.1 and nothing else. Re-run at each prototype freeze.
 

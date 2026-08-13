@@ -518,7 +518,13 @@ Two kinds of interruption and only two. Everything else is pull.
 
 #### Three clauses this project needs that IMPACT's did not
 
-**1. The mandate names a version.** Parity is against **`Tenderfoot UI Mockups V1,1.html`**, the frozen bundle. Not "the prototype", which iterates — V1.2 is expected. **When a new version lands, re-pointing this mandate is a deliberate act**, taken with the `Proto` audit (`Proto2PRD` §4.7.5), not an automatic consequence of a file appearing. An unversioned parity requirement is unfalsifiable.
+**1. The mandate names a version.** Parity is against **`Tenderfoot UI Mockups V1.2.html`**, the frozen bundle. Not "the prototype", which iterates. **When a new version lands, re-pointing this mandate is a deliberate act**, taken with the `Proto` audit (`Proto2PRD` §4.7.5), not an automatic consequence of a file appearing. An unversioned parity requirement is unfalsifiable.
+
+> **Re-pointed V1.1 → V1.2 on 2026-08-13, deliberately, and the clause got its first real exercise.** The sequence was: diff the bundles (6 lines, 3 hunks), **verify the *unchanged* `tokens.css` still round-trips to the new bundle** — 67 tokens, 13 radii, zero uncovered literals — re-point the tooling, regenerate and confirm only labels moved, re-score the `Proto` column, rebuild the explainer, and look at a screenshot.
+>
+> **The token check is the part worth copying.** Verifying the *existing* tokens against the new bundle proves the layer did not move; regenerating first and then verifying would have proved nothing, because the two would agree by construction. That is the same failure this project already recorded once, when a generator and its verifier shared a bug.
+>
+> **V1.1 stays in `prototype/PROTOTYPE/` and is not deleted.** The diff between versions is what says which rule-bearing comments still apply.
 
 **2. ~~Parity applies to what V1 builds, not to everything drawn.~~ SUPERSEDED 2026-08-13 by Matt — the intelligence chrome IS built, inert.**
 

@@ -1,4 +1,4 @@
-"""Independent verification of src/tokens.css against the frozen V1.1 bundle.
+"""Independent verification of src/tokens.css against the frozen V1.2 bundle.
 
 Deliberately does NOT reuse gen.py's data structures. It re-reads both files and
 resolves the alias chain, so a bug in the generator's map cannot also pass here.
@@ -12,7 +12,7 @@ import os
 # version lands, point it at the new file and re-run -- see
 # docs/ClaudeDesign_Proto_Cleanup.md, "Re-extraction".
 ROOT   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BUNDLE = os.path.join(ROOT, "PROTOTYPE", "Tenderfoot UI Mockups V1,1.html")
+BUNDLE = os.path.join(ROOT, "PROTOTYPE", "Tenderfoot UI Mockups V1.2.html")
 TOKENS = os.path.join(ROOT, "PROTOTYPE", "src", "tokens.css")
 
 

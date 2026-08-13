@@ -8,7 +8,17 @@ Items are Matt's to action; anyone may add. **Add the reason, not just the chang
 
 ---
 
-## Open — V1.2
+## ✅ CLOSED — V1.2 landed 2026-08-13
+
+**Both items resolved. Neither the way the list expected.**
+
+Item 1 turned out to need a deletion rather than a design — the mark and wordmark already existed and only their label was provisional. Item 2 was closed **won't-do** after measuring the design system rather than assuming it could stretch.
+
+**Steps 2–6 below all completed against `Tenderfoot UI Mockups V1.2.html`:** tokens verified *unchanged* against the new bundle before regenerating (67 tokens, 13 radii, zero uncovered literals), tooling re-pointed and made to derive its version label so it cannot go stale again, `Proto` re-scored — only `Region A.1` moved, 70% → 95%, mean 84% → 85.2% — fidelity mandate re-pointed deliberately, and the explainer rebuilt and eyeballed. **V1.1 retained alongside V1.2, never replaced.**
+
+**The mock layer did not need re-extracting**: the six changed lines are all in the header lockup, so `src/app.js` is unaffected. SP1 T12 remains outstanding against its original V1 → V1.1 drift, unchanged by this round.
+
+## ~~Open~~ — V1.2
 
 | # | Item | Why | Raised |
 |---|---|---|---|
@@ -42,7 +52,7 @@ Items are Matt's to action; anyone may add. **Add the reason, not just the chang
 
 **The three lowest `Proto` scores are not defects.** `View 2.4` (55%), `Screen 7` (60%) and `View 2.5` (65%) score low because **the prototype declined to draw what had not been decided** — the document viewer literally renders `DOCUMENT RENDER — PLACEHOLDER` and prints the open question on screen. Drawing something there would invent a decision. **Do not "fix" these**; they resolve when the underlying question is answered, not when the pixels change.
 
-**Three prototype answers are awaiting ratification, not revision** — saved views as a first-class object, rot suspicion in the status bar, and the cleared state pointing at the radar. If any is *overturned*, that becomes a punch item. Until then there is nothing to build. Listed in the SVRC preamble.
+~~**Three prototype answers are awaiting ratification, not revision**~~ **— ALL THREE RATIFIED 2026-08-13.** Saved views as a first-class object, rot suspicion in the status bar, and the cleared state pointing at the radar. **None was overturned, so none became a punch item** — which was the whole point of asking before V1.2 rather than after. SVRC 0.5.0.
 
 ---
 

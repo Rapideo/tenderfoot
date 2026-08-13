@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-BUNDLE = ROOT / "prototype" / "PROTOTYPE" / "Tenderfoot UI Mockups V1,1.html"
+BUNDLE = ROOT / "prototype" / "PROTOTYPE" / "Tenderfoot UI Mockups V1.2.html"
 SHOTS = HERE / "shots"
 PDF = ROOT / "docs" / "Tenderfoot-Explainer.pdf"
 
