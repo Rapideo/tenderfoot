@@ -210,7 +210,7 @@ When Matt stops asking for changes: **freeze it.** From that point it is a speci
 | | Task |
 |---|---|
 | **B1** | Amend the design spec: add the **fidelity mandate** and the **platform-properties section** (Proto2PRD §5.2). Platform properties matter more here than they did for IMPACT — half our inputs belong to other people (SAM.gov quotas, portal rate limits, IP blocks). |
-| **B2** | Write the **workflow spec** — stack, hosting, CI, deploy, secrets, branch protection. Closes §10.3, the last open question. |
+| ~~**B2**~~ | ✅ **Done 2026-08-12** — [`superpowers/specs/2026-08-12-tenderfoot-workflow.md`](superpowers/specs/2026-08-12-tenderfoot-workflow.md). Closes §10.3. **Deliberately thin where thin is correct**: no hosting, no staging, no release process, nearly no secrets. Specific where the risk actually is — which is other people's platforms, not ours. |
 | **B3** | Write one implementation plan per sub-project below, with complete code and per-task verification. Commit everything before any application code. |
 
 ---
