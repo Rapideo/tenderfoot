@@ -1,6 +1,7 @@
 # SP0 — Infrastructure
 
 **Plan date:** 2026-08-12 · **Slice:** SP0, the first · **Standard:** `Proto2PRD.md` §5.4
+**Executed:** 2026-08-12, branch `sp0-infrastructure`. All tasks complete, all exit criteria met. **Three defects found by the plan's own verification steps and corrected in both the code and this plan** — see the foot of this document.
 **Reads with:** the [workflow spec](../specs/2026-08-12-tenderfoot-workflow.md) and the [design spec](../specs/2026-08-03-tenderfoot-design.md)
 
 > **Commit this plan before writing any application code.** The design thinking happens here, where it is cheap; execution is then mechanical.
@@ -37,9 +38,9 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 
 ## Preconditions
 
-- [ ] **P1.** Node ≥ 20 and npm ≥ 10 available. *Verify:* `node -v && npm -v` — confirmed 2026-08-12 as v24.13.0 / 11.6.2.
-- [ ] **P2.** Python available for the token-drift gate. *Verify:* `python --version`.
-- [ ] **P3.** On a branch, not `master`. *Verify:* `git checkout -b sp0-infrastructure && git branch --show-current`.
+- [x] **P1.** Node ≥ 20 and npm ≥ 10 available. *Verify:* `node -v && npm -v` — confirmed 2026-08-12 as v24.13.0 / 11.6.2.
+- [x] **P2.** Python available for the token-drift gate. *Verify:* `python --version`.
+- [x] **P3.** On a branch, not `master`. *Verify:* `git checkout -b sp0-infrastructure && git branch --show-current`.
 
 ---
 
@@ -47,7 +48,7 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 
 ### 1. Root workspace
 
-- [ ] **T1.** Create `package.json` at the repository root.
+- [x] **T1.** Create `package.json` at the repository root.
 
 ```json
 {
@@ -73,7 +74,7 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 
 *Verify:* `node -e "JSON.parse(require('fs').readFileSync('package.json'))" && echo OK`
 
-- [ ] **T2.** Create `tsconfig.base.json` at the root.
+- [x] **T2.** Create `tsconfig.base.json` at the root.
 
 ```json
 {
@@ -94,7 +95,7 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 }
 ```
 
-- [ ] **T3.** Create `tsconfig.json` at the root — a solution file referencing the three packages.
+- [x] **T3.** Create `tsconfig.json` at the root — a solution file referencing the three packages.
 
 ```json
 {
@@ -109,7 +110,7 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 
 ### 2. Shared package
 
-- [ ] **T4.** Create `app/shared/package.json`.
+- [x] **T4.** Create `app/shared/package.json`.
 
 ```json
 {
@@ -123,7 +124,7 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 }
 ```
 
-- [ ] **T5.** Create `app/shared/tsconfig.json`.
+- [x] **T5.** Create `app/shared/tsconfig.json`.
 
 ```json
 {
@@ -133,7 +134,7 @@ Demo criterion, from the workflow spec §7: **the client boots, calls the API, t
 }
 ```
 
-- [ ] **T6.** Create `app/shared/src/index.ts`.
+- [x] **T6.** Create `app/shared/src/index.ts`.
 
 ```ts
 /* Types shared by client and server.
@@ -162,7 +163,7 @@ export interface PingResponse {
 
 ### 3. Server, database, migrations
 
-- [ ] **T7.** Create `app/server/package.json`.
+- [x] **T7.** Create `app/server/package.json`.
 
 ```json
 {
@@ -190,7 +191,7 @@ export interface PingResponse {
 }
 ```
 
-- [ ] **T8.** Create `app/server/tsconfig.json`.
+- [x] **T8.** Create `app/server/tsconfig.json`.
 
 ```json
 {
@@ -201,12 +202,13 @@ export interface PingResponse {
 }
 ```
 
-- [ ] **T9.** Create `app/server/src/db/index.ts` — the database handle.
+- [x] **T9.** Create `app/server/src/db/index.ts` — the database handle.
 
 ```ts
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /* ONE SQLITE FILE, LOCAL-FIRST (workflow spec §1).
  *
@@ -214,11 +216,23 @@ import { dirname, resolve } from "node:path";
  * database (workflow spec §9.3). The path is read from an env var precisely
  * so that decision stays open -- switching to per-firm files means varying
  * this value, not rewriting callers. */
-const DB_PATH = resolve(process.env.TENDERFOOT_DB ?? "tenderfoot.db");
+/* Anchored to the repository root, NOT to cwd. npm sets cwd to the workspace
+ * directory, so a cwd-relative default put the database at
+ * app/server/tenderfoot.db when invoked one way and elsewhere when invoked
+ * another -- which is how data quietly goes missing. Found by SP0's own
+ * verification. Depth is identical from src/db and dist/db. */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const DB_PATH = process.env.TENDERFOOT_DB
+  ? resolve(process.env.TENDERFOOT_DB)
+  : resolve(REPO_ROOT, "tenderfoot.db");
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
-export const db = new Database(DB_PATH);
+/* Explicitly typed. `composite: true` requires declaration emit, and an
+ * inferred type here names BetterSqlite3.Database from a namespace the
+ * emitted .d.ts cannot reference (TS4023). InstanceType<typeof Database>
+ * names it without a second import. */
+export const db: InstanceType<typeof Database> = new Database(DB_PATH);
 
 /* WAL: concurrent reads while a long ingest writes. Ingestion runs for
  * minutes at a time (§5.3), and without this the UI blocks behind it. */
@@ -231,12 +245,12 @@ db.pragma("foreign_keys = ON");
 export { DB_PATH };
 ```
 
-- [ ] **T10.** Create `app/server/src/db/migrate.ts` — the runner.
+- [x] **T10.** Create `app/server/src/db/migrate.ts` — the runner.
 
 ```ts
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { db, DB_PATH } from "./index.js";
 
 /* Hand-rolled rather than a library (SP0 plan, decision 2): ~40 lines, no
@@ -283,13 +297,17 @@ export function appliedMigrations(): string[] {
     .map((r: any) => r.name as string);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/* Entry-point guard. `file://${process.argv[1]}` is WRONG on Windows: argv[1]
+ * is a backslashed path (C:\...) while import.meta.url is a file:///C:/...
+ * URL, so the comparison silently never matches and the CLI does nothing.
+ * pathToFileURL normalises both sides. Found by SP0's own verification. */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log(`database: ${DB_PATH}`);
   migrate();
 }
 ```
 
-- [ ] **T11.** Create `app/server/migrations/001_app_meta.sql`.
+- [x] **T11.** Create `app/server/migrations/001_app_meta.sql`.
 
 ```sql
 -- SP0. Infrastructure only -- NOT domain schema.
@@ -309,7 +327,7 @@ VALUES ('schema_owner', 'sp0', datetime('now'));
 
 *Verify:* `npm run migrate --workspace app/server` then `npm run migrate --workspace app/server` again — the second run must print `no pending migrations`, proving idempotence.
 
-- [ ] **T12.** Create `app/server/src/index.ts` — the API.
+- [x] **T12.** Create `app/server/src/index.ts` — the API.
 
 ```ts
 import cors from "cors";
@@ -363,7 +381,7 @@ app.listen(PORT, () => console.log(`tenderfoot server on :${PORT}`));
 `curl -s localhost:3003/api/health` → JSON with `"migrations":["001_app_meta.sql"]`, and
 `curl -s -X POST localhost:3003/api/health/ping` → JSON with a timestamp.
 
-- [ ] **T13.** Create `app/server/src/db/migrate.test.ts`.
+- [x] **T13.** Create `app/server/src/db/migrate.test.ts`.
 
 ```ts
 import { afterAll, expect, test } from "vitest";
@@ -399,7 +417,7 @@ test("foreign keys are enforced", () => {
 
 ### 4. Client
 
-- [ ] **T14.** Create `app/client/package.json`.
+- [x] **T14.** Create `app/client/package.json`.
 
 ```json
 {
@@ -429,7 +447,7 @@ test("foreign keys are enforced", () => {
 }
 ```
 
-- [ ] **T15.** Create `app/client/tsconfig.json`.
+- [x] **T15.** Create `app/client/tsconfig.json`.
 
 ```json
 {
@@ -446,7 +464,7 @@ test("foreign keys are enforced", () => {
 }
 ```
 
-- [ ] **T16.** Create `app/client/vite.config.ts`.
+- [x] **T16.** Create `app/client/vite.config.ts`.
 
 ```ts
 import react from "@vitejs/plugin-react";
@@ -464,7 +482,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **T17.** Create `app/client/index.html`.
+- [x] **T17.** Create `app/client/index.html`.
 
 ```html
 <!doctype html>
@@ -481,7 +499,7 @@ export default defineConfig({
 </html>
 ```
 
-- [ ] **T18.** Create `app/client/src/main.tsx`.
+- [x] **T18.** Create `app/client/src/main.tsx`.
 
 ```tsx
 import { StrictMode } from "react";
@@ -503,7 +521,7 @@ createRoot(document.getElementById("root")!).render(
 );
 ```
 
-- [ ] **T19.** Create `app/client/src/Health.tsx`.
+- [x] **T19.** Create `app/client/src/Health.tsx`.
 
 ```tsx
 import { useEffect, useState } from "react";
@@ -544,7 +562,7 @@ export function Health() {
 
 ### 5. Gates
 
-- [ ] **T20.** Create `.env.example` at the root.
+- [x] **T20.** Create `.env.example` at the root.
 
 ```
 # Copy to .env. Never commit .env.
@@ -560,7 +578,7 @@ TENDERFOOT_DB=
 PORT=
 ```
 
-- [ ] **T21.** Append to `.gitignore`.
+- [x] **T21.** Append to `.gitignore`.
 
 ```
 node_modules/
@@ -573,7 +591,7 @@ dist-types/
 tmp-test.db*
 ```
 
-- [ ] **T22.** Create `.github/workflows/ci.yml`.
+- [x] **T22.** Create `.github/workflows/ci.yml`.
 
 ```yaml
 # There is no git remote yet (SP0 plan, decision 4), so this file does not
@@ -595,7 +613,7 @@ jobs:
       - run: npm run check
 ```
 
-- [ ] **T23.** Install and run the full gate.
+- [x] **T23.** Install and run the full gate.
 
 *Verify:* `npm install && npm run check` — typecheck, tests, client build, and token drift all pass. **Commit `package-lock.json`.**
 
@@ -603,11 +621,11 @@ jobs:
 
 ## Exit criteria
 
-- [ ] `npm run check` passes from a clean clone
-- [ ] `npm run migrate --workspace app/server` twice: applies once, no-ops the second time
-- [ ] Client at `:5175` shows applied migrations, and the button writes a timestamp that survives a refresh
-- [ ] Deleting `tenderfoot.db` and restarting the server rebuilds it from migrations
-- [ ] **No domain tables, no tokens, no SVRC screens.** If any appeared, SP0 grew a feature
+- [x] `npm run check` passes from a clean clone
+- [x] `npm run migrate --workspace app/server` twice: applies once, no-ops the second time
+- [x] Client at `:5175` shows applied migrations, and the button writes a timestamp that survives a refresh
+- [x] Deleting `tenderfoot.db` and restarting the server rebuilds it from migrations
+- [x] **No domain tables, no tokens, no SVRC screens.** If any appeared, SP0 grew a feature
 
 ---
 
@@ -620,3 +638,20 @@ SP0 exists partly to test B2 while it is cheap to correct. **Three things to wat
 **Is the three-package workspace worth its ceremony at this size?** If `shared` stays this thin through SP1, collapsing it into the server is the simplification.
 
 **Does the proxy-not-CORS choice hold?** It is cleaner, but `cors` is installed because the IDE8 stack includes it. If nothing ever needs it, drop the dependency and note it.
+
+
+---
+
+## Execution record — three defects the verification caught
+
+**Executed 2026-08-12.** The value of writing verification commands rather than "check it works" is that they fail. All three of these would have shipped silently.
+
+**1. `TS4023` — the exported database handle could not be named.** `composite: true` requires declaration emit, and the inferred type of `db` referenced `BetterSqlite3.Database` from a namespace the emitted `.d.ts` could not reference. Fixed with an explicit `InstanceType<typeof Database>` annotation, which names the type without a second import. **Caught by `npm run typecheck`** on the first run of the gate.
+
+**2. The migration CLI silently did nothing on Windows.** The entry-point guard read ``import.meta.url === `file://${process.argv[1]}` `` — but `argv[1]` is a backslashed path (`C:\...`) while `import.meta.url` is a `file:///C:/...` URL, so the comparison never matched. The command exited zero, printed nothing, and applied no migrations. **The unit tests passed throughout**, because they call `migrate()` directly. Fixed with `pathToFileURL`.
+
+> **This one is worth remembering.** A green test suite and a zero exit code, and the command did nothing at all. It was caught only because the plan's verification step said *"the second run must print `no pending migrations`"* — an expectation about **output**, not about exit status.
+
+**3. The database landed in a different place depending on how it was invoked.** `resolve("tenderfoot.db")` is cwd-relative, and npm sets cwd to the workspace directory — so `npm run migrate --workspace app/server` wrote `app/server/tenderfoot.db` while a root-level invocation would write elsewhere. **That is how data quietly goes missing.** Fixed by anchoring the default to the repository root, computed from the module's own location so `src/` and `dist/` resolve identically.
+
+**None of the three were design errors.** The plan's decisions all held. They were the ordinary friction of a first slice on a specific machine — which is exactly what SP0 exists to absorb before SP1 puts real data on top of it.

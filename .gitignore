@@ -1,0 +1,11 @@
+
+# SP0
+node_modules/
+dist/
+dist-types/
+.env
+*.db
+*.db-wal
+*.db-shm
+tmp-test.db*
+*.tsbuildinfo

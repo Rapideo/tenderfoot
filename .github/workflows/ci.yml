@@ -1,0 +1,17 @@
+# There is no git remote yet (SP0 plan, decision 4), so this file does not
+# run anything today. It exists so the gate is not reinvented later, and it
+# calls the same `npm run check` a developer runs locally -- which is what
+# keeps the two from drifting.
+name: check
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: npm ci
+      - run: npm run check

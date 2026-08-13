@@ -2,7 +2,7 @@
 
 **Updated 2026-08-12.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now:** Stage B, two of three planning documents done. Next action is **B3 — the implementation plan for SP0**.
+> **Now:** SP0 is built and green on branch `sp0-infrastructure`. Next action is **the SP1 plan — the entity graph**.
 
 ---
 
@@ -27,13 +27,13 @@
 |---|---|---|
 | **B1** | Fidelity mandate + platform properties into the spec | ✅ 2026-08-12 |
 | **B2** | Workflow spec — stack, CI, deploy, secrets | ✅ 2026-08-12 |
-| **B3** | Implementation plans, one per slice | ◐ **SP0 written** — `docs/superpowers/plans/2026-08-12-sp0-infrastructure.md` |
+| **B3** | Implementation plans, one per slice | ◐ SP0 written **and executed**. SP1 next |
 
 ## Slices
 
 | | | Status |
 |---|---|---|
-| **SP0** | Infrastructure — client → API → SQLite, check gate green | ◐ **plan written, ready to execute** |
+| **SP0** | Infrastructure — client → API → SQLite, check gate green | ✅ **executed 2026-08-12**, branch `sp0-infrastructure` |
 | **SP1** | Entity graph — real solicitations into the real schema | — |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
@@ -63,7 +63,7 @@
 | | |
 |---|---|
 | ~~B3 for SP0~~ | ✅ written 2026-08-12 |
-| B3 for SP1, SP2 | After SP0 proves the workflow spec |
+| B3 for SP1, SP2 | **Unblocked** — SP0 proved the workflow spec, with three corrections |
 
 ---
 
