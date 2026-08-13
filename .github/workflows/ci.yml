@@ -2,11 +2,48 @@
 # run anything today. It exists so the gate is not reinvented later, and it
 # calls the same `npm run check` a developer runs locally -- which is what
 # keeps the two from drifting.
+#
+# Revised 2026-08-13 (SP1.5 Task 16, workflow spec §6). `npm run check` now
+# needs a live Postgres. DATABASE_URL_TEST is a GITHUB SECRET, not a service
+# container -- the plan originally called for a Postgres service container;
+# that is superseded. Docker is not available in this project's workflow,
+# and the real test database is a dedicated Neon branch (project
+# wispy-tooth-06225229, branch `test`), not a throwaway one a container
+# would give you.
+#
+# The secret MUST hold that branch's UNPOOLED connection string. Schema-per-
+# test-file isolation (app/server/src/db/testdb.ts) turns TENDERFOOT_SCHEMA
+# into a `-c search_path=...` Postgres startup parameter, and Neon's pooled
+# endpoint (PgBouncer) rejects that startup parameter outright -- SQLSTATE
+# 08P01, "unsupported startup parameter in options: search_path". See
+# .env.example (Ruling 5) for the full account.
+#
+# DATABASE_URL is set to the SAME secret value below, on purpose. `npm run
+# build` (part of `npm run check`) runs migrate:deploy, which requires
+# DATABASE_URL and applies migrations to whatever it points at. Pointing
+# CI's build step at the test branch instead of production means every push
+# and every PR runs migrations only against a disposable database, never
+# the real one, before anything has been reviewed. CI never holds or
+# exercises the production connection string.
+#
+# GITHUB_RUN_ID needs no setup here -- it's a default Actions environment
+# variable, already present in every run, and it's what keeps a CI run's
+# schema names from colliding with a developer's local run or another
+# concurrent CI run (Ruling 3, app/server/src/db/testdb.ts). Just don't
+# override it.
+#
+# Python (setup-python below) stays required: the token-drift gate
+# (`prototype/tools/verify-tokens.py`) runs Python, which the Vercel build
+# image does not necessarily provide, so this workflow supplies its own
+# rather than assume the gate silently keeps running.
 name: check
 on: [push, pull_request]
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
