@@ -37,7 +37,7 @@
 |---|---|---|
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
-| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel, preview branches | 🔜 **NEXT.** [Plan written 2026-08-13](docs/superpowers/plans/2026-08-13-sp1.5-postgres-port.md) — 16 tasks. **P3 done: Vercel + Neon provisioned.** Two corrections outstanding (P3b) |
+| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) outstanding — dashboard-only, six steps in workflow spec §8 |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
