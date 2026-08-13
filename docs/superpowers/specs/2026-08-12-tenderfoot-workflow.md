@@ -203,7 +203,24 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 
 **Handling.** `.env` locally, never committed; `.env.example` checked in with keys and empty values. **In the deployed environment, secrets live in Vercel environment variables per environment — production, preview, development — and `vercel env pull` writes the local file.** No secret in the database, no secret in the client bundle.
 
-> **One consequence that is easy to miss.** Preview deployments get their own environment variables. **A preview branch pointed at the production database is a footgun**, and Neon's branching exists precisely to avoid it: a preview deploy should get a database branch, not production. Settle this when the port lands, while there is almost no data to lose.
+> **One consequence that is easy to miss.** Preview deployments get their own environment variables. **A preview branch pointed at the production database is a footgun**, and Neon's branching exists precisely to avoid it: a preview deploy should get a database branch, not production.
+>
+> **Investigated 2026-08-13 (Task 15), and the footgun is still live.** `vercel env ls` confirms it directly: `DATABASE_URL` (and every other Neon-injected variable) lists one Encrypted value shared across all three environments — `Production, Preview, Development` — not a distinct value per environment. Every preview deployed today, including Task 14's, writes to the same database production reads.
+>
+> **Not automatable from here, and not attempted.** Checked every CLI and API surface this project has access to: `vercel integration --help`, `vercel integration update --help` (only `--plan`, `--projects`, `--authorization-id` — billing and project access, not per-environment branching), `vercel integration-resource --help` (only `create-threshold`, `disconnect`, `remove`), and the full Neon MCP tool set (branch create/delete/describe/list, run_sql, connection strings — nothing that touches the Vercel↔Neon connection's deployment configuration). Neon's own documentation for this feature (`vercel-native-integration-previews`) says so directly: **it is a dashboard-only setting.** No Neon branch, Vercel resource, or config file was created, deleted, or modified while checking this.
+>
+> **So: manual steps, to be done by Matt, not scripted here.**
+>
+> 1. Vercel dashboard → team `koehler-partners` → project `tenderfoot`.
+> 2. Storage tab → open the connected Neon resource (`neon-lime-button`, bound to Neon project `wispy-tooth-06225229`).
+> 3. Open its **Connect Project** screen for `tenderfoot` (the same flow used for the original connection — revisiting it is how an existing connection gets reconfigured; there is no separate "Manage" screen for this).
+> 4. Under **Advanced Options → Deployments Configuration**, toggle **Preview** on. This is Preview Branching.
+> 5. Confirm **"Resource must be active before deployment"** is also on — it makes Vercel wait for the branch to exist before it builds.
+> 6. Save.
+>
+> **What the result should look like.** Neon's docs state the per-branch connection variables are injected only at deploy time and *do not* appear in the project's static environment-variable list — so `vercel env ls` will not grow a new row. Instead, the existing rows (`DATABASE_URL` and the rest) should narrow from `Production, Preview, Development` to `Production, Development`, since Preview is no longer served by a static value. If they still read all three environments after saving, the toggle did not take effect.
+>
+> **The real proof is still the one Task 15's brief specifies, and it needs an actual preview deploy** (out of scope for this batch — see the batch note below): deploy a throwaway branch, `POST $PREVIEW/api/health/ping`, then `GET $PRODUCTION/api/health` and confirm `last_ping` is unchanged. If it moved, the preview is still pointed at production and the toggle did not do what it claims to.
 
 ---
 
@@ -247,10 +264,10 @@ This section used to open *"we have no hosting platform, so it has no properties
 
 | Platform | Property to establish | Why it is load-bearing | Measured |
 |---|---|---|---|
-| **Vercel** | Function `maxDuration` ceiling on the chosen plan | §5.3 ingestion "runs for minutes." Configurable per function in `vercel.json`; the ceiling is not | — |
+| **Vercel** | Function `maxDuration` ceiling on the chosen plan | §5.3 ingestion "runs for minutes." Configurable per function in `vercel.json`; the ceiling is not | ✅ **300 seconds, measured 2026-08-13.** Not read from a dashboard — observed by deploying `api/index.ts` with `maxDuration: 800` and reading Vercel's own rejection: *"The value for maxDuration must be between 1 second and 300 seconds, in order to increase this limit upgrade your plan."* `vercel.json` still ships `30` (Task 14's honest placeholder); SP3's ingestion sizing against this 300s ceiling is §9.6's problem |
 | **Vercel** | Cron minimum frequency and behaviour on the chosen plan | SP7 is scheduled ingestion. This is the whole reason for the host | — |
 | **Vercel** | Request/response body limits | 21 MB bundles pass through the API on the way to blob storage, unless they don't — which is itself a design decision | — |
-| **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | ✅ **~5 min, measured 2026-08-13.** Cold-start latency still unmeasured — see below |
+| **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | ✅ **~5 min, measured 2026-08-13.** Cold-start latency also measured 2026-08-13, reported unaveraged since the cold path is the normal one for a one-user database: **first request after idle — 1087 ms** (connect 1052 ms + query 35 ms) **vs. an immediate second (warm) request — 317 ms** (connect 282 ms + query 35 ms). One `SELECT 1` round trip via `node --env-file=.env`, direct against `DATABASE_URL` — not through the deployed function, so Vercel's own cold start is not included here |
 | **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | ✅ **2026-08-13 — pooled by default, confirmed.** `DATABASE_URL` resolves to the `-pooler` host and `DATABASE_URL_UNPOOLED` to the direct one. **The integration got this right without being asked**, so the requirement is satisfied by construction rather than by discipline. The connection *count* ceiling is still unread |
 | **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | **Partial 2026-08-13** — see below |
 
