@@ -3,6 +3,7 @@
 **Date:** 2026-08-03
 **Revised:** 2026-08-04 — answer key removed (§8.2); platform-bound adapters and verified source facts added (§5.7–5.8); **scope narrowed to prospect discovery only (§1)** — the system is capacity-agnostic, and pipeline management is deferred (§9)
 **Revised:** 2026-08-11 — **§6 Matching is parked in full.** V1 returns everything active sources return, unranked and unfiltered (§1.1). Qualification is not deferred-as-designed but deferred-as-*undesigned*: it will be re-imagined once ingestion is running, and nothing in §6 binds that work.
+**Revised:** 2026-08-12 — **Stage B1**: the fidelity mandate added (§7.10) and the platform-properties section added (§5.9), both required by `Proto2PRD` §5.2 *before* sub-project 1 begins. §10.3 closed by the workflow spec.
 **Status:** Design approved, with §6 parked
 **Author:** Matt Smith, Koehler Partners (with Claude)
 
@@ -326,6 +327,23 @@ Established 2026-08-04. Recorded because they constrain the build.
 
 The Indiana archive gap resolves in a useful direction. The state's *contract* side is well published even though its *solicitation* side is not — and contract end dates were already the higher-value signal (§4.3). The gap pushes Phase 0 toward the better data rather than away from it.
 
+
+### 5.9 Platform properties
+
+`Proto2PRD` §5.2 requires this section in the architectural spec, on the strength of a specific failure: IMPACT's production went down thirteen days after launch because both Supabase projects were free tier and auto-paused after ~7 days of inactivity. *"Not a bug — a documented property of the plan, never written down."*
+
+**For Tenderfoot the section inverts, and the inversion is the point.**
+
+**We have no hosting platform, so it has no properties.** V1 is local-first: SQLite on disk, one user, batch ingestion (workflow spec §7). No tier limits, no cold starts, no connection caps, no auto-pause.
+
+**What Tenderfoot has instead is four source platforms belonging to other people**, whose properties are load-bearing and are documented in §5.7–5.8 and carried per-row in the Source Registry. The consolidated view lives in the workflow spec §10; the ones that change how code is written are `sort` on SAM.gov, `amount` on Indiana, withheld totals on Michigan, and CAPTCHA gating on Ohio.
+
+> **The equivalent failure is not ours to prevent by upgrading a plan.** It is **a source that quietly stops returning real results** — four confirmed instances across three independent platforms of a parameter accepted and silently ignored (§5.4). Same shape as auto-pause: a documented property of somebody else's system, invisible until something downstream is already wrong.
+>
+> **Two consequences, both already in force.** Every new adapter runs the vary-one-parameter check as part of being added, and the result is recorded on the Registry row. Where a source withholds totals — Michigan — **that fact is recorded too, because it means the check cannot run there and health must be inferred another way.**
+
+**One hosting property does exist, and it is dated.** At **SP7**, scheduled live ingestion means a machine must be awake to scrape. That is the point at which this section acquires real content and the workflow spec's §7 needs rewriting. Owned by whoever writes the SP7 plan.
+
 ---
 
 ## 6. Matching — PARKED 2026-08-11
@@ -480,6 +498,51 @@ A pull signal and a tripwire, not a workspace:
 - Genuinely time-critical alerts: a deadline moved on an active pursuit, an addendum posted, an award announced
 
 Two kinds of interruption and only two. Everything else is pull.
+
+
+### 7.10 The fidelity mandate
+
+**Added 2026-08-12 (Stage B1), before sub-project 1 begins** — which is the point of it. `Proto2PRD` §5.2: put this in before an audit discovers it is missing.
+
+> **The frontend MUST look and behave exactly like the prototype. Pixel-for-pixel parity is the non-negotiable success criterion. Every other consideration — abstraction reuse, component elegance, developer ergonomics — is subordinate to it.**
+
+**A mandate without a definition is inspiration rather than instruction**, so:
+
+#### What "matching" means
+
+- **Same semantic elements, nesting, and class names.**
+- **Same tokens** — `prototype/PROTOTYPE/src/tokens.css`, 67 role-named colours and 13 radius tokens, verified byte-identical to the bundle by `prototype/tools/verify-tokens.py`. CI runs that check (workflow spec §6).
+- **Same spacing scale, radii, shadows, typography.**
+- **Same container width, header height, mark size.**
+- **Copy verbatim.** Titles, button labels, micro-labels, modal bodies, toast messages, empty states. `ORDER · AMBIGUITY FIRST`, `MACHINE SCORES — A READING AID`, `COST TO PURSUE — FACTS, NOT A SCORE`, `GATED ITEMS — FILED, NOT DELETED (§6.2)` — these are specification, not placeholder text. Several of them carry an argument.
+
+#### Three clauses this project needs that IMPACT's did not
+
+**1. The mandate names a version.** Parity is against **`Tenderfoot UI Mockups V1,1.html`**, the frozen bundle. Not "the prototype", which iterates — V1.2 is expected. **When a new version lands, re-pointing this mandate is a deliberate act**, taken with the `Proto` audit (`Proto2PRD` §4.7.5), not an automatic consequence of a file appearing. An unversioned parity requirement is unfalsifiable.
+
+**2. Parity applies to what V1 builds, not to everything drawn.** The prototype shows the **finished product**; V1 ships a subset (§1.1). Region 1.1.2 (Score Strip), Region 1.1.5 (Gated Items Drawer) and View 2.2 (Scores and Evidence) are parked and **are not built**. **The mandate does not require building them — it requires that when they are built, they match.** Nothing is trimmed from the prototype to reflect V1's scope.
+
+**3. The wordmark is exempt until it exists.** The header renders `WORDMARK — PLACEHOLDER`. Pixel parity with a placeholder is not a goal. On the V1.2 punch list; the exemption ends when the mark does.
+
+#### Acceptable deviations — no paperwork required
+
+- **Real data replacing mock data.**
+- **Routes replacing in-page state.** The prototype has no router; the build does (workflow spec §1). Deep links are an addition, pre-authorised here.
+- **Framework form components** replacing raw handlers.
+- **Working interactions where the prototype's are inert.** The decision buttons do not advance the queue in the mockup, and the cleared state sits behind a flag. Those are mockup limitations, not design intent.
+- **Non-visual accessibility additions** — labels, roles, focus management, live regions.
+
+**Anything else requires an explicit `Deviation:` entry in the commit or PR body, with justification.**
+
+> *"A mandate without an escape hatch gets quietly violated. A mandate with a documented escape hatch gets followed, because compliance is easier than the paperwork of deviating."* — `Proto2PRD` §5.2
+
+#### One gap in this mandate, named rather than discovered
+
+**The prototype specifies desktop only.** It was designed and captured at 1600px. But §7.1 requires the triage queue to work on a phone, and the SVRC repeats it.
+
+**So responsive behaviour has no reference to be faithful to.** Pixel parity is defined at desktop and undefined below it, which means the mobile layout will be *designed during the build* by whoever writes the component — silently, and without anyone deciding it.
+
+**That is exactly the unratified-answer problem** (`Proto2PRD` §4.7.5), arriving in advance for once. Two ways to close it, both cheap, neither yet chosen: put mobile breakpoints on the prototype punch list so the reference exists, or state here that mobile is the developer's call within the token system and accept it. **Until one is chosen, this is the mandate's known hole.**
 
 ---
 

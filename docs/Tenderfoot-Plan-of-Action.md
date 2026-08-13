@@ -209,7 +209,7 @@ When Matt stops asking for changes: **freeze it.** From that point it is a speci
 
 | | Task |
 |---|---|
-| **B1** | Amend the design spec: add the **fidelity mandate** and the **platform-properties section** (Proto2PRD §5.2). Platform properties matter more here than they did for IMPACT — half our inputs belong to other people (SAM.gov quotas, portal rate limits, IP blocks). |
+| ~~**B1**~~ | ✅ **Done 2026-08-12.** Fidelity mandate at spec **§7.10**, platform properties at **§5.9**. The mandate gained three clauses IMPACT's did not need: it **names a version** (V1.1, re-pointed deliberately when V1.2 lands), parity applies **only to what V1 builds** while requiring parked nodes to match when built, and the wordmark is exempt until it exists. **One hole named rather than discovered: the prototype specifies desktop only, so responsive behaviour has no reference** — a decision that would otherwise get made silently during the build. |
 | ~~**B2**~~ | ✅ **Done 2026-08-12** — [`superpowers/specs/2026-08-12-tenderfoot-workflow.md`](superpowers/specs/2026-08-12-tenderfoot-workflow.md). Closes §10.3. **Deliberately thin where thin is correct**: no hosting, no staging, no release process, nearly no secrets. Specific where the risk actually is — which is other people's platforms, not ours. |
 | **B3** | Write one implementation plan per sub-project below, with complete code and per-task verification. Commit everything before any application code. |
 
