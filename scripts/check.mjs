@@ -26,6 +26,8 @@
  * actually runs) still sees whatever DATABASE_URL its own environment
  * provides. */
 import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 function run(npmScript, env = process.env) {
   // One joined command string, not a separate args array -- npmScript is
@@ -36,6 +38,45 @@ function run(npmScript, env = process.env) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+/* SP2 T3 review (Important): the DEV guard on /dev/gallery in
+ * app/client/src/router.tsx is convention-enforced, not tool-enforced --
+ * nothing stops a future `import { Gallery } from "./dev/Gallery"` from
+ * outside that guarded branch (a debug link, a barrel export, a lazy import
+ * "for convenience") from shipping it anyway. A comment on the guard cannot
+ * catch that; only something that runs is a guard.
+ *
+ * So this runs. app/client/src/dev/Gallery.tsx carries a marker string that
+ * exists nowhere else in the source tree. This function greps the actual
+ * production build for it -- after `build` below has produced dist/ --
+ * and fails the gate if it is present, whatever route it arrived by. */
+function checkGalleryMarkerAbsentFromBuild() {
+  const marker = "dev-gallery-marker";
+  const distDir = join(process.cwd(), "app", "client", "dist");
+  const leaks = [];
+  for (const rel of readdirSync(distDir, { recursive: true })) {
+    const full = join(distDir, rel);
+    if (statSync(full).isDirectory()) continue;
+    if (readFileSync(full, "utf8").includes(marker)) leaks.push(full);
+  }
+  if (leaks.length > 0) {
+    console.error(
+      `FAIL: a dev-only surface reached the production build.\n` +
+        `"${marker}" -- a marker that exists ONLY in ` +
+        `app/client/src/dev/Gallery.tsx, a DEV-ONLY component -- was found in:\n` +
+        leaks.map((f) => `  ${f}`).join("\n") +
+        `\n\nThis means /dev/gallery, or something that imports Gallery.tsx ` +
+        `from outside the import.meta.env.DEV branch in ` +
+        `app/client/src/router.tsx, shipped to production. Find and remove ` +
+        `whatever imports Gallery.tsx outside that guarded branch, then ` +
+        `rebuild and re-run this check.`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `OK     "${marker}" absent from ${distDir} -- the dev-only gallery route did not ship.`,
+  );
 }
 
 run("typecheck");
@@ -74,5 +115,7 @@ run("test", testEnv);
  * would trust it exists. The gate's own build step must never see
  * production -- see I2 above. */
 run("build", { ...process.env, DATABASE_URL: process.env.DATABASE_URL_TEST });
+
+checkGalleryMarkerAbsentFromBuild();
 
 run("tokens");
