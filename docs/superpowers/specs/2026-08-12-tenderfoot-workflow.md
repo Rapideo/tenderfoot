@@ -227,7 +227,11 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 >
 > **Recorded cost:** if the API does move later, the handlers get rewritten a second time. Roughly 180 lines, and cheap next to an unreviewable slice.
 
-**6. Where long ingestion actually runs.** **New 2026-08-13.** §5.3 fetches in three hops and was written assuming a process that could run for minutes. A capped function invocation may not hold that. Options: bound each invocation with the candidate-scrape idea (`Pinned-Ingestion-Scaffolding.md` proposal 2, which stops at hop 1 and already exists for other reasons), a durable workflow that survives across invocations, or run ingestion off-platform. **Must land before SP3, which is the first slice to touch a live source.**
+**6. Where long ingestion actually runs — now the load-bearing one.** **New 2026-08-13.** §5.3 fetches in three hops and was written assuming a process that could run for minutes. A capped function invocation may not hold that. Options: bound each invocation with the candidate-scrape idea (`Pinned-Ingestion-Scaffolding.md` proposal 2, which stops at hop 1 and already exists for other reasons), a durable workflow that survives across invocations, or run ingestion off-platform. **Must land before SP3, which is the first slice to touch a live source.**
+
+> **Sharpened by Matt the same day**, and it reframes what the hosting decision actually bought. **Scraping is a background process; it could never have run locally** — that is the closed-laptop problem, and it is the reason the host exists at all. **So the host solves *when* ingestion runs and leaves *how long it may run* wide open.** The two are easily confused, and confusing them would leave SP3 discovering the cap rather than designing around it.
+>
+> **Consequence: this item is not one of six equal open questions.** It is the one the hosting decision created and did not answer, and it sits directly in front of the next real slice.
 
 ---
 

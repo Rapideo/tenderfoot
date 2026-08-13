@@ -37,7 +37,7 @@
 |---|---|---|
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
-| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel, preview branches | 🔜 **NEXT.** Added 2026-08-13 |
+| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel, preview branches | 🔜 **NEXT.** [Plan written 2026-08-13](docs/superpowers/plans/2026-08-13-sp1.5-postgres-port.md) — 16 tasks. **Needs Matt to provision Neon via the Vercel Marketplace first (P3)** |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
@@ -59,7 +59,7 @@
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |
 | **Express or framework route handlers?** New 2026-08-13. Express keeps IDE8 commonality; route handlers are the platform's grain. **Recommend deciding *after* the port, not with it** | SP1.5 → SP2 |
 | **Which blob provider** — Vercel Blob / S3 / R2 | **SP4** |
-| **Where long ingestion runs** — bounded candidate scrape / durable workflow / off-platform | **SP3** |
+| **Where long ingestion runs** — bounded candidate scrape / durable workflow / off-platform. **The one the hosting decision created and did not answer:** the host solves *when* ingestion runs, not *how long it may run* | **SP3** |
 | ~~Doc storage on filesystem~~ · one-database-per-firm · auth in V1 | **Auth got sharper — it is a public URL now, not one laptop** |
 | Ingestion scaffolding brainstorm | **SP3** |
 | Prototype V1.2 — wordmark, mobile breakpoints | External sharing of the explainer |

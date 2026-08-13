@@ -243,7 +243,11 @@ The SQL itself is small and every item has a direct equivalent:
 **Two things get strictly better and are worth naming**, because they are the reason not to treat this as pure cost:
 
 - **Foreign keys are enforced unconditionally.** §2.2 calls entity FKs the expensive mistake to avoid, and the SQLite version depended on a `PRAGMA` set in application code — enforcement that a second connection opened anywhere else would silently lose. **That class of bug becomes impossible.**
-- **`TEXT` columns holding ISO-8601 dates become real `timestamptz`.** `closes_at`, `ends_at`, and `posted_at` carry the expiration radar and the highest-consequence extracted field in the system (§4.3, §8.4). **Date comparison stops being string comparison.**
+- **Machine timestamps become real `timestamptz`.** `created_at`, `updated_at`, `seen_at` are written by `now()` and convert for free.
+
+  > **Corrected the same day.** This bullet originally claimed the *domain* date columns — `closes_at`, `ends_at`, `posted_at` — also become `timestamptz`, and called it a clean win. **The important half of that is wrong.** The corpus carries `MM/DD` with no time and no zone; casting `'2026-08-15'` to `timestamptz` yields midnight **UTC**, which renders as *August 14, 8:00 PM* in Eastern. **A deadline that displays as the previous day is a defect**, and `closes_at` is the highest-consequence extracted field in the system (§8.4).
+  >
+  > The right model is probably `date` for contract and award dates and `timestamptz` for deadlines — **but that is a decision about timezone semantics, not a driver swap**, and taking it inside the port would be precisely the unratified-decision failure `Proto2PRD` §4.7.5 names. **Domain dates stay `text` through SP1.5**, with the change scheduled before SP4, when extraction starts producing times rather than dates. Recorded in the SP1.5 plan, decision 5.
 
 **One thing to watch.** `value_cents` is `INTEGER` and must become `bigint`, not `integer` — a contract over about $21 million overflows a 32-bit integer, and the corpus contains contracts in that range.
 
