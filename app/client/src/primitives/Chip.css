@@ -1,0 +1,39 @@
+/* Chip -- tag/source pill. Matched against two adjacent declarations in the
+ * bundle's opportunity-detail modal header (V1.2, index ~555272):
+ *
+ *   accent (the sourceLabel chip, "IN · SUPPLIER PORTAL"):
+ *     font:500 10px/1 'IBM Plex Mono';letter-spacing:.1em;
+ *     color:var(--acc);background:var(--accbg);padding:5px 8px;border-radius:4px
+ *
+ *   neutral (the tag chips, "MEDICAID"/"RFP"/"STATE"):
+ *     font:500 10px/1 'IBM Plex Mono';letter-spacing:.1em;
+ *     color:var(--text4);background:var(--chip);padding:5px 8px;border-radius:4px
+ *
+ * --type-microlabel-queue is that exact font shorthand; --tracking-label-tight
+ * is that exact letter-spacing; --radius-chip is that exact 4px step, named
+ * "chips and tags" in tokens.css. --accent/--accent-wash are --acc/--accbg;
+ * --text-tertiary/--ground-chip-alt are --text4/--chip. Padding has no token
+ * (tokens.css covers colour and radius only, type.css covers type only --
+ * there is no spacing scale yet), so it stays a literal, as it is in the
+ * bundle itself.
+ *
+ * display:inline-block is added so the chip renders correctly standing
+ * alone, outside the flex row that blockifies it in the bundle -- a
+ * structural property, not a colour/radius/font value. */
+.chip {
+  display: inline-block;
+  font: var(--type-microlabel-queue);
+  letter-spacing: var(--tracking-label-tight);
+  padding: 5px 8px;
+  border-radius: var(--radius-chip);
+}
+
+.chip--neutral {
+  color: var(--text-tertiary);
+  background: var(--ground-chip-alt);
+}
+
+.chip--accent {
+  color: var(--accent);
+  background: var(--accent-wash);
+}

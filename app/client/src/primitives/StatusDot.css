@@ -1,0 +1,44 @@
+/* StatusDot -- the 7x7 circular source-health indicator (V1.2, Source
+ * Registry drawer, index ~617159):
+ *   width:7px;height:7px;border-radius:50%;background:{{ s.dot }}
+ * --radius-round is that exact 50% step, whose own tokens.css comment names
+ * it "status dots and anything circular. Not a step in the scale -- a
+ * separate primitive." Width/height have no token (no size scale exists
+ * yet), so they stay literal, exactly as in the bundle.
+ *
+ * The four `s.dot` values actually used in the bundle's Source Registry data
+ * (name -> health -> dot):
+ *   Healthy       -> var(--ok)    (--signal-pos)
+ *   Failing       -> var(--bad)   (--signal-neg)
+ *   Rot suspected -> var(--yellow)(--signal-watch)
+ *   Not ingested  -> var(--text7) (--text-label)
+ * mapped onto this component's state names by the literal name match
+ * ("Rot suspected" -> state="rot") and by elimination (state="degraded"
+ * is the remaining, more-severe-than-"rot suspected" case -> "Failing").
+ *
+ * tokens.css flags 90 colour pairs below the JND threshold, so colour alone
+ * cannot be trusted to distinguish these four states -- see StatusDot.tsx
+ * for the non-colour affordance (data-state + accessible name) required
+ * alongside these fills. No new colour is introduced here; parity holds. */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-round);
+}
+
+.status-dot--ok {
+  background: var(--signal-pos);
+}
+
+.status-dot--degraded {
+  background: var(--signal-neg);
+}
+
+.status-dot--rot {
+  background: var(--signal-watch);
+}
+
+.status-dot--off {
+  background: var(--text-label);
+}

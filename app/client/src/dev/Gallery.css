@@ -1,0 +1,29 @@
+/* Layout only for the dev gallery -- no colour, radius, or font literal
+ * belongs here beyond what a primitive's own CSS already supplies. The one
+ * exception is the ink-context swatch: Keycap is styled for an ink (dark)
+ * surface in the bundle (V1.2's command-bar "Show menu" control), so this
+ * reproduces that surface -- from tokens, not a hardcoded hex -- rather than
+ * showing the atom floating, illegibly, on the gallery's light ground. */
+.gallery-section {
+  margin-top: 32px;
+}
+
+.gallery-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.gallery-ink-context {
+  background: var(--ink-surface);
+  padding: 16px;
+  border-radius: var(--radius-panel);
+}
+
+.gallery-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
