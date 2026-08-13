@@ -357,7 +357,7 @@ Everything else is buildable without blocking on him.
    profile has no source until V1 accumulates decisions, and inter-rater agreement will never be
    measured.
 7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline. **Note the radar's position improves under the V1 decision:** with the matching engine parked, the argument that SP8 sits behind a scorer that must be proven first no longer applies, and §6.0's "third option" — loading the contract register into the graph early — becomes the obvious call rather than a compromise.
-8. **Claude, unblocked:** test whether one licensed platform (Periscope, Ivalua, CGI Advantage) retains closed solicitations. Under §5.7 a single answer covers Illinois, Ohio, Michigan, and Kentucky at once. This is the last unexplored source question.
+8. ~~**Claude, unblocked:** test whether one licensed platform retains closed solicitations.~~ ✅ **Done 2026-08-12. The answer is yes, and it changes an assumption.** **Illinois/Periscope retains 2,155 closed solicitations back to 2018-02-23, anonymously, with awarded vendor on the row** — so solicitation-side backtesting is *not* federal-only, which is what the spec had assumed. Michigan/CGI Advantage browses anonymously and returns 3,762 award-history records; closed-solicitation retention is indicated there but unproven. **Ohio/Ivalua is gated behind a CAPTCHA and is not a tier-3 adapter candidate as things stand.** Recorded in spec §5.7, §5.8, and §10.1–10.2.
 9. **Then:** the bake-off.
 
 Steps 2 through 5 are independent of each other, and step 7 is independent of all of them.

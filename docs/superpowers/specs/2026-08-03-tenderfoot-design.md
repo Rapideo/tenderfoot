@@ -286,13 +286,13 @@ Demand-driven still governs *which* sources get added. But §5.7 changes the gro
 
 States do not build procurement portals; most license one of roughly five. Verified or strongly indicated across the initial scope:
 
-| Portal | Platform | Anonymous browse |
-|---|---|---|
-| Illinois BidBuy | Periscope S2G (BidSync/Jaggaer) | Verified — public browse, no login |
-| Ohio OhioBuys | Ivalua | Unverified; SSO login wall visible |
-| Michigan SIGMA VSS | CGI Advantage VSS | Unverified |
-| Kentucky eMARS VSS | CGI Advantage VSS — *same as Michigan* | Unverified |
-| Indiana IDOA | PeopleSoft supplier portal + static HTML public list | Verified public |
+| Portal | Platform | Anonymous browse | Closed solicitations retained |
+|---|---|---|---|
+| Illinois BidBuy | Periscope S2G (BidSync/Jaggaer) | **Verified** — public browse, no login | **YES — verified 2026-08-12.** 2,155 closed, back to 2018-02-23 |
+| Ohio OhioBuys | Ivalua | **Blocked to automation** — CAPTCHA browser check (2026-08-12) | Unknown |
+| Michigan SIGMA VSS | CGI Advantage VSS | **Verified 2026-08-12** — solicitations and award history render with no login | **Indicated, not proven.** Filter offers *All / Recent Awards / Recent Intents*; award history returns 3,762 records |
+| Kentucky eMARS VSS | CGI Advantage VSS — *same as Michigan* | Strongly indicated — same platform | Same as Michigan |
+| Indiana IDOA | PeopleSoft supplier portal + static HTML public list | Verified public | **No.** Closed solicitations are not published (§5.8) |
 
 The same platforms recur nationally: Periscope also runs Arkansas and Montana, Ivalua runs North Dakota, CGI Advantage runs Colorado and Maine.
 
@@ -315,6 +315,10 @@ Established 2026-08-04. Recorded because they constrain the build.
 | Indiana Transparency Portal / IDOA contract search | Contracts searchable by ID, vendor, agency, amount, type, and date range | Indiana's Phase 0 and expiration radar run here instead |
 | SAM.gov | API returns latest active version only; Data Services publishes archived CSVs going back decades, refreshed weekly | Clean split — API for live, bulk CSV for backfill. Validates the `since` design in §3.1 |
 | USASpending | FY2008 via Award Data Archive, FY2001 via custom download; period-of-performance dates present | Deep enough for the entity chain |
+| **Illinois BidBuy (Periscope)** | **Public advanced search carries a real `status` filter — `Approved · Closed · Evaluated · Intent To Award · Opened · Bid to PO · Sent`. Searching `Closed` returns 2,155 records, oldest opening date 2018-02-23.** Results carry buyer, organization, description, opening date and **awarded vendor**. No account | **Solicitation-side backtesting is possible outside the federal sources.** One Periscope adapter covers Illinois and, per §5.7, Arkansas and Montana |
+| **Illinois BidBuy (Periscope)** | **The `status` parameter is honoured, not silently ignored** — verified by §5.4's method: holding `openBids=true` and setting `status=Closed` moved the count 127 → 0 (empty intersection), and dropping the open-bids constraint returned 2,155 | The one platform confirmed to pass the silent-failure test. Record the method in the registry's verified-facets field |
+| **Michigan SIGMA VSS (CGI Advantage)** | **Anonymous browse confirmed.** *View Published Solicitations* and *Award History* both render results with no login; award history returns **3,762 records**. Solicitation filter: *All / My Commodities / Open / Closing Soon / Recently Published / Recent Amendments / Recent Intents / Recent Awards* | Closes §10.1 for Michigan and, by platform, Kentucky. **Closed-solicitation retention is indicated but not proven** — no explicit `Closed` option; `All` is untested |
+| **Ohio OhioBuys (Ivalua)** | **Gated behind a CAPTCHA browser check.** The public solicitation URL redirects to `/bas/browser_check` and fails automated navigation | **Not a tier-3 candidate as things stand.** Bot detection is a legal-posture and adapter-feasibility fact, not merely an inconvenience. A person can browse it; a scheduled adapter cannot |
 
 The Indiana archive gap resolves in a useful direction. The state's *contract* side is well published even though its *solicitation* side is not — and contract end dates were already the higher-value signal (§4.3). The gap pushes Phase 0 toward the better data rather than away from it.
 
@@ -583,8 +587,10 @@ Tenderfoot becomes a seeking *and management* tool later. These are designed in 
 
 Still open:
 
-1. **Do the Ohio, Michigan, and Kentucky portals allow anonymous browsing?** Illinois and Indiana are verified public; the Ivalua and CGI Advantage deployments are not. This decides whether those states are tier 3 or require registered accounts, and it sets the real cost of the platform-adapter strategy in §5.7.
-2. **Do any state portals archive closed solicitations?** None found so far. If the answer is uniformly no, solicitation-side backtesting is a federal-only capability and every state's Phase 0 runs on contract data.
+1. ~~**Do the Ohio, Michigan, and Kentucky portals allow anonymous browsing?**~~ **Answered 2026-08-12.** **Michigan: yes** — solicitations and award history render with no login, which by platform also indicates Kentucky. **Ohio: effectively no** — the public solicitation page sits behind a CAPTCHA browser check that fails automated navigation. A person can read it; an adapter cannot. **That reclassifies Ohio**: it is not a tier-3 scrape candidate as things stand, and bot detection belongs in the registry's legal-posture field rather than being rediscovered later.
+2. ~~**Do any state portals archive closed solicitations?**~~ **Answered for Illinois, 2026-08-12: yes, and deeply.** Periscope's public advanced search returns **2,155 closed solicitations back to 2018-02-23**, with awarded vendor on the row. **This overturns the working assumption that solicitation-side backtesting is federal-only.** Michigan indicates the same capability without proving it. Indiana remains the exception — no solicitation archive, which is why its Phase 0 runs on contract data (§5.8).
+
+   > **The consequence is larger than a source being added.** §8.2 says validation is human adjudication because there is no answer key; that stands. But a state with eight years of closed solicitations *and* awarded vendors is the first non-federal place where a backtest can run against outcomes rather than only against judgment — and Illinois is a neighbouring state inside the Firm Profile's secondary geography.
 3. **Technology stack, hosting, and deployment** — now assigned to the **workflow spec**, written in Stage B of `docs/Tenderfoot-Plan-of-Action.md`. Kept separate from this document deliberately: architecture and SDLC change at different rates and are read by different people.
 
 *Closed 2026-08-04:* KP's capacity calendar is no longer needed — the system is capacity-agnostic (§1). Whether anyone besides Matt clears the queue no longer gates anything either, since assignment and ownership moved to the management phase (§9).
