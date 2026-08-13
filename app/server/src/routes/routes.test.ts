@@ -1,17 +1,21 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { rmSync } from "node:fs";
 import express from "express";
+import { useTestSchema, resetSchema } from "../db/testdb.js";
 
-process.env.TENDERFOOT_DB = "tmp-routes-test.db";
+/* Point at a scratch SCHEMA before importing anything that opens a pool --
+ * the module reads the env vars at import time. */
+useTestSchema("test_routes");
+await resetSchema();
+
 const { migrate } = await import("../db/migrate.js");
-const { db } = await import("../db/index.js");
+const { close } = await import("../db/index.js");
 const { api } = await import("./index.js");
 
 let base = "";
 let server: any;
 
 beforeAll(async () => {
-  migrate(false);
+  await migrate(false);
   const app = express();
   app.use(express.json());
   app.use("/api", api);
@@ -25,8 +29,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((r) => server.close(() => r()));
-  db.close();
-  for (const s of ["", "-wal", "-shm"]) rmSync(`tmp-routes-test.db${s}`, { force: true });
+  await close();
 });
 
 /* `Response.json()` resolves to unknown under these lib types, and every
@@ -124,7 +127,10 @@ test("an in-posture source with a window can be enabled", async () => {
   const il = sources.find((s: any) => s.name === "Illinois BidBuy");
   const [status, body] = await patch(`/sources/${il.id}`, { enabled: true });
   expect(status).toBe(200);
-  expect(body.source.enabled).toBe(1);
+  /* Was toBe(1). enabled is a real boolean now, and this is a VISIBLE API
+   * change -- {"enabled": 1} became {"enabled": true}. Safe today because no
+   * client consumes it yet; it would not have been safe after SP6. */
+  expect(body.source.enabled).toBe(true);
 });
 
 test("solicitations list returns everything, in a stated order", async () => {
