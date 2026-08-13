@@ -29,7 +29,16 @@ if (!CONN) {
 /* Confines every connection in this pool to one schema. Used by the test
  * harness so each test file gets an isolated namespace in the same database
  * -- search_path is per CONNECTION, so it is set on the pool rather than
- * issued per query, which a pooled client would lose. */
+ * issued per query, which a pooled client would lose.
+ *
+ * Setting TENDERFOOT_SCHEMA implies CONN is an UNPOOLED connection string
+ * (Ruling 5, 2026-08-13). The line below turns it into a Postgres startup
+ * parameter (`-c search_path=...`), and Neon's pooled endpoint (PgBouncer)
+ * rejects any startup parameter outright -- error 08P01, "unsupported
+ * startup parameter in options: search_path" -- so pairing TENDERFOOT_SCHEMA
+ * with a pooled CONN fails to open a pool at all, before any query runs.
+ * DATABASE_URL_TEST in .env.example is unpooled for exactly this reason;
+ * this is a configuration fact, not something this file enforces. */
 const SCHEMA = process.env.TENDERFOOT_SCHEMA;
 
 export const pool = new pg.Pool({
