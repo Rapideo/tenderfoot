@@ -1,6 +1,5 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { RouterProvider, createBrowserRouter } from "react-router-dom";
 /* Token layer, imported first so every custom property is defined before any
  * component style can reference one. These two files are copies, not a
  * pointer into prototype/ (workflow spec §2, prototype/ stays read-only and
@@ -10,17 +9,13 @@ import { RouterProvider, createBrowserRouter } from "react-router-dom";
  * version. See scripts/sync-tokens.mjs. */
 import "./tokens/tokens.css";
 import "./tokens/type.css";
-import { Health } from "./Health";
+import { Router } from "./router";
 
-/* One route in SP0, purely to prove routing works. The real route table
- * follows the SVRC's seven screens and is SP2/SP6 work.
- *
- * Routing is an ADDITION to the IDE8 stack and a pre-authorised deviation
- * from the prototype, which has none (design spec §7.10). */
-const router = createBrowserRouter([{ path: "/", element: <Health /> }]);
-
+/* The route table itself -- Health plus the dev-only gallery -- now lives in
+ * router.tsx (SP2 T3), so it can carry the DEV guard and its own imports
+ * without main.tsx needing to know about either. */
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <Router />
   </StrictMode>,
 );
