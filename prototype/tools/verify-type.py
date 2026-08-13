@@ -96,6 +96,68 @@ dup_track = [v for v, n in css_track_values.items() if n > 1]
 for v in dup_track:
     print("DUPLICATE TRACKING VALUE %sem defined by %d different role tokens" % (v, css_track_values[v])); fail += 1
 
+# ---- CONSERVATION CHECK ------------------------------------------------
+# Everything above proves every VALUE the extraction regex found round-trips
+# into type.css. It cannot prove the regex found every occurrence: if
+# FONT_RE / TRACK_RE (here and in extract-type.py) missed a real declaration
+# format -- a shorthand with an unexpected unit, an unquoted family, a second
+# quote style -- both files would silently agree on an incomplete set,
+# because both are hand-written patterns for the same literal syntax. Two
+# independent authors converging on one regex is not the same as one
+# regex being independently checked; a coverage gap in that shared shape is
+# invisible to every check above it. That is a shared bug by convergence
+# rather than by import, and it is the actual failure mode Ruling 1 exists
+# to prevent -- "no shared regex" alone does not close it.
+#
+# So this check does not trust the pattern at all. It counts the LITERAL
+# SUBSTRING "font:" and "letter-spacing:" in the bundle -- str.count(), no
+# regex, nothing that could itself have a coverage gap -- and requires every
+# occurrence to be accounted for: either matched by the pattern above, or
+# named here as a known, deliberate exclusion. If a future bundle version
+# adds a format FONT_RE/TRACK_RE cannot see, this arithmetic stops
+# reconciling and the verifier fails loudly instead of quietly under-counting.
+FONT_EXCLUSIONS = {
+    "font:inherit": 1,  # a reset on native controls (e.g. <button>), not a type declaration
+}
+raw_font_count = tpl.count("font:")
+matched_font_count = sum(font_truth.values())
+excluded_font_count = 0
+for text, want in FONT_EXCLUSIONS.items():
+    got = tpl.count(text)
+    if got != want:
+        print("EXCLUSION COUNT DRIFT  %r: expected %d in the bundle, found %d -- exclusion list is stale" % (text, want, got)); fail += 1
+    excluded_font_count += got
+if matched_font_count + excluded_font_count != raw_font_count:
+    unaccounted = raw_font_count - matched_font_count - excluded_font_count
+    print("FONT CONSERVATION FAILURE  raw 'font:' occurrences=%d, matched=%d, excluded=%d -- %d unaccounted for (regex is missing a format)"
+          % (raw_font_count, matched_font_count, excluded_font_count, unaccounted))
+    fail += 1
+else:
+    print("font: conservation OK      %d raw occurrences = %d matched + %d excluded (%s)"
+          % (raw_font_count, matched_font_count, excluded_font_count, ", ".join(FONT_EXCLUSIONS) or "none"))
+
+# letter-spacing has no known exclusions today -- every raw occurrence in the
+# bundle is a real declaration and must be matched. The dict is still named
+# and iterated explicitly (not just asserted empty) so a future exclusion has
+# to be added deliberately here, not absorbed silently into "close enough".
+TRACKING_EXCLUSIONS = {}
+raw_track_count = tpl.count("letter-spacing:")
+matched_track_count = sum(track_truth.values())
+excluded_track_count = 0
+for text, want in TRACKING_EXCLUSIONS.items():
+    got = tpl.count(text)
+    if got != want:
+        print("EXCLUSION COUNT DRIFT  %r: expected %d in the bundle, found %d -- exclusion list is stale" % (text, want, got)); fail += 1
+    excluded_track_count += got
+if matched_track_count + excluded_track_count != raw_track_count:
+    unaccounted = raw_track_count - matched_track_count - excluded_track_count
+    print("TRACKING CONSERVATION FAILURE  raw 'letter-spacing:' occurrences=%d, matched=%d, excluded=%d -- %d unaccounted for (regex is missing a format)"
+          % (raw_track_count, matched_track_count, excluded_track_count, unaccounted))
+    fail += 1
+else:
+    print("letter-spacing: conservation OK  %d raw occurrences = %d matched + %d excluded (%s)"
+          % (raw_track_count, matched_track_count, excluded_track_count, ", ".join(TRACKING_EXCLUSIONS) or "none"))
+
 print("\nbundle font declarations (distinct)      : %d (%d total uses)" % (len(font_truth), sum(font_truth.values())))
 print("type.css font role tokens                 : %d" % len(font_roles))
 print("bundle letter-spacing values (distinct)   : %d (%d total uses)" % (len(track_truth), sum(track_truth.values())))
