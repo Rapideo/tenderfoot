@@ -1,4 +1,4 @@
-# PINNED — ingestion scaffolding, and mechanical vs smart modes
+# PINNED — ingestion scaffolding, modes, and a mobile triage app
 
 **Raised 2026-08-12 by Matt. Brainstorm deliberately deferred — nothing here is decided.**
 
@@ -75,3 +75,22 @@ The largest idea here, and the one most worth getting right. Matt: *"we have mec
 **Pinned. Not designed, not scheduled, not started.**
 
 The one piece with a hard deadline attached: **the ingestion window must exist, in code at minimum, before the first real scrape runs.** That is a safety rail rather than a feature, and it is the only item here that cannot wait for the brainstorm.
+
+
+---
+
+# PINNED — a mobile-only triage app
+
+**Raised 2026-08-12 by Matt, while adding mobile breakpoints to the prototype punch list. Not designed, not scheduled.**
+
+> *"I could see people wanting to access this from their phone, especially in the triage area. We might even be able to do a separate mobile-only triage app, which is kind of an interesting concept."*
+
+**Why it is more interesting than it first sounds.** Tenderfoot has seven screens, and **exactly one of them is a habit.** Triage is the daily driver — one opportunity, ten seconds, Interested or Pass. The other six are reference: look something up, read a brief, check a radar, edit the profile. Those are desk work.
+
+**So the split is not desktop-versus-mobile. It is habit-versus-reference** — and that line already exists in the design. §7.1 says the queue collapses the navigation because *"the queue is the only thing on screen"*, and the prototype implements it. **A mobile triage app is that idea taken to its conclusion: the screen that already wants to be alone, alone.**
+
+**What it would need that responsive breakpoints would not:** almost nothing new. The decision is Interested/Pass plus a reason; the facts that support it are already four lines and a fact panel. The hard parts of Tenderfoot — ingestion, extraction, entity resolution — are all server-side and already shared.
+
+**What to be careful about.** A second client is a second thing to keep faithful to the prototype (§7.10), and there is no mobile reference yet — which is exactly what punch-list item 2 is for. **Do the breakpoints first regardless**; they are needed either way, and they would tell us whether a separate app is warranted or whether responsive triage is simply enough.
+
+**Deliberately not decided.** Recorded so it survives, and so it is not built by accident while someone is doing the breakpoints.

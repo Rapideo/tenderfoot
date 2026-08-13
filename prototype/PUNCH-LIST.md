@@ -14,7 +14,9 @@ Items are Matt's to action; anyone may add. **Add the reason, not just the chang
 |---|---|---|---|
 | 1 | **Replace `WORDMARK — PLACEHOLDER` with a real mark** | The only visible sign the product is unfinished. It appears in the header of every screenshot, which makes it gate anything shown outside the firm — including [`../docs/Tenderfoot-Explainer.pdf`](../docs/Tenderfoot-Explainer.pdf). Also the one unclosed gap `Region A.1` names about itself, and what holds that node at `Proto 70%` while its neighbours sit at 90–95%. | 2026-08-12 |
 
-**That is the whole list.** The 2026-08-12 review ran twenty nodes and produced **no other prototype changes**, because the review adopted the prototype's answers rather than overturning them — eight decisions written into the SVRC at v0.4.0 rather than back into the artifact.
+| 2 | **Mobile breakpoints, at least for the triage queue** | The prototype specifies **desktop only** — designed and captured at 1600px. But §7.1 requires triage to work on a phone and the SVRC repeats it, so **responsive behaviour currently has no reference to be faithful to.** Without one, the mobile layout gets designed during the build by whoever writes the component, silently, with nobody deciding it — the §4.7.5 problem, seen coming for once. Closes the hole named in spec §7.10. | 2026-08-12 |
+
+**That was the whole list until item 2.** The 2026-08-12 review ran twenty nodes and produced **no other prototype changes**, because the review adopted the prototype's answers rather than overturning them — eight decisions written into the SVRC at v0.4.0 rather than back into the artifact.
 
 ---
 
