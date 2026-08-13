@@ -29,13 +29,21 @@ afterAll(async () => {
   for (const s of ["", "-wal", "-shm"]) rmSync(`tmp-routes-test.db${s}`, { force: true });
 });
 
-const get = (p: string) => fetch(base + p).then(async (r) => [r.status, await r.json()] as const);
-const patch = (p: string, body: unknown) =>
+/* `Response.json()` resolves to unknown under these lib types, and every
+ * assertion below then fails typecheck while vitest passes -- which is
+ * exactly the split that let a red gate through once already. Typed here so
+ * the two agree. */
+type Res = [status: number, body: any];
+
+const get = (p: string): Promise<Res> =>
+  fetch(base + p).then(async (r) => [r.status, await r.json()] as Res);
+
+const patch = (p: string, body: unknown): Promise<Res> =>
   fetch(base + p, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-  }).then(async (r) => [r.status, await r.json()] as const);
+  }).then(async (r) => [r.status, await r.json()] as Res);
 
 test("the firm profile is readable and is the seeded firm", async () => {
   const [status, body] = await get("/profile");
