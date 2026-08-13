@@ -45,8 +45,37 @@ export function useTestSchema(name: string): string {
   return schema;
 }
 
-/** Drop and recreate the schema. Runs on its own connection, outside the pool. */
-export async function resetSchema(name: string): Promise<void> {
+/** Thrown by resetSchema() when TENDERFOOT_SCHEMA isn't set yet -- see the
+ * comment on resetSchema for why that function takes no name parameter. */
+export class TestSchemaNotSetError extends Error {
+  constructor() {
+    super(
+      "TENDERFOOT_SCHEMA is not set. Call useTestSchema() before resetSchema() -- " +
+        "resetSchema takes no name argument precisely so it cannot be called with the wrong one.",
+    );
+    this.name = "TestSchemaNotSetError";
+  }
+}
+
+/* Drop and recreate the schema this process is using. Runs on its own
+ * connection, outside the pool.
+ *
+ * Ruling 6 (review round 1, on top of Ruling 3): takes NO argument, on
+ * purpose. The first version took `name` and interpolated whatever it was
+ * handed, so nothing stopped a test file from calling
+ * resetSchema("test_migrate") with the bare logical name instead of the
+ * suffixed value useTestSchema() returns -- silently reopening the exact
+ * cross-run collision Ruling 3 exists to close (a CI run and a local run
+ * both naming the plain string would DROP SCHEMA ... CASCADE each other's
+ * tables). A doc comment saying "pass the suffixed value" is a precondition
+ * with nothing behind it, not a guard -- this project already paid for that
+ * lesson once (staged lesson 2.13). Reading TENDERFOOT_SCHEMA directly,
+ * which only useTestSchema() sets, makes the wrong call unrepresentable
+ * instead of merely discouraged: there is no parameter left to get wrong.
+ * Do not add one back, even as an optional override. */
+export async function resetSchema(): Promise<void> {
+  const name = process.env.TENDERFOOT_SCHEMA;
+  if (!name) throw new TestSchemaNotSetError();
   const admin = new pg.Client({ connectionString: process.env.DATABASE_URL_TEST });
   await admin.connect();
   try {
