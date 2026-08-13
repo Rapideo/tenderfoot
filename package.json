@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": { "node": ">=20.12" },
   "workspaces": ["app/client", "app/server", "app/shared"],
   "scripts": {
     "dev": "npm run dev --workspace app/server & npm run dev --workspace app/client",

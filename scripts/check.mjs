@@ -39,17 +39,40 @@ function run(npmScript, env = process.env) {
 }
 
 run("typecheck");
-run("test");
 
-const testUrl = process.env.DATABASE_URL_TEST;
-if (!testUrl) {
-  console.error(
-    "DATABASE_URL_TEST is not set. Copy .env.example to .env and paste the Neon `test` " +
-      "branch string, or run `vercel env pull`.",
-  );
-  process.exit(1);
-}
-/* The gate's own build step must never see production -- see I2 above. */
-run("build", { ...process.env, DATABASE_URL: testUrl });
+/* DATABASE_URL is cleared from the `test` child's environment, on purpose
+ * (post-merge re-review finding). .env's DATABASE_URL is PRODUCTION, and
+ * loading .env for the whole gate (C1/I2 above) puts it in every child's
+ * environment unless removed. It is safe today ONLY because all four test
+ * files call useTestSchema() -- which overwrites process.env.DATABASE_URL
+ * with the test branch's connection string -- before importing
+ * db/index.ts. A future test file that forgot that call would otherwise
+ * connect straight to production instead of failing to find a database at
+ * all.
+ *
+ * That is the exact failure shape this project has already paid for three
+ * times: a loud failure quietly becoming a silent one pointed at
+ * production (a migration CLI exiting 0 while doing nothing; an import
+ * reporting success while dropping a row; a gate that only ever passed
+ * because of an unrecorded shell precondition). Clearing DATABASE_URL here
+ * restores the loud failure -- a test file that skips useTestSchema() now
+ * has NO DATABASE_URL at all and dies immediately with "DATABASE_URL is
+ * not set" (db/index.ts) instead of quietly reaching production.
+ * DATABASE_URL_TEST is left untouched; useTestSchema() needs it to build
+ * the connection string it installs.
+ *
+ * Do not "fix" this by putting DATABASE_URL back into testEnv -- that is
+ * the bug this block exists to close. */
+const { DATABASE_URL: _productionUrlKeptOutOfTestEnv, ...testEnv } = process.env;
+run("test", testEnv);
+
+/* No redundant "is DATABASE_URL_TEST set" check here: `test` above already
+ * requires it (useTestSchema() throws a named error the moment any test
+ * file imports without it, and that failure exits this script before this
+ * line is ever reached) -- a second check here could never actually run,
+ * and an unreachable guidance message is worse than none, since someone
+ * would trust it exists. The gate's own build step must never see
+ * production -- see I2 above. */
+run("build", { ...process.env, DATABASE_URL: process.env.DATABASE_URL_TEST });
 
 run("tokens");
