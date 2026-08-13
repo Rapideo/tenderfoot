@@ -6,7 +6,8 @@
   "workspaces": ["app/client", "app/server", "app/shared"],
   "scripts": {
     "dev": "npm run dev --workspace app/server & npm run dev --workspace app/client",
-    "build": "npm run build --workspace app/client",
+    "migrate:deploy": "tsx app/server/src/db/migrate.ts",
+    "build": "npm run migrate:deploy && npm run build --workspace app/client",
     "typecheck": "tsc --build --force",
     "test": "vitest run",
     "tokens": "python prototype/tools/verify-tokens.py",
