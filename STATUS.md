@@ -27,13 +27,13 @@
 |---|---|---|
 | **B1** | Fidelity mandate + platform properties into the spec | ✅ 2026-08-12 |
 | **B2** | Workflow spec — stack, CI, deploy, secrets | ✅ 2026-08-12 |
-| **B3** | Implementation plans, one per slice | ◐ **SP0 in progress** |
+| **B3** | Implementation plans, one per slice | ◐ **SP0 written** — `docs/superpowers/plans/2026-08-12-sp0-infrastructure.md` |
 
 ## Slices
 
 | | | Status |
 |---|---|---|
-| **SP0** | Infrastructure — client → API → SQLite, CI green | ◐ planning |
+| **SP0** | Infrastructure — client → API → SQLite, check gate green | ◐ **plan written, ready to execute** |
 | **SP1** | Entity graph — real solicitations into the real schema | — |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
@@ -62,7 +62,7 @@
 
 | | |
 |---|---|
-| B3 for SP0 | In progress |
+| ~~B3 for SP0~~ | ✅ written 2026-08-12 |
 | B3 for SP1, SP2 | After SP0 proves the workflow spec |
 
 ---
