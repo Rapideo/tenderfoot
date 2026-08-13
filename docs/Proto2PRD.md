@@ -19,6 +19,8 @@ One of those two mechanisms has no written procedure anywhere. The prototype app
 
 This document closes that gap. Everything in `methodology.md` is carried forward here, the case study's corrections are folded in, and **§4 — the prototype phase — is reconstructed from forensic examination of the IMPACT prototype repository**, because that was the only surviving record of how it was actually done.
 
+> **Lessons not yet ready for this document live in [`Proto2PRD-Lessons.md`](Proto2PRD-Lessons.md).** Opened 2026-08-12. Observations arrive there when noticed and are promoted here only when they have been seen twice, or once with a stated mechanism explaining why they must recur. **A playbook full of one-off observations stops being trustworthy**, and the holding pen exists to protect that.
+
 ### This document is maintained continuously, not retrospectively
 
 The process is a deliverable. Learnings get folded in **as they emerge**, in general form — not reconstructed at the end of a project, when the reasoning has already been lost. IMPACT's bake-off brief is the cautionary example: it happened, it worked, nobody wrote it down, and it is gone (§4.3).
