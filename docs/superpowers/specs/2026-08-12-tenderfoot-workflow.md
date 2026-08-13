@@ -291,7 +291,8 @@ This section used to open *"we have no hosting platform, so it has no properties
 | Vercel project | `tenderfoot`, team `koehler-partners`, alongside `kp-web` | ✅ |
 | Neon project | `wispy-tooth-06225229`, currently named **`neon-lime-button`** (auto-generated) | ⬜ **rename to `tenderfoot-db` OUTSTANDING** |
 | Billing plan | **`launch_v3` (Launch), subscription** | ✅ Taken by default rather than chosen — see `DOOGIE` 2026-08-13 |
-| Compute | `ep-super-bonus-auoe43hj`, branch `br-super-breeze-aun4swjv`, **1 → 1 CU** | ⬜ **resize to 0.25 → 8 OUTSTANDING** |
+| Compute | `ep-super-bonus-auoe43hj` (default branch) and `ep-withered-base-au6l4cjf` (`test` branch), both **0.25 → 8 CU** | ✅ **Resized 2026-08-13, verified by reading back.** Was 1→1 and **0.25→0.25** respectively — the *test* one was the tighter of the two and nobody had noticed |
+| Autosuspend | **300 s**, now explicit on both computes | ✅ **Confirmed twice.** Measured by observation this morning at 5 m 19 s while the value read `0`; the console then wrote `300` outright. The observational reading was right |
 | `DATABASE_URL` | resolves to the **`-pooler`** host | ✅ Correct as provisioned |
 | Point-in-time restore | **24 hours** — longer than `kp-web-prod`'s 6 | ✅ |
 | Postgres | 17, `aws-us-east-1`, same region as the website | ✅ |

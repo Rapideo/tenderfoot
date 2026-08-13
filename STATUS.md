@@ -67,7 +67,10 @@
 | `three_open_questions.md` — the SVRC `Imp`/`Pri` review | Slice order from SP3 on |
 | ~~User stories~~ | ✅ **93 drafted 2026-08-12** — `docs/user-stories-source.html` and the published story map. Yours to edit |
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |
-| **Express or framework route handlers?** New 2026-08-13. Express keeps IDE8 commonality; route handlers are the platform's grain. **Recommend deciding *after* the port, not with it** | SP1.5 → SP2 |
+| 🔴 **Rotate the Neon credentials.** An agent printed live connection strings into a log while attempting to redact them. **Nothing reached git** — local scratch only — but they are live | **Now** |
+| 🔴 **Per-preview database branching.** Six numbered steps in workflow spec §8; dashboard-only. **Until it is done, every preview deployment writes to the production database** | SP2 onward |
+| **A git remote — or accept that CI is decorative.** `.github/workflows/ci.yml` is correct and has never run. Without it the local gate is the *only* gate | Decide before SP3 |
+| ~~Express or framework route handlers?~~ | ✅ **Ruled 2026-08-13: Express stays.** Workflow spec §9.5 stays open on its own terms; the port did not decide it by momentum |
 | **Which blob provider** — Vercel Blob / S3 / R2 | **SP4** |
 | **Where long ingestion runs** — bounded candidate scrape / durable workflow / off-platform. **The one the hosting decision created and did not answer:** the host solves *when* ingestion runs, not *how long it may run* | **SP3** |
 | ~~Doc storage on filesystem~~ · one-database-per-firm · auth in V1 | **Auth got sharper — it is a public URL now, not one laptop** |
@@ -78,9 +81,10 @@
 
 | | |
 |---|---|
-| ~~B3 for SP0~~ | ✅ written 2026-08-12 |
+| ~~B3 for SP0~~ · ~~B3 for SP1.5~~ | ✅ written and executed |
 | SP1 T12–T15 | Re-extraction + minimal admin |
-| B3 for SP2 / SP3 | Unblocked |
+| **B3 for SP2** | **Next.** Scope grew 2026-08-13 — the parked intelligence chrome is now built inert, so SP2 is no longer "mostly transcription" |
+| **The ingestion round-trip fix** | **Blocks SP3.** ~7 rows/sec against a *measured* 300s function ceiling: an 8,000-record register is ~19 minutes and does not fit. Multi-row `INSERT`/`UNNEST` |
 
 ---
 

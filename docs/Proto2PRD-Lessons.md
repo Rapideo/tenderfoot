@@ -189,6 +189,32 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 >
 > **The deeper form, which is what makes it a playbook lesson rather than a Vercel note:** *a guard rail phrased as "do not use the dangerous flag" only works if the dangerous behaviour requires a flag.* Both instances here were dangerous behaviour reached by **omission**.
 
+### 2.14 A defect can live between two individually-correct diffs, where no scoped review can see it
+
+**Observed 2026-08-13, SP1.5.** Nine task-scoped reviews each judged one diff against one brief, and all nine passed. The whole-branch review then found four defects, the worst of which no scoped review *could* have found:
+
+- One batch correctly changed `source.enabled` from an integer to a real `boolean`.
+- Another batch correctly deleted the now-redundant `typeof v === "boolean" ? (v ? 1 : 0) : v` coercion.
+- **Neither diff was wrong. Between them,** `PATCH {"enabled":"true"}` began enabling a source whose legal posture is `out` — excluded by its terms of service — with no legal note and no ingestion window, because Postgres coerces `"true"` to `true` while the guard tested `=== 1 || === true`. **Under the old engine the same request was inert.**
+
+**Proposed generalisation.** A review scoped to one change is the right tool for *"is this change correct"* and structurally cannot answer *"is the system still correct."* **Any migration that changes a type, a contract or an engine needs a pass whose unit is the whole change, not the individual commits** — and that pass is a different *kind* of review, not a larger one. Two other findings that day fit the same shape: a stale engine reference in a client file **no task's brief listed**, and the absence of `.env` loading, which is a defect of *omission* that no diff contains.
+
+**Why not promoted.** One project. **But the mechanism is structural rather than circumstantial** — scoped review cannot see across its own scope, by definition — and that argues it will recur anywhere the same method is used. Strong candidate on a second sighting.
+
+### 2.15 An agent's "green" is a sample of one, and nobody reports flakiness they never ran twice
+
+**Observed 2026-08-13, twice in one slice.**
+
+**First:** every "gate green" reported during SP1.5 — four separate agents, four separate numbers — passed only because each agent's shell already carried the environment. **From a clean shell the gate failed at import in all four test files.** Nothing in the repo loaded `.env`. Found by the whole-branch review, not by any of the agents reporting success.
+
+**Second:** two agents reported `37/37, exit 0`. Running the gate directly before merging, it **failed** — then passed three times, then failed once more across five runs. Roughly a 20% flake, caused by a Neon compute pinned at a fixed 0.25 CU while four test files opened pools against it. **Diagnosed by the collect time (48.8 s under contention against 645 ms in isolation) and confirmed when a resize moved that exact number to 2.9 s.**
+
+**Proposed generalisation.** *"Tests pass"* from a subagent is one observation, in one environment, at one moment. **Before trusting a gate at a decision point — a merge, a release — run it yourself, run it more than once, and run it in the environment you actually claim it works in.** Reliability is a property of a distribution and no single report can carry it.
+
+**Corollary worth keeping separately:** when a flake is fixed, confirm the *metric predicted to move* actually moved. A failure that stops reproducing is not the same as a cause that has been removed.
+
+**Why not promoted.** One project, though two instances. **The second half — verify by the predicted metric, not by the symptom's absence — may deserve promotion on its own**, since it is the difference between a diagnosis and a coincidence.
+
 ---
 
 ## 3. Watch items — open questions about the method itself
