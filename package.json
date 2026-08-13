@@ -11,7 +11,8 @@
     "build": "npm run migrate:deploy && npm run build --workspace app/client",
     "typecheck": "tsc --build --force",
     "test": "vitest run",
-    "tokens": "python prototype/tools/verify-tokens.py && python prototype/tools/verify-type.py",
+    "sync:tokens": "node scripts/sync-tokens.mjs",
+    "tokens": "python prototype/tools/verify-tokens.py && python prototype/tools/verify-type.py && node scripts/sync-tokens.mjs --check",
     "check": "node --env-file-if-exists=.env scripts/check.mjs"
   },
   "devDependencies": {
