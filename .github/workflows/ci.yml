@@ -36,6 +36,22 @@
 # (`prototype/tools/verify-tokens.py`) runs Python, which the Vercel build
 # image does not necessarily provide, so this workflow supplies its own
 # rather than assume the gate silently keeps running.
+#
+# Pinned to 3.12, not "latest" -- so a runner image update can't move the
+# interpreter out from under this gate. Confirmed 2026-08-13 against the
+# actual script: `verify-tokens.py` imports only re/json/sys/io/os and uses
+# no version-gated syntax (no walrus, no match/case, no PEP 604 unions --
+# plain %-formatting throughout), so it isn't pinned to 3.12 because it
+# NEEDS 3.12; it's pinned because 3.12 is a version this gate has actually
+# been run on and shown to pass, not the newest available. Verified to also
+# pass unmodified on 3.11 and 3.14.2 (`py -3.11`, local default), which
+# bracket 3.12 and confirm nothing in it is version-specific.
+#
+# The named step right after setup-python exists so that if a future edit
+# ever reorders or drops that action, this workflow fails LOUDLY, on a step
+# whose name says why, instead of `npm run tokens` dying several steps later
+# on a bare "command not found" -- which would read as an unrelated failure
+# in the one gate whose entire job is catching silent drift.
 name: check
 on: [push, pull_request]
 jobs:
@@ -50,5 +66,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      - name: Verify Python is available for the token-drift gate
+        run: python --version
       - run: npm ci
       - run: npm run check
