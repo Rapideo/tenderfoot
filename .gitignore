@@ -9,3 +9,5 @@ dist-types/
 *.db-shm
 tmp-test.db*
 *.tsbuildinfo
+.vercel
+.env*.local

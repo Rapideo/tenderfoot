@@ -251,7 +251,7 @@ This section used to open *"we have no hosting platform, so it has no properties
 | **Vercel** | Cron minimum frequency and behaviour on the chosen plan | SP7 is scheduled ingestion. This is the whole reason for the host | — |
 | **Vercel** | Request/response body limits | 21 MB bundles pass through the API on the way to blob storage, unless they don't — which is itself a design decision | — |
 | **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | **Partial 2026-08-13** — see below |
-| **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | — |
+| **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | ✅ **2026-08-13 — pooled by default, confirmed.** `DATABASE_URL` resolves to the `-pooler` host and `DATABASE_URL_UNPOOLED` to the direct one. **The integration got this right without being asked**, so the requirement is satisfied by construction rather than by discipline. The connection *count* ceiling is still unread |
 | **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | **Partial 2026-08-13** — see below |
 
 **Read from the account 2026-08-13**, via the Neon API rather than from memory. These are **org-level facts and the settings of the existing `kp-web-prod` project**; a newly created Tenderfoot project may not inherit all of them, so the project-level rows are re-checked once it exists.
@@ -266,6 +266,38 @@ This section used to open *"we have no hosting platform, so it has no properties
 | Compute | autoscaling **0.25 → 8 CU** | |
 | Quota | resets **monthly** (`quota_reset_at`) | The allowance exists. **The ceiling itself is still unread** |
 | Point-in-time restore | `history_retention_seconds: 21600` — **6 hours** | Shorter than instinct suggests. Relevant the first time a migration is regretted |
+
+**Tenderfoot's own resource, provisioned 2026-08-13.**
+
+| | | Status |
+|---|---|---|
+| Vercel project | `tenderfoot`, team `koehler-partners`, alongside `kp-web` | ✅ |
+| Neon project | `wispy-tooth-06225229`, currently named **`neon-lime-button`** (auto-generated) | ⬜ **rename to `tenderfoot-db` OUTSTANDING** |
+| Billing plan | **`launch_v3` (Launch), subscription** | ✅ Taken by default rather than chosen — see `DOOGIE` 2026-08-13 |
+| Compute | `ep-super-bonus-auoe43hj`, branch `br-super-breeze-aun4swjv`, **1 → 1 CU** | ⬜ **resize to 0.25 → 8 OUTSTANDING** |
+| `DATABASE_URL` | resolves to the **`-pooler`** host | ✅ Correct as provisioned |
+| Point-in-time restore | **24 hours** — longer than `kp-web-prod`'s 6 | ✅ |
+| Postgres | 17, `aws-us-east-1`, same region as the website | ✅ |
+
+> ### ⬜ Two changes decided 2026-08-13 and NOT YET APPLIED
+>
+> **Verified still outstanding at time of writing** — the project name and the compute size are unchanged from provisioning. **Neither the Neon MCP nor the Vercel CLI can make these changes**: the MCP exposes create, delete, describe, list, branch, SQL and auth but no update; `vercel integration-resource` offers only `create-threshold`, `disconnect`, `remove`. So this needs the Neon console or the Neon API.
+>
+> ```
+> PATCH https://console.neon.tech/api/v2/projects/wispy-tooth-06225229
+>   {"project":{"name":"tenderfoot-db",
+>               "default_endpoint_settings":{"autoscaling_limit_min_cu":0.25,
+>                                            "autoscaling_limit_max_cu":8}}}
+>
+> PATCH .../projects/wispy-tooth-06225229/endpoints/ep-super-bonus-auoe43hj
+>   {"endpoint":{"autoscaling_limit_min_cu":0.25,"autoscaling_limit_max_cu":8}}
+> ```
+>
+> **The second call is not redundant, and this is the half that fails silently.** `default_endpoint_settings` applies only to *newly created* endpoints. Change the project alone and the live compute stays pinned at 1 CU while the settings page reads 0.25–8 — which looks done and is not.
+>
+> **The Vercel resource name is a separate string** from the Neon project name; both currently read `neon-lime-button`. Renaming the Neon project will probably not rename the Vercel resource, which is cosmetic and changeable only in the Vercel dashboard.
+
+> **The compute default is worth noting as a platform property rather than a preference.** A fixed floor of 1 CU on a database that idles most of the day is the wrong end of the trade for one user, and **nothing about the provisioning flow surfaces that choice** — it is simply what you get. That is the same class of fact as an auto-pausing free tier: a documented default with a cost, invisible unless someone reads it.
 
 > **One value deliberately left unresolved.** `kp-web-prod`'s `suspend_timeout_seconds` reads **`0`**. In Neon's API `0` means *use the default* and `-1` means *never suspend* — **but this section exists precisely because reading a value's meaning from memory is the failure mode it guards against.** The effective delay is confirmed against the console or by observation before it is written here as a number.
 | **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |

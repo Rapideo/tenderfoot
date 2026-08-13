@@ -159,6 +159,24 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 
 **Why not promoted.** One instance, and arguably a special case of 2.11. **The cheap fix is concrete though** — add "where does it run, and what can it write to" to the requirements template — and that may be worth promoting on its own before the lesson is.
 
+### 2.13 Agent-aware CLIs remove the confirmation prompt for exactly the actor most likely to need it
+
+**Observed 2026-08-13, the hard way.** Claude ran `vercel integration add neon --format=json --non-interactive` intending to *enumerate* available products and billing plans. It provisioned a paid subscription instead — plan, resource name and compute size all taken as defaults, none chosen. The plan's own precondition had said this step was *"the one step Claude does not do — it creates billable resources."*
+
+**The detail that makes this a lesson rather than a blunder.** `vercel`'s own help says of `--non-interactive`:
+
+> *"Run without interactive prompts; **when an agent is detected this is the default**."*
+
+**So the flag was not the cause.** A human running `vercel integration add neon` gets a prompt — choose a plan, confirm the spend. **An agent running the identical command gets no prompt, because the tool detects the agent and suppresses it.** The guard rail is removed precisely for the actor with the least context about what a subscription costs.
+
+**Proposed generalisation, in three parts:**
+
+1. **Assume the confirmation you would have seen is not there.** Agent-mode auto-detection is spreading across CLIs, and it converts *"this command asks first"* into *"this command does it."*
+2. **Exploration and mutation frequently share a command surface.** `integration add --help` lists; `integration add` performs. There was no `--dry-run`, and `--format=json` reads like an output flag rather than a commit.
+3. **A precondition that says "do not do this" has no mechanism behind it.** A plan cannot enforce its own preconditions. **The only real guard is refusing to run write-capable commands against a live account while exploring** — read the docs, or ask.
+
+**Why not promoted yet.** One instance. **But the mechanism is documented in the tool's own help text**, which is stronger evidence than a single incident usually carries, and it is not specific to Vercel or to this project. **This is a strong candidate for promotion on a second sighting**, and worth watching for on any CLI touching billing, deploys, or deletion.
+
 ---
 
 ## 3. Watch items — open questions about the method itself

@@ -37,7 +37,7 @@
 |---|---|---|
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
-| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel, preview branches | 🔜 **NEXT.** [Plan written 2026-08-13](docs/superpowers/plans/2026-08-13-sp1.5-postgres-port.md) — 16 tasks. **Needs Matt to provision Neon via the Vercel Marketplace first (P3)** |
+| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel, preview branches | 🔜 **NEXT.** [Plan written 2026-08-13](docs/superpowers/plans/2026-08-13-sp1.5-postgres-port.md) — 16 tasks. **P3 done: Vercel + Neon provisioned.** Two corrections outstanding (P3b) |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
@@ -47,6 +47,16 @@
 | **SP8** | Radars + reporting *(on GO)* | — |
 
 ---
+
+## Infrastructure — live as of 2026-08-13
+
+| | |
+|---|---|
+| Vercel | project `tenderfoot`, team `koehler-partners`, beside `kp-web` |
+| Neon | project `wispy-tooth-06225229`, org `Vercel: Koehler Partners`, beside `kp-web-prod`. Postgres 17, `aws-us-east-1` |
+| Billing | **`launch_v3` (Launch), subscription** — same org and bill as the website |
+| `DATABASE_URL` | pooled endpoint, injected by the integration into all three environments |
+| ⬜ **Outstanding** | **rename `neon-lime-button` → `tenderfoot-db`** · **resize compute 1→1 CU to 0.25→8 CU.** Neither is doable through the Neon MCP or the Vercel CLI — console or Neon API. Exact calls in workflow spec §10.1 |
 
 ## Waiting on Matt
 
