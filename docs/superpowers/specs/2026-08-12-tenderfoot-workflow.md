@@ -250,9 +250,24 @@ This section used to open *"we have no hosting platform, so it has no properties
 | **Vercel** | Function `maxDuration` ceiling on the chosen plan | §5.3 ingestion "runs for minutes." Configurable per function in `vercel.json`; the ceiling is not | — |
 | **Vercel** | Cron minimum frequency and behaviour on the chosen plan | SP7 is scheduled ingestion. This is the whole reason for the host | — |
 | **Vercel** | Request/response body limits | 21 MB bundles pass through the API on the way to blob storage, unless they don't — which is itself a design decision | — |
-| **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | — |
+| **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | **Partial 2026-08-13** — see below |
 | **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | — |
-| **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | — |
+| **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | **Partial 2026-08-13** — see below |
+
+**Read from the account 2026-08-13**, via the Neon API rather than from memory. These are **org-level facts and the settings of the existing `kp-web-prod` project**; a newly created Tenderfoot project may not inherit all of them, so the project-level rows are re-checked once it exists.
+
+| | Value | |
+|---|---|---|
+| Neon org | **`Vercel: Koehler Partners`**, `managed_by: vercel`, plan **`launch`** | A paid tier, already in use. **Tenderfoot lands on the same bill, which is the intent** |
+| Second org | `matthew.smith@koehlerpartners.com`, plan `free`, **empty** | Console-managed and unused. **Not where Tenderfoot goes** — worth stating, because `list_projects` defaults to it and reports zero projects, which reads as "no Neon" and is wrong |
+| Postgres | **17** — the same major version the migrations target | |
+| Region | `aws-us-east-1` | |
+| Existing project | `kp-web-prod`, created 2026-05-21 | The precedent. Neon under Vercel is already the working pattern here |
+| Compute | autoscaling **0.25 → 8 CU** | |
+| Quota | resets **monthly** (`quota_reset_at`) | The allowance exists. **The ceiling itself is still unread** |
+| Point-in-time restore | `history_retention_seconds: 21600` — **6 hours** | Shorter than instinct suggests. Relevant the first time a migration is regretted |
+
+> **One value deliberately left unresolved.** `kp-web-prod`'s `suspend_timeout_seconds` reads **`0`**. In Neon's API `0` means *use the default* and `-1` means *never suspend* — **but this section exists precisely because reading a value's meaning from memory is the failure mode it guards against.** The effective delay is confirmed against the console or by observation before it is written here as a number.
 | **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |
 
 ### 10.2 Other people's platforms — already measured
