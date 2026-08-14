@@ -39,3 +39,47 @@
   margin-top: 16px;
   max-width: 640px;
 }
+
+/* Task 6 -- Surfaces. gallery-card-demo/gallery-panel-item are pure layout
+ * (width caps so Card doesn't stretch full-bleed in the gallery); the
+ * padding inside gallery-card-body is gallery presentation only, not a
+ * claim about Card's or FactPanel's own CSS -- neither primitive carries
+ * internal padding, since the bundle's card sections each bring their own
+ * (rows/shell chrome, Task 8). gallery-fact-trio reproduces the bundle's
+ * own DEADLINE/EST. VALUE/POSTED wrapping grid exactly (V1.2, index
+ * ~556908): display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ * gap:1px;background:var(--brdsoft);border:1px solid var(--brdsoft);
+ * border-radius:8px;overflow:hidden -- token-driven throughout
+ * (--line-soft, --radius-action), not a hardcoded value. */
+.gallery-card-demo {
+  max-width: 640px;
+}
+
+.gallery-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gallery-fact-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-action);
+  overflow: hidden;
+}
+
+.gallery-row--align-top {
+  align-items: flex-start;
+}
+
+.gallery-panel-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 340px;
+}

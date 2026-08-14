@@ -1,0 +1,49 @@
+/* Card -- matched against the bundle's triage/detail card (V1.2, index
+ * ~554745), the outer wrapper that itself carries the DEADLINE/EST. VALUE/
+ * POSTED trio (see FactTile.css), the buyerNote callout (see Callout.css),
+ * and further down the "COST TO PURSUE" panel (see FactPanel.css) -- i.e.
+ * this is literally the surface the other three primitives in this task
+ * sit on, matching the brief's own "raised surface" description directly:
+ *
+ *   background:var(--surface);border:1px solid var(--brd);border-radius:10px;
+ *   box-shadow:0 1px 2px rgba(20,24,28,.05),0 8px 24px -16px rgba(20,24,28,.35);
+ *   overflow:hidden
+ *
+ * --radius-panel is that exact 10px step ("outer containers"); --line-card
+ * is --brd ("card and panel outline. The default card border.", 21 uses --
+ * the most-used border colour in the direction after --line-soft).
+ *
+ * box-shadow has no token: tokens.css and type.css cover colour/radius/type
+ * only, and there is no shadow layer -- the same gap Task 4's report flagged
+ * for spacing. Both rgba() literals are reproduced exactly from the bundle;
+ * both are rgb(20,24,28), i.e. --text-primary's own hex (#14181c) at reduced
+ * alpha, not an invented colour, just one with no custom-property form to
+ * reference. Flagged in task-6-report.md rather than resolved by guessing
+ * at a workaround.
+ *
+ * A second, flatter card pattern exists in the bundle (goRadars/goReports,
+ * excluded from Button in task-5-report as "Card-shaped shortcuts ...
+ * belongs to Surfaces (Task 6)"):
+ *   border:1px solid var(--brd);background:var(--surface);border-radius:9px;
+ *   padding:16px 18px
+ * -- --radius-card's own 9px, no box-shadow, a clickable card-shaped button
+ * rather than a generic container. This interface (`<Card>{children}</Card>`,
+ * no variant prop) cannot express both; the brief's own "raised surface"
+ * language and the direct nesting relationship above make the elevated,
+ * 10px/box-shadow triage card the stronger match -- see task-6-report.md
+ * for the full reasoning and the --radius-card consumer count this leaves
+ * at zero.
+ *
+ * animation:tfin .22s ease both (a one-time mount transition) is not
+ * reproduced -- it is an entrance effect, not a resting property of the
+ * surface, same reasoning Task 5 used to exclude hover states with no
+ * evidenced counterpart here. */
+.card {
+  background: var(--ground-surface);
+  border: 1px solid var(--line-card);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    0 1px 2px rgba(20, 24, 28, 0.05),
+    0 8px 24px -16px rgba(20, 24, 28, 0.35);
+  overflow: hidden;
+}

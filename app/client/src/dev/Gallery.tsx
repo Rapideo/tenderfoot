@@ -7,10 +7,19 @@
  * anywhere else in the bundle turns "the guard in router.tsx works" from an
  * assumption into something a command either finds or does not. */
 import "./Gallery.css";
-import { Button, Chip, Keycap, MicroLabel, StatusDot } from "../primitives";
+import { Button, Callout, Card, Chip, FactPanel, FactTile, Keycap, MicroLabel, StatusDot } from "../primitives";
 import type { ButtonVariant, StatusDotState } from "../primitives";
 
 const STATUS_STATES: StatusDotState[] = ["ok", "degraded", "rot", "off"];
+
+/* Task 6 copy, reproduced character-for-character from the bundle (see
+ * Callout.css and FactPanel.css for the exact declarations these were
+ * matched against). The naspo-ogs mock record supplies both the fact trio
+ * and the callout below -- the same real record the bundle pairs them on. */
+const CALLOUT_COPY =
+  "Listed on Indiana's portal — the buyer is NY OGS, not Indiana. Cooperative award, participating states TBD.";
+const FACT_PANEL_TITLE = "COST TO PURSUE — FACTS, NOT A SCORE";
+const FACT_PANEL_NOTE = "Counted from the bundle. The light/moderate/heavy call is yours.";
 
 /* Button copy is reproduced character-for-character from the bundle
  * instance each variant was matched against (see Button.css): interestIt
@@ -129,6 +138,75 @@ export function Gallery() {
           to primary, secondary, tertiary, or ghost. None was invented for
           them here; see task-5-report.md.
         </p>
+      </section>
+
+      {/* Task 6 -- surfaces: Card, FactTile, FactPanel, Callout. Appended
+       * after Button per the gallery's append-only rule; Tasks 4-5's
+       * sections above are untouched. */}
+      <section className="gallery-section">
+        <h2>Surfaces</h2>
+
+        {/* Card -- the raised surface everything else sits on, matched
+         * against the bundle's triage/detail card (task-6-report.md), which
+         * itself wraps a FactTile trio and a Callout -- the composition
+         * reproduced here, using the naspo-ogs mock record's real copy. */}
+        <div className="gallery-section">
+          <MicroLabel>CARD, WRAPPING A FACT TILE TRIO + CALLOUT</MicroLabel>
+          <div className="gallery-card-demo">
+            <Card>
+              <div className="gallery-card-body">
+                <Callout>{CALLOUT_COPY}</Callout>
+                <div className="gallery-fact-trio">
+                  <FactTile
+                    label="DEADLINE"
+                    value="2026-08-27"
+                    sub="17 days out · 3:00 PM EDT"
+                    emphasis
+                  />
+                  <FactTile label="EST. VALUE" value="$12M+" sub="Multi-state, no ceiling stated" />
+                  <FactTile label="POSTED" value="2026-07-14" sub="No addenda" />
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        {/* FactPanel -- "COST TO PURSUE — FACTS, NOT A SCORE" is an
+         * argument, not a label: the panel exists to present facts a person
+         * judges, explicitly not a computed score (task-6-brief.md). Both a
+         * populated and an empty panel are shown -- absence is a distinct
+         * state from low confidence (SVRC View 2.3), and with V1 shipping
+         * no scores, the empty case is the common one, not an edge case.
+         * The populated example's six facts are the bundle's own costFacts
+         * mock data; the two "warn" facts (Pre-proposal conference,
+         * Notarization required) use `emphasis`. */}
+        <div className="gallery-section">
+          <div className="gallery-row gallery-row--align-top">
+            <span className="gallery-panel-item">
+              <MicroLabel>POPULATED</MicroLabel>
+              <Card>
+                <div className="gallery-card-body">
+                  <FactPanel title={FACT_PANEL_TITLE} note={FACT_PANEL_NOTE}>
+                    <FactTile label="Required forms" value="7" />
+                    <FactTile label="Pre-proposal conference" value="Mandatory" emphasis />
+                    <FactTile label="References demanded" value="3" />
+                    <FactTile label="Notarization required" value="Yes" emphasis />
+                    <FactTile label="Page limit" value="40 pp" />
+                    <FactTile label="Sealed copies + USB" value="2" />
+                  </FactPanel>
+                </div>
+              </Card>
+            </span>
+            <span className="gallery-panel-item">
+              <MicroLabel>EMPTY</MicroLabel>
+              <Card>
+                <div className="gallery-card-body">
+                  <FactPanel title={FACT_PANEL_TITLE} note={FACT_PANEL_NOTE} />
+                </div>
+              </Card>
+            </span>
+          </div>
+        </div>
       </section>
     </main>
   );

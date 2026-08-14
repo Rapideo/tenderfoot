@@ -1,7 +1,11 @@
 export { Button } from "./Button";
 export type { ButtonVariant } from "./Button";
+export { Callout } from "./Callout";
+export { Card } from "./Card";
 export { Chip } from "./Chip";
 export type { ChipTone } from "./Chip";
+export { FactPanel } from "./FactPanel";
+export { FactTile } from "./FactTile";
 export { Keycap } from "./Keycap";
 export { MicroLabel } from "./MicroLabel";
 export { StatusDot } from "./StatusDot";

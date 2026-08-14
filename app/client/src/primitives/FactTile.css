@@ -1,0 +1,47 @@
+/* FactTile -- the deadline/value/posted trio (V1.2, opportunity header,
+ * index ~556698): three of these side by side, each:
+ *
+ *   background:var(--surface);padding:13px 15px
+ *     label: font:500 9.5px/1 'IBM Plex Mono';letter-spacing:.14em;
+ *       color:var(--text7);margin-bottom:7px        (DEADLINE / EST. VALUE / POSTED)
+ *     value: font:600 17px/1.1 'IBM Plex Mono';color:{{ cur.deadlineColor }}
+ *     sub:   font:400 11px/1.4 'IBM Plex Sans';color:var(--text5);margin-top:4px
+ *       (deadlineIn / valueNote / postedNote)
+ *
+ * The label's declaration is byte-identical to MicroLabel's own -- see
+ * FactTile.tsx, which renders it via that primitive rather than
+ * reimplementing it; margin-bottom:7px is applied here, on FactTile's own
+ * wrapper, not by reaching into MicroLabel.css.
+ *
+ * --type-metric-stat is purpose-named for exactly this trio ("stat value
+ * under a DEADLINE / EST. VALUE / POSTED microlabel", 4 uses in V1.2);
+ * --type-body-default-2 is purpose-named for its sub-caption ("deadlineIn,
+ * valueNote", the single highest-use BODY-family token, 11 uses).
+ *
+ * Padding has no token layer (same as every prior primitive), so it stays
+ * a literal, exactly as in the bundle. */
+.fact-tile {
+  background: var(--ground-surface);
+  padding: 13px 15px;
+}
+
+.fact-tile__label {
+  margin-bottom: 7px;
+}
+
+.fact-tile__value {
+  font: var(--type-metric-stat);
+  color: var(--text-primary);
+}
+
+/* emphasis -- the DEADLINE-only warn state; see FactTile.tsx for the
+ * evidence this is a boolean, not a graded colour scale. */
+.fact-tile__value--emphasis {
+  color: var(--signal-caution);
+}
+
+.fact-tile__sub {
+  font: var(--type-body-default-2);
+  color: var(--text-muted);
+  margin-top: 4px;
+}
