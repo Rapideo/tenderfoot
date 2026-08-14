@@ -556,7 +556,17 @@ Scored nodes carry the same six-column grid. **All 1–5 scales run low to high*
 |---|---|---|---|
 | `Eff` | Effort | 1–5 | Cost to build. 5 = expensive. |
 | `Imp` | Impact | 1–5 | Value to the user. 5 = high. |
-| `Pri` | Priority | 1–5 | How soon this should be built, all things considered. 5 = soonest. |
+| `Pri` | Priority | 1–5 | **How much KP wants the thing.** 5 = most. **Pure product judgment, independent of what has to be built first.** |
+
+> ### `Pri` is product priority, not build order — ruled by Matt, 2026-08-13
+>
+> This cell previously read *"how soon this should be built, all things considered"*, which was **circular**: `docs/Tenderfoot-Plan-of-Action.md` §6 derives slice ordering **from** `Pri`, so a `Pri` that already accounted for technical dependency was partly a restatement of the thing it was supposed to inform.
+>
+> **The rule now: `Pri` is what KP wants. Dependency ordering is applied once, on top, in the plan.** So **a node can legitimately be `Pri 5` and still land in a late slice** because three other things must exist first — and that is not a contradiction to be resolved by lowering the number.
+>
+> **Consequence worth stating.** The twenty existing values were written by Claude against a system that **had a matching engine**, before V1 was decided to return everything and rank nothing (§1.1). Under this definition several are **wrong rather than merely stale** — five are argued in [`three_open_questions.md`](../three_open_questions.md), most notably `View 1.2 : Saved Views` at `Imp 2 · Pri 2`, which with no ranking is **the only way the firehose gets carved** and is a primary interaction rather than a convenience.
+>
+> **Confirming the definition makes those disagreements arguable rather than vague. It does not resolve them.**
 | `Vol` | Volatility | 1–5 | How likely this is to change. 5 = expect churn. Independent of `Conc`. |
 | `Proto` | Prototype accuracy | 0–100% | How close the prototype is to what we actually want. **0% throughout — no prototype exists.** |
 | `Conc` | Conceptual completeness | 0–100% | How settled the idea is, whether or not anything is drawn. |

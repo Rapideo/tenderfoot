@@ -23,9 +23,15 @@ They were nonetheless filled in by Claude when the document was drafted, because
 
 The scoring key defines `Pri` as *"how soon this should be built, all things considered."* But the plan of action derives slice ordering **from** `Pri`. If `Pri` already accounts for technical dependency, the two are circular.
 
-**Claude's reading, for confirmation or correction:** `Pri` should be **pure product judgment** — how much KP wants the thing, independent of what has to be built first. Dependency ordering is then applied on top, once, in the plan. Under that reading a node can legitimately be `Pri 5` and still land in a late slice because it depends on three other things.
+~~**Claude's reading, for confirmation or correction:**~~ ✅ **ANSWERED 2026-08-13 by Matt — the reading is confirmed.**
 
-**Answer needed:** confirm, or state the reading you intend.
+> **`Pri` is pure product judgment: how much KP wants the thing.** Independent of what has to be built first. Dependency ordering is applied on top, once, in the plan. **A node can legitimately be `Pri 5` and still land in a late slice** because three other things must exist first.
+
+**What this settles, and it is more than the definition.** The circularity is broken: `Pri` is now an *input* to slice ordering rather than a partial restatement of it, so §6's sequence can be reconciled against it without arguing in a circle.
+
+**What it does not settle.** The twenty existing `Pri` values were written by Claude against a system that **had a matching engine**, and several are wrong under that definition rather than merely stale — the five listed at the foot of this file. **Confirming the definition makes those disagreements arguable rather than vague, which is progress, but it does not resolve them.** Q3 is where that gets scoped.
+
+**Recorded in the SVRC's scoring key**, so the next person reading a grid does not have to find this file.
 
 ---
 
