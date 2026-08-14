@@ -217,6 +217,36 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 
 ---
 
+### 2.16 A revocation is proved by the OLD key failing, not by the new key working
+
+**Observed 2026-08-14.**
+
+A leaked database credential was rotated in the provider console. The obvious check — connect with the new string — passed, and on its own would have closed the incident. **The check that mattered was connecting with the OLD string, which still worked on one of the two branches.** The provider resets a role password *per branch*: the role is a project-level object and its password is not. Nothing in the console flow says the word "branch," and the reset genuinely succeeded for the branch it was aimed at. The report was accurate and the incident was still open.
+
+**Proposed generalisation.** For any change whose purpose is to **remove** something — a credential, an access grant, a feature flag, a route, a permission, a file — the positive test confirms the replacement exists and says **nothing whatsoever** about whether the original is gone. The two are independent facts. **The negative test is the one that carries the claim, and it is the one that gets skipped**, because a passing positive test feels like completion and produces the same green.
+
+**Corollary, and it has to be planned for.** The negative test requires the old artifact, so it must be **captured before the change**. A rotation that discards the old string first cannot be verified at all — only assumed.
+
+**Why not promoted.** One instance. **But it is a shape rather than an accident** — the same structure as 2.5 (instrument for silent failure) and 2.9 (ask what was removed). A second instance in any project should send it straight to the playbook.
+
+### 2.17 Fixing every instance leaves the template that mints the next one
+
+**Observed 2026-08-14 — and the spec had already written the warning.**
+
+A database compute was resized from 1→1 to 0.25→8 CU. Both live computes read the new value and verified on read-back, so the change was recorded as done. **The project-level `default_endpoint_settings`, which governs computes that do not exist yet, still read 1→1.** Every future branch would be born at the wrong size — including the per-preview branches that a still-outstanding task exists specifically to start creating.
+
+**The sharpest part is that the hazard was documented.** The workflow spec said in as many words that the default applies only to newly created endpoints, that the second API call was *"not redundant,"* and that this was *"the half that fails silently."* The warning was correct, it was written by the person doing the work, and the second call still was not made. **A documented hazard is not a mitigated one.**
+
+**Proposed generalisation.** Where a setting exists at both **instance** and **template** level, fixing every instance produces a complete-looking audit and a wrong system — because the audit surface is *what exists*, and the defect lives in *what does not exist yet*. It surfaces only when something new is created, which is typically later, under different circumstances, and gets attributed to the new thing.
+
+**The check that catches it.** After changing a setting across every instance, ask: ***"what mints the next instance, and did it change?"*** Then create one and read it back. Nothing short of creating one distinguishes a fixed template from an unfixed one.
+
+**Second-order value, recorded 2026-08-14.** The near-miss here was a *shortcut*: rebuilding the test branch instead of resetting its password would have inherited the rotated credential and retired the leaked hostname in one move. It was rejected only because the template defect was found first — otherwise it would have silently restored the SP1.5 flaky gate, whose cause had already been measured and paid for. **A shortcut that creates a new instance inherits the template's defects, and that is invisible at the moment the shortcut looks clever.**
+
+**Why not promoted.** One instance. **The warning-was-written-and-ignored half may be the more valuable one**, and it generalises past configuration entirely: it is a claim about whether documentation is actually consulted at the moment of action, or only at the moment of writing.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
