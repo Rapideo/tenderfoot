@@ -327,7 +327,20 @@ test("renders its text uppercase-styled via the type token, not inline values", 
 - [ ] `npm run check` green — typecheck, all tests, build, **and both token verifiers**.
 - [ ] `npm run build` produces a bundle with **no trace of the gallery**, proven by grep.
 - [ ] Every primitive renders on `/dev/gallery` with every state, labelled.
-- [ ] **No hardcoded colour, radius, or font anywhere in `app/client/src`.** Verify: `grep -rnE "#[0-9a-fA-F]{3,6}|font:\s*[0-9]|border-radius:\s*[0-9]" app/client/src --include=*.tsx --include=*.css` returns only token definitions.
+- [ ] **No hardcoded colour, radius, or font anywhere in `app/client/src`.** Verify:
+
+```bash
+grep -rnE "#[0-9a-fA-F]{3,6}|rgba?\(|hsla?\(|font:\s*[0-9]|border-radius:\s*[0-9]|box-shadow:" \
+  app/client/src --include=*.tsx --include=*.css
+```
+
+returns only token definitions.
+
+> **⚠ Corrected 2026-08-13 during execution — the original pattern could not see half of what it claimed to check.** It was `#[0-9a-fA-F]{3,6}|font:|border-radius:`, which **cannot match `rgba(20,24,28,.05)`** — so a colour living in a `box-shadow` passed a scan reporting zero hardcoded colours. Found when Task 6's implementer flagged that its own shadow literal was unchecked.
+>
+> **This is the second instance today of the same failure in my own work**, after a `letter-spacing` regex that required a leading `.` and silently excluded three negative tracking values. **A pattern that cannot match a category reports zero of it without saying so**, and the report looks identical to a genuine pass.
+>
+> **The general fix is the one Task 1 adopted: a conservation check.** Where a count feeds a decision, verify what the pattern *cannot* match, not only what it returns.
 - [ ] `ScoreBar` with `value={null}` renders a deliberate empty state, and **no fixture anywhere supplies a fake score.**
 - [ ] `docs/SP2-fidelity-audit.md` exists, with a `Deviation:` entry for every departure.
 - [ ] **Matt's sign-off.** This is the gate; the slice is not done without it.
