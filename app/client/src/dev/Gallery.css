@@ -133,3 +133,26 @@
   display: block;
   margin-bottom: 8px;
 }
+
+/* Task 9 -- the reorganised page's own framing text: the intro paragraph,
+ * each group's "compare in the frozen bundle" citation, and the standing
+ * note above Intelligence. All three are prose, so they get the same
+ * width cap gallery-note already uses rather than stretching full-bleed. */
+.gallery-intro {
+  max-width: 640px;
+}
+
+.gallery-compare {
+  margin-top: 4px;
+  max-width: 640px;
+}
+
+/* border-top:var(--line-soft) -- the same token gallery-fact-trio already
+ * uses for a hairline -- sets the standing note apart from the Intelligence
+ * heading above it without inventing a new colour or a box the bundle has
+ * no counterpart for. */
+.gallery-standing-note {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}

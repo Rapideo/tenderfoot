@@ -79,6 +79,42 @@ function checkGalleryMarkerAbsentFromBuild() {
   );
 }
 
+/* SP2 T9: companion to checkGalleryMarkerAbsentFromBuild() below, and the
+ * deferred item that check was carrying (progress.md, Task 3 minor --
+ * "CARRIED INTO TASK 9"). That check greps the production BUILD for the
+ * marker's absence; nothing anywhere asserted the marker was present in
+ * SOURCE to begin with. Delete "dev-gallery-marker" from Gallery.tsx and
+ * the absence check passes vacuously -- there is nothing to find in the
+ * build because there was never anything to find, not because the route
+ * didn't ship. Same shape as a test that cannot fail. Task 9 reorganises
+ * the exact file that holds the marker, which is exactly when a string
+ * with no visible purpose is most likely to be edited away. Runs first,
+ * before typecheck/test/build, so a deleted marker fails fast rather than
+ * burning the rest of the gate first. */
+function checkGalleryMarkerPresentInSource() {
+  const marker = "dev-gallery-marker";
+  const galleryPath = join(process.cwd(), "app", "client", "src", "dev", "Gallery.tsx");
+  const source = readFileSync(galleryPath, "utf8");
+  if (!source.includes(marker)) {
+    console.error(
+      `FAIL: "${marker}" is missing from ${galleryPath}.\n` +
+        `checkGalleryMarkerAbsentFromBuild() (later in this script) greps the ` +
+        `production build for this exact string and treats its ABSENCE there ` +
+        `as proof /dev/gallery did not ship. If the marker isn't in the source ` +
+        `in the first place, that check passes whether or not the gallery ` +
+        `actually shipped -- it would be proving nothing. Restore ` +
+        `"${marker}" to Gallery.tsx (its <h1> is where it lives today) and ` +
+        `re-run.`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `OK     "${marker}" present in ${galleryPath} -- the build-absence check has something to grep for.`,
+  );
+}
+
+checkGalleryMarkerPresentInSource();
+
 run("typecheck");
 
 /* DATABASE_URL is cleared from the `test` child's environment, on purpose

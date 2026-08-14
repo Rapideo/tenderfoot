@@ -31,8 +31,9 @@
  * no variant prop) cannot express both; the brief's own "raised surface"
  * language and the direct nesting relationship above make the elevated,
  * 10px/box-shadow triage card the stronger match -- see task-6-report.md
- * for the full reasoning and the --radius-card consumer count this leaves
- * at zero.
+ * for the full reasoning. --radius-card had zero consumers at the time this
+ * was written; that stopped being true when ShortcutCard landed later in
+ * the same task (Ruling 11) and consumed it -- see ShortcutCard.css.
  *
  * animation:tfin .22s ease both (a one-time mount transition) is not
  * reproduced -- it is an entrance effect, not a resting property of the

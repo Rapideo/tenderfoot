@@ -1,11 +1,24 @@
-/* The dev-only design-system gallery. Primitives arrive with SP2 Tasks 4-9,
- * each appending its own section (progress.md, Ruling 2: append-only, T9 is
- * the sole reorganiser).
+/* The dev-only design-system gallery -- SP2's sign-off instrument. Every
+ * primitive from Tasks 4-8 landed here across six commits, each one
+ * APPENDING its own section (progress.md Ruling 2: append-only, "T9 is the
+ * sole reorganiser"). This is that one reorganisation: everything below is
+ * grouped as Atoms / Surfaces / Intelligence / Chrome (task-9-brief.md step
+ * 1), not as the six arrival-order sections it used to be. No primitive's
+ * behaviour, props, or rendered state changed to do this -- only where each
+ * one sits on the page and what surrounds it.
  *
- * "dev-gallery-marker" below is not a UI string; it exists only so Task 3
- * step 4 can grep a production build for it. A string that cannot occur
- * anywhere else in the bundle turns "the guard in router.tsx works" from an
- * assumption into something a command either finds or does not. */
+ * "dev-gallery-marker" below is not a UI string; it exists only so
+ * scripts/check.mjs can grep a production build for it -- and, as of this
+ * task, so the SAME script can grep THIS FILE for it too. Deleting this
+ * string used to make the absence-from-build check pass vacuously (nothing
+ * to find is not the same as nothing shipped): checkGalleryMarkerAbsentFrom
+ * Build() would report success even if /dev/gallery reached production,
+ * simply because the marker it was told to look for no longer existed
+ * anywhere (progress.md, Task 3 minor, carried into Task 9 -- "same shape as
+ * a test that cannot fail"). checkGalleryMarkerPresentInSource() closes that
+ * gap by asserting the opposite fact. Reorganising this exact file is
+ * precisely when that string is most likely to be edited away by accident
+ * -- do not delete it. */
 import "./Gallery.css";
 import {
   Button,
@@ -27,6 +40,16 @@ import {
 import type { ButtonVariant, StatusDotState } from "../primitives";
 
 const STATUS_STATES: StatusDotState[] = ["ok", "degraded", "rot", "off"];
+
+/* Comparison affordance (task-9-brief.md step 3): the exact frozen-bundle
+ * filename, cited once here rather than re-typed (and risking a typo) in
+ * every group's compare note below. Two other files sit in the same
+ * directory with near-identical names -- an unversioned "Tenderfoot UI
+ * Mockups.html" and "Tenderfoot UI Mockups V1,1.html" (a comma, not a
+ * period) -- and neither is the parity target. Getting the filename wrong
+ * would mean comparing against a stale bundle without any error to catch
+ * it, so naming the real one exactly, once, is the point. */
+const FROZEN_BUNDLE_PATH = "prototype/PROTOTYPE/Tenderfoot UI Mockups V1.2.html";
 
 /* Task 6 copy, reproduced character-for-character from the bundle (see
  * Callout.css and FactPanel.css for the exact declarations these were
@@ -95,6 +118,33 @@ const SCORE_STRIP_EMPTY = [
  * no contents", the same shape as ScoreBar's value=null. */
 const GATED_DRAWER_EXAMPLE_COUNT = 4;
 
+/* Standing note (task-9-brief.md step 2): rendered ABOVE the Intelligence
+ * group's demos, not after them -- a reviewer looking at a populated score
+ * bar should not have to scroll past it to be told what it is. Content is
+ * fixed: built-and-not-wired, V1 renders the empty state, and the
+ * qualification gate, citing design spec §1.1 ("§1.1 parks matching as
+ * undesigned, not as pending work") and its own §7.10 clause 2 (superseded
+ * 2026-08-13 to require these controls exist, inert, rather than be
+ * omitted). Not the `Callout` primitive: Callout is matched against one
+ * specific bundle instance -- the buyerNote entity-resolution finding --
+ * and reusing it here for an unrelated process note would misuse a
+ * primitive whose whole identity is that one bundle citation. */
+const STANDING_NOTE = (
+  <p className="gallery-note gallery-standing-note">
+    <strong>Read this before the score bars below, not after.</strong> Every
+    control in this group is built and rendered. None is wired, and none may
+    become wired: a rendered control here may never become a live filter,
+    ranking, or score until qualification is designed. Design spec §1.1 parks
+    matching as <strong>undesigned</strong>, not as pending work -- shipping
+    inert filter chrome puts a wired-up switch one small commit away from
+    existing, and that commit is the failure this note exists to prevent.
+    V1 renders the empty state: the <code>assessment</code> table is empty by
+    design and stays that way, so the "V1 RENDERS THIS STATE" examples below
+    -- not the illustrative ones beside them -- are what every real render in
+    the shipped product looks like.
+  </p>
+);
+
 /* Task 8 -- rows and chrome: TableRow, StatusBar, HeaderLockup.
  *
  * SOURCES_EXAMPLE is the bundle's own Source Registry array, verbatim
@@ -146,12 +196,31 @@ export function Gallery() {
     <main>
       <h1>dev-gallery-marker — Design system gallery</h1>
 
-      {/* Task 4 -- the atoms: micro-label, keycap, chip, status dot. Each
-       * primitive's CSS declaration was matched against its exact
-       * counterpart in the frozen bundle; see the CSS files under
-       * ../primitives for the citations. */}
+      <p className="gallery-intro">
+        Every primitive from SP2 Tasks 4-8, grouped as Atoms / Surfaces /
+        Intelligence / Chrome, every state labelled -- built for a roughly
+        hour-long sign-off read, not a passing glance. Each group cites
+        exactly where in the frozen bundle (<code>{FROZEN_BUNDLE_PATH}</code>)
+        its primitives were matched, so parity can be checked directly
+        against it without searching the file first.
+      </p>
+
+      {/* ============================== ATOMS ============================
+       * MicroLabel, Keycap, Chip, StatusDot (Task 4) and Button (Task 5),
+       * merged into one group: all five are the smallest, most-repeated
+       * building blocks, and Button was previously its own top-level
+       * section only because it arrived a task later, not because it is a
+       * different kind of thing. */}
       <section className="gallery-section">
         <h2>Atoms</h2>
+        <p className="gallery-compare">
+          Compare in the frozen bundle -- Keycap index ~550324 (command-bar
+          "Show menu"), Chip index ~555272 (opportunity-detail modal header),
+          StatusDot index ~617159 (Source Registry drawer). MicroLabel (32
+          uses) and Button (49 instances) recur too often for one index to
+          stand in; MicroLabel was matched against the triage card's DEADLINE
+          label, Button's full enumeration is in task-5-report.md.
+        </p>
 
         <div className="gallery-section">
           <MicroLabel>DEADLINE</MicroLabel>
@@ -181,15 +250,12 @@ export function Gallery() {
             ))}
           </div>
         </div>
-      </section>
 
-      {/* Task 5 -- Button, in the four styles the bundle's 49 <button>
-       * elements actually contain (primary/secondary/ghost from the brief,
-       * plus tertiary -- a fourth recurring style the brief did not name;
-       * see Button.css and task-5-report.md). Appended after Atoms per the
-       * gallery's append-only rule; Task 4's section above is untouched. */}
-      <section className="gallery-section">
-        <h2>Button</h2>
+        {/* Button, in the four styles the bundle's 49 <button> elements
+         * actually contain (primary/secondary/ghost from the original
+         * brief, plus tertiary -- a fourth recurring style the brief did
+         * not name; see Button.css and task-5-report.md). */}
+        <h3>Button</h3>
 
         <div className="gallery-section">
           <div className="gallery-row">
@@ -248,11 +314,17 @@ export function Gallery() {
         </p>
       </section>
 
-      {/* Task 6 -- surfaces: Card, FactTile, FactPanel, Callout. Appended
-       * after Button per the gallery's append-only rule; Tasks 4-5's
-       * sections above are untouched. */}
+      {/* ============================= SURFACES ===========================
+       * Card, ShortcutCard, FactTile, FactPanel, Callout (Task 6). */}
       <section className="gallery-section">
         <h2>Surfaces</h2>
+        <p className="gallery-compare">
+          Compare in the frozen bundle -- Card index ~554745 (triage/detail
+          card), ShortcutCard index ~570279/~570759 (goRadars/goReports),
+          FactTile index ~556698 (the DEADLINE/EST. VALUE/POSTED trio),
+          FactPanel index ~562481 (populated) and ~599427 (empty, Pipeline
+          Board), Callout index ~629092 (data) rendered at ~556799.
+        </p>
 
         {/* Card -- the raised surface everything else sits on, matched
          * against the bundle's triage/detail card (task-6-report.md), which
@@ -338,20 +410,23 @@ export function Gallery() {
         </div>
       </section>
 
-      {/* Task 7 -- the intelligence chrome, built inert: ScoreBar (via
-       * ScoreStrip, which composes it -- both its populated and empty
-       * states appear below), ScoreStrip, GatedDrawer. Appended after
-       * Surfaces per the gallery's append-only rule; Tasks 4-6's sections
-       * above are untouched.
-       *
-       * See the SCORE_STRIP_ and GATED_DRAWER_EXAMPLE_COUNT constants above
-       * for why the populated examples are illustrative bundle data, not
-       * fabricated, and why the empty/count=0 examples are V1's actual
-       * state rather than a corner case. Card wraps ScoreStrip here, same
-       * as it wraps FactPanel above (SP2 plan pre-flight scan: "Card wraps
-       * score surfaces"). */}
+      {/* ============================ INTELLIGENCE ========================
+       * ScoreBar (via ScoreStrip, which composes it), ScoreStrip, GatedDrawer
+       * (Task 7) -- the chrome built inert. The standing note is rendered
+       * FIRST, before either demo, per task-9-brief.md step 2. */}
       <section className="gallery-section">
-        <h2>Intelligence chrome (inert)</h2>
+        <h2>Intelligence</h2>
+
+        {STANDING_NOTE}
+
+        <p className="gallery-compare">
+          Compare in the frozen bundle -- ScoreBar index ~560940, ScoreStrip
+          ("MACHINE SCORES — A READING AID") index ~559895, GatedDrawer index
+          ~567216. The illustrative ScoreStrip values below are the bundle's
+          own first mock opportunity record (id "in-fssa-ltss", index
+          ~627585), not invented; the illustrative GatedDrawer count mirrors
+          the bundle's own four-item GATED mock array.
+        </p>
 
         <div className="gallery-section">
           <div className="gallery-row gallery-row--align-top">
@@ -390,20 +465,10 @@ export function Gallery() {
             </span>
           </div>
         </div>
-
-        <p className="gallery-note">
-          These three are built and rendered, and they are not wired: a
-          rendered control here may never become an active filter, ranking,
-          or score until qualification is designed (SP2 plan, §1.1). Both
-          empty states above -- ScoreStrip with every value null, and
-          GatedDrawer at count=0 -- are the actual V1 state, not a
-          placeholder for one; V1 ships neither scores nor gates.
-        </p>
       </section>
 
-      {/* Task 8 -- rows and chrome: TableRow, StatusBar, HeaderLockup.
-       * Appended after Intelligence chrome per the gallery's append-only
-       * rule; Tasks 4-7's sections above are untouched.
+      {/* =============================== CHROME ===========================
+       * TableRow, StatusBar, HeaderLockup (Task 8).
        *
        * TableRow and StatusBar are each rendered in their own block-level
        * section rather than inside gallery-row/gallery-panel-item: those
@@ -416,7 +481,13 @@ export function Gallery() {
        * Kept out of that layout here rather than re-adding the property
        * defensively. */}
       <section className="gallery-section">
-        <h2>Rows and chrome</h2>
+        <h2>Chrome</h2>
+        <p className="gallery-compare">
+          Compare in the frozen bundle -- TableRow index ~616303 (Source
+          Registry) and ~603268 (entity opps, a second independent padding
+          citation), StatusBar index ~617384 (the persistent footer),
+          HeaderLockup index ~549237.
+        </p>
 
         <div className="gallery-section">
           <MicroLabel>
