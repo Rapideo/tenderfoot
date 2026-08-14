@@ -14,8 +14,10 @@ import {
   Chip,
   FactPanel,
   FactTile,
+  GatedDrawer,
   Keycap,
   MicroLabel,
+  ScoreStrip,
   ShortcutCard,
   StatusDot,
 } from "../primitives";
@@ -51,6 +53,44 @@ const BUTTON_EXAMPLES: Record<ButtonVariant, string> = {
   ghost: "CLEAR",
 };
 const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "tertiary", "ghost"];
+
+/* Task 7 -- the intelligence chrome, built inert. THESE ARE BUILT AND
+ * RENDERED. THEY ARE NOT WIRED, AND MUST NOT BECOME WIRED (Matt,
+ * 2026-08-13; design spec §7.10 clause 2 superseded to require it).
+ *
+ * SCORE_STRIP_EXAMPLE is NOT invented: it is the bundle's own first mock
+ * opportunity record (V1.2, index ~627585, id "in-fssa-ltss"), reproduced
+ * verbatim -- Fit 84 / Winnability 61 / Value 72 / Timing 48 -- and
+ * labelled illustrative below rather than presented as a live result. No
+ * fixture anywhere in this file supplies a score V1 would not actually
+ * have (task-7-brief.md, progress.md Ruling 3). These four land in the
+ * fill's POS/MID tiers only (none below 45); the LOW/--signal-neg tier is
+ * covered by ScoreBar.test.tsx, not by this gallery -- flagged in
+ * task-7-report.md.
+ *
+ * SCORE_STRIP_EMPTY is the actual V1 state: the assessment table is empty
+ * by design (design spec §1.1) and stays empty, so every real ScoreStrip
+ * render in the shipped product looks like this one, not like the
+ * illustrative example beside it. */
+const SCORE_STRIP_EXAMPLE = [
+  { label: "Fit", value: 84 },
+  { label: "Winnability", value: 61 },
+  { label: "Value", value: 72 },
+  { label: "Timing", value: 48 },
+];
+const SCORE_STRIP_EMPTY = [
+  { label: "Fit", value: null },
+  { label: "Winnability", value: null },
+  { label: "Value", value: null },
+  { label: "Timing", value: null },
+];
+
+/* GatedDrawer's count=4 mirrors the bundle's own GATED mock array length
+ * (V1.2, the triage screen's four hard-gate examples) -- illustrative, not
+ * a claim V1 gates anything. count=0 is V1's actual state: SVRC Region
+ * 1.1.5 records "V1 has no gates, so nothing is gated and the drawer has
+ * no contents", the same shape as ScoreBar's value=null. */
+const GATED_DRAWER_EXAMPLE_COUNT = 4;
 
 export function Gallery() {
   return (
@@ -247,6 +287,69 @@ export function Gallery() {
             </span>
           </div>
         </div>
+      </section>
+
+      {/* Task 7 -- the intelligence chrome, built inert: ScoreBar (via
+       * ScoreStrip, which composes it -- both its populated and empty
+       * states appear below), ScoreStrip, GatedDrawer. Appended after
+       * Surfaces per the gallery's append-only rule; Tasks 4-6's sections
+       * above are untouched.
+       *
+       * See the SCORE_STRIP_ and GATED_DRAWER_EXAMPLE_COUNT constants above
+       * for why the populated examples are illustrative bundle data, not
+       * fabricated, and why the empty/count=0 examples are V1's actual
+       * state rather than a corner case. Card wraps ScoreStrip here, same
+       * as it wraps FactPanel above (SP2 plan pre-flight scan: "Card wraps
+       * score surfaces"). */}
+      <section className="gallery-section">
+        <h2>Intelligence chrome (inert)</h2>
+
+        <div className="gallery-section">
+          <div className="gallery-row gallery-row--align-top">
+            <span className="gallery-panel-item">
+              <MicroLabel>ILLUSTRATIVE -- BUNDLE MOCK DATA, NOT A LIVE SCORE</MicroLabel>
+              <div className="gallery-score-demo">
+                <Card>
+                  <div className="gallery-card-body">
+                    <ScoreStrip scores={SCORE_STRIP_EXAMPLE} />
+                  </div>
+                </Card>
+              </div>
+            </span>
+            <span className="gallery-panel-item">
+              <MicroLabel>V1 RENDERS THIS STATE</MicroLabel>
+              <div className="gallery-score-demo">
+                <Card>
+                  <div className="gallery-card-body">
+                    <ScoreStrip scores={SCORE_STRIP_EMPTY} />
+                  </div>
+                </Card>
+              </div>
+            </span>
+          </div>
+        </div>
+
+        <div className="gallery-section">
+          <div className="gallery-row">
+            <span className="gallery-button-item">
+              <MicroLabel>ILLUSTRATIVE -- BUNDLE MOCK GATED COUNT</MicroLabel>
+              <GatedDrawer count={GATED_DRAWER_EXAMPLE_COUNT} />
+            </span>
+            <span className="gallery-button-item">
+              <MicroLabel>V1 RENDERS THIS STATE</MicroLabel>
+              <GatedDrawer count={0} />
+            </span>
+          </div>
+        </div>
+
+        <p className="gallery-note">
+          These three are built and rendered, and they are not wired: a
+          rendered control here may never become an active filter, ranking,
+          or score until qualification is designed (SP2 plan, §1.1). Both
+          empty states above -- ScoreStrip with every value null, and
+          GatedDrawer at count=0 -- are the actual V1 state, not a
+          placeholder for one; V1 ships neither scores nor gates.
+        </p>
       </section>
     </main>
   );

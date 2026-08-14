@@ -1,0 +1,139 @@
+/* ScoreBar -- one row of the "MACHINE SCORES — A READING AID" panel
+ * (ScoreStrip). See ScoreBar.tsx for the exact bundle declaration this was
+ * matched against (V1.2, index ~560940) and why the wrapper+button merge
+ * into one <div> with a three-column grid, caret column dropped.
+ *
+ * --line-mid/--radius-button/--ground-surface are the wrapper's exact
+ * border/radius/background tokens (border:1px solid var(--brdmid);
+ * border-radius:7px;background:var(--surface)). --line-soft/--radius-micro
+ * are the track's exact background/radius (background:var(--brdsoft);
+ * border-radius:3px) -- --radius-micro's own tokens.css comment names
+ * "score meters" directly, the single strongest name match in this task.
+ *
+ * --type-ui-view is the label's exact shorthand (500 11.5px/1 IBM Plex
+ * Sans) -- one of exactly 3 uses in the whole bundle (the other two: "+ New
+ * view", "Delete view", both flagged unimplemented in task-5-report.md),
+ * zero consumers anywhere before this. --type-metric-score is the value's
+ * exact shorthand (600 13px/1 IBM Plex Mono), its own type.css comment
+ * reading "score value" -- purpose-named for exactly this role, one of its
+ * 2 uses (the other: oppRows' score column, which unlike this row DOES tint
+ * the value text with scoreColor -- reproduced here byte-for-byte as
+ * written, i.e. NOT tinted; the two are independent bundle instances of the
+ * same token, not merged).
+ *
+ * Grid-template-columns/gap/padding have no token layer (as with every
+ * prior primitive), so they stay literals, exactly as in the bundle. */
+.score-bar {
+  /* width:100% reproduces the bundle's own button declaration
+   * (width:100%;display:grid;...) -- dropped by mistake when the
+   * wrapper+button merged into one <div> (see ScoreBar.tsx), and its
+   * absence is not cosmetic: a <button> shrinks to its content by
+   * default, which is why the bundle stated width:100% explicitly, and a
+   * plain <div> normally stretches on its own -- EXCEPT the middle "1fr"
+   * track column has no in-flow content (its fill is position:absolute,
+   * so it does not count toward intrinsic sizing), so without an explicit
+   * width the whole row collapses toward near-zero inside any ancestor
+   * that sizes by shrink-to-fit (confirmed visually: the gallery's
+   * flex/align-items:flex-start panel wrapper is exactly such an
+   * ancestor, same one Card already documents as not stretching Card
+   * "full-bleed" -- Gallery.css). Restored here rather than left
+   * dependent on every future caller happening to provide a definite
+   * width. */
+  width: 100%;
+  display: grid;
+  grid-template-columns: 96px 1fr 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--ground-surface);
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-button);
+  overflow: hidden;
+}
+
+.score-bar__label {
+  font: var(--type-ui-view);
+  color: var(--text-secondary);
+}
+
+.score-bar__track {
+  height: 5px;
+  background: var(--line-soft);
+  border-radius: var(--radius-micro);
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+
+.score-bar__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-micro);
+}
+
+/* Thresholds reproduce the bundle's own scoreColor(v) byte-for-byte --
+ *   scoreColor(v) { return v >= 70 ? "var(--ok)" : v >= 45 ? "var(--acc)" : "var(--warn)"; }
+ * the one function in the bundle that colours every numeric score,
+ * confirmed by reading it directly (it also drives oppRows' score column
+ * and the citation panel's bigger score display -- three independent
+ * bundle surfaces, one function).
+ *
+ * The POSITIVE and MID tiers keep that function's own colours. The LOW
+ * tier does NOT: scoreColor()'s low branch returns var(--warn), never
+ * var(--bad)/--signal-neg -- across all five mock opportunity records no
+ * score ever renders that branch as --bad. --signal-neg is used here
+ * anyway because task-7-brief.md hands this assignment down explicitly:
+ * --signal-neg already carries three jobs in this direction (tokens.css --
+ * a data-conflict flag, a destructive action, and, per its own comment,
+ * "a score or verdict: low fit, Pass"), and this is that third job's first
+ * real consumer. THE OVERLOAD IS KNOWN AND HANDED BACK, NOT DISCOVERED
+ * HERE -- and it is not resolved by inventing a fourth colour to
+ * disambiguate, which would break parity (tokens.css's own "NOT SPLIT
+ * HERE" note). Flagged in task-7-report.md as a literal disagreement with
+ * the one bundle function that actually computes this, worth Matt's eye at
+ * the gate. */
+.score-bar__fill--pos {
+  background: var(--signal-pos);
+}
+
+.score-bar__fill--mid {
+  background: var(--accent);
+}
+
+.score-bar__fill--low {
+  background: var(--signal-neg);
+}
+
+.score-bar__value {
+  font: var(--type-metric-score);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* Empty state (value === null) -- the V1 case: the assessment table is
+ * empty by design (design spec §1.1) and stays empty, so this is not a
+ * rare edge case, it is the one every real V1 render hits. Matched in
+ * SHAPE against FactPanel's own populated/empty split per this task's
+ * dispatch, not against a literal bundle declaration -- the bundle has no
+ * "unscored" state to match literally, every one of its mock scores is
+ * populated.
+ *
+ * Dashed border reuses --line-control-3, the SAME token FactPanel's own
+ * empty state uses (FactPanel.css, task-6-report.md: the bundle's actual
+ * empty-list treatment is --brdctl3, not the more flatteringly-named
+ * --line-dashed/--brddash) -- consistent with that precedent rather than
+ * inventing a new "empty" border colour. The value text dims to
+ * --text-disabled, the same role FactPanel's empty message and Button's
+ * :disabled state already use. No fill is rendered at all (see
+ * ScoreBar.tsx) rather than a 0%-width one, so the empty state can never be
+ * mistaken for a rendered score of zero, even on inspection. */
+.score-bar--empty {
+  border-style: dashed;
+  border-color: var(--line-control-3);
+}
+
+.score-bar--empty .score-bar__value {
+  color: var(--text-disabled);
+}

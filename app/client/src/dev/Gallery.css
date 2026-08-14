@@ -76,6 +76,24 @@
   align-items: flex-start;
 }
 
+/* Task 7 -- ScoreStrip's decorative bar track has no in-flow text content
+ * (its fill is position:absolute, so it never contributes to intrinsic
+ * sizing). FactPanel's FactTile trio above sits in the same
+ * gallery-panel-item (align-items:flex-start, a shrink-to-fit column) and
+ * still reaches the full 340px cap, because its real text content (dollar
+ * amounts, dates) naturally wants MORE than 340px and gets clamped there.
+ * ScoreStrip's own natural width does not push that far, so without this it
+ * settles at whatever its label/value text alone demands (~230px,
+ * confirmed by rendering it) rather than the 340px every other panel demo
+ * in this gallery uses. width (not max-width, unlike gallery-card-demo)
+ * gives Card a definite box to fill, matching the rest of the gallery
+ * rather than an accidental, content-driven size -- gallery layout only,
+ * same reasoning gallery-card-demo already documents for Card not
+ * stretching full-bleed on its own. */
+.gallery-score-demo {
+  width: 340px;
+}
+
 .gallery-panel-item {
   display: flex;
   flex-direction: column;
