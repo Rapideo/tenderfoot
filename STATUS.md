@@ -38,7 +38,7 @@
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
 | **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) outstanding — dashboard-only, six steps in workflow spec §8 |
-| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
+| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ◐ **All 10 tasks done 2026-08-13**, branch `sp2-design-system`, 22 commits, gate green. **Sixteen primitives** on `/dev/gallery`. **NOT merged — waiting on Matt's sign-off**, which is the point of the slice |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
 | ~~SP5~~ | ~~Matching engine~~ | **Removed 2026-08-11** |
@@ -47,6 +47,20 @@
 | **SP8** | Radars + reporting *(on GO)* | — |
 
 ---
+
+## Waiting for Matt at the SP2 gate — five rulings, none of them defects
+
+Run `npm run dev`, open `/dev/gallery`. **Read the second paragraph first** — it names two decoy bundle files that sit beside the real one; only **V1.2** is the parity reference.
+
+| | |
+|---|---|
+| **98 type tokens** | 88 font shorthands + 10 tracking. Not a scale — a census. `--type-body-*` alone has 25 thin variants. **Merging them would break the parity §7.10 ranks above elegance**, so nobody did |
+| **No spacing layer, no shadow layer** | The same gap typography had before Task 1. Every primitive inlines bundle-faithful literals; `Card`'s shadow uses `rgba` because there is no token for it |
+| **`StatusDot`: `rot` = yellow, `degraded` = red** | Faithfully transcribed from the bundle. Possibly backwards *in the prototype* |
+| **`--brddash` is misnamed** | Named for dashed borders, commented "empty states" — but the bundle uses it for placeholders and drop zones and **never** for an empty list, which uses `--brdctl3` |
+| **Gaps in `Button`** | A **danger primary** exists in the bundle uncovered by the prop set; two singleton styles left out as below the 3× recurrence bar |
+
+**One known gap, ruled not gate-blocking:** the bundle's `COST TO PURSUE` panel sits in a **recessed** wrapper (`--surface3`) that no primitive expresses, so the gallery shows it on plain white. Colour difference is near-imperceptible; **the real gap is that no "recessed section" primitive exists** — needs one before SP6 composes a real screen.
 
 ## Infrastructure — live as of 2026-08-13
 
