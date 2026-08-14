@@ -34,6 +34,18 @@ import "./ScoreBar.css";
  * state anywhere, every one of its four mock scores is populated. */
 export function ScoreBar({ label, value }: { label: string; value: number | null }) {
   const empty = value === null;
+  // RULING 13 -- this is a threshold comparator, the exact shape this
+  // task's ban is aimed at ("if you find yourself writing a comparator,
+  // stop" -- task-7-brief.md). It survives review only because it decides
+  // one thing and one thing only: which of three CSS classes paints this
+  // bar's fill, mirroring the bundle's own scoreColor(v) byte-for-byte
+  // (see ScoreBar.css). It is presentation, not qualification -- it never
+  // touches which opportunities appear, in what order, or whether one
+  // clears a bar. Matching/qualification is parked as UNDESIGNED, not
+  // deferred, by design spec §1.1, and nothing here reopens that: this
+  // value never feeds a sort, a filter, or a pass/fail decision anywhere
+  // in this component or ScoreStrip. Do not cite this line as precedent
+  // for a real threshold -- that decision does not exist yet.
   const tier = empty ? null : value >= 70 ? "pos" : value >= 45 ? "mid" : "low";
   const rowClass = empty ? "score-bar score-bar--empty" : "score-bar";
 
