@@ -99,13 +99,24 @@ const GATED_DRAWER_EXAMPLE_COUNT = 4;
  *
  * SOURCES_EXAMPLE is the bundle's own Source Registry array, verbatim
  * (V1.2, index ~700536) -- name/platform/tier/legal/health for all five
- * mock sources, not invented. SOURCE_ROW_COLUMNS is that same list's own
- * grid-template-columns (index ~616303): minmax(200px,1fr) 120px 84px
- * 112px 112px -- the exact citation TableRow.tsx documents. The coloured
- * legal-status badge and the column-header row the bundle wraps this list
- * in are separate, unbuilt elements out of this task's scope ("these three
- * only" -- task-8-brief.md), so each cell here is plain text, not a claim
- * of full-screen fidelity.
+ * mock sources, not invented. SOURCE_ROW_COLUMNS and SOURCE_ROW_PADDING are
+ * that same list's own grid-template-columns and padding (index ~616303):
+ * minmax(200px,1fr) 120px 84px 112px 112px, 13px 22px -- the exact citation
+ * TableRow.tsx documents, and (per Ruling 14, SP2 T8 review) now passed as
+ * the `padding` override rather than left at the component's 13px 24px
+ * default, which this list's own bundle instance does not actually use.
+ * The coloured legal-status badge and the column-header row the bundle
+ * wraps this list in are separate, unbuilt elements out of this task's
+ * scope ("these three only" -- task-8-brief.md), so each cell here is
+ * plain text, not a claim of full-screen fidelity.
+ *
+ * ENTITY_OPPS_ROW_* is a second, independent padding citation (index
+ * ~603268, "Live opportunities" nested inside an entity profile): columns
+ * minmax(0,1.9fr) minmax(0,.7fr) minmax(0,.7fr), padding 14px 26px --
+ * demonstrating the override is general-purpose, not something only the
+ * Source Registry needed. Cell content is neutral placeholder text, not
+ * bundle data (the `ent.opps` array's own field values were not captured),
+ * kept honestly generic rather than invented as if it were.
  *
  * STATUS_BAR_* mirror the same five sources: GovWin IQ is EXCLUDED (not
  * ingested) and is not one of the "4 SOURCES" the footer counts; of the
@@ -125,6 +136,9 @@ const SOURCES_EXAMPLE = [
   { name: "GovWin IQ", platform: "Aggregator", tier: "—", legal: "EXCLUDED", health: "Not ingested" },
 ];
 const SOURCE_ROW_COLUMNS = "minmax(200px,1fr) 120px 84px 112px 112px";
+const SOURCE_ROW_PADDING = "13px 22px";
+const ENTITY_OPPS_ROW_COLUMNS = "minmax(0,1.9fr) minmax(0,.7fr) minmax(0,.7fr)";
+const ENTITY_OPPS_ROW_PADDING = "14px 26px";
 const STATUS_BAR_LAST_RUN = "2026-08-10 06:04 EDT";
 
 export function Gallery() {
@@ -405,11 +419,14 @@ export function Gallery() {
         <h2>Rows and chrome</h2>
 
         <div className="gallery-section">
-          <MicroLabel>TABLE ROW -- SOURCE REGISTRY, THE BUNDLE'S OWN FIVE MOCK SOURCES</MicroLabel>
+          <MicroLabel>
+            TABLE ROW -- SOURCE REGISTRY, THE BUNDLE'S OWN FIVE MOCK SOURCES (PADDING 13PX 22PX,
+            ITS OWN BUNDLE VALUE, INDEX ~616303)
+          </MicroLabel>
           <div className="gallery-tablerow-demo">
             <Card>
               {SOURCES_EXAMPLE.map((s) => (
-                <TableRow key={s.name} columns={SOURCE_ROW_COLUMNS}>
+                <TableRow key={s.name} columns={SOURCE_ROW_COLUMNS} padding={SOURCE_ROW_PADDING}>
                   <span>{s.name}</span>
                   <span>{s.platform}</span>
                   <span>{s.tier}</span>
@@ -417,6 +434,26 @@ export function Gallery() {
                   <span>{s.health}</span>
                 </TableRow>
               ))}
+            </Card>
+          </div>
+        </div>
+
+        {/* Ruling 14 (SP2 T8 review): a second, independent padding
+         * citation -- entity opps (index ~603268), 14px 26px -- to show the
+         * override is general-purpose, not something only the Source
+         * Registry row above needed. Cell text is neutral placeholder
+         * content, not bundle data (see the constants comment above). */}
+        <div className="gallery-section">
+          <MicroLabel>
+            TABLE ROW, PADDING OVERRIDE -- ENTITY OPPS' OWN 14PX 26PX (BUNDLE INDEX ~603268)
+          </MicroLabel>
+          <div className="gallery-tablerow-demo">
+            <Card>
+              <TableRow columns={ENTITY_OPPS_ROW_COLUMNS} padding={ENTITY_OPPS_ROW_PADDING}>
+                <span>Opportunity</span>
+                <span>Deadline</span>
+                <span>Value</span>
+              </TableRow>
             </Card>
           </div>
         </div>

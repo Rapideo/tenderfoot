@@ -15,37 +15,51 @@ import "./TableRow.css";
  * padding is where the screens genuinely disagree -- 12px 16px, 13px 22px,
  * 13px 24px, 13px 26px, 14px 22px, 14px 26px, all real, all measured.
  * `13px 24px` is the plurality (four of ten: expiring, orgs, vendors,
- * yields), so that is what this shared primitive carries; the other six
- * screens' own padding is a per-screen deviation this generic primitive
- * does not attempt to reproduce, same as this task's own `columns` prop
- * exists precisely because grid-template-columns does NOT generalise
- * across screens either. Flagged for the gate rather than silently
- * averaged away.
+ * yields), so that is what this shared primitive's own CSS default carries;
+ * the other six screens' own padding is a genuine per-screen deviation, not
+ * noise -- Ruling 14 (SP2 T8 review): an unexpressed axis becomes an
+ * inlined style in every consuming screen, the exact pattern the CSS-scan
+ * gate exists to catch (it already produced Button's `size` and
+ * ShortcutCard). So `padding` is an optional override, same mechanism as
+ * `background` below -- but it is NOT a variant set: these ten values do
+ * not cluster into two or three named types, they are screen-specific
+ * composition, so a free-form prop is right and an enum is not. It takes a
+ * MEASURED bundle value, not an invented one -- the table above is the
+ * reference for what those six deviations actually are (12px 16px: fields/
+ * gated; 13px 22px: sources; 13px 26px: entity history; 14px 22px:
+ * oppRows; 14px 26px: entity opps).
  *
- * `columns` and `background` are per-instance DATA, not design literals --
- * the bundle's own `grid-template-columns` differs by screen (task-8-
- * brief.md), and every `{{ x.bg }}` binding across the bundle's per-row
- * lists (fields, docs, notes, saved views) resolves to a token reference
- * the caller already chose (var(--surface), var(--accbg2), var(--badbg2)...),
- * never a literal hex -- confirmed by reading those mock arrays directly.
- * Same class of exception ScoreBar.tsx documents for its fill's width: an
- * inline style here carries a runtime value, not a hardcoded one, so the
- * "never hardcode a colour, radius, or font" rule is not in tension with
- * it. When `background` is omitted, no background is set at all -- the row
- * takes whatever surface it sits on (Card, in every one of the bundle's
- * own div-based row lists), not an invented default. */
+ * `columns`, `background`, and `padding` are all per-instance DATA, not
+ * design literals -- the bundle's own `grid-template-columns` differs by
+ * screen (task-8-brief.md), and every `{{ x.bg }}` binding across the
+ * bundle's per-row lists (fields, docs, notes, saved views) resolves to a
+ * token reference the caller already chose (var(--surface), var(--accbg2),
+ * var(--badbg2)...), never a literal hex -- confirmed by reading those mock
+ * arrays directly. Same class of exception ScoreBar.tsx documents for its
+ * fill's width: an inline style here carries a runtime value, not a
+ * hardcoded one, so the "never hardcode a colour, radius, or font" rule is
+ * not in tension with it. When `background`/`padding` are omitted, nothing
+ * is set inline for them at all -- background takes whatever surface the
+ * row sits on (Card, in every one of the bundle's own div-based row
+ * lists), and padding falls through to table-row's own CSS default
+ * (13px 24px), left exactly where it was so nothing already built moves. */
 export function TableRow({
   columns,
   background,
+  padding,
   children,
 }: {
   columns: string;
   background?: string;
+  padding?: string;
   children?: ReactNode;
 }) {
   const style: CSSProperties = { gridTemplateColumns: columns };
   if (background) {
     style.background = background;
+  }
+  if (padding) {
+    style.padding = padding;
   }
   return (
     <div className="table-row" style={style}>

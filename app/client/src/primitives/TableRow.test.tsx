@@ -50,6 +50,34 @@ test("background, when given, is applied verbatim", () => {
   unmount();
 });
 
+/* Ruling 14 (SP2 T8 review): padding is an optional override for the six
+ * bundle screens whose own padding deviates from the 13px 24px plurality
+ * default -- e.g. entity opps' own 14px 26px (index ~603268). Applied the
+ * same way as background: an inline override, not a variant class. */
+test("padding, when given, overrides the default -- a real measured bundle value, e.g. entity opps' 14px 26px", () => {
+  const { unmount } = render(
+    <TableRow columns="1fr 1fr" padding="14px 26px">
+      <span>Cell</span>
+    </TableRow>,
+  );
+  const row = screen.getByText("Cell").closest(".table-row") as HTMLElement;
+  expect(row.style.padding).toBe("14px 26px");
+  // Everything else in the row still carries no inline style of its own.
+  expect(screen.getByText("Cell").getAttribute("style")).toBeNull();
+  unmount();
+});
+
+test("with no padding prop, the row sets no inline padding -- the 13px 24px default lives in table-row's own CSS, not duplicated per instance", () => {
+  const { unmount } = render(
+    <TableRow columns="1fr 1fr">
+      <span>Cell</span>
+    </TableRow>,
+  );
+  const row = screen.getByText("Cell").closest(".table-row") as HTMLElement;
+  expect(row.style.padding).toBe("");
+  unmount();
+});
+
 test("renders children directly as grid cells -- no per-cell wrapper injected", () => {
   const { unmount } = render(
     <TableRow columns="1fr 1fr 1fr">
