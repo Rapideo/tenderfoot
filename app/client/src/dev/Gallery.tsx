@@ -15,11 +15,14 @@ import {
   FactPanel,
   FactTile,
   GatedDrawer,
+  HeaderLockup,
   Keycap,
   MicroLabel,
   ScoreStrip,
   ShortcutCard,
+  StatusBar,
   StatusDot,
+  TableRow,
 } from "../primitives";
 import type { ButtonVariant, StatusDotState } from "../primitives";
 
@@ -91,6 +94,38 @@ const SCORE_STRIP_EMPTY = [
  * 1.1.5 records "V1 has no gates, so nothing is gated and the drawer has
  * no contents", the same shape as ScoreBar's value=null. */
 const GATED_DRAWER_EXAMPLE_COUNT = 4;
+
+/* Task 8 -- rows and chrome: TableRow, StatusBar, HeaderLockup.
+ *
+ * SOURCES_EXAMPLE is the bundle's own Source Registry array, verbatim
+ * (V1.2, index ~700536) -- name/platform/tier/legal/health for all five
+ * mock sources, not invented. SOURCE_ROW_COLUMNS is that same list's own
+ * grid-template-columns (index ~616303): minmax(200px,1fr) 120px 84px
+ * 112px 112px -- the exact citation TableRow.tsx documents. The coloured
+ * legal-status badge and the column-header row the bundle wraps this list
+ * in are separate, unbuilt elements out of this task's scope ("these three
+ * only" -- task-8-brief.md), so each cell here is plain text, not a claim
+ * of full-screen fidelity.
+ *
+ * STATUS_BAR_* mirror the same five sources: GovWin IQ is EXCLUDED (not
+ * ingested) and is not one of the "4 SOURCES" the footer counts; of the
+ * remaining four, SAM.gov is the one "ROT SUSPECTED" and Ohio Procurement
+ * (health: "Failing") is the one "DEGRADED" -- the bundle's own counts,
+ * reproduced, not computed here. lastRun is the bundle's own literal
+ * timestamp (V1.2, index ~617384). The healthy variant is not a bundle
+ * instance (V1.2 ships only the degraded one) -- task-8-brief.md step 3
+ * requires it anyway, so 0/0 is shown labelled as the counterfactual it is,
+ * same discipline ScoreStrip's "V1 RENDERS THIS STATE" label already
+ * establishes for a state the bundle does not itself render. */
+const SOURCES_EXAMPLE = [
+  { name: "Indiana Supplier Portal", platform: "Periscope", tier: "T1 API", legal: "ToS OK", health: "Healthy" },
+  { name: "Indiana EDS Contracts", platform: "Custom", tier: "T1 API", legal: "ToS OK", health: "Healthy" },
+  { name: "SAM.gov", platform: "SAM", tier: "T1 API", legal: "ToS OK", health: "Rot suspected" },
+  { name: "Ohio Procurement", platform: "Bonfire", tier: "T2 scrape", legal: "Rate-limited", health: "Failing" },
+  { name: "GovWin IQ", platform: "Aggregator", tier: "—", legal: "EXCLUDED", health: "Not ingested" },
+];
+const SOURCE_ROW_COLUMNS = "minmax(200px,1fr) 120px 84px 112px 112px";
+const STATUS_BAR_LAST_RUN = "2026-08-10 06:04 EDT";
 
 export function Gallery() {
   return (
@@ -350,6 +385,61 @@ export function Gallery() {
           GatedDrawer at count=0 -- are the actual V1 state, not a
           placeholder for one; V1 ships neither scores nor gates.
         </p>
+      </section>
+
+      {/* Task 8 -- rows and chrome: TableRow, StatusBar, HeaderLockup.
+       * Appended after Intelligence chrome per the gallery's append-only
+       * rule; Tasks 4-7's sections above are untouched.
+       *
+       * TableRow and StatusBar are each rendered in their own block-level
+       * section rather than inside gallery-row/gallery-panel-item: those
+       * two wrappers use align-items:flex-start, which shrink-wraps a flex
+       * child to its own content width. StatusBar in particular has no
+       * content-driven width of its own (every child is flex:none or a
+       * flex:1 spacer that contributes nothing to shrink-to-fit sizing) --
+       * exactly the class of bug task-7-report.md flagged when a dropped
+       * width:100% collapsed a bar to 16px and every test still passed.
+       * Kept out of that layout here rather than re-adding the property
+       * defensively. */}
+      <section className="gallery-section">
+        <h2>Rows and chrome</h2>
+
+        <div className="gallery-section">
+          <MicroLabel>TABLE ROW -- SOURCE REGISTRY, THE BUNDLE'S OWN FIVE MOCK SOURCES</MicroLabel>
+          <div className="gallery-tablerow-demo">
+            <Card>
+              {SOURCES_EXAMPLE.map((s) => (
+                <TableRow key={s.name} columns={SOURCE_ROW_COLUMNS}>
+                  <span>{s.name}</span>
+                  <span>{s.platform}</span>
+                  <span>{s.tier}</span>
+                  <span>{s.legal}</span>
+                  <span>{s.health}</span>
+                </TableRow>
+              ))}
+            </Card>
+          </div>
+        </div>
+
+        <div className="gallery-section gallery-statusbar-item">
+          <MicroLabel>V1 RENDERS THIS STATE -- THE BUNDLE'S OWN COUNTS</MicroLabel>
+          <StatusBar sources={4} degraded={1} rotSuspected={1} lastRun={STATUS_BAR_LAST_RUN} />
+        </div>
+
+        <div className="gallery-section gallery-statusbar-item">
+          <MicroLabel>
+            A HEALTHY STATE -- 0 DEGRADED, 0 ROT SUSPECTED (not a bundle instance; task-8-brief.md
+            step 3)
+          </MicroLabel>
+          <StatusBar sources={4} degraded={0} rotSuspected={0} lastRun={STATUS_BAR_LAST_RUN} />
+        </div>
+
+        <div className="gallery-section">
+          <MicroLabel>HEADER LOCKUP</MicroLabel>
+          <div className="gallery-row">
+            <HeaderLockup />
+          </div>
+        </div>
       </section>
     </main>
   );

@@ -1,0 +1,75 @@
+/* StatusBar -- see StatusBar.tsx for the full bundle declaration this was
+ * matched against (V1.2, index ~617384) and what was dropped/kept.
+ *
+ * Token matches:
+ *   --ink-surface        is --ink,    the bar's own background
+ *   --on-ink-muted       is --inktx,  the bar's default text/icon colour
+ *                         (already consumed elsewhere -- Keycap.css)
+ *   --signal-watch       is --yellow, the counts dot -- the same token
+ *                         StatusDot/ScoreBar use for "rot suspected",
+ *                         reproduced here as the bundle's static literal
+ *                         (see .tsx for why it is not recomputed)
+ *   --ink-raised         is --ink3,   the 1px vertical divider
+ *   --type-microlabel-source + --tracking-hint-tight is the exact
+ *                         `font:400 10.5px/1 'IBM Plex Mono';
+ *                         letter-spacing:.06em` shared by every text span
+ *                         in the bar (7 uses total in the bundle; this
+ *                         primitive accounts for three of them)
+ *   --on-ink-disabled    is --inktx3, the version stamp's own colour --
+ *                         tokens.css names this exact use ("disabled text
+ *                         on ink (the version stamp)")
+ *   --radius-round       is the dot's 50% step, the same token
+ *                         StatusDot.css already consumes (see .tsx for why
+ *                         StatusDot itself is not reused here)
+ */
+.status-bar {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 20px;
+  background: var(--ink-surface);
+  color: var(--on-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status-bar__counts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--on-ink-muted);
+  flex: none;
+}
+
+.status-bar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-round);
+  background: var(--signal-watch);
+  flex: none;
+}
+
+.status-bar__label {
+  font: var(--type-microlabel-source);
+  letter-spacing: var(--tracking-hint-tight);
+  flex: none;
+}
+
+.status-bar__divider {
+  width: 1px;
+  height: 12px;
+  background: var(--ink-raised);
+  flex: none;
+}
+
+.status-bar__spacer {
+  flex: 1;
+}
+
+.status-bar__version {
+  color: var(--on-ink-disabled);
+}

@@ -1,0 +1,15 @@
+/* TableRow -- see TableRow.tsx for the ten bundle row instances this was
+ * measured against, and for why grid-template-columns and background are
+ * not here (they are per-instance data, set inline).
+ *
+ * --line-row is --brdrow ("table row rules; the faintest division that
+ * still reads" -- tokens.css), the border colour shared by all ten
+ * instances without exception. Padding has no token layer (as with every
+ * prior primitive), so it stays a literal. */
+.table-row {
+  display: grid;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 24px;
+  border-bottom: 1px solid var(--line-row);
+}

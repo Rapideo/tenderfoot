@@ -111,3 +111,25 @@
   gap: 12px;
   width: 100%;
 }
+
+/* Task 8 -- TableRow demo. Not a flex container, so TableRow's own grid
+ * sizing is never shrink-wrapped by an align-items:flex-start ancestor
+ * (same reasoning gallery-card-demo documents for Card). 800px, not the
+ * 640px every other panel demo uses: the Source Registry row's own five
+ * columns (minmax(200px,1fr) 120px 84px 112px 112px, 14px gaps, 24px
+ * horizontal padding) sum to just over 730px before the first column even
+ * grows -- a narrower cap clipped the HEALTH column against Card's own
+ * overflow:hidden, caught only by rendering the gallery and looking. */
+.gallery-tablerow-demo {
+  max-width: 800px;
+}
+
+/* Task 8 -- StatusBar demo. MicroLabel is inline by default; made block
+ * here, with the bar left in normal block flow beneath it (not a flex
+ * child), so it gets its containing block's full width the plain way --
+ * see the comment in Gallery.tsx for why that matters for this specific
+ * primitive. */
+.gallery-statusbar-item .micro-label {
+  display: block;
+  margin-bottom: 8px;
+}
