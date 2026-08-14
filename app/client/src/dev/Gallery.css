@@ -83,3 +83,13 @@
   gap: 8px;
   max-width: 340px;
 }
+
+/* Ruling 11 (SP2 T6 review) -- ShortcutCard sits beside Card so the absent
+ * box-shadow is directly comparable. gap:12px reproduces the bundle's own
+ * goRadars/goReports wrapper (display:grid;gap:12px). */
+.gallery-shortcut-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}

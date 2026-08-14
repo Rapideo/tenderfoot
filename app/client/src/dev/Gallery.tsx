@@ -7,7 +7,18 @@
  * anywhere else in the bundle turns "the guard in router.tsx works" from an
  * assumption into something a command either finds or does not. */
 import "./Gallery.css";
-import { Button, Callout, Card, Chip, FactPanel, FactTile, Keycap, MicroLabel, StatusDot } from "../primitives";
+import {
+  Button,
+  Callout,
+  Card,
+  Chip,
+  FactPanel,
+  FactTile,
+  Keycap,
+  MicroLabel,
+  ShortcutCard,
+  StatusDot,
+} from "../primitives";
 import type { ButtonVariant, StatusDotState } from "../primitives";
 
 const STATUS_STATES: StatusDotState[] = ["ok", "degraded", "rot", "off"];
@@ -20,6 +31,14 @@ const CALLOUT_COPY =
   "Listed on Indiana's portal — the buyer is NY OGS, not Indiana. Cooperative award, participating states TBD.";
 const FACT_PANEL_TITLE = "COST TO PURSUE — FACTS, NOT A SCORE";
 const FACT_PANEL_NOTE = "Counted from the bundle. The light/moderate/heavy call is yours.";
+
+/* Ruling 11 (SP2 T6 review): ShortcutCard's copy, reproduced
+ * character-for-character from the bundle's goRadars/goReports buttons
+ * (see ShortcutCard.css). */
+const SHORTCUT_CARDS = [
+  { title: "3 contracts expire inside your sectors", description: "Expiration radar — re-competes, months early" },
+  { title: "Next ingest at 06:00", description: "4 sources · last run clean" },
+];
 
 /* Button copy is reproduced character-for-character from the bundle
  * instance each variant was matched against (see Button.css): interestIt
@@ -149,25 +168,46 @@ export function Gallery() {
         {/* Card -- the raised surface everything else sits on, matched
          * against the bundle's triage/detail card (task-6-report.md), which
          * itself wraps a FactTile trio and a Callout -- the composition
-         * reproduced here, using the naspo-ogs mock record's real copy. */}
+         * reproduced here, using the naspo-ogs mock record's real copy.
+         *
+         * ShortcutCard sits beside it deliberately (Ruling 11, SP2 T6
+         * review): the bundle evidences a second, flatter card-shaped role
+         * (goRadars/goReports) that Card's children-only interface cannot
+         * express, because the bundle element is semantically a <button>,
+         * not a container -- see ShortcutCard.css. The ONLY visual
+         * difference from Card is the absent box-shadow, easy to miss
+         * unless the two sit side by side, which is why they are placed
+         * here rather than in a section of their own. */}
         <div className="gallery-section">
-          <MicroLabel>CARD, WRAPPING A FACT TILE TRIO + CALLOUT</MicroLabel>
-          <div className="gallery-card-demo">
-            <Card>
-              <div className="gallery-card-body">
-                <Callout>{CALLOUT_COPY}</Callout>
-                <div className="gallery-fact-trio">
-                  <FactTile
-                    label="DEADLINE"
-                    value="2026-08-27"
-                    sub="17 days out · 3:00 PM EDT"
-                    emphasis
-                  />
-                  <FactTile label="EST. VALUE" value="$12M+" sub="Multi-state, no ceiling stated" />
-                  <FactTile label="POSTED" value="2026-07-14" sub="No addenda" />
-                </div>
+          <div className="gallery-row gallery-row--align-top">
+            <span className="gallery-panel-item">
+              <MicroLabel>CARD, WRAPPING A FACT TILE TRIO + CALLOUT</MicroLabel>
+              <div className="gallery-card-demo">
+                <Card>
+                  <div className="gallery-card-body">
+                    <Callout>{CALLOUT_COPY}</Callout>
+                    <div className="gallery-fact-trio">
+                      <FactTile
+                        label="DEADLINE"
+                        value="2026-08-27"
+                        sub="17 days out · 3:00 PM EDT"
+                        emphasis
+                      />
+                      <FactTile label="EST. VALUE" value="$12M+" sub="Multi-state, no ceiling stated" />
+                      <FactTile label="POSTED" value="2026-07-14" sub="No addenda" />
+                    </div>
+                  </div>
+                </Card>
               </div>
-            </Card>
+            </span>
+            <span className="gallery-panel-item">
+              <MicroLabel>SHORTCUT CARD -- SAME BORDER/RADIUS FAMILY, NO BOX-SHADOW</MicroLabel>
+              <div className="gallery-shortcut-stack">
+                {SHORTCUT_CARDS.map((card) => (
+                  <ShortcutCard key={card.title} title={card.title} description={card.description} />
+                ))}
+              </div>
+            </span>
           </div>
         </div>
 

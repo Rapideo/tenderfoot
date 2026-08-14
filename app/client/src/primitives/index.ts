@@ -8,5 +8,6 @@ export { FactPanel } from "./FactPanel";
 export { FactTile } from "./FactTile";
 export { Keycap } from "./Keycap";
 export { MicroLabel } from "./MicroLabel";
+export { ShortcutCard } from "./ShortcutCard";
 export { StatusDot } from "./StatusDot";
 export type { StatusDotState } from "./StatusDot";
