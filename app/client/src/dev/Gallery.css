@@ -4,8 +4,23 @@
  * surface in the bundle (V1.2's command-bar "Show menu" control), so this
  * reproduces that surface -- from tokens, not a hardcoded hex -- rather than
  * showing the atom floating, illegibly, on the gallery's light ground. */
+
+/* dev-gallery-marker (C1, 2026-08-14 fix wave): a SECOND copy of the same
+ * marker Gallery.tsx's <h1> carries, deliberately duplicated here rather than
+ * assumed to travel with it. Vite bundles a CSS side-effect import
+ * (Gallery.tsx:22, `import "./Gallery.css"`) unconditionally, independently
+ * of whether import.meta.env.DEV tree-shakes the JS that imports it -- a
+ * clean build at HEAD shipped 18 `.gallery-*` selectors into
+ * dist/assets/index-*.css while scripts/check.mjs's marker grep, which only
+ * ever looked for the JS-side string, reported the build clean. A CUSTOM
+ * PROPERTY, not a comment: Vite's production CSS minifier strips comments,
+ * so a marker living only in one would never reach dist and this would
+ * prove nothing. The declaration below is otherwise inert -- nothing reads
+ * --dev-gallery-marker -- and checkGalleryMarkerAbsentFromBuild() in
+ * scripts/check.mjs is what actually greps for it in the built output. */
 .gallery-section {
   margin-top: 32px;
+  --dev-gallery-marker: "dev-gallery-marker";
 }
 
 .gallery-row {

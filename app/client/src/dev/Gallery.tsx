@@ -84,25 +84,37 @@ const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "tertiary", "g
  * RENDERED. THEY ARE NOT WIRED, AND MUST NOT BECOME WIRED (Matt,
  * 2026-08-13; design spec §7.10 clause 2 superseded to require it).
  *
- * SCORE_STRIP_EXAMPLE is NOT invented: it is the bundle's own first mock
- * opportunity record (V1.2, index ~627585, id "in-fssa-ltss"), reproduced
- * verbatim -- Fit 84 / Winnability 61 / Value 72 / Timing 48 -- and
- * labelled illustrative below rather than presented as a live result. No
- * fixture anywhere in this file supplies a score V1 would not actually
- * have (task-7-brief.md, progress.md Ruling 3). These four land in the
- * fill's POS/MID tiers only (none below 45); the LOW/--signal-caution tier
- * is covered by ScoreBar.test.tsx, not by this gallery -- flagged in
- * task-7-report.md.
+ * SCORE_STRIP_EXAMPLE is NOT invented: it is the bundle's own SECOND mock
+ * opportunity record (V1.2, index ~628895, id "naspo-ogs" -- the same
+ * record CALLOUT_COPY and the FactPanel "populated" demo above already
+ * cite, not a new fixture), reproduced verbatim -- Fit 43 / Winnability 21
+ * / Value 91 / Timing 34.
+ *
+ * I2 (2026-08-14 fix wave): this used to be OPPS[0] ("in-fssa-ltss", 84 /
+ * 61 / 72 / 48) -- POS and MID tiers only, never LOW. --signal-caution, the
+ * colour scoreColor() actually gives a low score (Ruling 12 corrected this
+ * after the token layer wrongly claimed --signal-neg owned it), never
+ * painted a single pixel anywhere a reviewer could see one; its only
+ * coverage was ScoreBar.test.tsx asserting a class name, not a rendered
+ * colour. naspo-ogs's three sub-45 scores (43, 21, 34) all render
+ * --signal-caution; its one score of 91 renders --signal-pos. No bundle
+ * record has a score in the 45-69 MID band alongside a sub-45 score, so
+ * this swap trades MID-tier coverage for the LOW-tier coverage that was
+ * previously invisible -- not a fabricated fourth value forcing all three
+ * tiers into one row, just the bundle's own second record, which happens
+ * to be the one that was wrong all day. No fixture anywhere in this file
+ * supplies a score V1 would not actually have (task-7-brief.md,
+ * progress.md Ruling 3).
  *
  * SCORE_STRIP_EMPTY is the actual V1 state: the assessment table is empty
  * by design (design spec §1.1) and stays empty, so every real ScoreStrip
  * render in the shipped product looks like this one, not like the
  * illustrative example beside it. */
 const SCORE_STRIP_EXAMPLE = [
-  { label: "Fit", value: 84 },
-  { label: "Winnability", value: 61 },
-  { label: "Value", value: 72 },
-  { label: "Timing", value: 48 },
+  { label: "Fit", value: 43 },
+  { label: "Winnability", value: 21 },
+  { label: "Value", value: 91 },
+  { label: "Timing", value: 34 },
 ];
 const SCORE_STRIP_EMPTY = [
   { label: "Fit", value: null },
@@ -435,9 +447,10 @@ export function Gallery() {
           Compare in the frozen bundle -- ScoreBar index ~560940, ScoreStrip
           ("MACHINE SCORES — A READING AID") index ~559895, GatedDrawer index
           ~567216. The illustrative ScoreStrip values below are the bundle's
-          own first mock opportunity record (id "in-fssa-ltss", index
-          ~627585), not invented; the illustrative GatedDrawer count mirrors
-          the bundle's own four-item GATED mock array.
+          own second mock opportunity record (id "naspo-ogs", index
+          ~628895), not invented -- the same record the Surfaces group above
+          cites for Callout and FactPanel; the illustrative GatedDrawer count
+          mirrors the bundle's own four-item GATED mock array.
         </p>
 
         <div className="gallery-section">

@@ -40,6 +40,24 @@ NOTE_WATCH = (
     "     * changed without lying. Whether the direction needs two caution hues is open."
 )
 NOTE_NEG = "negative. Overloaded -- see the note at the foot of this group."
+NOTE_DASHED = (
+    "a DEFERRED-FEATURE placeholder, not an empty-state token (I4, 2026-08-14\n"
+    "     * fix wave -- the exact twin of --signal-neg's false low-score\n"
+    "     * claim, Ruling 12). Read at all 4 of its bundle uses: every one\n"
+    "     * marks a layout slot for something deliberately not built yet,\n"
+    "     * captioned inline -- \"DOCUMENT RENDER — PLACEHOLDER\", \"Rescore\n"
+    "     * history has no treatment yet (§6.4)\", \"Records are not\n"
+    "     * accessible to this project. The slot stays in the layout...\",\n"
+    "     * \"Recall is quoted against its denominator...\". NEVER an empty\n"
+    "     * list -- the bundle's OWN \"list has nothing in it\" treatment\n"
+    "     * (FactPanel's and ScoreBar's empty states alike) uses --brdctl3\n"
+    "     * instead (F4, SP2 fidelity audit, corrected the same day). Two\n"
+    "     * consumers (FactPanel.css, ScoreBar.css) carry a comment\n"
+    "     * explaining why they ignore this token's old, flattering\n"
+    "     * description; correcting the description here is the actual fix --\n"
+    "     * a comment surviving in two consumers to explain around a wrong\n"
+    "     * claim means the claim, not the consumers, was the defect."
+)
 
 GROUPS = [
  ("GROUND -- light backgrounds, ordered by depth", [
@@ -63,7 +81,7 @@ GROUPS = [
   ("--line-control-2", "--brdctl2",  "second control border"),
   ("--line-control-3", "--brdctl3",  "third control border"),
   ("--line-control-4", "--brdctl4",  "fourth control border"),
-  ("--line-dashed",    "--brddash",  "dashed affordance: empty states, add-new targets"),
+  ("--line-dashed",    "--brddash",  NOTE_DASHED),
   ("--line-dashed-2",  "--brddash2", "second dashed affordance"),
  ]),
  ("TEXT -- foreground on light ground, darkest first", [
@@ -241,6 +259,24 @@ HEAD = '''/* ===================================================================
  * sampled from, which applies only where a slot-4 palette source exists. These
  * came out of the generator, so the tokens record WHAT but not WHY, and the
  * do-not-revisit discipline has nothing to anchor to until a source is named.
+ *
+ * SECOND PALETTE, NOT EXTRACTED (I3, 2026-08-14 fix wave). The bundle defines
+ * every one of these 67 names TWICE: once under :root (the light values
+ * below) and again, immediately after, under a `[data-theme="dark"]`
+ * selector -- 134 hex values total, a complete second dark palette, not a
+ * handful of overrides. This generator's extraction loop keeps only the
+ * FIRST definition of each name (`if n not in defs`), so every value below
+ * is the LIGHT one; the dark one is read, matched, and silently discarded.
+ * That is not a bug in the regex -- both selectors satisfy the same
+ * `--name:#hex` pattern on purpose, because :root and [data-theme="dark"]
+ * are just two more curly-brace blocks to it -- it is a scope this file has
+ * never claimed to cover. This is that claim, made explicitly: A DARK THEME
+ * EXISTS IN THE BUNDLE. IT IS NOT BUILT HERE. Nothing below should be read
+ * as "the bundle has no dark palette" -- only as "this generator emits the
+ * light one." prototype/tools/verify-tokens.py's conservation check counts
+ * both palettes and fails if that count ever drifts from 67, so this
+ * disclosure cannot go silently stale the way the --line-dashed and
+ * --signal-neg comments did (I4, Ruling 12).
  * ==========================================================================*/
 
 :root {

@@ -51,6 +51,24 @@ function run(npmScript, env = process.env) {
  * exists nowhere else in the source tree. This function greps the actual
  * production build for it -- after `build` below has produced dist/ --
  * and fails the gate if it is present, whatever route it arrived by. */
+/* C1 (2026-08-14 fix wave): this used to grep for a marker that lived ONLY
+ * in Gallery.tsx's JS. That missed a real, currently-shipping defect: Vite
+ * bundles a CSS side-effect import (`import "./Gallery.css"` in
+ * Gallery.tsx) unconditionally, independently of whether the JS that
+ * imports it is tree-shaken -- a clean build at HEAD shipped 18
+ * `.gallery-*` selectors into dist/assets/index-*.css while this exact
+ * function printed OK, because the marker it was grepping for had only ever
+ * existed on the JS side. The marker now ALSO lives in Gallery.css (a
+ * --dev-gallery-marker custom property -- a real declaration, not a
+ * comment, because Vite's production CSS minifier strips comments and a
+ * marker living only in one would never reach dist). This function's own
+ * whole-dist-tree grep did not need to change to cover both; only the
+ * marker's footprint did. Root cause fixed separately in router.tsx
+ * (Gallery is now built only inside `if (import.meta.env.DEV)`, as a
+ * React.lazy()-wrapped dynamic import(), so Rollup can prove the whole
+ * branch -- JS and CSS alike -- is unreachable in production and drop it);
+ * this check is what proves that fix actually holds, and what will catch a
+ * regression if a future static import reintroduces the leak. */
 function checkGalleryMarkerAbsentFromBuild() {
   const marker = "dev-gallery-marker";
   const distDir = join(process.cwd(), "app", "client", "dist");
@@ -64,12 +82,13 @@ function checkGalleryMarkerAbsentFromBuild() {
     console.error(
       `FAIL: a dev-only surface reached the production build.\n` +
         `"${marker}" -- a marker that exists ONLY in ` +
-        `app/client/src/dev/Gallery.tsx, a DEV-ONLY component -- was found in:\n` +
+        `app/client/src/dev/Gallery.tsx and app/client/src/dev/Gallery.css, ` +
+        `both DEV-ONLY -- was found in:\n` +
         leaks.map((f) => `  ${f}`).join("\n") +
         `\n\nThis means /dev/gallery, or something that imports Gallery.tsx ` +
-        `from outside the import.meta.env.DEV branch in ` +
+        `or Gallery.css from outside the import.meta.env.DEV branch in ` +
         `app/client/src/router.tsx, shipped to production. Find and remove ` +
-        `whatever imports Gallery.tsx outside that guarded branch, then ` +
+        `whatever imports either file outside that guarded branch, then ` +
         `rebuild and re-run this check.`,
     );
     process.exit(1);
@@ -91,25 +110,38 @@ function checkGalleryMarkerAbsentFromBuild() {
  * with no visible purpose is most likely to be edited away. Runs first,
  * before typecheck/test/build, so a deleted marker fails fast rather than
  * burning the rest of the gate first. */
+/* C1 (2026-08-14 fix wave): checks Gallery.css too, not just Gallery.tsx.
+ * Gallery.css carries its own copy of the marker (a --dev-gallery-marker
+ * custom property) precisely because a CSS side-effect import ships to
+ * production independently of JS tree-shaking -- see the comment on
+ * checkGalleryMarkerAbsentFromBuild() below. The same vacuous-pass risk
+ * Task 3 found for the JS marker applies here identically: if someone
+ * deletes the CSS marker while Gallery.css can still reach a build, the
+ * absence check downstream would have nothing to find and would pass
+ * whether or not the leak actually happened. */
 function checkGalleryMarkerPresentInSource() {
   const marker = "dev-gallery-marker";
-  const galleryPath = join(process.cwd(), "app", "client", "src", "dev", "Gallery.tsx");
-  const source = readFileSync(galleryPath, "utf8");
-  if (!source.includes(marker)) {
-    console.error(
-      `FAIL: "${marker}" is missing from ${galleryPath}.\n` +
-        `checkGalleryMarkerAbsentFromBuild() (later in this script) greps the ` +
-        `production build for this exact string and treats its ABSENCE there ` +
-        `as proof /dev/gallery did not ship. If the marker isn't in the source ` +
-        `in the first place, that check passes whether or not the gallery ` +
-        `actually shipped -- it would be proving nothing. Restore ` +
-        `"${marker}" to Gallery.tsx (its <h1> is where it lives today) and ` +
-        `re-run.`,
-    );
-    process.exit(1);
+  const sources = [
+    join(process.cwd(), "app", "client", "src", "dev", "Gallery.tsx"),
+    join(process.cwd(), "app", "client", "src", "dev", "Gallery.css"),
+  ];
+  for (const path of sources) {
+    const source = readFileSync(path, "utf8");
+    if (!source.includes(marker)) {
+      console.error(
+        `FAIL: "${marker}" is missing from ${path}.\n` +
+          `checkGalleryMarkerAbsentFromBuild() (later in this script) greps the ` +
+          `production build for this exact string and treats its ABSENCE there ` +
+          `as proof /dev/gallery -- JS and CSS alike -- did not ship. If the ` +
+          `marker isn't in every one of its source files, that check passes ` +
+          `whether or not the gallery actually shipped -- it would be proving ` +
+          `nothing. Restore "${marker}" to ${path} and re-run.`,
+      );
+      process.exit(1);
+    }
   }
   console.log(
-    `OK     "${marker}" present in ${galleryPath} -- the build-absence check has something to grep for.`,
+    `OK     "${marker}" present in ${sources.length} dev-gallery source file(s) -- the build-absence check has something to grep for.`,
   );
 }
 
