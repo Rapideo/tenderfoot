@@ -14,14 +14,12 @@
  *
  * What's left clusters into four real, recurring visual styles:
  *
- *   PRIMARY (interestIt, the decision bar's "Interested" -- also tourNext,
- *   saveView, confirmReason's non-pass branch at a smaller size):
+ *   PRIMARY (interestIt, the decision bar's "Interested"):
  *     border:1px solid var(--accbrd);background:var(--acc);
  *     border-radius:8px;padding:15px;font:600 14px/1 'IBM Plex Sans';
  *     color:var(--surface)
  *
- *   SECONDARY (passIt, the decision bar's "Pass" -- also cancelReason's
- *   "Back", closeEditor's "Cancel" at a smaller size):
+ *   SECONDARY (passIt, the decision bar's "Pass"):
  *     border:1px solid var(--brdctl);background:var(--surface);
  *     border-radius:8px;padding:15px;font:600 14px/1 'IBM Plex Sans';
  *     color:var(--text3)
@@ -31,6 +29,30 @@
  * does --type-button's ("primary action buttons (Interested / Pass)", its
  * only 2 uses in the bundle) -- the highest-traffic controls in the
  * product, matched exactly per the brief.
+ *
+ *   PRIMARY/SECONDARY, size="sm" (Ruling 9, added on review): a second,
+ *   smaller cluster of the same two colour treatments, purpose-named by
+ *   --radius-button ("buttons, toolbars, toasts") and --type-ui-action /
+ *   --type-ui-action-primary, both with zero consumers before this.
+ *
+ *   sm primary -- saveView ("Create view"/"Save changes", editor footer):
+ *     border:1px solid var(--accbrd);background:var(--acc);
+ *     border-radius:7px;padding:10px 18px;font:600 12.5px/1 'IBM Plex Sans';
+ *     color:var(--surface)
+ *   (tourNext is the same cluster but border:var(--accbrd2) i.e.
+ *   --accent-bright, not --accbrd -- a one-off substitution; saveView's
+ *   --accbrd/--accent-line is what --type-ui-action-primary's own bundle
+ *   uses ("tour Next, editor Save") is built against here.)
+ *
+ *   sm secondary -- closeEditor ("Cancel", editor footer):
+ *     border:1px solid var(--brdctl);background:var(--surface);
+ *     border-radius:7px;padding:10px 16px;font:500 12.5px/1 'IBM Plex Sans';
+ *     color:var(--text4)
+ *   NOT var(--text3) -- cancelReason's "Back" (padding 11px 16px, same
+ *   family) confirms it: both are var(--text4)/--text-tertiary, a real
+ *   colour step down from default secondary's --text-secondary, not a
+ *   geometry-only resize. (Task-5 report originally mis-stated this as
+ *   "text3 at a smaller size"; corrected after review.)
  *
  *   TERTIARY -- not named in the brief. A bordered, surface-background
  *   button whose label is accent-coloured rather than neutral, used for
@@ -93,6 +115,21 @@
   font: var(--type-button);
   justify-content: center;
   gap: 9px;
+}
+
+/* size="sm" -- higher specificity (two classes) than the single-class
+ * variant rules above, so these win regardless of source order. */
+.btn--primary.btn--sm {
+  border-radius: var(--radius-button);
+  padding: 10px 18px;
+  font: var(--type-ui-action-primary);
+}
+
+.btn--secondary.btn--sm {
+  border-radius: var(--radius-button);
+  padding: 10px 16px;
+  font: var(--type-ui-action);
+  color: var(--text-tertiary);
 }
 
 .btn--tertiary {

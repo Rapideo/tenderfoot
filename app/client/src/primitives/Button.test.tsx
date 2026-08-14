@@ -72,3 +72,45 @@ test("is not disabled by default", () => {
   expect(btn.disabled).toBe(false);
   unmount();
 });
+
+/* Ruling 9 (review of this task): primary/secondary each have a second,
+ * smaller bundle-evidenced size cluster (saveView/tourNext/confirmReason;
+ * cancelReason/closeEditor) that --radius-button and
+ * --type-ui-action(-primary) are purpose-named for. */
+test("size='sm' renders via tokens, not inline values, for primary and secondary", () => {
+  for (const variant of ["primary", "secondary"] as const) {
+    const { unmount } = render(
+      <Button variant={variant} size="sm">
+        Save changes
+      </Button>,
+    );
+    const btn = screen.getByRole("button", { name: "Save changes" });
+    expect(btn.getAttribute("style")).toBeNull();
+    expect(btn.className).toMatch(new RegExp(`btn--${variant}`));
+    expect(btn.className).toMatch(/btn--sm/);
+    unmount();
+  }
+});
+
+test("size='sm' is a distinct class from the default size", () => {
+  const { unmount: unmountDefault } = render(<Button variant="secondary">Pass</Button>);
+  const defaultClass = screen.getByRole("button", { name: "Pass" }).className;
+  unmountDefault();
+
+  const { unmount: unmountSm } = render(
+    <Button variant="secondary" size="sm">
+      Cancel
+    </Button>,
+  );
+  const smClass = screen.getByRole("button", { name: "Cancel" }).className;
+  unmountSm();
+
+  expect(smClass).not.toBe(defaultClass);
+});
+
+test("size defaults to 'default' (no btn--sm class) when omitted", () => {
+  const { unmount } = render(<Button variant="primary">Interested</Button>);
+  const btn = screen.getByRole("button", { name: "Interested" });
+  expect(btn.className).not.toMatch(/btn--sm/);
+  unmount();
+});

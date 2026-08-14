@@ -98,6 +98,30 @@ export function Gallery() {
           </div>
         </div>
 
+        {/* size="sm" (Ruling 9, added on review): a second, smaller
+         * primary/secondary cluster -- saveView ("Save changes", editor
+         * footer) and closeEditor ("Cancel", editor footer) -- purpose-named
+         * by --radius-button and --type-ui-action(-primary), which had zero
+         * consumers before this. sm secondary's colour is var(--text4), a
+         * real step down from default secondary's var(--text3), not just a
+         * smaller size -- see Button.css. */}
+        <div className="gallery-section">
+          <div className="gallery-row">
+            <span className="gallery-button-item">
+              <MicroLabel>PRIMARY, SM</MicroLabel>
+              <Button variant="primary" size="sm">
+                Save changes
+              </Button>
+            </span>
+            <span className="gallery-button-item">
+              <MicroLabel>SECONDARY, SM</MicroLabel>
+              <Button variant="secondary" size="sm">
+                Cancel
+              </Button>
+            </span>
+          </div>
+        </div>
+
         <p className="gallery-note">
           Hover: the bundle declares exactly two hover treatments across all
           49 buttons (background:var(--hover) on table/list rows,
