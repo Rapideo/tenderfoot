@@ -73,27 +73,27 @@
   border-radius: var(--radius-micro);
 }
 
-/* Thresholds reproduce the bundle's own scoreColor(v) byte-for-byte --
+/* Thresholds and colours reproduce the bundle's own scoreColor(v)
+ * byte-for-byte -- the one function in the bundle that colours every
+ * numeric score, confirmed by reading it directly (it also drives
+ * oppRows' score column and the citation panel's bigger score display --
+ * three independent bundle surfaces, one function):
  *   scoreColor(v) { return v >= 70 ? "var(--ok)" : v >= 45 ? "var(--acc)" : "var(--warn)"; }
- * the one function in the bundle that colours every numeric score,
- * confirmed by reading it directly (it also drives oppRows' score column
- * and the citation panel's bigger score display -- three independent
- * bundle surfaces, one function).
+ * mapped onto role names from tokens.css's own compatibility block, not
+ * asserted from memory: --ok -> --signal-pos, --acc -> --accent,
+ * --warn -> --signal-caution.
  *
- * The POSITIVE and MID tiers keep that function's own colours. The LOW
- * tier does NOT: scoreColor()'s low branch returns var(--warn), never
- * var(--bad)/--signal-neg -- across all five mock opportunity records no
- * score ever renders that branch as --bad. --signal-neg is used here
- * anyway because task-7-brief.md hands this assignment down explicitly:
- * --signal-neg already carries three jobs in this direction (tokens.css --
- * a data-conflict flag, a destructive action, and, per its own comment,
- * "a score or verdict: low fit, Pass"), and this is that third job's first
- * real consumer. THE OVERLOAD IS KNOWN AND HANDED BACK, NOT DISCOVERED
- * HERE -- and it is not resolved by inventing a fourth colour to
- * disambiguate, which would break parity (tokens.css's own "NOT SPLIT
- * HERE" note). Flagged in task-7-report.md as a literal disagreement with
- * the one bundle function that actually computes this, worth Matt's eye at
- * the gate. */
+ * RULING 12 (2026-08-13): the low tier previously used --signal-neg, on
+ * the dispatch's instruction that --signal-neg carried a "low score or
+ * verdict" job alongside its two real ones (a data-conflict flag, a
+ * destructive action). That instruction, and the tokens.css/
+ * extract-tokens.py note it came from, were wrong -- scoreColor()'s low
+ * branch is var(--warn) in every one of the bundle's five mock records,
+ * never var(--bad). Caught by checking the bundle instead of following
+ * the instruction; the generator note is corrected at its source
+ * (prototype/tools/extract-tokens.py) rather than left to mislead the
+ * next reader. --signal-caution is the true low-score colour: caution
+ * amber, not negative red. */
 .score-bar__fill--pos {
   background: var(--signal-pos);
 }
@@ -103,7 +103,7 @@
 }
 
 .score-bar__fill--low {
-  background: var(--signal-neg);
+  background: var(--signal-caution);
 }
 
 .score-bar__value {

@@ -64,8 +64,8 @@ const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "tertiary", "g
  * labelled illustrative below rather than presented as a live result. No
  * fixture anywhere in this file supplies a score V1 would not actually
  * have (task-7-brief.md, progress.md Ruling 3). These four land in the
- * fill's POS/MID tiers only (none below 45); the LOW/--signal-neg tier is
- * covered by ScoreBar.test.tsx, not by this gallery -- flagged in
+ * fill's POS/MID tiers only (none below 45); the LOW/--signal-caution tier
+ * is covered by ScoreBar.test.tsx, not by this gallery -- flagged in
  * task-7-report.md.
  *
  * SCORE_STRIP_EMPTY is the actual V1 state: the assessment table is empty

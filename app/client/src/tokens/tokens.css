@@ -214,20 +214,34 @@
      * was --badbrd2, 2 uses in V1.2 */
 
   /* --signal-neg IS OVERLOADED, and this is the note referred to above.
-   * One value, three jobs, observed in the bundle:
+   * One value, two jobs, observed in the bundle:
    *   1. a data-quality flag  -- "DEADLINE DISAGREEMENT -- NOT RESOLVED"
    *   2. a destructive action -- "Delete view"
-   *   3. a score or verdict   -- low fit, Pass
    *
    * These are not the same thing and they do not always co-occur. A record can
-   * carry a deadline conflict while scoring well; a destructive button is not a
-   * judgement about an opportunity. Rendering all three in the same red means
-   * the interface cannot say "this is wrong" and "this is bad news" differently.
+   * carry a deadline conflict while a destructive control elsewhere carries no
+   * judgement about that record at all. Rendering both in the same red means
+   * the interface cannot say "this is wrong" and "this action cannot be undone"
+   * differently.
    *
    * This matters more here than it would elsewhere, because the whole system is
    * a judgement tool -- see docs/Proto2PRD.md 4.5, where the REASON outranks the
-   * decision. A colour that conflates data integrity with a verdict undercuts
-   * that.
+   * decision. A colour that conflates data integrity with an irreversible
+   * action undercuts that.
+   *
+   * A THIRD JOB WAS CLAIMED HERE UNTIL 2026-08-13 AND IS NOT REAL. This note
+   * previously listed a third overloaded job, "a score or verdict -- low fit,
+   * Pass". It does not exist. The bundle's own scoreColor(v) -- the one
+   * function that colours every numeric score anywhere in the direction --
+   * returns var(--warn) for a low score, never var(--bad)/--signal-neg,
+   * confirmed against all five mock opportunity records:
+   *   scoreColor(v) { return v >= 70 ? "var(--ok)" : v >= 45 ? "var(--acc)" : "var(--warn)"; }
+   * The claim was written from memory rather than checked against the bundle,
+   * then treated as ground truth for most of a working day (SP2 T7) before an
+   * implementer building ScoreBar's fill colour checked scoreColor() directly
+   * and found the disagreement. Removed rather than left here to mislead the
+   * next reader -- a comment asserting a mechanism the artifact does not have
+   * is exactly the failure this project has spent the day hunting elsewhere.
    *
    * NOT SPLIT HERE. Splitting introduces a colour, which is a design decision.
    * Recorded so the choice is deliberate rather than inherited. */

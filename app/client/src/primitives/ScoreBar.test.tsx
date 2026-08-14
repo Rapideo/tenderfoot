@@ -39,10 +39,11 @@ test("label, row and value carry no inline style -- tokens only, not literals", 
 });
 
 /* The bar's fill colour comes from a signal token, tiered at the bundle's
- * own scoreColor(v) thresholds (v>=70 / v>=45 / below) -- verified directly
- * against the bundle's scorer function. The low tier's colour
- * (--signal-neg) is a handed-down deviation from what that function
- * actually returns there (var(--warn)); see ScoreBar.css. */
+ * own scoreColor(v) thresholds (v>=70 / v>=45 / below) and colours --
+ * verified directly against the bundle's scorer function, including the
+ * low tier (--signal-caution, i.e. var(--warn)'s role name): Ruling 12
+ * corrected an earlier --signal-neg assignment that did not match what
+ * the function actually returns there; see ScoreBar.css. */
 test("fill colour is class-driven and tiered at the bundle's own scoreColor thresholds", () => {
   const cases: Array<[number, string]> = [
     [84, "score-bar__fill--pos"],
