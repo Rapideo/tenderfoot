@@ -350,6 +350,33 @@ This section used to open *"we have no hosting platform, so it has no properties
 > **Why this is load-bearing rather than trivia.** It is a silent-partial-success — the same shape as `default_endpoint_settings` above, and the same shape as the source platforms that accept a parameter and ignore it. The console reports the reset as done, and it *is* done, for one branch. **Nothing in the flow says the word "branch."** An incident closed on the strength of that report leaves a live credential behind, and the only way to find out is to try the other string.
 >
 > **The rule that follows: rotation is not complete until every branch is rotated and each one is verified by a failed connection on the old string.** A successful connection on the new string proves the new credential works; only a *failed* connection on the old one proves the old credential is dead. Both halves are required, and the second is the one that gets skipped.
+>
+> **Rotation is cheap to finish, because `store_passwords: true` on this project.** Neon keeps the role password, so `get_connection_string` returns the live one. Once a branch is reset in the console, the new string can be fetched programmatically — nothing needs copying by hand.
+>
+> **The tempting shortcut is wrong here, for a reason worth keeping.** Deleting and recreating the `test` branch would inherit `main`'s new password and retire the leaked hostname too, with no console trip. **Do not** — see the next note.
+
+> ### 🔴 LATENT 2026-08-14 — `default_endpoint_settings` is still 1→1 CU, so every NEW branch is born wrong
+>
+> Read from the project this morning:
+>
+> ```
+> "default_endpoint_settings": { "autoscaling_limit_min_cu": 1,
+>                                "autoscaling_limit_max_cu": 1,
+>                                "suspend_timeout_seconds": 0 }
+> ```
+>
+> **The 2026-08-13 resize fixed the two existing endpoints and not the project default.** Both live computes read 0.25→8 and verify on read-back, so the change looks complete and, for anything that exists today, is. **The callout above predicted exactly this half and it happened anyway** — the endpoint PATCH was applied, the project PATCH was not.
+>
+> **Two consequences, and the second is the expensive one:**
+>
+> 1. **Never rebuild the `test` branch by deleting and recreating it.** Its compute would come up at 1→1 CU. That is not cosmetic: the SP1.5 flaky gate was diagnosed to a fixed test compute, and the fix was verified because the predicted metric moved — collect time 48.84 s under contention → 2.9–4.4 s after the resize. Recreating the branch silently restores the failure and the gate goes flaky again with no change in the code to explain it.
+> 2. **Per-preview database branching (§8) is still outstanding, and it creates branches.** Every preview branch will be born at 1→1 CU on a database that idles nearly always — the wrong end of the trade, multiplied by the number of previews. **Fix the project default before §8 is turned on, not after.**
+>
+> ```
+> PATCH https://console.neon.tech/api/v2/projects/wispy-tooth-06225229
+>   {"project":{"default_endpoint_settings":{"autoscaling_limit_min_cu":0.25,
+>                                            "autoscaling_limit_max_cu":8}}}
+> ```
 
 
 ### 10.2 Other people's platforms — already measured
