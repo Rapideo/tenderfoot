@@ -270,6 +270,8 @@ This section used to open *"we have no hosting platform, so it has no properties
 | **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | ✅ **~5 min, measured 2026-08-13.** Cold-start latency also measured 2026-08-13, reported unaveraged since the cold path is the normal one for a one-user database: **first request after idle — 1087 ms** (connect 1052 ms + query 35 ms) **vs. an immediate second (warm) request — 317 ms** (connect 282 ms + query 35 ms). One `SELECT 1` round trip via `node --env-file=.env`, direct against `DATABASE_URL` — not through the deployed function, so Vercel's own cold start is not included here |
 | **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | ✅ **2026-08-13 — pooled by default, confirmed.** `DATABASE_URL` resolves to the `-pooler` host and `DATABASE_URL_UNPOOLED` to the direct one. **The integration got this right without being asked**, so the requirement is satisfied by construction rather than by discipline. The connection *count* ceiling is still unread |
 | **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | **Partial 2026-08-13** — see below |
+| **Neon** | Whether a role-password reset applies project-wide or per branch | Credential rotation is only complete if it reaches every branch. Getting this wrong leaves a leaked credential live while the incident reads as closed | ✅ **Per branch, measured 2026-08-14** — see below |
+| **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |
 
 **Read from the account 2026-08-13**, via the Neon API rather than from memory. These are **org-level facts and the settings of the existing `kp-web-prod` project**; a newly created Tenderfoot project may not inherit all of them, so the project-level rows are re-checked once it exists.
 
@@ -331,7 +333,24 @@ This section used to open *"we have no hosting platform, so it has no properties
 > 2. **A cron-driven ingestion run wakes a suspended database every time.** Harmless for a nightly job; worth knowing before anyone concludes a scheduled run is "slow."
 >
 > **What this does NOT justify is disabling autosuspend.** Suspension is why a one-user database is cheap, and paying for an always-on compute to save one resume per session is the wrong trade. **Measure the resume first** (§9.6's sibling question), then decide.
-| **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |
+
+> ### ✅ MEASURED 2026-08-14 — a Neon role password is per BRANCH, not per project
+>
+> **This was asserted from memory and the assertion was wrong.** Before the rotation it was stated that resetting `neondb_owner` would cover every branch, because the role is a project-level object. The role is; **its password is not.** A branch copies its parent's roles *and their passwords* at creation, and the two are independent from that moment on.
+>
+> **Measured by connecting, not by reading a dashboard.** After the console password reset on `main`, one probe against both strings:
+>
+> ```
+> DATABASE_URL       (main, pooled)     -> FAILS: password authentication failed for user "neondb_owner"
+> DATABASE_URL_TEST  (test, unpooled)   -> STILL WORKS
+> ```
+>
+> **The reset landed on `main` and did not reach `test`.** The two branches now hold different passwords for the same role name.
+>
+> **Why this is load-bearing rather than trivia.** It is a silent-partial-success — the same shape as `default_endpoint_settings` above, and the same shape as the source platforms that accept a parameter and ignore it. The console reports the reset as done, and it *is* done, for one branch. **Nothing in the flow says the word "branch."** An incident closed on the strength of that report leaves a live credential behind, and the only way to find out is to try the other string.
+>
+> **The rule that follows: rotation is not complete until every branch is rotated and each one is verified by a failed connection on the old string.** A successful connection on the new string proves the new credential works; only a *failed* connection on the old one proves the old credential is dead. Both halves are required, and the second is the one that gets skipped.
+
 
 ### 10.2 Other people's platforms — already measured
 

@@ -70,7 +70,8 @@ Run `npm run dev`, open `/dev/gallery`. **Read the second paragraph first** — 
 | Neon | project `wispy-tooth-06225229`, org `Vercel: Koehler Partners`, beside `kp-web-prod`. Postgres 17, `aws-us-east-1` |
 | Billing | **`launch_v3` (Launch), subscription** — same org and bill as the website |
 | `DATABASE_URL` | pooled endpoint, injected by the integration into all three environments |
-| ⬜ **Outstanding** | **rename `neon-lime-button` → `tenderfoot-db`** · **resize compute 1→1 CU to 0.25→8 CU.** Neither is doable through the Neon MCP or the Vercel CLI — console or Neon API. Exact calls in workflow spec §10.1 |
+| Compute | ✅ **resized 0.25 → 8 CU on both computes 2026-08-13**, verified by reading back. The `test` compute had been the tighter of the two at 0.25→0.25 |
+| ⬜ **Outstanding** | **rename `neon-lime-button` → `tenderfoot-db`.** Still unchanged as of 2026-08-14 — the resize landed, the rename did not. Not doable through the Neon MCP or the Vercel CLI — console or Neon API. Exact call in workflow spec §10.1. *Cosmetic; blocks nothing* |
 
 ## Waiting on Matt
 
@@ -81,7 +82,7 @@ Run `npm run dev`, open `/dev/gallery`. **Read the second paragraph first** — 
 | `three_open_questions.md` — the SVRC `Imp`/`Pri` review | Slice order from SP3 on |
 | ~~User stories~~ | ✅ **93 drafted 2026-08-12** — `docs/user-stories-source.html` and the published story map. Yours to edit |
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |
-| 🔴 **Rotate the Neon credentials.** An agent printed live connection strings into a log while attempting to redact them. **Nothing reached git** — local scratch only — but they are live | **Now** |
+| 🟡 **Rotate the Neon credentials — HALF DONE 2026-08-14.** `main` is rotated: the old string now fails authentication, the new one works, 201 solicitations intact, full gate green (92 tests). **The `test` branch is still on the leaked password and still connects.** A Neon role password is per *branch*, not per project — this was asserted the other way and was wrong; see workflow spec §10.1. One console reset on the `test` branch closes it | **Now** |
 | 🔴 **Per-preview database branching.** Six numbered steps in workflow spec §8; dashboard-only. **Until it is done, every preview deployment writes to the production database** | SP2 onward |
 | **A git remote — or accept that CI is decorative.** `.github/workflows/ci.yml` is correct and has never run. Without it the local gate is the *only* gate | Decide before SP3 |
 | ~~Express or framework route handlers?~~ | ✅ **Ruled 2026-08-13: Express stays.** Workflow spec §9.5 stays open on its own terms; the port did not decide it by momentum |
