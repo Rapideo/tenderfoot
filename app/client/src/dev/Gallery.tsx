@@ -205,6 +205,18 @@ export function Gallery() {
         against it without searching the file first.
       </p>
 
+      {/* Ruling 15 (SP2 T9 review): the decoy warning previously lived only
+       * in the FROZEN_BUNDLE_PATH comment below, never on the page a
+       * reviewer actually reads -- so it could not do the job it exists
+       * for. Kept short deliberately (the review flagged that an intro this
+       * long gets skimmed): one bolded claim, the two names, done. */}
+      <p className="gallery-intro">
+        <strong>Only V1.2 is the parity reference.</strong> Two
+        similarly-named files sit beside it and are NOT current: the
+        unversioned "Tenderfoot UI Mockups.html" and "Tenderfoot UI Mockups
+        V1,1.html" (a comma, not a period).
+      </p>
+
       {/* ============================== ATOMS ============================
        * MicroLabel, Keycap, Chip, StatusDot (Task 4) and Button (Task 5),
        * merged into one group: all five are the smallest, most-repeated
