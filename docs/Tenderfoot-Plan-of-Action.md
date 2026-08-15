@@ -230,7 +230,8 @@ Nine sub-projects. Each ≤50 tasks, each ending in something demo-able, each de
 | ~~**SP1.5**~~ | **Postgres port + first deploy** *(added and completed 2026-08-13)* | — *(no new components)* | ✅ **MERGED** `703ea77`. 201 solicitations in Neon, reached at a deployed preview URL; 37 tests, gate 5/5 green. **One clause of the criterion knowingly unmet: preview deploys do NOT yet get their own database branch** — dashboard-only, six steps in workflow spec §8, so every preview writes to production until then |
 | ~~**SP2**~~ | Design system | — *(tokens + primitives from the frozen prototype)* | ◐ **All 10 tasks complete 2026-08-13** — branch `sp2-design-system`, 22 commits, 73 files, gate green. **Sixteen primitives**, not the thirteen earlier notes claimed. **Deliberately NOT merged: the sign-off gate is the point of the slice**, and merging before Matt sees the gallery would defeat it. Five findings await his ruling and one known gap is recorded — see `STATUS.md` and [`SP2-fidelity-audit.md`](SP2-fidelity-audit.md) |
 
-| **SP3** | Federal ingestion | 2A, 2B, 2F, 2G, 5E | `--since 24mo` pulls real SAM.gov + USASpending into the graph; dedup works; per-source yield visible |
+| **SP3** | Federal ingestion | 2A, 2B, 2F, **2G(a)**, 5E | `--since 24mo` pulls real SAM.gov + USASpending into the graph **as sightings**; a scrape artifact imports cleanly and is re-runnable |
+| **SP3.5** | **Merge — sightings into canonical records** *(added 2026-08-15)* | **2G(b)** *(split from SP3, see §6.5)* | The same solicitation seen by two sources resolves to **one** canonical row; an amended posting is detected as a change rather than a duplicate; **honest per-source yield visible** |
 | **SP4** | Fetch and extraction | 2H, 2I, 5D | Documents pulled and parsed; every field carries confidence + a source pointer; accuracy measured against A1's labels |
 | **SP5** | ~~Matching engine~~ **PARKED** | — | **Removed from the sequence 2026-08-11.** V1 returns everything (spec §1.1); qualification is undesigned and will be re-imagined after ingestion runs. |
 | **SP6** | Triage + record | 4A, 4B, 4D, 5A, 5B, 5C | **The answer.** Everything from active sources, read and decided in the app. Produces **discovery and volume**, not precision. **← GO / NO-GO** |
@@ -306,7 +307,7 @@ But "rarely, except in one sector" is not the same as "no", and the exception is
 
 **SP2 comes before any feature work.** This is the ordering that cost IMPACT an entire unplanned sub-project (§7.1). Tenderfoot's primitives are unusually load-bearing: the four-score display and the evidence/citation pattern appear on every surface, so getting them wrong once means getting them wrong in fifteen places.
 
-**Ingestion splits across SP3 and SP4** because extraction (2I) is large on its own and independently demo-able. SP3 proves records arrive and dedup; SP4 proves the contents get read correctly.
+**Ingestion splits across SP3, SP3.5 and SP4** because each is large on its own and independently demo-able. **SP3 proves records arrive; SP3.5 proves the system can tell one opportunity from two; SP4 proves the contents get read correctly.** *(Amended 2026-08-15 — this sentence previously read "SP3 proves records arrive and dedup," which is the conflation §6.5 separates: arriving and de-duplicating are different claims, provable at different moments, and bundling them let the merge hide inside a criterion no component built.)*
 
 **SP6 is the gate, and everything before it is in service of it.** The spec already accepts a negative result as valid (§8.7). Sequencing puts that finding as early as it can honestly come.
 
@@ -383,6 +384,23 @@ Four nodes rule `Imp 5`: `View 1.1 : The Queue` (SP6), `View 2.3 : Extracted Fie
 §6.0 was raised on 08-10 and marked *"flagged for the same reconciliation pass as the rest of §6."* **This is that pass.** Matt resolved the substance on 08-10 — the Expiration Radar stays in SP8 — and the ruled score now independently agrees: `View 3.1 : Expiration Radar` rules **`Pri 4`, not `Pri 5`**, so nothing in the priorities argues for pulling it in front of the gate. **§6.0's flag is closed, its ruling stands, and the three consequences recorded under it (sector-weighting, the SP1 demo-criterion fold-in, the Medicaid cliff as SP8's fixture) are unaffected.**
 
 > **There is no scorer in V1, so there is no scorer regression gate.** What replaces it is narrower and still worth having: **ingestion regression.** A source that silently returns fewer records than last run is the V1 equivalent of a scorer regression — invisible, and a direct hit on the one pain V1 exists to solve. Spec §5.4 already requires instrumenting for source rot; that instrument *is* the regression gate for V1, and it should be built in SP3 rather than inherited later.
+
+### 6.5 The merge step becomes its own slice — SP3.5, added 2026-08-15
+
+**Ruled by Matt 2026-08-15**, out of the ingestion scaffolding design (`docs/superpowers/specs/2026-08-15-ingestion-scaffolding-design.md`, open item 2). That design lands **sightings**; turning them into canonical solicitations was real work with no home in the plan.
+
+**It was not missing from the plan — it was hidden inside SP3's demo criterion.** SP3 read *"dedup works; per-source yield visible."* Both clauses describe the merge, not the ingestion, and both have now moved. A criterion that names a capability no listed component builds is how a slice silently grows.
+
+**Why `2G` splits rather than moves.** The build inventory's `2G` is *"Sightings + dedup"*, which bundles two things at different stages:
+
+- **`2G(a)` — the schema.** Observations recorded separately from the canonical record. **Already shipped in SP1** (`002_entity_graph.sql`: the `sighting` table, deliberately without a unique constraint on `solicitation_id`). SP3 consumes it by writing sightings.
+- **`2G(b)` — the merge logic.** Dedup across sources, change detection for addenda and deadline moves, and honest per-source yield. **Not built.** This is SP3.5.
+
+**Why it is a slice and not a task.** It has a demo-able ending nothing else produces — *the same solicitation, seen by two sources, resolving to one row, with its sighting history intact* — and that demo is the first time the system shows it can tell one opportunity from two. It also has a hard dependency in the other direction: **SP6's gate cannot demo real screens against raw sightings**, because a triage queue that shows the same solicitation three times because three sources carry it is not a triage queue.
+
+**Why SP3.5 and emphatically not SP5.** SP5 is a **retired** number — the parked matching engine (§6.-1) — and it is referenced as such across this document, `STATUS.md`, and the design spec. Reusing it for something unrelated is exactly the failure `Proto2PRD-Lessons.md` §2.18 records: *a change to what something means moves nothing and breaks everything.* Every historical reference to "SP5" would silently acquire a second meaning. **SP1.5 is the precedent for inserting a slice**, and it is the one followed here.
+
+**Position is forced, not chosen.** After SP3, because merge needs sightings to exist. Before SP4, because extraction attaches documents to canonical records. Well before SP6.
 
 ---
 

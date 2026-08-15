@@ -72,9 +72,22 @@ The largest idea here, and the one most worth getting right. Matt: *"we have mec
 
 ## Status
 
-**Pinned. Not designed, not scheduled, not started.**
+~~**Pinned. Not designed, not scheduled, not started.**~~
 
-The one piece with a hard deadline attached: **the ingestion window must exist, in code at minimum, before the first real scrape runs.** That is a safety rail rather than a feature, and it is the only item here that cannot wait for the brainstorm.
+✅ **BRAINSTORMED AND DESIGNED 2026-08-15** — [`specs/2026-08-15-ingestion-scaffolding-design.md`](superpowers/specs/2026-08-15-ingestion-scaffolding-design.md). Nine decisions, all Matt's. **Not built.** This document stays as the record of the thinking that preceded it; the spec supersedes it wherever they differ.
+
+**How each proposal actually landed — none of them quite as written here:**
+
+| | Outcome |
+|---|---|
+| **1 — scaffolding for the mechanical layer** | **The config file was dropped.** Its sequencing (*config file → settings screen → registry*) was written before the `source` table existed. That table already **is** the registry, `since_default` and all, and is already runtime-editable — so a file would have been a second home for configuration that has one |
+| **2 — a candidate scrape** | **Survives as `depth`**, a run-contract parameter (`listing \| detail \| documents`). *Counts before documents* remains the governor that replaced the parked scorer |
+| **3 — a hard ingestion window** | **Did NOT dissolve, contrary to what `STATUS.md` claimed for three days.** It fell out of the over-ask answer instead: the checkpoint resume marker and *`since` = last successful run* are the same mechanism, so the rail with the deadline attached came free. Both of this document's shape-notes survived intact — **fail closed**, and **per source, always** |
+| **4 — mechanical and smart as modes** | **Deferred, but its precondition was built.** Everything is mechanical for now; the `mode` column exists from day one on every derived row, because this document's own condition is that mode live in the data rather than in configuration. Matt's sequencing: mechanical first, smart later against a smaller candidate set, for token efficiency |
+
+**The hard-deadline item is discharged.** *"The ingestion window must exist, in code at minimum, before the first real scrape runs"* — it is now §5 of the spec, and it is the same code as the resume mechanism rather than a separate rail that could be forgotten.
+
+**One thing this brainstorm produced that was not on the list: a new slice.** The merge from sightings to canonical records had been hiding inside SP3's demo criterion (*"dedup works; per-source yield visible"*) with no component building it. It is now **SP3.5** — Plan of Action §6.5.
 
 
 ---
