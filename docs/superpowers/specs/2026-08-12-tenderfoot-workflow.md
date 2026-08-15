@@ -244,11 +244,19 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 >
 > **Recorded cost:** if the API does move later, the handlers get rewritten a second time. Roughly 180 lines, and cheap next to an unreviewable slice.
 
-**6. Where long ingestion actually runs — now the load-bearing one.** **New 2026-08-13.** §5.3 fetches in three hops and was written assuming a process that could run for minutes. A capped function invocation may not hold that. Options: bound each invocation with the candidate-scrape idea (`Pinned-Ingestion-Scaffolding.md` proposal 2, which stops at hop 1 and already exists for other reasons), a durable workflow that survives across invocations, or run ingestion off-platform. **Must land before SP3, which is the first slice to touch a live source.**
+**6. Where long ingestion actually runs — now the load-bearing one.** ~~New 2026-08-13~~ **— RULED 2026-08-15: ingestion runs on Vercel, invoked by hand, with the operator setting the scope of each run.** §5.3 fetches in three hops and was written assuming a process that could run for minutes. A capped function invocation may not hold that. Options were: bound each invocation with the candidate-scrape idea (`Pinned-Ingestion-Scaffolding.md` proposal 2, which stops at hop 1 and already exists for other reasons), a durable workflow that survives across invocations, or run ingestion off-platform. **This unblocks B3 for SP3.**
 
-> **Sharpened by Matt the same day**, and it reframes what the hosting decision actually bought. **Scraping is a background process; it could never have run locally** — that is the closed-laptop problem, and it is the reason the host exists at all. **So the host solves *when* ingestion runs and leaves *how long it may run* wide open.** The two are easily confused, and confusing them would leave SP3 discovering the cap rather than designing around it.
+> **Sharpened by Matt 2026-08-13**, and it reframes what the hosting decision actually bought. **Scraping is a background process; it could never have run locally** — that is the closed-laptop problem, and it is the reason the host exists at all. **So the host solves *when* ingestion runs and leaves *how long it may run* wide open.** The two are easily confused, and confusing them would leave SP3 discovering the cap rather than designing around it.
 >
-> **Consequence: this item is not one of six equal open questions.** It is the one the hosting decision created and did not answer, and it sits directly in front of the next real slice.
+> **The ruling does not pick one of the three options — it removes the constraint that made them necessary.** Scope stops being a constant and becomes an input: the operator names which sources and how deep, and a run is sized to fit 300 seconds by construction rather than by engineering. Nothing has to survive an invocation boundary because nothing is asked to cross one.
+>
+> **Named "off-platform" in the moment; recorded here by what it does.** What was described keeps execution on Vercel — the scraping logic ships as ordinary application code. The word pointed at the third option, the design pointed at a fourth that was not on the list, and the design is what governs.
+>
+> **What this defers, loudly, to SP7.** Unattended ingestion does not exist under this ruling. **Nothing scrapes unless a human asks it to**, so the full 8,000-record contract register cannot be taken in one action and no source stays current on its own. **Vercel Cron is not exercised in V1** — the platform can still do it, which is why the closed-laptop risk stays retired, but SP3 does not use it and SP7 must. The long-run question is not answered, it is unasked until a slice needs it.
+>
+> **Consequence for SP3's plan, which is Claude's to answer and not Matt's.** Two things follow immediately: a scoped run needs defined behaviour when the operator asks for more than fits — a bound on the inputs or a graceful stop, not a 300-second death mid-write — and the invocation needs a surface a human can reach, which lands naturally on **SP1 T12–T15's minimal admin UI** rather than inventing a second one.
+>
+> **The round-trip fix does not stop mattering; it changes job.** Multi-row `INSERT`/`UNNEST` was a blocker while a full register had to fit one invocation. Under a hand-scoped run it is a **scope multiplier** — every row/second it buys is depth the operator can ask for before hitting the ceiling. Still Claude's, still before SP3 ships.
 
 ---
 

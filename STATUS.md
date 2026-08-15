@@ -1,8 +1,12 @@
 # Tenderfoot — status
 
-**Updated 2026-08-14.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-08-15.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now: SP2 is SIGNED OFF (2026-08-14) and clear to merge.** Sixteen primitives on `/dev/gallery`, reviewed against the V1.2 bundle with no issues raised; **all five gate rulings resolved** — two of them turned out not to be what the gate list said. Three fixes applied (`--type-body-default` → `--type-body-para`/`-detail`, `StatusDot` `degraded` → `failing`, and `npm run dev` now loads `.env`), gate re-run **green: 92 tests, 20 files, exit 0**.
+> **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
+>
+> **Also ruled 2026-08-15: where long ingestion runs.** On Vercel, invoked by hand, operator sets the scope. **B3 for SP3 is unblocked** — it was the only thing blocking Claude. Unattended ingestion is deferred to SP7 and does not exist before then.
+>
+> **Behind that: SP2 is SIGNED OFF (2026-08-14) and merged.** Sixteen primitives on `/dev/gallery`, reviewed against the V1.2 bundle with no issues raised; **all five gate rulings resolved** — two of them turned out not to be what the gate list said. Three fixes applied (`--type-body-default` → `--type-body-para`/`-detail`, `StatusDot` `degraded` → `failing`, and `npm run dev` now loads `.env`), gate re-run **green: 92 tests, 20 files, exit 0**.
 >
 > **Also closed today:** all three of `three_open_questions.md`, and the full twenty-node SVRC `Imp`/`Pri` re-score (v0.6.0, fourteen moved).
 >
@@ -10,42 +14,43 @@
 >
 > ⚠️ **One honest limit on the `test` rotation.** Per lesson §2.16 a revocation is proved by the OLD key failing, not the new one working — and **the old `test` string was overwritten before it was captured**, so that negative test could not be run. Neon's dialog asserts the old password is invalid; nothing here demonstrates it. **The `main` rotation was proved properly; this one is asserted.**
 >
-> **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. Nothing is pinned for Matt.
+> **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. **Nothing is pinned for Matt.**
 >
 > Behind it: SP1 T12–T15 still outstanding (mock-layer re-extraction, minimal admin UI).
 
 ---
 
-## 🔖 RESUME HERE — pinned at the end of the 08-14 session
+## 🔖 RESUME HERE — updated 2026-08-15
 
-**State is clean.** On `main`, working tree clean, **SP2 merged** (`ebbcf7c`), gate green *after* the merge — exit 0, 20 files, 92 tests, every token check passing. Nothing is half-finished and nothing is uncommitted.
+**State is clean apart from this file.** On `main`, **SP2 merged** (`ebbcf7c`), gate green locally *and* on CI — 20 files, 92 tests, every token check passing. ⚠️ **`STATUS.md` and the workflow spec have uncommitted edits** — the 08-15 ruling and the CI result. Nothing else is dirty and no code changed.
 
-### Matt — one urgent, three whenever
+**🟢 The repo is public and pushed — 2026-08-15.** `Rapideo/tenderfoot` created, `main` and `sp2-design-system` both pushed, `origin` tracking. **`gh repo create` was not blocked after all** — the earlier classifier refusal did not recur, and `gh` was already authenticated as `Rapideo`. Verified before pushing: `.env` and `.env.local` are gitignored and were never tracked, only `.env.example` ships. **Matt chose to publish the live infra identifiers and the credential-incident write-up as-is**, having been asked specifically about both.
 
-**1. 🔴 Create the remote and push. This is the only thing blocking anything.** Decided public at `Rapideo/tenderfoot`. `gh repo create` is blocked for Claude by the permission classifier, so it has to be Matt:
+**✅ CI ran for the first time ever, failed, and is now green.** The first run failed on **the harmless one of the two predicted causes** — `DATABASE_URL_TEST` missing as an Actions secret. **The other predicted cause did not exist:** 16 of 20 files ran on Linux and all 55 of their tests passed, so there is no Windows-vs-Linux path problem. Matt ruled that Claude set the secret; it was piped from `.env` into `gh secret set` **without the value ever entering the transcript**, and both runs were re-run green at **92 tests / 20 files** — matching local exactly.
 
-```
-gh repo create Rapideo/tenderfoot --public --source=. --remote=origin --description "Tenderfoot -- government contract opportunity discovery for Koehler Partners. React + Express + Postgres on Neon, deployed on Vercel."
-git push -u origin main
-git push origin sp2-design-system
-```
+> **The residual risk that came with that ruling, stated plainly:** a live Neon `test` credential now sits in a **public** repo's secret store. It is not readable back and is withheld from fork PRs, but **anyone with write access can exfiltrate it via a workflow.** The blast radius is the `test` branch only — not `main` — and that branch is already the one whose rotation is asserted rather than proved.
 
-> **Expect CI to fail on that first push and do not read it as a regression.** `.github/workflows/ci.yml` is correct and **has never executed once**. Likely first-run causes: Windows-vs-Linux path assumptions, or `DATABASE_URL_TEST` not existing as a GitHub Actions secret. Paste the output and Claude fixes it.
+### Matt — nothing urgent, two whenever
+
+**1. Two SP4 decisions, not yet needed.** Extraction runtime (Node / Python sidecar / smart mode — the largest open question in the stack) and the blob provider.
+
+**2. `THOUGHTS.md`** — whether the two live ideas become real backlog items.
+
+### ✅ Ruled 2026-08-15 — where long ingestion runs
+
+**Ingestion runs on Vercel, invoked by hand, with the operator setting the scope of each run — which sources, how deep.** It does not pick one of the three options; it removes the constraint that made them necessary. Scope becomes an input rather than a constant, so a run fits the 300-second ceiling by construction and nothing has to survive an invocation boundary.
+
+> **What it defers, loudly, to SP7.** Unattended ingestion does not exist. **Nothing scrapes unless a human asks it to**, the 8,000-record register cannot be taken in one action, and no source stays current on its own. **Vercel Cron is not exercised in V1** — the platform can still do it, so the closed-laptop risk stays retired, but SP3 does not use it and SP7 must.
 >
-> **Also settled before pushing:** history carries no real credential (the only matches are a discarded `tenderfoot:tenderfoot@localhost:5433` Docker placeholder), `.env` was never tracked, largest blob is 3.8 MB. **Matt chose to publish the live infra identifiers and the credential-incident write-up as-is**, having been asked specifically about both.
-
-**2. Where long ingestion runs — the one that actually blocks Claude.** Bounded candidate scrape / durable workflow / off-platform. This is the question the hosting decision created and did not answer: the host solves *when* ingestion runs, not *how long it may take*. It is coupled to a measured number — **~7 rows/second against a 300-second function ceiling**, which does not survive an 8,000-record contract register. **B3 for SP3 cannot be written without it.**
-
-**3. Two SP4 decisions, not yet needed.** Extraction runtime (Node / Python sidecar / smart mode — the largest open question in the stack) and the blob provider.
-
-**4. `THOUGHTS.md`** — whether the two live ideas become real backlog items.
+> Recorded in workflow spec §9.6. **B3 for SP3 is unblocked.**
 
 ### Claude — next session, in this order
 
-1. **Per-preview DB branching** (workflow spec §8, six steps). **Until it is done every preview deployment writes to the production database.** Status changed on 08-14: its prerequisite is met (compute default now 0.25→8, so new branches are born right) **and it is no longer Matt's to click** — the browser extension works, so Claude can drive it.
-2. **§6 slice-order reconciliation** — unblocked by Q3. Two inputs to apply: `Shell A`/`Region A.1` dropped to `Pri 3`, so **§6 must now state "build the shell first" on its own** rather than inheriting it from a score; and `Screen 7` rose to `Pri 4` and **must not move earlier** — its `PARKED` marker holds it.
-3. **SP1 T12–T15** — re-extraction, minimal admin.
-4. **SP6 preconditions** — recessed-section primitive, spacing/shadow layers, `Button` danger-primary.
+1. **B3 for SP3** — now unblocked. Two things the ruling hands it: a scoped run needs defined behaviour when the operator asks for more than fits (bound the inputs or stop gracefully — not a 300-second death mid-write), and the invocation needs a surface a human can reach, which lands on **T12–T15's admin UI** rather than a second one.
+2. **Per-preview DB branching** (workflow spec §8, six steps). **Until it is done every preview deployment writes to the production database.** Prerequisite is met (compute default now 0.25→8, so new branches are born right) **and it is no longer Matt's to click** — the browser extension works, so Claude can drive it.
+3. **§6 slice-order reconciliation** — unblocked by Q3. Two inputs to apply: `Shell A`/`Region A.1` dropped to `Pri 3`, so **§6 must now state "build the shell first" on its own** rather than inheriting it from a score; and `Screen 7` rose to `Pri 4` and **must not move earlier** — its `PARKED` marker holds it.
+4. **SP1 T12–T15** — re-extraction, minimal admin. **Coupled to item 1 now**, since the manual scrape needs somewhere to live.
+5. **SP6 preconditions** — recessed-section primitive, spacing/shadow layers, `Button` danger-primary.
 
 ### One open thread that is nobody's task yet
 
@@ -86,7 +91,7 @@ git push origin sp2-design-system
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
 | **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) outstanding — dashboard-only, six steps in workflow spec §8 |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ✅ **SIGNED OFF 2026-08-14.** Branch `sp2-design-system`, **sixteen primitives** on `/dev/gallery`, gate green (**92 tests / 20 files**) after the three sign-off fixes. **Clear to merge — not yet merged** |
-| **SP3** | Federal ingestion — SAM.gov + USASpending | — |
+| **SP3** | Federal ingestion — SAM.gov + USASpending | ◐ **B3 unblocked 2026-08-15** — §9.6 ruled. Hand-invoked, operator-scoped |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
 | ~~SP5~~ | ~~Matching engine~~ | **Removed 2026-08-11** |
 | **SP6** | Triage + record. **← GO / NO-GO** | — |
@@ -143,10 +148,11 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 | ~~🟡 **Rotate the Neon credentials**~~ | ✅ **BOTH BRANCHES DONE 2026-08-14.** `main` proved by the old string failing; `test` reset and `DATABASE_URL_TEST` re-derived, gate green. ⚠️ **`test` is asserted, not proved** — the old string was overwritten before capture, so the negative test could not run. See `Proto2PRD.md` §5.4 |
 | 🔴 **Per-preview database branching.** Six numbered steps in workflow spec §8; dashboard-only. **Until it is done, every preview deployment writes to the production database.** ✅ Its prerequisite is now met — the compute default is fixed, so branches created by this feature are born at 0.25→8. **Claude can drive this in the browser now; it no longer needs to be Matt's** | SP2 onward |
 | ~~🟡 **Set the project compute DEFAULT**~~ | ✅ **`0.25 → 8` CU, done 2026-08-14**, read back on the settings page. New branches are now born right |
-| ◐ **A git remote — DECIDED 2026-08-14: create one, public, at `Rapideo/tenderfoot`.** Repo verified publishable (no credential in any commit, `.env` never tracked, largest blob 3.8 MB). **`gh repo create` is blocked for Claude by the permission classifier — Matt runs it.** The first push turns CI on for the first time ever | Decide before SP3 |
+| ~~◐ **A git remote**~~ | ✅ **DONE 2026-08-15 — public at `Rapideo/tenderfoot`, `main` and `sp2-design-system` pushed.** Decided 08-14, executed 08-15. **The classifier block did not recur** — Claude created it directly, `gh` already authenticated as `Rapideo`. The first push turned CI on for the first time ever and it failed on the missing test-DB secret; see the new row below |
+| ~~🔴 **`DATABASE_URL_TEST` as a GitHub Actions secret**~~ | ✅ **DONE 2026-08-15 — Matt ruled Claude sets it; set from `.env`, CI green at 92/20 on both branches.** The rejected option was gating the DB tests off in CI, which would have made green-on-CI weaker than green-on-laptop. **Accepted residual: a live `test` credential is in a public repo's secret store, exfiltratable by anyone with write access.** Blast radius is the `test` branch only |
 | ~~Express or framework route handlers?~~ | ✅ **Ruled 2026-08-13: Express stays.** Workflow spec §9.5 stays open on its own terms; the port did not decide it by momentum |
 | **Which blob provider** — Vercel Blob / S3 / R2 | **SP4** |
-| **Where long ingestion runs** — bounded candidate scrape / durable workflow / off-platform. **The one the hosting decision created and did not answer:** the host solves *when* ingestion runs, not *how long it may run* | **SP3** |
+| ~~**Where long ingestion runs**~~ | ✅ **RULED 2026-08-15 — on Vercel, invoked by hand, operator sets the scope.** Not one of the three options; it removes the constraint that made them necessary. **Unattended ingestion deferred to SP7 and does not exist before then.** Workflow spec §9.6 |
 | ~~Doc storage on filesystem~~ · one-database-per-firm · auth in V1 | **Auth got sharper — it is a public URL now, not one laptop** |
 | Ingestion scaffolding brainstorm | **SP3** |
 | ~~Prototype V1.2 — wordmark, mobile breakpoints~~ | ✅ **Both closed 2026-08-13.** V1.2 landed and was verified against V1.1 rather than trusted (colours 132→132, media queries 0→0, `display:flex` 74→73 — exactly the one disclosed wrapper). **The wordmark item turned out to be a deletion, not a design** — the logo already existed; only the 8px placeholder *label* was provisional. **Mobile ruled desktop-only** by measurement, not instinct; a separate mobile client is now plan of record |
@@ -158,9 +164,9 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 |---|---|
 | ~~B3 for SP0~~ · ~~B3 for SP1.5~~ · ~~B3 for SP2~~ | ✅ written and executed. SP2's scope grew 2026-08-13 — the parked intelligence chrome is built inert, so it was never "mostly transcription" |
 | SP1 T12–T15 | Re-extraction + minimal admin |
-| **B3 for SP3** | **Next**, but gated: §9.6 (where long ingestion runs), the round-trip fix, and the scaffolding brainstorm all land in the plan rather than after it |
+| **B3 for SP3** | **Next and UNGATED as of 2026-08-15** — §9.6 is ruled. The round-trip fix and the scaffolding brainstorm still land *in* the plan rather than after it. Two things the ruling hands the plan: behaviour when the operator asks for more than fits, and where the human-reachable trigger lives (T12–T15's admin UI) |
 | **A "recessed section" primitive** | The one known SP2 gap, ruled not gate-blocking. Needed **before SP6** composes `FactPanel` into a real screen |
-| **The ingestion round-trip fix** | **Blocks SP3.** ~7 rows/sec against a *measured* 300s function ceiling: an 8,000-record register is ~19 minutes and does not fit. Multi-row `INSERT`/`UNNEST` |
+| **The ingestion round-trip fix** | **No longer a blocker — it changed job on 2026-08-15.** ~7 rows/sec against a *measured* 300s ceiling was fatal while a full register had to fit one invocation. Under a hand-scoped run it is a **scope multiplier**: every row/second buys depth the operator can ask for. Multi-row `INSERT`/`UNNEST`, still before SP3 ships |
 
 ---
 
@@ -177,8 +183,9 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 
 ## Known risks
 
-- 🔴 **NEW — a leaked database credential is still live on the `test` branch.** Rotation closed `main` and not `test`, because a Neon role password is per *branch*. **Verified by connecting, not assumed:** the old `main` string fails auth, the old `test` string still works. One console reset closes it. **The general rule this produced — a revocation is proved by the OLD key failing, not the new key working** — is lessons `2.16`
-- 🟡 **NEW — the compute default that mints future branches is still wrong (1→1 CU).** Harmless today because every compute that exists was fixed; wrong the instant anything is created. **The spec had already written the warning and it happened anyway.** Lessons `2.17`
+- ~~🔴 **a leaked database credential is still live on the `test` branch**~~ **CLOSED 2026-08-14** — reset from the Neon console, `DATABASE_URL_TEST` re-derived, gate green on it. ⚠️ **Closed on assertion, not evidence:** the old string was overwritten before capture, so the negative test could not run. The rule it produced — **a revocation is proved by the OLD key failing, not the new key working** — is lessons `2.16`, **promoted into the playbook 2026-08-14** after this second instance
+- ~~🟡 **the compute default that mints future branches is still wrong (1→1 CU)**~~ **CLOSED 2026-08-14** — set to `0.25 → 8` and read back on the settings page. New branches are now born right. **The spec had already written the warning and it happened anyway;** lessons `2.17`
+- 🟡 **NEW 2026-08-15 — nothing ingests unless a human asks it to.** The direct and accepted consequence of the §9.6 ruling. **Sources go stale between hand-run scrapes**, and the 8,000-record register cannot be taken in one action. Not a defect and not a surprise — it is what buys SP3 a plan that fits the 300-second ceiling. **It becomes a real problem only if SP7 slips or the GO decision assumes currency V1 does not have**
 
 - ~~**Deployment expires at SP7.** A closed laptop does not scrape~~ **RETIRED 2026-08-13** — Vercel Cron answers it. Arrived four slices early, with the answer attached
 - ~~**A second reader means a second copy**~~ **RETIRED 2026-08-13** — managed Postgres answers it
