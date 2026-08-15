@@ -241,6 +241,25 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 > **So the setting is necessary but not sufficient.** It is correctly configured and verified persisted (`Required` on, `Preview` checked, **`Production` deliberately unchecked** — checking it would branch the production database). **The footgun stays live until the Vercel project is connected to the GitHub repo**, which is a deploy-model change (pushes to `main` would auto-deploy to production) and therefore Matt's call, not a mechanical follow-up.
 >
 > **One side effect, recorded rather than reverted.** Production's `last_ping` now reads `2026-08-15T18:07:16.838Z` — the test write. It was not restored: `last_ping` records when the last ping happened, and back-dating it to `2026-08-13T15:28:45.875Z` would put a false value in the field to make the trace look tidy. The old value is written above if it is ever wanted.
+>
+> ---
+>
+> **✅ CLOSED 2026-08-15, LATER THE SAME DAY. The footgun is gone, and it is proven by the test that failed three hours earlier.**
+>
+> **The missing piece was the Git connection**, made with `vercel git connect https://github.com/Rapideo/tenderfoot.git` — **not dashboard-only**, unlike the branching toggle itself. The dashboard confirms `Rapideo/tenderfoot — Connected just now`. Note the asymmetry worth remembering: **one half of this feature is CLI-automatable and the other is not**, which is why the whole thing read as "manual, hand to Matt" for two days.
+>
+> **The proof, run against a real Git preview deployment** (branch `verify-preview-branching`, deployment `tenderfoot-l4qa4hinc`):
+>
+> | | `last_ping` after `POST $PREVIEW/api/health/ping` |
+> |---|---|
+> | Production `main` | `2026-08-15T18:07:16.838Z` — **unchanged** |
+> | `preview/verify-preview-branching` | `2026-08-15T21:01:14.521Z` — the write landed here |
+>
+> Neon created `preview/verify-preview-branching` (`br-shiny-mountain-au6to812`) with `creation_source: "vercel"`, parented on `main` at LSN `0/1D4B760`. **The identical test on a CLI deploy three hours earlier moved production.** Same setting, same endpoints, same assertion — the only variable changed was how the deployment was triggered, which is what isolates the cause.
+>
+> **What this retires.** Every preview deployment from a Git branch now gets its own copy-on-write database. The branches are born at the corrected `0.25 → 8` CU default (§2.17's template fix, made on 08-14 specifically so this feature would not multiply the wrong compute size — that sequencing paid off exactly as intended).
+>
+> **What it does not cover.** `vercel deploy` from a laptop still produces a branchless preview pointed at production, because there is no Git branch to key on. **The CLI path is still the footgun**; only the Git path is safe. Anyone reaching for `vercel deploy` to "just check something quickly" is reaching for the unsafe one.
 
 ---
 

@@ -287,6 +287,14 @@ Three consecutive changes to an adopted reference document. Re-pointing one node
 
 **Why not promoted yet.** Two instances now, one of them strong, and it is close kin to §2.17 — all three are cases where the visible surface (instances; diff size; the flagged list) is not the surface where the defect lives. **Candidate title if they merge: *auditing the wrong surface*.** Worth one more observation before promoting, and it is close.
 
+> **That observation arrived 2026-08-15, and it is the strongest of the set.** Workflow spec §8 recorded per-preview branching as **"not automatable from here"**, and the survey behind that conclusion was genuinely thorough — it enumerated `vercel integration --help`, `vercel integration update --help`, `vercel integration-resource --help`, and the entire Neon MCP tool set, naming what each could and could not do. **Every one of those findings was correct.** The conclusion was still wrong, and it stood for two days, moving the task into the human's column.
+>
+> **The surface surveyed was "commands that configure the integration."** The feature needed a second change on a surface never enumerated — **`vercel git connect`** — because the branching toggle is inert until the project has a connected Git repository. Nothing about the integration's own configuration surface could have revealed that; the missing capability was not a *deeper* fact about the surface examined, it was **a different surface entirely**.
+>
+> **What makes it the sharpest instance.** §2.17's audit was thorough over instances and missed the template; §2.18's was thorough over the flagged list and missed the unflagged. **Here the audit was thorough, correct, and explicitly scoped — and the scope itself was the defect.** A survey that lists what it checked reads as exhaustive precisely because it is specific, and its own specificity is what conceals the boundary. **Thoroughness within a surface is indistinguishable, from the inside, from thoroughness across the surfaces that matter.**
+>
+> **The check this adds.** Before recording *"X cannot be done from here,"* ask ***"what else would have to be true for X to work, and did I enumerate the surface that governs that?"*** — a capability claim needs the list of surfaces it did **not** examine, or it is a claim about one surface wearing the clothes of a claim about the system. **Three instances now, in three different shapes. This is the one that makes the merge worth doing.**
+
 ### 2.19 A predicted success signal is a claim that expires, and it fails toward "broken"
 
 **Observed 2026-08-15, and it cost most of a session.**
