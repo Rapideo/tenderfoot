@@ -436,3 +436,13 @@ August 14, 2026:
 181. One loose thread worth naming: THOUGHTS.md is untracked, so git isn't protecting it — and the machine zeroed a branch ref last night. Four ideas in it, and at least two aren't scratch: "levels of research and qualifying against that research" sits right next to the qualification work we deliberately parked as undesigned, and "what analysis can we do on 20+ years of historical data" is a real question about the 2,160-contract corpus. Those probably want to be backlog items rather than a loose file.
 
 182. Told Claude to commit it, so that's closed — tracked verbatim, nothing edited or reordered. Whether the two live ones get promoted into real backlog items is still my call and I haven't made it.
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+183. Back from the break, and answered Q2 — option (d), a marker outside the grid. Parked node keeps its product scores and carries a bold PARKED line above the grid; planning excludes it by the marker rather than by a lowered number. Made it a standing rule in the scoring key, not a one-off for View 2.2, because the whole reason Imp/Pri went wrong in the first place was a convention nobody wrote down.
+
+184. The part I hadn't seen coming: the old stopgap wasn't just fragile, it was wrong. "Read their Pri as zero for V1" was sitting in three places and it instructed you to mentally rewrite a number that was never zero. Pri 4 is a true statement about the finished product. Three copies of a warning is a warning nobody reads, and the answer to that is never a fourth copy.
+
+185. Also worth noting what didn't move: View 2.2 stays at Pri 4 and View 2.3 stays at Pri 4, and they're now perfectly distinguishable anyway. That was the actual complaint — you couldn't tell them apart from the numbers — and it turned out not to need a number to fix it.
+
+186. Down to Q3, which is the only one that costs me anything: five nodes at ~5 minutes or all twenty at ~30. Still mine to decide.

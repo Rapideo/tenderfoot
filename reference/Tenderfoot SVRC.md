@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.5.0, 2026-08-13.**
+**Tenderfoot SVRC — version 0.5.1, 2026-08-14.**
 **Adopted.** This is the working outline, not a draft.
 
 > ### Eight decisions adopted from the prototype — 2026-08-12
@@ -27,7 +27,9 @@
 >
 > **Decided 2026-08-11.** The application returns everything every active source returns: no ranking, no scoring, no filtering (spec §1.1). Qualification is parked and will be re-imagined after ingestion runs.
 >
-> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). Their grids are left filled rather than blanked — the scoring key forbids a half-filled grid, and blanking them would misreport parked work as unscored work. **Read their `Pri` as zero for V1, and unchanged for the product.**
+> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). **Each carries a bold `PARKED` marker above its grid** — ruled 2026-08-14 and written into the scoring key. Grids stay filled and `Imp`/`Pri` stay true, because they are judgments about the finished product. **Planning excludes these nodes by the marker, not by the number.**
+>
+> ~~Read their `Pri` as zero for V1.~~ **Superseded, and it was wrong rather than merely fragile** — it asked a reader to mentally rewrite a number that was never zero. The priority is not zero; the node is outside V1's scope.
 >
 > **Parked for V1, not removed from the product.** Matt, 2026-08-11: the prototype represents the final released product and serves as demo material, and it renders all three of these. **This outline describes the destination; V1 builds a subset of it.** So these nodes are not candidates for deletion in a later revision, and a Design iteration that develops them further is on-plan rather than scope creep.
 >
@@ -173,9 +175,11 @@ Deadline gets special treatment. It is the highest-consequence extracted field (
 
 ### Region 1.1.2 : Score Strip — PARKED
 
+**PARKED 2026-08-11** with §6 — V1 has no scores, so this region does not render.
+
 The four machine scores — Fit, Winnability, Value, Timing (§6.3) — each expandable to its citation. Collapsed by default. The scores are a reading aid, not a verdict, and a strip that demands attention would turn triage into score-review.
 
-**Parked 2026-08-11** with §6. V1 has no scores, so this region does not render. **Nothing takes its place in the card** — the deciding facts are already in 1.1.1 and the cost facts in 1.1.3, and inventing a substitute strip would be adding a judgment surface by the back door. The row is shorter in V1, which is the honest consequence.
+**Nothing takes its place in the card** — the deciding facts are already in 1.1.1 and the cost facts in 1.1.3, and inventing a substitute strip would be adding a judgment surface by the back door. The row is shorter in V1, which is the honest consequence.
 
 ### Region 1.1.3 : Pursuit-Cost Fact Panel
 
@@ -197,13 +201,13 @@ Chips need a free-text escape hatch. The hand-run is currently producing reasons
 
 ### Region 1.1.5 : Gated Items Drawer — PARKED, AND THE REASON IT EXISTS DID NOT GO AWAY
 
+**PARKED 2026-08-11** — V1 has no gates, so nothing is gated and the drawer has no contents.
+
 Items eliminated by Stage 0 hard gates (§6.1), filed rather than deleted.
 
 This region exists because of a documented near-miss, not a principle. A stale deadline extracted from the wrong PDF would have silently killed KP's single best-fit opportunity three weeks before it actually closed. §6.2's "gated items are filed, not deleted" is the only thing that makes that recoverable, and a rejection you cannot inspect is a bug you will never find.
 
 Low traffic by design. It needs to exist, not to be prominent.
-
-**Parked 2026-08-11.** V1 has no gates, so nothing is gated and the drawer has no contents.
 
 **But the near-miss it was built for is an extraction failure, not a gating failure**, and V1 is fully exposed to it. A bundle shipping two deadlines still ships two deadlines; the wrong one still kills the best-fit opportunity three weeks early. What protects against it in V1 is Region 1.1.1's rule — *show the disagreement rather than silently picking a winner* — which is now carrying this risk alone. **Reinstate this drawer the same day anything gates**, and until then treat 1.1.1's conflict display as the higher-priority node it has become.
 
@@ -277,11 +281,11 @@ The app's remaining case is the triage queue's reason capture (§7.1), which is 
 
 ## View 2.2 : Scores and Evidence — PARKED
 
+**PARKED 2026-08-11** with spec §6 — V1 has no scores, so this view does not ship. **In the finished product it is worth what the grid says.** The marker is what holds it out of the V1 sequence; the numbers are not lowered to do that job (scoring key).
+
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
 | 3   | 4   | 4   | 3   | 90%   | 70%  |
-
-**Parked 2026-08-11** with spec §6. V1 has no scores and this view does not ship. The grid is left as scored rather than blanked — per the scoring key a half-filled grid is forbidden, and zeroing it would misreport parked work as unestimated work. **Read `Pri` as zero for V1 regardless of the 4.**
 
 **Overview** — The four scores at full width, each with the evidence that produced it, quoted and linked back into the source document.
 
@@ -584,9 +588,31 @@ Beneath the grid, four labels, **bold rather than headings** so they never enter
 
 Levels 3 and below take no grid and no labels.
 
+> ### `PARKED` is a marker, not a score — ruled by Matt, 2026-08-14
+>
+> **A parked node is deferred out of V1 but still part of the finished product.** Not cut, not deprecated, not a candidate for deletion — the prototype renders it and it ships eventually.
+>
+> **A parked node keeps its scores.** `Imp` and `Pri` are judgments about the product, and the product still wants the thing. Lowering them so a planning document reads correctly would destroy the judgment and force someone to reconstruct it by guessing when the node un-parks — **which is exactly how the `Imp`/`Pri` problem started**, and is not repeated here.
+>
+> **Instead the node carries a bold `PARKED` line directly beneath its heading, above the grid**, giving the date, the decision that parked it, and what does not ship. **Planning excludes a parked node by that marker, not by its number** — `docs/Tenderfoot-Plan-of-Action.md` §6 reads the marker first and the `Pri` second.
+>
+> **Above the grid rather than beneath it, and that placement is the whole fix.** The four labels sit below because they elaborate; this one is not a label and does not elaborate. A reader must not reach the numbers before knowing they describe something V1 does not build.
+>
+> **The marker is the only element that crosses the level-3 line.** Grids and labels stop at level 2 because that is where judgments are made. Parking is a *fact* about a node rather than a judgment about it, so `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid. A heading may also repeat `— PARKED` as a scanning aid in a long outline; the marker is the part that governs.
+>
+> **Superseded: "read their `Pri` as zero for V1."** That was the previous stopgap, it lived in three places, and it was **wrong rather than merely fragile** — it asked a reader to mentally rewrite a number that was never zero. The priority is not zero; the node is simply outside V1's scope.
+
 #######################################################
 
 # Revision history
+
+*Revision note, 0.5.0 → 0.5.1 — parked nodes get a marker instead of a footnote. Claude, 2026-08-14.*
+
+- **Q2 of [`three_open_questions.md`](../three_open_questions.md) ruled by Matt: option (d), a marker outside the grid.** A parked node keeps its product scores and carries a bold `PARKED` line above its grid; planning excludes it by that marker rather than by a lowered number. **Written into the scoring key as a rule**, so it governs the next parked node rather than being a treatment of this one.
+- **The previous stopgap is superseded, and it was wrong rather than merely fragile.** *"Read their `Pri` as zero for V1"* appeared in three places — preamble, node, audit trail — and asked a reader to mentally rewrite a number that was never zero. **Three copies of a warning is a warning nobody reads, and the fix is not a fourth copy.**
+- **What it buys, concretely.** `View 2.2` (parked, not buildable for a year) and `View 2.3` (ships in V1 and is arguably the most important thing in it) carried near-identical grids and could not be told apart from the numbers. They now can, without either number moving.
+- **The marker is the only element that crosses the level-3 line**, because parking is a fact about a node rather than a judgment about it. `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid — which is also why Q2 was a one-node question about scoring and a three-node question about marking.
+- **Q3 is still open** — how much of the twenty-node `Imp`/`Pri` set Matt wants to re-score.
 
 *Revision note, 0.3.1 → 0.4.0 — eight decisions adopted from the prototype. Claude, 2026-08-12.*
 
@@ -610,7 +636,7 @@ Levels 3 and below take no grid and no labels.
 *Revision note, 0.2.0 → 0.3.0 — V1 has no scores. Claude, 2026-08-11.*
 
 - **Matching parked in full** (Matt, 2026-08-11). V1 returns everything every active source returns — no ranking, no scoring, no filtering. Recorded in spec §1.1 and §6; SP5 removed from the plan of action's slice sequence rather than reordered.
-- **Three nodes parked, none cut**: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), Region 1.1.5 (Gated Items Drawer). **Grids left filled deliberately.** The scoring key forbids a half-filled grid, and blanking a parked node would report it as unestimated rather than as descoped — a different and worse claim. Each carries a prose note instead, and the preamble says to read their `Pri` as zero.
+- **Three nodes parked, none cut**: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), Region 1.1.5 (Gated Items Drawer). **Grids left filled deliberately.** The scoring key forbids a half-filled grid, and blanking a parked node would report it as unestimated rather than as descoped — a different and worse claim. Each carries a prose note instead, and ~~the preamble says to read their `Pri` as zero~~ — **superseded 2026-08-14: the prose note became a `PARKED` marker above the grid, and the read-as-zero instruction was struck as wrong.**
 - **The outline survived the removal of its scoring layer largely intact**, which is the most interesting thing this revision found. Screen 1 loses one region of four and still works, because 1.1.1, 1.1.3, and 1.1.4 were built around facts and decisions rather than around scores. That is evidence the structure was sound, reached by deleting a third of the machine's output and seeing what broke.
 - **Region 1.1.5's parking exposed a live risk rather than closing one.** The drawer was justified by a real near-miss — a bundle shipping two deadlines, the wrong one three weeks early — but that near-miss is an *extraction* failure, not a *gating* failure. V1 is fully exposed to it and the drawer is gone, so Region 1.1.1's show-the-disagreement rule is now carrying that risk alone and is more load-bearing than its grid suggests.
 - **Reason chips parked; V1 records free text.** Region 1.1.4 already argued the vocabulary should be derived from the hand-run rather than invented ahead of it. With nothing consuming reasons, that ordering is enforced by circumstance instead of discipline.

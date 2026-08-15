@@ -21,8 +21,8 @@
 | | |
 |---|---|
 | Design spec | ✅ `docs/superpowers/specs/2026-08-03-tenderfoot-design.md` |
-| SVRC (screen outline) | ✅ v0.4.0, adopted |
-| Prototype | ✅ V1.1, frozen, reference-only |
+| SVRC (screen outline) | ✅ v0.5.1, adopted |
+| Prototype | ✅ V1.2, frozen, reference-only |
 | Tokens extracted + verified | ✅ 67 colours, 13 radii |
 | Corpus | ✅ 76 live + 140 calibration + 2,160 contracts |
 | Source research | ✅ Complete 2026-08-12 |
@@ -86,7 +86,7 @@ Run `npm run dev`, open `/dev/gallery`. **Read the second paragraph first** — 
 | | Blocks |
 |---|---|
 | 🔴 **The SP2 sign-off gate.** `npm run dev` → `/dev/gallery`. **Read the second paragraph first** — it names two decoy bundle files beside the real one; only **V1.2** is the parity reference. **Five rulings** listed above, none of them defects | **Merging SP2** |
-| `three_open_questions.md` — **Q1 answered 2026-08-13** (`Pri` = product priority, not build order). **Q2 and Q3 still open** — the SVRC `Imp`/`Pri` review | Slice order from SP3 on |
+| `three_open_questions.md` — **Q1 answered 08-13** (`Pri` = product priority, not build order), **Q2 answered 08-14** (parked nodes keep their scores and carry a `PARKED` marker; planning excludes by the marker, not the number). **Only Q3 is left** — how much of the twenty-node `Imp`/`Pri` set Matt re-scores: the five flagged (~5 min) or all twenty (~30 min) | Slice order from SP3 on |
 | ~~User stories~~ | ✅ **93 drafted 2026-08-12** — `docs/user-stories-source.html` and the published story map. Yours to edit |
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |
 | 🟡 **Rotate the Neon credentials — HALF DONE 2026-08-14.** `main` is rotated: the old string now fails authentication, the new one works, 201 solicitations intact, full gate green (92 tests). **The `test` branch is still on the leaked password and still connects.** A Neon role password is per *branch*, not per project — this was asserted the other way and was wrong; see workflow spec §10.1. One console reset on the `test` branch closes it | **Now** |
