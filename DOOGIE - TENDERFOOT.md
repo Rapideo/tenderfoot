@@ -510,3 +510,44 @@ August 14, 2026:
 215. Pinned everything in STATUS under a RESUME HERE block rather than trusting either of us to remember. The one that actually blocks Claude is where long ingestion runs; the rest of its list it can start without me. Per-preview branching moved from my column to its column today, because the browser extension works now and the compute default is fixed — which was the thing that made creating branches unsafe in the first place.
 
 216. Left one thread deliberately open rather than quietly closed: the test-branch rotation is asserted, not proved. Only way to actually close it is to rotate again and capture the old string first. Not worth doing tonight, but it's written down as unproved instead of ticked off.
+
+
+August 15, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+217. Told Claude to try creating the repo itself instead of doing it by hand. It worked first try. Last session's refusal on gh repo create didn't recur, gh was already authenticated as Rapideo, and the whole thing was one command.
+
+218. That's the lesson and it's an uncomfortable one. A single observed refusal got written into STATUS as "gh repo create is blocked for Claude by the permission classifier," which reads as a permanent property of the tool — and on the back of that it became the one item pinned to me, in red, described as the only thing blocking anything. It was one refusal on one day. The fix was to try again. An observed refusal is an event, not a capability boundary, and recording it as the latter converts a retry into a handoff and then parks the handoff on the human.
+
+219. Repo is public at Rapideo/tenderfoot. main and sp2-design-system both pushed, origin tracking.
+
+220. CI executed for the first time ever and failed on both branches. I'd written down to expect that and not read it as a regression, with two likely causes named. It was the harmless one: DATABASE_URL_TEST doesn't exist as a GitHub Actions secret.
+
+221. The half that didn't fail is the more useful half. 16 of the 20 test files ran on Linux and all 55 of their tests passed, so the Windows-vs-Linux path assumption — the expensive one to chase — isn't there at all. A prediction that names two causes and hits one also rules the other one out, and that was worth as much as the diagnosis.
+
+222. The secret was a real decision because the repo is public now. Three ways: Claude sets it from .env, I set it by hand, or CI stops running the four database test files. Took the first. The third is the one with an actual cost — it would make green-on-CI weaker than green-on-laptop, and a gate that means two different things in two places has stopped being a gate.
+
+223. Residual I want written down rather than ticked off: a live Neon test credential now sits in a public repo's secret store. Not readable back, withheld from fork PRs, but anyone with write access can pull it out through a workflow. Blast radius is the test branch only. Which means both of the known soft spots in this project are now on the same branch — the asserted-not-proved rotation and this. Not a problem today; worth knowing they're stacked.
+
+224. Small thing done right: Claude assumed the string was in .env.local, checked by listing key names rather than dumping the file, found it in .env instead, and piped it straight into gh so the value never appeared in the transcript. The assumption was wrong and it cost nothing because of how it was checked.
+
+225. CI green after that. 92 tests, 20 files — identical to local. The gate now means the same thing in both places.
+
+226. Ruled where long ingestion runs. On Vercel, invoked by hand, and I set the scope of each run — which sources, how deep. Claude flagged that I'd said "off-platform" and then described something that stays on Vercel, which was right to flag. The word pointed at option three; what I described was a fourth option that was never on the list.
+
+227. Worth keeping the shape of that one. All three options were answers to "how do we survive a 300-second ceiling." The answer was to stop asking a single run to be big. Scope becomes an input instead of a constant, so nothing has to cross an invocation boundary — the constraint isn't engineered around, it stops applying.
+
+228. What it costs, and I want this loud now rather than discovered at the GO decision: unattended ingestion does not exist in V1. Nothing scrapes unless I ask it to, sources go stale between runs, and the 8,000-record register can't be taken in one action. Vercel Cron isn't used — the platform still has it, which is why the closed-laptop risk stays retired, but SP3 doesn't touch it and SP7 has to. The failure mode is GO quietly assuming a currency V1 doesn't have.
+
+229. Claude took two consequences as its own rather than handing them back: what happens when I ask for more than fits, and where the human-reachable trigger lives. The second lands on T12-T15's admin UI instead of inventing a second surface. Right call on both — those are plan questions, not product ones, and I'd rather rule on the product ones.
+
+230. The round-trip fix changed job rather than going away. Multi-row INSERT was a blocker while a full register had to fit one invocation; under a hand-scoped run it's a scope multiplier, where every row/second it buys is depth I can ask for before hitting the ceiling. Still gets done before SP3 ships, just not as a gate.
+
+231. B3 for SP3 is unblocked, which was the only thing genuinely blocking Claude. My list is down to the two SP4 decisions and whether the two live THOUGHTS items become real backlog.
+
+232. Claude staged the refusal thing as its own lesson 2.19 and flagged that it might belong inside 2.15 instead. Told it to merge. They're the same lesson: an agent's result is one observation whichever way it points, and 2.15 was only ever about green because green was the only direction we'd been burned in. Merging keeps it one idea instead of two half-arguments that cross-reference each other.
+
+233. The bit of the merge I'd have missed on my own is the asymmetry. Nobody re-runs a red. A pass invites suspicion and a failure doesn't, so the sample-of-one problem is actually worse in the direction we weren't watching. And a refusal gets written down as a property rather than an event, which is what makes it expensive — "X is blocked for the agent" names a human as the workaround, so a bad record doesn't just sit there being wrong, it moves work onto me and then looks like a constraint when I go to question it.
+
+234. Still not promoted, and the reason is honest: what's missing is a refusal that recurs on retry. Without one we can say "check" but not "how to tell." Retry-before-you-hand-off goes in the moment we have it — it's the cheapest rule in the file.

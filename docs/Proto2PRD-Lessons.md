@@ -203,19 +203,25 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 
 **Why not promoted.** One project. **But the mechanism is structural rather than circumstantial** — scoped review cannot see across its own scope, by definition — and that argues it will recur anywhere the same method is used. Strong candidate on a second sighting.
 
-### 2.15 An agent's "green" is a sample of one, and nobody reports flakiness they never ran twice
+### 2.15 An agent's result is one observation, in either direction
 
-**Observed 2026-08-13, twice in one slice.**
+**Observed 2026-08-13, twice in one slice — and again on 2026-08-15 with the sign reversed.**
 
 **First:** every "gate green" reported during SP1.5 — four separate agents, four separate numbers — passed only because each agent's shell already carried the environment. **From a clean shell the gate failed at import in all four test files.** Nothing in the repo loaded `.env`. Found by the whole-branch review, not by any of the agents reporting success.
 
 **Second:** two agents reported `37/37, exit 0`. Running the gate directly before merging, it **failed** — then passed three times, then failed once more across five runs. Roughly a 20% flake, caused by a Neon compute pinned at a fixed 0.25 CU while four test files opened pools against it. **Diagnosed by the collect time (48.8 s under contention against 645 ms in isolation) and confirmed when a resize moved that exact number to 2.9 s.**
 
-**Proposed generalisation.** *"Tests pass"* from a subagent is one observation, in one environment, at one moment. **Before trusting a gate at a decision point — a merge, a release — run it yourself, run it more than once, and run it in the environment you actually claim it works in.** Reliability is a property of a distribution and no single report can carry it.
+**Third, 2026-08-15 — the same defect with the sign flipped.** `gh repo create` was refused once by the permission classifier on 08-14. That refusal was written into `STATUS.md` as ***"`gh repo create` is blocked for Claude by the permission classifier — Matt runs it,"*** the task moved to the human's column, and it was pinned as the **single red item, described as the only thing blocking anything.** Retried the next day on Matt's instruction, it **succeeded on the first attempt** — no configuration change, no argument altered. **The cost lived entirely in the recording, not in the refusal:** a session's delay on the item the whole plan was queued behind, and a handoff that was never necessary.
+
+**Proposed generalisation.** A result reported by an agent — *"tests pass," "that action is blocked"* — is **one observation, in one environment, at one moment.** Permission decisions, classifier verdicts and sandbox refusals are evaluated per call and can turn on phrasing, surrounding context, session state, or which credentials happen to be present; test results vary on environment and contention. **Neither direction carries reliability, because reliability is a property of a distribution and no single report can hold one.** Before trusting a result at a decision point — a merge, a release, a handoff — run it yourself, run it more than once, and run it in the environment you actually claim it works in.
+
+**The asymmetry, and it is why the red case is the more dangerous one.** Nobody thinks to re-run a refusal. **A failure feels conclusive in a way a pass does not**, so the sample size of one goes unexamined precisely where scepticism is cheapest. Worse, a refusal is usually recorded as a *property* — *"X is blocked for the agent"* — rather than as an event, and that phrasing **names a human as the workaround.** The wrong entry does not sit inert. It reassigns work, then defends the reassignment by looking like a known constraint.
+
+**The check that catches the red case.** Record **what happened**, not **what is true**: *"refused 2026-08-14, not retried"* rather than *"is blocked."* And **before handing any refused task to a human, retry it once.** A genuine refusal costs one call to confirm; a spurious one costs a handoff, and here it cost a day at the front of the queue.
 
 **Corollary worth keeping separately:** when a flake is fixed, confirm the *metric predicted to move* actually moved. A failure that stops reproducing is not the same as a cause that has been removed.
 
-**Why not promoted.** One project, though two instances. **The second half — verify by the predicted metric, not by the symptom's absence — may deserve promotion on its own**, since it is the difference between a diagnosis and a coincidence.
+**Why not promoted.** One project, though three instances now across both directions. **Two pieces may deserve promotion on their own:** *verify by the predicted metric, not by the symptom's absence*, which is the difference between a diagnosis and a coincidence; and *retry before you hand off*, which is the cheapest rule in this file. **The instance still missing is a refusal that recurs on retry** — that is the counter-example that would show how to tell a real capability boundary from a one-off, and without it the rule says only "check," not "how to know."
 
 ---
 
