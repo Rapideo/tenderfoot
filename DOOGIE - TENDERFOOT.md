@@ -446,3 +446,17 @@ August 14, 2026:
 185. Also worth noting what didn't move: View 2.2 stays at Pri 4 and View 2.3 stays at Pri 4, and they're now perfectly distinguishable anyway. That was the actual complaint — you couldn't tell them apart from the numbers — and it turned out not to need a number to fix it.
 
 186. Down to Q3, which is the only one that costs me anything: five nodes at ~5 minutes or all twenty at ~30. Still mine to decide.
+
+187. Said do all twenty rather than the five flagged, and that turned out to be the right call for a reason I didn't have when I made it. The two worst numbers in the whole document weren't on the flagged list and couldn't have been: Shell A and Region A.1 were both sitting at Pri 5, which under Q1's ruling means "KP wants this most" and was actually still saying "build this first." Q1 outlawed that definition on the 13th. The values sat there wrong for a full day afterward.
+
+188. That's the lesson and it's a good one. Changing what a column MEANS doesn't change the numbers already written in it, and nothing in a diff shows you the gap -- the definition moves in one line, the twenty stale values move in none. Claude staged it as 2.18 and folded in a second instance, so that one's close to being promoted into the playbook proper.
+
+189. The other half: every one of the five nodes I'd been shown was flagged as too LOW. Nobody thought to look for too HIGH. A targeted re-audit inherits the bias of whoever wrote the target list, and when the thing that moved is the yardstick itself, you don't get to spot-check.
+
+190. Fourteen of twenty moved. Biggest: View 1.2 Saved Views from Imp 2 Pri 2 to 4 and 4 -- with no ranking in V1, saved views are the only way the firehose gets carved. Screen 7 from Pri 1 to 4, and it picked up a PARKED marker while we were in there, because "deferred to a later phase" is the same shape as parked even though the cause is different. That's the Q2 rule fitting a case it wasn't written for, one day after we wrote it.
+
+191. Opening the doc mattered on its own, separate from the numbers. View 1.2's known-gaps still said "genuinely a candidate for cutting" and its open-questions still asked something I ratified on the 13th. If we'd edited grids from a list we'd have left a node arguing with itself.
+
+192. One I'm not fully settled on and it's flagged as such in the node: View 1.2 is now Imp 4 at Conc 45%, lowest completeness in the document. The argument for raising it is that my old 2s meant "haven't thought about this" rather than "doesn't matter" -- but that's Claude reading my intent from a year ago, and it says so. Revisit once anything's designed.
+
+193. Three open questions are closed. That file is history now. Which means the SVRC Imp/Pri review that was gating the section 6 slice-order reconciliation is done, and item 7 is Claude's to pick up. My remaining list is the three Neon console clicks and the SP2 sign-off gate.

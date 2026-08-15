@@ -247,7 +247,7 @@ A database compute was resized from 1→1 to 0.25→8 CU. Both live computes rea
 
 ---
 
-### 2.18 A version number that tracks how much prose changed will miss the change that matters
+### 2.18 A change to what something *means* moves nothing and breaks everything — two instances
 
 **Observed 2026-08-14, reconstructing the SVRC's missing revision notes.**
 
@@ -261,7 +261,15 @@ Three consecutive changes to an adopted reference document. Re-pointing one node
 
 **And the repair is a note, not a renumber.** Retroactively renumbering makes the history lie a second way. The version stays wrong; the note is how a reader finds out that it is.
 
-**Why not promoted.** One instance, and it is close kin to §2.17 — both are cases where the visible surface (instances; diff size) is not the surface where the defect lives. **They may eventually merge into one lesson about auditing the wrong surface**, but not on two observations.
+**Second instance, same day, and it is the stronger one.** Q1 redefined the SVRC's `Pri` column on 2026-08-13 — one line in the scoring key. **The twenty values already written under the old definition stayed exactly where they were.** A day later, `Shell A` and `Region A.1` were still carrying `Pri 5` meaning *"build this first"* — the reading the ruling had explicitly outlawed. **Redefining a column does not re-score it**, and the gap is invisible in a diff: the definition moves in one line and the stale values move in none.
+
+**What makes it the stronger instance.** Nobody had to be careless. The ruling was correct, recorded, and prominently placed; the person who wrote it then wrote *"confirming the definition makes those disagreements arguable rather than vague — it does not resolve them"* **and still did not go re-read the twenty numbers.** The failure is structural: a definition and its instances are edited in different passes, and only the definition feels like the decision.
+
+**The check that catches this one.** After changing what a field *means*, ask: ***"how many existing values were written under the old meaning, and who is re-reading them?"*** If the answer is *"all of them"* and *"nobody,"* the change is not finished. **Sizing the version bump by semantics rather than diff is the same discipline applied to the same defect** — which is why these are one lesson and not two.
+
+**A corollary worth keeping separately.** The re-score was driven by a list of five nodes flagged as suspect. **All five were flagged as too *low*; the two worst values in the document were too *high*, and no amount of examining the five would have found them.** A targeted re-audit inherits the bias of whoever wrote the target list. **When the underlying definition changed, the audit has to be exhaustive, because the thing that moved was the yardstick.**
+
+**Why not promoted yet.** Two instances now, one of them strong, and it is close kin to §2.17 — all three are cases where the visible surface (instances; diff size; the flagged list) is not the surface where the defect lives. **Candidate title if they merge: *auditing the wrong surface*.** Worth one more observation before promoting, and it is close.
 
 ---
 

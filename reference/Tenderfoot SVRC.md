@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.5.1, 2026-08-14.**
+**Tenderfoot SVRC — version 0.6.0, 2026-08-14.**
 **Adopted.** This is the working outline, not a draft.
 
 > ### Eight decisions adopted from the prototype — 2026-08-12
@@ -41,7 +41,9 @@
 >
 > Three things a reader still needs to know.
 >
-> **`Imp` and `Pri` were placeholders and are now load-bearing.** They were filled because the scoring key forbids a half-filled grid, not because they were known. Adoption promotes them from guesses to inputs — `docs/Tenderfoot-Plan-of-Action.md` §6 reconciles slice ordering against `Pri`. **They should be reviewed once with that consequence in mind**, because a placeholder that silently becomes a build order is exactly the failure the `·` convention exists to prevent. `Eff` is a genuine estimate. `Conc` reflects how settled the spec is.
+> ~~**`Imp` and `Pri` were placeholders and are now load-bearing.**~~ **REVIEWED IN FULL 2026-08-14 by Matt — all twenty nodes. `Imp` and `Pri` are now rulings, not proposals.** They had been filled by Claude because the scoring key forbids a half-filled grid, not because they were known, and adoption had quietly promoted them from guesses to inputs. **Fourteen of the twenty moved.** `Eff` remains a Claude estimate; `Conc` reflects how settled the spec is.
+>
+> **The two largest errors were not the ones flagged in advance, and they point the same way.** `Shell A` and `Region A.1` both carried `Pri 5` — the old *"build this first"* definition that Q1 had already outlawed on 08-13, still sitting in the values a day later. **Q1 changed what the column meant and nobody re-read the twenty numbers against the new meaning.** The five nodes flagged before the pass were all *too low*; nobody had thought to look for *too high*.
 >
 > ~~**`Proto` is stale everywhere.**~~ **Filled 2026-08-12 against V1.1**, **re-pointed 2026-08-13 to V1.2**, by driving the bundle and comparing each node's `Overview` and `Known gaps` to what is actually drawn. **Mean 85.2%; thirteen of twenty at 90% or above; nothing below 55%.**
 >
@@ -71,7 +73,7 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 90%   | 70%  |
+| 2   | 4   | 3   | 2   | 90%   | 70%  |
 
 **Overview** — The persistent application frame. Tenderfoot is a small app with a strong daily habit attached to one screen, so the shell's job is mostly to stay out of the way and to make the queue count visible from anywhere. It is scored as a parent because it says something its regions do not: it is built once, early, and everything else assumes it.
 
@@ -83,7 +85,7 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 95%   | 90%  |
+| 2   | 4   | 3   | 2   | 95%   | 90%  |
 
 **Overview** — Wordmark, primary navigation, and the queue counter.
 
@@ -113,7 +115,7 @@ It should show zero proudly. An empty queue is the goal state, not an empty stat
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 3   | 90%   | 60%  |
+| 2   | 4   | 4   | 3   | 90%   | 60%  |
 
 **Overview** — Ingestion health at a glance: when adapters last ran, and whether any are failing.
 
@@ -217,13 +219,15 @@ Low traffic by design. It needs to exist, not to be prominent.
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 2   | 2   | 3   | 85%   | 45%  |
+| 2   | 4   | 4   | 3   | 85%   | 45%  |
 
 **Overview** — Persisted custom queries (§7.7, `4I`). Scope the queue to a sector, a jurisdiction, a value band.
 
-**Known gaps** — Nothing establishes that anyone wants this yet. It is in the spec as a convenience and it is the kind of feature that gets built because it is easy rather than because it is needed. Genuinely a candidate for cutting.
+**Re-scored 2026-08-14 by Matt: `Imp 2 → 4`, `Pri 2 → 4`.** The old scores assumed a matching engine would make the volume tractable. **V1 returns everything and never ranks, so saved views are the only way the firehose gets carved** — a primary interaction, not a convenience.
 
-**Open questions** — Is this a queue filter or a first-class saved object? The second is a much larger commitment and the spec does not distinguish.
+**Known gaps** — ~~Nothing establishes that anyone wants this yet… genuinely a candidate for cutting.~~ **Struck 2026-08-14 — that assessment was written against a system with a matching engine and it inverted.** The real gap now is the one the numbers expose: **`Conc` is 45%, the lowest in the document, and this node is scored `Imp 4`.** Those are hard to hold together. The reading taken is that the old 2s were *"we have not thought about this"* wearing the costume of *"this does not matter"* — **but that diagnosis was made by Claude about a judgment of Matt's, and it is the least-evidenced claim in the re-score.** Worth revisiting once anything is designed.
+
+**Open questions** — ~~Is this a queue filter or a first-class saved object?~~ ✅ **Answered 2026-08-13: a first-class object**, ratified from the prototype. **It is a schema decision wearing a UI costume** — named views need storage, naming, editing, deletion and eventually sharing; remembered filter state needs one blob. **That is what `Conc 45%` is measuring**: the *shape* is decided, almost nothing beneath it is.
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -303,7 +307,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 2   | 75%   | 75%  |
+| 3   | 5   | 4   | 2   | 75%   | 75%  |
 
 **Overview** — Every extracted field with its confidence and a pointer to where it came from. Deadlines, values, set-asides, eligibility requirements, contacts.
 
@@ -317,7 +321,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 3   | 3   | 3   | 55%   | 55%  |
+| 4   | 4   | 3   | 3   | 55%   | 55%  |
 
 **Overview** — The bundle inline, with extraction highlights pointing back into the source.
 
@@ -329,7 +333,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 3   | 2   | 65%   | 80%  |
+| 3   | 4   | 4   | 2   | 65%   | 80%  |
 
 **Overview** — Every Sighting and addendum in order. This is what the Sighting table exists for (§4.4), and it is what makes an extracted deadline trustworthy in seconds — you can see when it changed, in which source, and whether anything said so.
 
@@ -357,7 +361,7 @@ Both radars are **post-gate work** — slice SP8, after the go/no-go — and the
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 2   | 3   | 95%   | 75%  |
+| 2   | 4   | 4   | 3   | 95%   | 75%  |
 
 **Overview** — Contracts approaching their end date, read as predicted re-competes months ahead of any RFP (`4E`). The lead-time advantage, and the direct answer to problem #2, *finding out too late* (§1).
 
@@ -375,7 +379,7 @@ There is a live fixture waiting for it: 231 contracts across 149 vendors all exp
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 3   | 2   | 4   | 80%   | 50%  |
+| 3   | 3   | 3   | 4   | 80%   | 50%  |
 
 **Overview** — Who wins work KP could sub on. KP's WBE certification makes it attractive to primes carrying participation goals (`4F`, §4.6), which turns some unreachable opportunities into reachable ones.
 
@@ -401,7 +405,7 @@ Win history infers capability without anyone maintaining a taxonomy — which is
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 2   | 95%   | 65%  |
+| 2   | 4   | 3   | 2   | 95%   | 65%  |
 
 **Overview** — Buyers, with what they have bought, from whom, how often, and on what cycle.
 
@@ -449,7 +453,7 @@ Win rate becomes a report once there is enough history to populate one. **It is 
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 5   | 3   | 3   | 90%   | 70%  |
+| 3   | 5   | 4   | 3   | 90%   | 70%  |
 
 **Overview** — The backtest as a standing view. The output the whole project is judged against: *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You saw one of them."* (§3.1)
 
@@ -463,7 +467,7 @@ Highest impact in the document and mid priority, which is not a contradiction �
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 3   | 2   | 80%   | 80%  |
+| 2   | 4   | 4   | 2   | 80%   | 80%  |
 
 **Overview** — What each source actually produced: records ingested, survived gates, reached triage, marked interested. Retires sources that do not earn their maintenance.
 
@@ -499,7 +503,7 @@ The rule this screen enforces: no fact about Koehler Partners appears in code. A
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 2   | 95%   | 80%  |
+| 3   | 4   | 5   | 2   | 95%   | 80%  |
 
 **Overview** — Sources as **data rows, not code** (§5). Each carries its adapter tier, platform, archive depth, legal posture, and health. Adding a source is a row and a config, not a deploy.
 
@@ -511,13 +515,15 @@ The platform field is what makes this scale: states mostly license about five pl
 
 #######################################################
 
-# Screen 7 - Pipeline Board
+# Screen 7 - Pipeline Board — PARKED
 
 #######################################################
 
+**PARKED — deferred to a later phase (§9), not by the V1 scoring decision.** Pursuit *management* comes after pursuit *seeking*. **The cause differs from the other three parked nodes and the consequence is identical**, which is the first evidence the marker generalises: it was written for machine judgment and it fits a phase deferral without amendment.
+
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 3   | 1   | 5   | 60%   | 30%  |
+| 4   | 3   | 4   | 5   | 60%   | 30%  |
 
 **Overview** — Pursuits across their states: `Watching → Bid/No-Bid → Drafting → Submitted → Outcome`, with ownership and assignment (§7.2, `4C`). The system of record, and the answer to problem #4 — opportunities living in email and memory.
 
@@ -526,7 +532,9 @@ The platform field is what makes this scale: states mostly license about five pl
 - **`Drafting` added.** The gap between deciding to bid and submitting is where a pursuit actually dies, and the original machine had no state for it — a decided-but-unwritten proposal was indistinguishable from one nobody had started. This is the longest-lived state on the board and it was missing.
 - **`Won/Lost` → `Outcome`.** One state holding a result, rather than two terminal states. It also absorbs the results the original pair could not express: withdrawn, cancelled by the buyer, no award made. All three occur in real procurement records.
 
-**Specified and deliberately not built.** Pursuit management is deferred to a later phase (§9). Tenderfoot's current job is contract *seeking*; seeking *and* management comes later. It is scored as a leaf because it has no views yet, and `Pri 1` is the whole point.
+**Specified and deliberately not built.** Pursuit management is deferred to a later phase (§9). Tenderfoot's current job is contract *seeking*; seeking *and* management comes later. It is scored as a leaf because it has no views yet.
+
+~~`Pri 1` is the whole point.~~ **Corrected 2026-08-14 to `Pri 4`, and this node is the cleanest example of why Q1 mattered.** `Pri 1` did not mean *KP does not want a pipeline board* — it meant *we are not building one yet*, which is the circular definition Q1 outlawed. **KP wants this: it is the answer to problem #4**, opportunities living in email and memory, and the 08-11 revision above concedes that being a system of record is one of the three things V1's triage queue earns its login on. **The number went up and the schedule did not move**, which is exactly what the `PARKED` marker exists to make possible.
 
 **Known gaps** — Everything below the state machine. Volatility is 5 because a year of using the triage queue will change what this needs to be, and designing it now would mostly produce something to throw away.
 
@@ -544,13 +552,15 @@ The platform field is what makes this scale: states mostly license about five pl
 
 **Search is absent deliberately.** The shell has no global search because six screens do not need one and the filters inside each view are more useful. Worth revisiting only if the entity browser grows.
 
-**What is scored `Pri 5` and why.** Only the shell, its header, and the triage queue. Everything else waits, because the queue is the only screen that can be used before the scoring engine is trustworthy — someone can clear a queue of badly-ranked opportunities and their reasons still make the next version better.
+**What is scored `Pri 5` and why.** ~~Only the shell, its header, and the triage queue. Everything else waits, because…~~ **Rewritten 2026-08-14 — the old text was an argument about build order, in a document that no longer keeps build order in this column.**
+
+**`Pri 5` is now carried by exactly two nodes: `View 1.1` (the queue) and `View 6.2` (the source registry).** The queue is the screen the product lives or dies on; the registry is V1's entire control surface — switching a source on or off is the only lever there is. **The shell and its header dropped from 5 to 3**, not because they matter less but because *"built once, early, and everything assumes it"* is a statement §6 owns and this column does not.
 
 #######################################################
 
 # Scoring key
 
-Scored nodes carry the same six-column grid. **All 1–5 scales run low to high** — `5` is the most of the thing, so `Pri 5` means do it first and `Eff 5` means it is expensive. **`·` means not yet scored**, which is deliberately not the same as `0`.
+Scored nodes carry the same six-column grid. **All 1–5 scales run low to high** — `5` is the most of the thing, so ~~`Pri 5` means do it first~~ **`Pri 5` means KP wants it most** (corrected 2026-08-14 — this sentence still carried the pre-Q1 definition after the table above had been fixed) and `Eff 5` means it is expensive. **`·` means not yet scored**, which is deliberately not the same as `0`.
 
 **Scores sit at the level where the judgment is made.** Every *leaf* carries a grid — a node with nothing scored beneath it. A screen whose views each carry their own scores is deliberately left without one: a screen-level grid would only roll up judgments already made a level down, and one judgment kept in two places can disagree with itself. Scoring a parent as well is allowed where it says something its children do not — the Shell does. **What is never allowed is an unscored leaf, a half-filled grid, or an ungridded parent whose children are not themselves finished.**
 
@@ -571,6 +581,8 @@ Scored nodes carry the same six-column grid. **All 1–5 scales run low to high*
 > **Consequence worth stating.** The twenty existing values were written by Claude against a system that **had a matching engine**, before V1 was decided to return everything and rank nothing (§1.1). Under this definition several are **wrong rather than merely stale** — five are argued in [`three_open_questions.md`](../three_open_questions.md), most notably `View 1.2 : Saved Views` at `Imp 2 · Pri 2`, which with no ranking is **the only way the firehose gets carved** and is a primary interaction rather than a convenience.
 >
 > **Confirming the definition makes those disagreements arguable rather than vague. It does not resolve them.**
+>
+> ✅ **Resolved 2026-08-14** — Matt reviewed all twenty and fourteen moved, `View 1.2` among them (`Imp 2 · Pri 2` → `4 · 4`). **The values above are historical from this date; read the grids, not this note.** And the correction this ruling most needed was not in the five flagged here: `Shell A` and `Region A.1` sat at `Pri 5` under the definition this very blockquote had just outlawed, for a full day, because **changing what a column means does not change the numbers already written in it.**
 | `Vol` | Volatility | 1–5 | How likely this is to change. 5 = expect churn. Independent of `Conc`. |
 | `Proto` | Prototype accuracy | 0–100% | How close the prototype is to what we actually want. **0% throughout — no prototype exists.** |
 | `Conc` | Conceptual completeness | 0–100% | How settled the idea is, whether or not anything is drawn. |
@@ -600,11 +612,25 @@ Levels 3 and below take no grid and no labels.
 >
 > **The marker is the only element that crosses the level-3 line.** Grids and labels stop at level 2 because that is where judgments are made. Parking is a *fact* about a node rather than a judgment about it, so `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid. A heading may also repeat `— PARKED` as a scanning aid in a long outline; the marker is the part that governs.
 >
+> **The marker states its cause, because there is more than one.** Three nodes are parked by the V1 scoring decision (§1.1) — Region 1.1.2, Region 1.1.5, View 2.2. **`Screen 7` is parked by a phase deferral (§9)**, and was carrying `Pri 1` for it until 2026-08-14. Different reasons, identical consequence: **out of the sequence, scores untouched.** That the rule fit a case it was not written for, within a day of being written, is the first evidence it generalises.
+>
 > **Superseded: "read their `Pri` as zero for V1."** That was the previous stopgap, it lived in three places, and it was **wrong rather than merely fragile** — it asked a reader to mentally rewrite a number that was never zero. The priority is not zero; the node is simply outside V1's scope.
 
 #######################################################
 
 # Revision history
+
+*Revision note, 0.5.1 → 0.6.0 — `Imp` and `Pri` reviewed in full and become rulings. Matt, 2026-08-14.*
+
+**Minor by diff size, major by semantics — bumped on the second, per the rule §2.18 of `docs/Proto2PRD-Lessons.md` was written from an hour earlier.** Fourteen numbers moved and the column changed owner; that is not a patch.
+
+- **Q3 answered: all twenty, not the five flagged.** Fourteen moved. **`Imp` and `Pri` are now Matt's rulings rather than Claude's placeholders**, which closes the caveat this document has carried in its preamble since adoption on 2026-08-10.
+- **The two largest errors were not on the flagged list, and the flagged list could not have found them.** `Shell A` and `Region A.1` carried `Pri 5` — *"built once, early, everything assumes it"* — which is precisely the build-order reading Q1 had outlawed the previous day. **The five flagged nodes were all too low; nobody thought to look for too high.** A pass that re-examines only the entries you already suspect will confirm your suspicions and miss the rest.
+- **The general form, and it is the same shape as §2.18.** Q1 changed what `Pri` *means*; the twenty values written under the old meaning were left standing. **Redefining a column does not re-score it, and the gap between the two is invisible in a diff** — the definition changes in one line and the stale values change in none.
+- **`Screen 7` gains a `PARKED` marker and `Pri 1 → 4`.** It was parked by a *phase deferral* (§9) rather than by the V1 scoring decision (§1.1) — a cause the marker was not written for, which it fit without amendment. **First evidence the 0.5.1 rule generalises**, and it arrived within a day.
+- **Two sentences elsewhere still carried the pre-Q1 definition** and were corrected: the scoring key's *"`Pri 5` means do it first"*, and the summary claiming `Pri 5` belongs to *"the shell, its header, and the triage queue."* Both had survived the Q1 edit because that edit changed the table row and stopped there. **`Pri 5` is now `View 1.1` and `View 6.2`, and nothing else.**
+- **`View 1.2` needed prose surgery, not just numbers.** Its `Known gaps` still read *"genuinely a candidate for cutting"* and its `Open questions` still asked a question ratified on 08-13. **A node can be re-scored and left self-contradicting**, which is the argument for opening the document rather than editing the grids from a list.
+- **The one to revisit.** `View 1.2` is now `Imp 4` at `Conc 45%`, the lowest completeness in the document. The reading — that the old `2`s meant *"unexamined"* rather than *"unimportant"* — is **Claude's diagnosis of a judgment of Matt's, and the least-evidenced claim in the pass.**
 
 *Revision note, 0.5.0 → 0.5.1 — parked nodes get a marker instead of a footnote. Claude, 2026-08-14.*
 

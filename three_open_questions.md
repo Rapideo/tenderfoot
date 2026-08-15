@@ -1,10 +1,14 @@
-# Three open questions — Matt owes answers
+# ~~Three open questions — Matt owes answers~~ — ✅ ALL THREE ANSWERED, CLOSED 2026-08-14
 
 **Raised 2026-08-12** by Claude, at Matt's request, so they are not lost between sessions.
 **Subject:** the `Imp` / `Pri` columns in [`reference/Tenderfoot SVRC.md`](reference/Tenderfoot%20SVRC.md).
 
-> **Status 2026-08-14 — Q1 ✅ answered 08-13, Q2 ✅ answered 08-14, Q3 ⬜ open.**
-> Both rulings are recorded in the SVRC's scoring key, which is where a reader will actually be. Q3 is the only one left: **how much of the twenty-node `Imp`/`Pri` set Matt wants to re-score**, and when.
+> **CLOSED 2026-08-14. Q1 answered 08-13; Q2 and Q3 answered 08-14.**
+> All three rulings are recorded in the SVRC — the two definitional ones in the scoring key, where a reader will actually be, and the re-score in the grids themselves (**v0.6.0, fourteen of twenty values moved**).
+>
+> **This file is now history and should not be consulted for current scores.** It is kept because the arguments in it are the record of *why* the numbers are what they are, and because the five nodes it flagged turned out to be the wrong five — which is the most useful thing in it.
+>
+> **Nothing is owed here any more.** The `Imp`/`Pri` review that gated `docs/Tenderfoot-Plan-of-Action.md` §6 reconciliation is done; item 7 there is unblocked.
 
 ---
 
@@ -105,12 +109,29 @@ The two carry near-identical grids today. One ships in the first release and is 
 
 ## Q3 — How much re-scoring do you want to do?
 
+✅ **ANSWERED 2026-08-14 by Matt — all twenty. "Open the doc; do all 20."**
+
+**Fourteen of the twenty moved.** `Imp` and `Pri` are now rulings rather than placeholders, which closes the caveat this document exists because of. Applied in SVRC **v0.6.0**.
+
+**The choice was vindicated by what it caught, and the five-node option could not have caught it.** The two worst values in the document were `Shell A` and `Region A.1`, both at `Pri 5` — *"built once, early, everything assumes it"* — which is the build-order definition **Q1 had outlawed the day before.** They were not on the flagged list because the flagged list was assembled by asking *"what looks too low?"* **Every one of the five was an under-score. Nobody thought to look for an over-score.**
+
+**The general lesson, staged as `Proto2PRD-Lessons.md` §2.18.** Q1 changed what `Pri` *means*, and the twenty values written under the old meaning stayed put. **Redefining a column does not re-score it, and nothing in a diff shows the gap** — the definition moves in one line, the stale values move in none.
+
+**Opening the document mattered independently of the numbers.** `View 1.2`'s `Known gaps` still read *"genuinely a candidate for cutting"* and its `Open questions` still asked a question ratified on 08-13. Editing grids from a list would have left a node whose numbers and prose contradict each other.
+
+**One item deliberately left unsettled.** `View 1.2` is now `Imp 4` at `Conc 45%` — the lowest completeness in the document. The justification is that the old `2`s meant *"unexamined"* rather than *"unimportant,"* which is **Claude's reading of Matt's intent a year ago and the least-evidenced claim in the pass.** Flagged in the node itself to be revisited once anything is designed.
+
+<details>
+<summary>The original question</summary>
+
 | Scope | Cost | Gets you |
 |---|---|---|
 | The five flagged below | ~5 minutes | Most of the value |
 | All twenty scored nodes | ~30 minutes with the doc open | A grid that is entirely yours rather than partly Claude's |
 
 **Answer needed:** which, and when.
+
+</details>
 
 ---
 
