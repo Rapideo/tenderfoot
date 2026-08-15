@@ -4,7 +4,9 @@
 
 > **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
 >
-> **Also ruled 2026-08-15: where long ingestion runs.** On Vercel, invoked by hand, operator sets the scope. **B3 for SP3 is unblocked** — it was the only thing blocking Claude. Unattended ingestion is deferred to SP7 and does not exist before then.
+> **Also ruled 2026-08-15: where long ingestion runs.** On Vercel, invoked by hand, operator sets the scope. Unattended ingestion is deferred to SP7 and does not exist before then. **B3 for SP3 clears its §9.6 gate but not its last one** — the ingestion scaffolding brainstorm is Matt's and lands *in* the plan.
+>
+> **Also done 2026-08-15: the §6 slice-order reconciliation** (Plan of Action §6.4). **No slice moved.** One finding went back to Matt: whether source health belongs in front of the GO gate rather than in SP7.
 >
 > **Behind that: SP2 is SIGNED OFF (2026-08-14) and merged.** Sixteen primitives on `/dev/gallery`, reviewed against the V1.2 bundle with no issues raised; **all five gate rulings resolved** — two of them turned out not to be what the gate list said. Three fixes applied (`--type-body-default` → `--type-body-para`/`-detail`, `StatusDot` `degraded` → `failing`, and `npm run dev` now loads `.env`), gate re-run **green: 92 tests, 20 files, exit 0**.
 >
@@ -14,7 +16,7 @@
 >
 > ⚠️ **One honest limit on the `test` rotation.** Per lesson §2.16 a revocation is proved by the OLD key failing, not the new one working — and **the old `test` string was overwritten before it was captured**, so that negative test could not be run. Neon's dialog asserts the old password is invalid; nothing here demonstrates it. **The `main` rotation was proved properly; this one is asserted.**
 >
-> **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. **Nothing is pinned for Matt.**
+> **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. **Nothing infrastructural is pinned for Matt; two design items are** — the scaffolding brainstorm and §6.4 A3.
 >
 > Behind it: SP1 T12–T15 still outstanding (mock-layer re-extraction, minimal admin UI).
 
@@ -30,11 +32,15 @@
 
 > **The residual risk that came with that ruling, stated plainly:** a live Neon `test` credential now sits in a **public** repo's secret store. It is not readable back and is withheld from fork PRs, but **anyone with write access can exfiltrate it via a workflow.** The blast radius is the `test` branch only — not `main` — and that branch is already the one whose rotation is asserted rather than proved.
 
-### Matt — nothing urgent, two whenever
+### Matt — four, and the first one gates Claude
 
-**1. Two SP4 decisions, not yet needed.** Extraction runtime (Node / Python sidecar / smart mode — the largest open question in the stack) and the blob provider.
+**1. 🟡 NEW — the ingestion scaffolding brainstorm, which gates B3 for SP3.** `docs/Pinned-Ingestion-Scaffolding.md`, four proposals. **It is a shorter conversation than it was yesterday:** Proposals 2 (candidate scrape) and 3 (hard ingestion window) were both shapes for surviving the duration ceiling, which the §9.6 ruling dissolves. What is left is mostly Proposal 1 (scaffolding for the mechanical layer) and Proposal 4 (mechanical and smart as first-class modes) — and 4 is entangled with the SP4 extraction-runtime decision below.
 
-**2. `THOUGHTS.md`** — whether the two live ideas become real backlog items.
+**2. 🟡 NEW — §6.4 A3: does source health move in front of the GO gate?** `Region A.2 : Status Bar` rules `Pri 4` — higher than the shell that contains it — and §6 currently puts health in SP7, *after* SP6. **The tension is whether the gate's number means anything:** SP6 measures volume and Interested-per-hundred, known risks record four silent-failure instances across three platforms, and nothing in the sequence would distinguish a quiet market from a dead source. Proposed: a read-only liveness surface before SP6, not alarms. **A slice-boundary change, so it is Matt's.** If declined, SP6 must name how source liveness gets verified instead.
+
+**3. Two SP4 decisions, not yet needed.** Extraction runtime (Node / Python sidecar / smart mode — the largest open question in the stack) and the blob provider.
+
+**4. `THOUGHTS.md`** — whether the two live ideas become real backlog items.
 
 ### ✅ Ruled 2026-08-15 — where long ingestion runs
 
@@ -46,9 +52,9 @@
 
 ### Claude — next session, in this order
 
-1. **B3 for SP3** — now unblocked. Two things the ruling hands it: a scoped run needs defined behaviour when the operator asks for more than fits (bound the inputs or stop gracefully — not a 300-second death mid-write), and the invocation needs a surface a human can reach, which lands on **T12–T15's admin UI** rather than a second one.
-2. **Per-preview DB branching** (workflow spec §8, six steps). **Until it is done every preview deployment writes to the production database.** Prerequisite is met (compute default now 0.25→8, so new branches are born right) **and it is no longer Matt's to click** — the browser extension works, so Claude can drive it.
-3. **§6 slice-order reconciliation** — unblocked by Q3. Two inputs to apply: `Shell A`/`Region A.1` dropped to `Pri 3`, so **§6 must now state "build the shell first" on its own** rather than inheriting it from a score; and `Screen 7` rose to `Pri 4` and **must not move earlier** — its `PARKED` marker holds it.
+1. **B3 for SP3** — now unblocked by the §9.6 ruling, **but still gated on the ingestion scaffolding brainstorm**, which is Matt's and lands *in* the plan rather than after it. Two things the ruling hands it: a scoped run needs defined behaviour when the operator asks for more than fits (bound the inputs or stop gracefully — not a 300-second death mid-write), and the invocation needs a surface a human can reach, which lands on **T12–T15's admin UI** rather than a second one.
+2. ⏸ **Per-preview DB branching** (workflow spec §8, six steps). **Until it is done every preview deployment writes to the production database.** **Attempted 2026-08-15 and stopped on a blocker that is not a permanent one: the Chrome extension is not connected** (two attempts, zero connected browsers; it worked 08-14, likely a restart). **Everything around it is prepared** — before-state captured (18 vars, all three environments), `vercel integration list` confirmed project-scoped so the entry-208 near-miss is designed out, and dashboard-only re-verified on CLI v54. **The Vercel CLI IS installed (54.0.0)**, so §8's real proof — a throwaway preview deploy — is now drivable, which it was not when §8 called it out of scope.
+3. ~~**§6 slice-order reconciliation**~~ ✅ **DONE 2026-08-15 — Plan of Action §6.4.** **No slice moved.** Both named inputs applied: shell-first is now a **stated hard dependency** rather than an inherited score, and parked nodes are excluded **by marker, not number** (`Screen 7` and `View 2.2` both rule `Pri 4` and would otherwise jump ahead of shipping work). §4's list of hard ordering constraints **was incomplete and gained a third** — containment. §6.0's flag closed; the radar stays in SP8. **One finding went to Matt — see A3 below.**
 4. **SP1 T12–T15** — re-extraction, minimal admin. **Coupled to item 1 now**, since the manual scrape needs somewhere to live.
 5. **SP6 preconditions** — recessed-section primitive, spacing/shadow layers, `Button` danger-primary.
 
@@ -154,7 +160,8 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 | **Which blob provider** — Vercel Blob / S3 / R2 | **SP4** |
 | ~~**Where long ingestion runs**~~ | ✅ **RULED 2026-08-15 — on Vercel, invoked by hand, operator sets the scope.** Not one of the three options; it removes the constraint that made them necessary. **Unattended ingestion deferred to SP7 and does not exist before then.** Workflow spec §9.6 |
 | ~~Doc storage on filesystem~~ · one-database-per-firm · auth in V1 | **Auth got sharper — it is a public URL now, not one laptop** |
-| Ingestion scaffolding brainstorm | **SP3** |
+| 🟡 **Ingestion scaffolding brainstorm — now the last gate on B3 for SP3.** Shorter than it was: the §9.6 ruling dissolves Proposals 2 and 3, leaving mostly 1 and 4, and 4 is entangled with the extraction-runtime decision | **SP3 — blocking** |
+| 🟡 **NEW — §6.4 A3: source health in front of the GO gate?** `Region A.2` rules `Pri 4`; §6 puts health in SP7, after SP6. A slice-boundary change, so it is Matt's. If declined, SP6 names how source liveness gets verified instead | **SP6's number** |
 | ~~Prototype V1.2 — wordmark, mobile breakpoints~~ | ✅ **Both closed 2026-08-13.** V1.2 landed and was verified against V1.1 rather than trusted (colours 132→132, media queries 0→0, `display:flex` 74→73 — exactly the one disclosed wrapper). **The wordmark item turned out to be a deletion, not a design** — the logo already existed; only the 8px placeholder *label* was provisional. **Mobile ruled desktop-only** by measurement, not instinct; a separate mobile client is now plan of record |
 | 📎 **`THOUGHTS.md`** — ✅ **tracked 2026-08-14**, committed verbatim. Four ideas from 08-11. **Two bear on open questions:** *levels of research and qualifying against that research* collides with the qualification work spec §1.1 parks as **undesigned** — note the collision, don't resolve it — and *what analysis 20+ years of historical data enables* is real against the 2,160-contract corpus (Illinois backtests to 2018). The other two are V2-shaped, past SP8. **Still to decide: promote the live two into backlog, or leave filed** | Nothing |
 

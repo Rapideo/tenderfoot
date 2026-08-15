@@ -41,7 +41,11 @@ Component IDs throughout (`0A`, `2B`, `5C`…) refer to the build inventory. Sec
 - A **priority** per area
 - A **complete set of user stories**
 
-That is richer than the playbook's input #2 and it carries sequencing information the original format did not. Consequence: **§6's slice ordering is now a proposal to reconcile against Matt's priorities, not a fixed plan.** Where his effort/impact ranking disagrees with the dependency graph, the dependency graph wins only on hard ordering constraints (§2.2 entity FKs, §3.1 `since`); everything else defers to his priority.
+That is richer than the playbook's input #2 and it carries sequencing information the original format did not. Consequence: **§6's slice ordering is now a proposal to reconcile against Matt's priorities, not a fixed plan.** Where his effort/impact ranking disagrees with the dependency graph, the dependency graph wins only on hard ordering constraints; everything else defers to his priority.
+
+**The hard ordering constraints, and there are three.** §2.2 entity FKs · §3.1 `since` · **containment — a shell is built before the views rendered inside it.** The third was added 2026-08-15 by the §6.4 reconciliation: it had been invisible while `Shell A` carried a placeholder `Pri 5` that sorted correctly for the wrong reason, and only became visible when Matt's real ruling put it at `Pri 3`. **A list of exceptions that has never been tested against a disagreement is not known to be complete** — this one was written on 08-04 and was two-thirds complete for eleven days, because nothing disagreed with it until the placeholder scores became rulings.
+
+> ✅ **The reconciliation this line calls for ran on 2026-08-15 — see §6.4.** No slice moved. It could not run before 08-14, because until then the "priorities" it reconciles against were Claude's placeholders rather than Matt's rulings.
 
 ---
 
@@ -330,6 +334,54 @@ From SP5 onward, every scorer change re-runs the backtest and compares against t
 
 This is why 5A and 3I get built as infrastructure in SP5–SP6 rather than as features later.
 
+### 6.4 Slice order reconciled against the ruled scores — 2026-08-15
+
+**The pass §4 called for, and it could not run until 2026-08-14.** §4 says *"§6's slice ordering is now a proposal to reconcile against Matt's priorities, not a fixed plan"* — but the priorities were Claude's placeholders until Matt ruled all twenty SVRC nodes on 08-14 (v0.6.0, fourteen moved). This is the first time the reconciliation has had a real input.
+
+**The rule being applied**, from §4: where Matt's ranking disagrees with the dependency graph, **the dependency graph wins only on hard ordering constraints; everything else defers to his priority.**
+
+**Result: no slice moves.** The sequence SP0 → SP1 → SP1.5 → SP2 → SP3 → SP4 → SP6 → SP7 → SP8 stands as written. Two amendments are applied to *how §6 justifies itself*, one finding is proposed for Matt's ruling, and one tension is recorded so it is not rediscovered.
+
+#### A1 — "Build the shell first" is now a stated dependency, not an inherited score. **Applied.**
+
+`Shell A` and `Region A.1 : Main Header` both rule at **`Pri 3`**. Eight nodes rule higher, and `View 1.1 : The Queue` and `View 6.2 : Source Registry` both rule `Pri 5`. **Sorted by priority, the queue would be built before the frame it renders inside** — which is absurd for a reason that has nothing to do with priority.
+
+**The scores are correct and must not be adjusted to fix this.** KP does not want a header; they want the queue. `Pri 3` is a true statement about the product, and lowering or raising it to make a planning document sort correctly is precisely the circularity Q1 outlawed on 08-13.
+
+> **So §6 states the constraint on its own authority: the shell is built before the views it contains.** This is a **third hard ordering constraint**, and §4 lists only two — §2.2 entity FKs and §3.1 `since`. **§4's list was incomplete, and the `Pri 3` ruling is what exposed it.** A containment relationship is a hard constraint in exactly the way a foreign key is; it was invisible while the shell carried a placeholder `Pri 5` that happened to sort right for the wrong reason.
+
+#### A2 — Parked nodes are excluded by their marker, never by their number. **Applied.**
+
+Two parked nodes now carry **`Pri 4`** — `Screen 7 : Pipeline Board` (raised from `Pri 1`) and `View 2.2 : Scores and Evidence`. **Both now outrank every `Pri 3` node that does ship**, including `View 2.1 : Brief`, `View 2.4 : Documents`, `View 4.1 : Organizations` and `View 4.2 : Vendors`.
+
+**Any Pri-derived ordering would pull both in front of shipping work.** The SVRC's scoring key already rules the fix — *"planning excludes a parked node by that marker, not by its number"* — and names this document as the consumer. **§6 now says so explicitly rather than depending on a reader of the SVRC having seen it.**
+
+> `Screen 7` is the clean case: **its number went up and its schedule did not move.** That is the whole purpose of separating the marker from the score, and it is worth noting the two parked nodes were parked for *different causes* — `View 2.2` by the V1 scoring decision (spec §1.1), `Screen 7` by a phase deferral (§9). The marker handled both without amendment.
+
+#### A3 — Source health may need to precede the gate, not follow it. **Proposed — Matt's ruling.**
+
+`Region A.2 : Status Bar` rules **`Pri 4`** — **higher than the shell that contains it and higher than the main header.** Its two children are the Source Health Indicator and Last Run. §6 currently places health alarms in **SP7**, which is *after* SP6's GO / NO-GO.
+
+**The tension is not about priority, it is about whether the gate's number means anything.** SP6 must produce volume per source per week and Interested-per-hundred per source (§6.-1). **Known risks record four silent-failure instances across three source platforms.** A GO / NO-GO measured during a window in which a source was silently dead is not a measurement of the market; it is a measurement of an outage, and nothing in the current sequence would reveal which one had happened.
+
+| | |
+|---|---|
+| **What is proposed** | A minimal source-health surface — is each source up, when did it last run — lands **before SP6**, not in SP7. Not alarms, not alerting: the read-only indicator `Region A.2` already describes |
+| **Why it is not just moved** | It is a slice-boundary change and therefore Matt's, not Claude's. `View 5.2 : Source Yield` (`Pri 4`) is already in SP3's demo criterion, so part of the surface may exist by then and the increment could be small |
+| **If declined** | SP6's gate stays valid only if source liveness is verified some other way during the measurement window, and that method should be named at SP6 rather than assumed |
+
+#### A4 — An `Imp 5` node sits behind the gate. **Recorded, no change proposed.**
+
+Four nodes rule `Imp 5`: `View 1.1 : The Queue` (SP6), `View 2.3 : Extracted Fields` (SP4), `View 6.1 : Firm Profile` (SP1) — and **`View 5.1 : Market Sizing`, which sits in SP8, behind a GO.** Three of the four most important things in the product are built before the gate and the fourth is conditional on passing it.
+
+**This is judged correct and left alone.** Market sizing is a claim about a population, and the population does not exist until ingestion has run for a while — the dependency is real rather than administrative. **And SP6 already discharges part of it**: volume per source per week and Interested-per-hundred are required outputs of the gate itself, so the first market-sizing numbers arrive with the gate rather than after it.
+
+> Recorded here because an `Imp 5` behind a conditional gate is the kind of thing that gets rediscovered as a surprise at SP6. **It is a known and accepted position, not an oversight.**
+
+#### Closing §6.0's flag
+
+§6.0 was raised on 08-10 and marked *"flagged for the same reconciliation pass as the rest of §6."* **This is that pass.** Matt resolved the substance on 08-10 — the Expiration Radar stays in SP8 — and the ruled score now independently agrees: `View 3.1 : Expiration Radar` rules **`Pri 4`, not `Pri 5`**, so nothing in the priorities argues for pulling it in front of the gate. **§6.0's flag is closed, its ruling stands, and the three consequences recorded under it (sector-weighting, the SP1 demo-criterion fold-in, the Medicaid cliff as SP8's fixture) are unaffected.**
+
 > **There is no scorer in V1, so there is no scorer regression gate.** What replaces it is narrower and still worth having: **ingestion regression.** A source that silently returns fewer records than last run is the V1 equivalent of a scorer regression — invisible, and a direct hit on the one pain V1 exists to solve. Spec §5.4 already requires instrumenting for source rot; that instrument *is* the regression gate for V1, and it should be built in SP3 rather than inherited later.
 
 ---
@@ -378,7 +430,7 @@ Everything else is buildable without blocking on him.
    scoring artifact is obsolete. Two losses recorded in §A2 rather than absorbed: the negative
    profile has no source until V1 accumulates decisions, and inter-rater agreement will never be
    measured.
-7. **Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline. **Note the radar's position improves under the V1 decision:** with the matching engine parked, the argument that SP8 sits behind a scorer that must be proven first no longer applies, and §6.0's "third option" — loading the contract register into the graph early — becomes the obvious call rather than a compromise.
+7. ~~**Claude:** reconcile §6's slice order against Matt's priorities — including the §6.0 tension about where the Expiration Radar belongs; draft the workflow spec from the stack outline.~~ ✅ **DONE 2026-08-15 — see §6.4.** Both halves closed: the workflow spec was drafted 2026-08-12, and the reconciliation ran against Matt's 08-14 rulings. **No slice moved.** Two amendments applied (shell-first is now a stated dependency; parked nodes excluded by marker, not number), **one finding proposed for Matt — source health before the gate rather than in SP7 (§6.4 A3)** — and one tension recorded. **§6.0's flag is closed and the radar stays in SP8**, which the ruled `Pri 4` independently agrees with. The note below stands as written and was not the deciding argument.
 8. ~~**Claude, unblocked:** test whether one licensed platform retains closed solicitations.~~ ✅ **Done 2026-08-12. The answer is yes, and it changes an assumption.** **Illinois/Periscope retains 2,155 closed solicitations back to 2018-02-23, anonymously, with awarded vendor on the row** — so solicitation-side backtesting is *not* federal-only, which is what the spec had assumed. Michigan/CGI Advantage browses anonymously and returns 3,762 award-history records; closed-solicitation retention is indicated there but unproven. **Ohio/Ivalua is gated behind a CAPTCHA and is not a tier-3 adapter candidate as things stand.** Recorded in spec §5.7, §5.8, and §10.1–10.2.
 9. **Then:** the bake-off.
 10. ~~**Claude, next — SP1.5, the Postgres port.**~~ ✅ **Done and merged 2026-08-13** (`703ea77`). Plan written first, then executed as nine reviewed batches, a whole-branch review, a fix wave and a scoped re-review. **Scope held** — Express, the blob provider and the ingestion runtime all stayed open and out of it.
