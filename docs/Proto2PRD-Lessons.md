@@ -287,6 +287,24 @@ Three consecutive changes to an adopted reference document. Re-pointing one node
 
 **Why not promoted yet.** Two instances now, one of them strong, and it is close kin to §2.17 — all three are cases where the visible surface (instances; diff size; the flagged list) is not the surface where the defect lives. **Candidate title if they merge: *auditing the wrong surface*.** Worth one more observation before promoting, and it is close.
 
+### 2.19 A predicted success signal is a claim that expires, and it fails toward "broken"
+
+**Observed 2026-08-15, and it cost most of a session.**
+
+Workflow spec §8 recorded a six-step dashboard procedure for per-preview database branching, written 2026-08-13 *without executing it*. Two of the six were wrong by the time they were run, and the two failures had opposite signs.
+
+**The procedural half — wrong, and it looked like a broken tool.** §8 listed "toggle Preview on" and "confirm *resource must be active* is also on" as independent steps 4 and 5. They are **ordered**: the branch checkboxes render `disabled` until the second is switched on. Because the dialog's inputs are **1×1 `sr-only` checkboxes behind styled labels**, a disabled control absorbs clicks in complete silence — element-reference clicks resolved to the 1px input and did nothing, coordinate clicks missed and dismissed the dialog. Every symptom pointed at flaky browser automation. **The prior session had already recorded this as an environment problem and handed it to a human**, which is §2.15's failure exactly: a refusal recorded as a property. The actual state was one boolean away and readable the whole time.
+
+**The verification half — wrong in the more dangerous direction.** §8 predicted the environment-variable list would *narrow* from `Production, Preview, Development` to `Production, Development`, and stated: *"If they still read all three environments after saving, the toggle did not take effect."* The save landed correctly and **the list did not narrow** — the stored values persist and are overridden per-deployment. Followed literally, **the recorded check would have reported a correct save as a failure**, prompting a retry of a change that was already done.
+
+**And the change was still inert.** The real proof — deploy a preview, ping it, read production — showed **no database branch was created** and the preview wrote straight to production. The cause was outside the procedure entirely: the project has **no connected Git repository**, and the feature keys off *Git* preview deployments. §8 could not have known this on 08-13, because the repository did not exist until 08-15.
+
+**Proposed generalisation.** A procedure written from documentation rather than execution carries **two** perishable claims: the steps, and *the signal that says the steps worked*. The steps fail loudly and get fixed. **The predicted signal fails silently, is trusted precisely when the operator is least able to judge it, and is what a later session will reason from.** Worse, both failure modes here were **conservative-looking** — one said "the control is broken", the other said "the save failed" — so both pushed toward redoing work rather than toward a false all-clear. **A wrong success criterion does not merely fail to confirm; it actively manufactures a false negative, and a false negative is indistinguishable from an unfinished task.**
+
+**The check that catches it.** When recording an unexecuted procedure, mark the expected-result clause as **unverified**, distinctly from the steps — and on execution, verify the *end state* by an instrument that does not depend on the procedure's own predictions. Here the honest instrument was querying the database directly, which answered in one statement what the environment-variable list could not answer at all. **If a claimed success signal has never once been observed firing, it is a hypothesis wearing a checklist's clothes.**
+
+**Why not promoted.** One instance, though a rich one, and it overlaps three existing lessons without being any of them — §2.15 (a single observation in either direction), §2.16 (verifying the wrong thing), §2.17 (a documented hazard is not a mitigated one). **The distinct claim here is about the shelf-life of a *prediction* embedded in a procedure**, which none of those three make. Worth a second instance before promoting; the natural one would be any other spec step written ahead of its execution.
+
 ---
 
 ## 3. Watch items — open questions about the method itself
