@@ -39,7 +39,7 @@ import {
 } from "../primitives";
 import type { ButtonVariant, StatusDotState } from "../primitives";
 
-const STATUS_STATES: StatusDotState[] = ["ok", "degraded", "rot", "off"];
+const STATUS_STATES: StatusDotState[] = ["ok", "failing", "rot", "off"];
 
 /* Comparison affordance (task-9-brief.md step 3): the exact frozen-bundle
  * filename, cited once here rather than re-typed (and risking a typo) in
@@ -186,7 +186,7 @@ const STANDING_NOTE = (
  * (health: "Failing") is the one "DEGRADED" -- the bundle's own counts,
  * reproduced, not computed here. lastRun is the bundle's own literal
  * timestamp (V1.2, index ~617384). The healthy variant is not a bundle
- * instance (V1.2 ships only the degraded one) -- task-8-brief.md step 3
+ * instance (V1.2 ships only the failing one) -- task-8-brief.md step 3
  * requires it anyway, so 0/0 is shown labelled as the counterfactual it is,
  * same discipline ScoreStrip's "V1 RENDERS THIS STATE" label already
  * establishes for a state the bundle does not itself render. */
@@ -556,7 +556,7 @@ export function Gallery() {
 
         <div className="gallery-section gallery-statusbar-item">
           <MicroLabel>V1 RENDERS THIS STATE -- THE BUNDLE'S OWN COUNTS</MicroLabel>
-          <StatusBar sources={4} degraded={1} rotSuspected={1} lastRun={STATUS_BAR_LAST_RUN} />
+          <StatusBar sources={4} failing={1} rotSuspected={1} lastRun={STATUS_BAR_LAST_RUN} />
         </div>
 
         <div className="gallery-section gallery-statusbar-item">
@@ -564,7 +564,7 @@ export function Gallery() {
             A HEALTHY STATE -- 0 DEGRADED, 0 ROT SUSPECTED (not a bundle instance; task-8-brief.md
             step 3)
           </MicroLabel>
-          <StatusBar sources={4} degraded={0} rotSuspected={0} lastRun={STATUS_BAR_LAST_RUN} />
+          <StatusBar sources={4} failing={0} rotSuspected={0} lastRun={STATUS_BAR_LAST_RUN} />
         </div>
 
         <div className="gallery-section">

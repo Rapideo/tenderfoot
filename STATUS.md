@@ -2,7 +2,9 @@
 
 **Updated 2026-08-14.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now: SP2 is built and waiting on Matt's sign-off.** Sixteen primitives on `/dev/gallery`, **26 commits** on `sp2-design-system`, gate green (**92 tests, 20 files**), whole-branch review clean. **Deliberately not merged** — the sign-off gate *is* the slice.
+> **Now: SP2 is SIGNED OFF (2026-08-14) and clear to merge.** Sixteen primitives on `/dev/gallery`, reviewed against the V1.2 bundle with no issues raised; **all five gate rulings resolved** — two of them turned out not to be what the gate list said. Three fixes applied (`--type-body-default` → `--type-body-para`/`-detail`, `StatusDot` `degraded` → `failing`, and `npm run dev` now loads `.env`), gate re-run **green: 92 tests, 20 files, exit 0**.
+>
+> **Also closed today:** all three of `three_open_questions.md`, and the full twenty-node SVRC `Imp`/`Pri` re-score (v0.6.0, fourteen moved).
 >
 > **Credential rotation is HALF done.** `main` is rotated and verified: old string dead, new one live, **201 solicitations intact**, full gate green on the new credential. **The `test` branch is still on the leaked password and still connects.**
 >
@@ -52,19 +54,27 @@
 
 ---
 
-## Waiting for Matt at the SP2 gate — five rulings, none of them defects
+## ~~Waiting for Matt at the SP2 gate~~ — ✅ SIGNED OFF 2026-08-14
 
-Run `npm run dev`, open `/dev/gallery`. **Read the second paragraph first** — it names two decoy bundle files that sit beside the real one; only **V1.2** is the parity reference.
+**Matt drove `/dev/gallery` against the V1.2 bundle and passed the visual review with no issues raised.** The five rulings were then walked through individually and all resolved. **Two of the five were not what the gate list said they were.**
 
-| | |
+| Ruling | Outcome |
 |---|---|
-| **98 type tokens** | 88 font shorthands + 10 tracking. Not a scale — a census. `--type-body-*` alone has 25 thin variants. **Merging them would break the parity §7.10 ranks above elegance**, so nobody did |
-| **No spacing layer, no shadow layer** | The same gap typography had before Task 1. Every primitive inlines bundle-faithful literals; `Card`'s shadow uses `rgba` because there is no token for it |
-| **`StatusDot`: `rot` = yellow, `degraded` = red** | Faithfully transcribed from the bundle. Possibly backwards *in the prototype* |
-| **`--brddash` is misnamed** | Named for dashed borders, commented "empty states" — but the bundle uses it for placeholders and drop zones and **never** for an empty list, which uses `--brdctl3` |
-| **Gaps in `Button`** | A **danger primary** exists in the bundle uncovered by the prop set; two singleton styles left out as below the 3× recurrence bar |
+| **98 type tokens** | ✅ **Census accepted, one name fixed.** Measured: **17 of 88 font tokens are actually consumed**; the 25-member `--type-body-*` family is 7 sizes × 8 leadings, of which **four are used**. Kept as a census — parity outranks elegance and 17/88 means nobody yet knows which survive a real screen. **But `--type-body-default` (12.5px, 7 uses) was outweighed by `--type-body-default-2` (11px, 11 uses)** — a token named "default" that wasn't, beside the family's most-used member hidden behind a positional `-2`. Renamed **`--type-body-para`** and **`--type-body-detail`**, *in the generator as well as the emitted file* |
+| **No spacing layer, no shadow layer** | ✅ **Accepted, with a date instead of a "later."** Extract when the second consumer appears; sixteen primitives and **zero composed screens** cannot distinguish systematic spacing from incidental. `Card`'s `rgba` shadow has exactly one consumer. **Now a named SP6 precondition** |
+| ~~**`StatusDot`: `rot` = yellow, `degraded` = red**~~ | ✅ **Not backwards — the colours were right and the NAME was wrong.** The bundle is coherent: *"Rot suspected"* is a suspicion and warns yellow; *"Failing"* is confirmed and errors red. The apparent inversion came from the state being called **`degraded`**, picked *"by elimination"* rather than from the bundle — and "degraded" reads as *less* severe than "rot." **Renamed `degraded` → `failing`** to match the bundle's own label. TypeScript union member: **zero parity impact, nothing rendered changed.** The four states now read green/yellow/red/grey in plain ascending severity |
+| ~~**`--brddash` is misnamed**~~ | ✅ **Already fixed; struck from the list.** It is `--line-dashed` now with the description corrected, `--brddash` retained as one of ~16 bundle-name aliases. **Nothing consumes either** — the only dashed affordances are the two unimplemented singletons. This row was stale |
+| **Gaps in `Button`** | ✅ **Danger-primary deliberately not added.** It is `confirmReason`'s pass branch (`--bad`/`--baddk`), driven by app state rather than any prop — no consumer exists, and building a variant ahead of need is what the 3× recurrence bar prevents. **Deferred to SP6 as a named precondition**, because it is a *destructive confirm* and SP6 composes the decision bar. The two singletons (`toggleDrawer`, dashed "+ New view") stay out unless they recur |
 
-**One known gap, ruled not gate-blocking:** the bundle's `COST TO PURSUE` panel sits in a **recessed** wrapper (`--surface3`) that no primitive expresses, so the gallery shows it on plain white. Colour difference is near-imperceptible; **the real gap is that no "recessed section" primitive exists** — needs one before SP6 composes a real screen.
+### SP6 preconditions — three items, one gate
+
+Named together so they cannot be rediscovered piecemeal. **None block the SP2 merge; all three block SP6 composing a real screen.**
+
+| | Why it waits for SP6 |
+|---|---|
+| **A "recessed section" primitive** | The bundle's `COST TO PURSUE` panel sits in a `--surface3` recessed wrapper no primitive expresses, so the gallery draws it on plain white. Colour difference is near-imperceptible — **the real gap is the missing primitive, not the colour** |
+| **Spacing + shadow token layers** | Extract when a composed screen shows which values are systematic |
+| **`Button` danger-primary** | A destructive confirm; decide the affordance when the decision bar exists |
 
 ## Infrastructure — live, re-read from the account 2026-08-14
 
@@ -85,7 +95,7 @@ Run `npm run dev`, open `/dev/gallery`. **Read the second paragraph first** — 
 
 | | Blocks |
 |---|---|
-| 🔴 **The SP2 sign-off gate.** `npm run dev` → `/dev/gallery`. **Read the second paragraph first** — it names two decoy bundle files beside the real one; only **V1.2** is the parity reference. **Five rulings** listed above, none of them defects | **Merging SP2** |
+| ~~🔴 **The SP2 sign-off gate**~~ | ✅ **SIGNED OFF 2026-08-14.** Gallery reviewed against V1.2, no issues raised; all five rulings resolved above. **SP2 is clear to merge** |
 | ~~`three_open_questions.md`~~ ✅ **ALL THREE CLOSED 2026-08-14.** Q1 `Pri` = product priority · Q2 parked nodes keep their scores and carry a `PARKED` marker · Q3 all twenty re-scored, **fourteen moved**. `Imp`/`Pri` are rulings now, not placeholders. **The §6 slice-order reconciliation is unblocked** | ~~Slice order from SP3 on~~ — now Claude's |
 | ~~User stories~~ | ✅ **93 drafted 2026-08-12** — `docs/user-stories-source.html` and the published story map. Yours to edit |
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |

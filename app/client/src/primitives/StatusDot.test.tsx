@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { StatusDot } from "./StatusDot";
 
-const STATES = ["ok", "degraded", "rot", "off"] as const;
+const STATES = ["ok", "failing", "rot", "off"] as const;
 
 test("renders every state via tokens, not inline values", () => {
   for (const state of STATES) {

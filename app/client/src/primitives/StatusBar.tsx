@@ -53,27 +53,27 @@ import "./StatusBar.css";
  *
  * The dot is a static literal in the bundle -- background:var(--yellow),
  * never a template binding, the ONLY footer instance in all of V1.2. It is
- * not recomputed from degraded/rotSuspected here either: inventing a
+ * not recomputed from failing/rotSuspected here either: inventing a
  * health-conditional colour (green when both are 0, say) would be a
  * mechanism the bundle never shows, the same discipline Ruling 12 applied
  * to --signal-neg's claimed third job. Flagged for the gate: a shipped
  * product may well want this dot to react to the counts beside it: V1.2
  * gives no evidence either way, so nothing is built here beyond what is
  * shown. Not reused from StatusDot: that primitive couples colour to a
- * `state` prop, and its state named "degraded" means something else
- * entirely (StatusDot's degraded = "Failing" = --signal-neg/red; this dot
+ * `state` prop, and its state named "failing" means something else
+ * entirely (StatusDot's failing = "Failing" = --signal-neg/red; this dot
  * is always --yellow) -- reusing it here would either mislabel the
  * accessible name or silently repurpose an enum this task does not own. */
 const VERSION_STAMP = "TENDERFOOT 0.1.2 · MOCKUP";
 
 export function StatusBar({
   sources,
-  degraded,
+  failing,
   rotSuspected,
   lastRun,
 }: {
   sources: number;
-  degraded: number;
+  failing: number;
   rotSuspected: number;
   lastRun: string;
 }) {
@@ -82,7 +82,7 @@ export function StatusBar({
       <button type="button" className="status-bar__counts">
         <span className="status-bar__dot" />
         <span className="status-bar__label">
-          {`${sources} SOURCES · ${degraded} DEGRADED · ${rotSuspected} ROT SUSPECTED`}
+          {`${sources} SOURCES · ${failing} DEGRADED · ${rotSuspected} ROT SUSPECTED`}
         </span>
       </button>
       <span className="status-bar__divider" />

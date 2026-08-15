@@ -125,7 +125,11 @@ It should show zero proudly. An empty queue is the goal state, not an empty stat
 
 ### Region A.2.1 : Source Health Indicator
 
-Green, degraded, or failing, deep-linking into the Source Registry (`4J`). Derived from the per-source yield figures §5.4 requires the adapters to record.
+~~Green, degraded, or failing~~ — **corrected 2026-08-14 at the SP2 sign-off gate. Four states, not three, and "degraded" was never one of them.** The bundle's own Source Registry vocabulary is **`Healthy` (green) · `Rot suspected` (yellow) · `Failing` (red) · `Not ingested` (grey)**, and the built `StatusDot` now uses those names exactly.
+
+**The discarded word caused a real false alarm.** `degraded` had been invented here, bound in code to the bundle's *"Failing"*, and carried to the sign-off gate as a suspected colour inversion — because "degraded" reads as *less* severe than "rot," so degraded=red beside rot=yellow looks backwards. **It never was.** A suspicion warns; a confirmed failure errors. **Inventing a state name next to a source that already had one is what produced a bug report about a bug that did not exist.**
+
+Deep-links into the Source Registry (`4J`). Derived from the per-source yield figures §5.4 requires the adapters to record.
 
 ### Region A.2.2 : Last Run
 

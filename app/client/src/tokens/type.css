@@ -128,7 +128,18 @@
   --type-subhead-note:        500 12.5px/1.45 'IBM Plex Sans';  /* note title
      * 1 use in V1.2 */
 
-  /* ---- BODY -- sans 400, prose and secondary copy, largest first ----------------- */
+  /* ---- BODY -- sans 400, prose and secondary copy, largest first.
+   * 25 tokens over 7 sizes and 8 leadings: a CENSUS of the bundle, not a
+   * scale. Four are consumed by the SP2 primitives. Do not read any member
+   * as a default -- there isn't one, which is why the two that used to say
+   * so were renamed at the sign-off gate (2026-08-14):
+   *   --type-body-default   (12.5px,  7 uses) -> --type-body-para
+   *   --type-body-default-2 (11px,   11 uses) -> --type-body-detail
+   * The one named "default" was outweighed 11 to 7 by the one named "-2",
+   * so the name pointed at the wrong token and the positional suffix hid
+   * the family's most-used member. Renamed HERE, in the generator, because
+   * renaming only the emitted file would mint the old names back on the
+   * next run --- */
   --type-body-buyer:          400 14px/1.5 'IBM Plex Sans';  /* buyer name under a title
      * 1 use in V1.2 */
   --type-body-summary:        400 14px/1.6 'IBM Plex Sans';  /* queue-cleared summary paragraph
@@ -153,7 +164,7 @@
      * 4 uses in V1.2 */
   --type-body-list:           400 12.5px/1.55 'IBM Plex Sans';  /* list-row prose (citation, editor preview)
      * 3 uses in V1.2 */
-  --type-body-default:        400 12.5px/1.6 'IBM Plex Sans';  /* a common paragraph style (empty state, citation, posture-why)
+  --type-body-para:           400 12.5px/1.6 'IBM Plex Sans';  /* a common paragraph style (empty state, citation, posture-why)
      * 7 uses in V1.2 */
   --type-body-decision:       400 12px/1 'IBM Plex Sans';  /* last-decision toast text
      * 1 use in V1.2 */
@@ -175,7 +186,7 @@
      * 3 uses in V1.2 */
   --type-body-field:          400 11px/1.35 'IBM Plex Sans';  /* field label
      * 1 use in V1.2 */
-  --type-body-default-2:      400 11px/1.4 'IBM Plex Sans';  /* the most common note/detail line (deadlineIn, valueNote, conflictASrc) -- highest use-count of any BODY-family token (11)
+  --type-body-detail:         400 11px/1.4 'IBM Plex Sans';  /* the most common note/detail line (deadlineIn, valueNote, conflictASrc) -- highest use-count of any BODY-family token (11)
      * 11 uses in V1.2 */
   --type-body-note-sm:        400 11px/1.5 'IBM Plex Sans';  /* small note text
      * 3 uses in V1.2 */

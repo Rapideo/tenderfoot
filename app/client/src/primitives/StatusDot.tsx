@@ -1,6 +1,6 @@
 import "./StatusDot.css";
 
-export type StatusDotState = "ok" | "degraded" | "rot" | "off";
+export type StatusDotState = "ok" | "failing" | "rot" | "off";
 
 /* Accessible names reuse the bundle's own Source Registry vocabulary
  * verbatim (health: "Healthy" | "Failing" | "Rot suspected" | "Not
@@ -8,7 +8,7 @@ export type StatusDotState = "ok" | "degraded" | "rot" | "off";
  * state-to-bundle-value mapping this was matched against. */
 const STATE_LABEL: Record<StatusDotState, string> = {
   ok: "Healthy",
-  degraded: "Failing",
+  failing: "Failing",
   rot: "Rot suspected",
   off: "Not ingested",
 };

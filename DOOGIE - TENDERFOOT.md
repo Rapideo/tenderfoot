@@ -460,3 +460,27 @@ August 14, 2026:
 192. One I'm not fully settled on and it's flagged as such in the node: View 1.2 is now Imp 4 at Conc 45%, lowest completeness in the document. The argument for raising it is that my old 2s meant "haven't thought about this" rather than "doesn't matter" -- but that's Claude reading my intent from a year ago, and it says so. Revisit once anything's designed.
 
 193. Three open questions are closed. That file is history now. Which means the SVRC Imp/Pri review that was gating the section 6 slice-order reconciliation is done, and item 7 is Claude's to pick up. My remaining list is the three Neon console clicks and the SP2 sign-off gate.
+
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+194. Looked at the gallery. Liked everything I saw, no issues. So the visual half of the SP2 gate is done and the five rulings were what was left.
+
+195. Had Claude walk me through all five with a recommendation each, and two of them turned out not to be what the gate list said they were. That's worth more than the fixes.
+
+196. StatusDot was the good one. It was carried to me as "rot=yellow, degraded=red, possibly backwards in the prototype." It isn't backwards. The bundle says Rot suspected -> yellow and Failing -> red, which is exactly right: a suspicion warns, a confirmed failure errors. The problem was that whoever built it invented the state name "degraded" — picked "by elimination," their words — and degraded reads as LESS severe than rot, so the pair looks inverted. Renamed it to failing, which is what the bundle called it in the first place. Nothing rendered changed.
+
+197. That's a lesson about naming, not about colour. Inventing a state name next to a source that already had one produced a bug report about a bug that didn't exist. It cost a gate item and my attention. Also caught that the SVRC's Region A.2.1 said "green, degraded, or failing" — three states, and one of them fictional. Fixed to the four real ones.
+
+198. The type tokens: I'd been told "98, a census not a scale, merging breaks parity." True, and I accepted it. But the number that actually mattered wasn't in the framing — only 17 of the 88 are used by anything, and of the 25-token body family, four. So it's a census of the BUNDLE, not of a system, and there's no point collapsing it until a real screen shows which ones survive.
+
+199. What did need fixing there: --type-body-default was 12.5px with 7 uses, and --type-body-default-2 was 11px with 11. The one called "default" wasn't, and the family's most-used token was hiding behind a positional "-2." Now --type-body-para and --type-body-detail. Renamed in the generator too, because renaming only the output file would mint the old names straight back — which is lesson 2.17 landing on us again, one day after we wrote it.
+
+200. brddash was already fixed and the gate list was just stale. Struck it.
+
+201. Danger-primary button: deliberately not built. No consumer, and building a variant ahead of need is what the 3x recurrence bar is for. But it's a destructive confirm, so it goes on the SP6 list rather than nowhere.
+
+202. Three things now cluster on SP6 — the recessed-section primitive, the spacing/shadow layers, and the danger-primary. Named them together as SP6 preconditions so they can't get rediscovered one at a time.
+
+203. One thing I didn't expect: npm run dev has never loaded .env. The server dies immediately on DATABASE_URL not set. npm run check loads it, dev never did — and "npm run dev then open /dev/gallery" is literally the sign-off procedure written in STATUS. The documented gate procedure was broken and nobody hit it because the gallery is client-only. Fixed.
+
+204. SP2 is signed off. Gate green after all of it — 92 tests, 20 files, exit 0. Clear to merge.

@@ -107,7 +107,18 @@ GROUPS = [
   ("--type-subhead-history",    "500", "12.5", "1.4",  "IBM Plex Sans", "history entry title"),
   ("--type-subhead-note",       "500", "12.5", "1.45", "IBM Plex Sans", "note title"),
  ]),
- ("BODY -- sans 400, prose and secondary copy, largest first", [
+ ("BODY -- sans 400, prose and secondary copy, largest first.\n"
+  "   * 25 tokens over 7 sizes and 8 leadings: a CENSUS of the bundle, not a\n"
+  "   * scale. Four are consumed by the SP2 primitives. Do not read any member\n"
+  "   * as a default -- there isn't one, which is why the two that used to say\n"
+  "   * so were renamed at the sign-off gate (2026-08-14):\n"
+  "   *   --type-body-default   (12.5px,  7 uses) -> --type-body-para\n"
+  "   *   --type-body-default-2 (11px,   11 uses) -> --type-body-detail\n"
+  "   * The one named \"default\" was outweighed 11 to 7 by the one named \"-2\",\n"
+  "   * so the name pointed at the wrong token and the positional suffix hid\n"
+  "   * the family's most-used member. Renamed HERE, in the generator, because\n"
+  "   * renaming only the emitted file would mint the old names back on the\n"
+  "   * next run", [
   ("--type-body-buyer",         "400", "14",   "1.5",  "IBM Plex Sans", "buyer name under a title"),
   ("--type-body-summary",       "400", "14",   "1.6",  "IBM Plex Sans", "queue-cleared summary paragraph"),
   ("--type-body-brief",         "400", "14",   "1.65", "IBM Plex Sans", "brief modal prose (WHAT IT IS / WHY IT FITS)"),
@@ -120,7 +131,7 @@ GROUPS = [
   ("--type-body-label",         "400", "12.5", "1.4",  "IBM Plex Sans", "field label paired with a value"),
   ("--type-body-compact",       "400", "12.5", "1.5",  "IBM Plex Sans", "compact body copy"),
   ("--type-body-list",          "400", "12.5", "1.55", "IBM Plex Sans", "list-row prose (citation, editor preview)"),
-  ("--type-body-default",       "400", "12.5", "1.6",  "IBM Plex Sans", "a common paragraph style (empty state, citation, posture-why)"),
+  ("--type-body-para",       "400", "12.5", "1.6",  "IBM Plex Sans", "a common paragraph style (empty state, citation, posture-why)"),
   ("--type-body-decision",      "400", "12",   "1",    "IBM Plex Sans", "last-decision toast text"),
   ("--type-body-meta",          "400", "12",   "1.35", "IBM Plex Sans", "metadata row (file name, vendor, cycle, M/WBE)"),
   ("--type-body-party",         "400", "12",   "1.4",  "IBM Plex Sans", "counterparty name"),
@@ -131,7 +142,7 @@ GROUPS = [
   ("--type-body-platform",      "400", "11.5", "1.3",  "IBM Plex Sans", "platform/source note"),
   ("--type-body-small",         "400", "11.5", "1.5",  "IBM Plex Sans", "small supporting body text"),
   ("--type-body-field",         "400", "11",   "1.35", "IBM Plex Sans", "field label"),
-  ("--type-body-default-2",     "400", "11",   "1.4",  "IBM Plex Sans", "the most common note/detail line (deadlineIn, valueNote, conflictASrc) -- highest use-count of any BODY-family token (11)"),
+  ("--type-body-detail",     "400", "11",   "1.4",  "IBM Plex Sans", "the most common note/detail line (deadlineIn, valueNote, conflictASrc) -- highest use-count of any BODY-family token (11)"),
   ("--type-body-note-sm",       "400", "11",   "1.5",  "IBM Plex Sans", "small note text"),
  ]),
  ("UI -- sans 500/600, controls and interactive labels", [

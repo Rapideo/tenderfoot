@@ -15,7 +15,7 @@
  *
  * --type-metric-stat is purpose-named for exactly this trio ("stat value
  * under a DEADLINE / EST. VALUE / POSTED microlabel", 4 uses in V1.2);
- * --type-body-default-2 is purpose-named for its sub-caption ("deadlineIn,
+ * --type-body-detail is purpose-named for its sub-caption ("deadlineIn,
  * valueNote", the single highest-use BODY-family token, 11 uses).
  *
  * Padding has no token layer (same as every prior primitive), so it stays
@@ -41,7 +41,7 @@
 }
 
 .fact-tile__sub {
-  font: var(--type-body-default-2);
+  font: var(--type-body-detail);
   color: var(--text-muted);
   margin-top: 4px;
 }

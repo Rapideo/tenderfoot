@@ -12,9 +12,18 @@
  *   Failing       -> var(--bad)   (--signal-neg)
  *   Rot suspected -> var(--yellow)(--signal-watch)
  *   Not ingested  -> var(--text7) (--text-label)
- * mapped onto this component's state names by the literal name match
- * ("Rot suspected" -> state="rot") and by elimination (state="degraded"
- * is the remaining, more-severe-than-"rot suspected" case -> "Failing").
+ * mapped onto this component's state names by literal name match.
+ *
+ * RENAMED AT THE SP2 SIGN-OFF GATE, 2026-08-14: state="failing" was
+ * state="degraded", which had been picked "by elimination" rather than
+ * from the bundle. That name is why this component was carried to the
+ * gate as a suspected inversion -- "degraded" reads as LESS severe than
+ * "rot", so degraded=red beside rot=yellow looks backwards. It never was.
+ * The bundle is coherent: "Rot suspected" is a suspicion and warns in
+ * yellow; "Failing" is confirmed and errors in red. Only the invented
+ * name disagreed with the colours, so the name moved and no rendered
+ * value changed. The four states now read green/yellow/red/grey in plain
+ * ascending severity.
  *
  * tokens.css flags 90 colour pairs below the JND threshold, so colour alone
  * cannot be trusted to distinguish these four states -- see StatusDot.tsx
@@ -31,7 +40,7 @@
   background: var(--signal-pos);
 }
 
-.status-dot--degraded {
+.status-dot--failing {
   background: var(--signal-neg);
 }
 
