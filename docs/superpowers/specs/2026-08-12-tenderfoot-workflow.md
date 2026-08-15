@@ -291,7 +291,7 @@ This section used to open *"we have no hosting platform, so it has no properties
 | | | Status |
 |---|---|---|
 | Vercel project | `tenderfoot`, team `koehler-partners`, alongside `kp-web` | ✅ |
-| Neon project | `wispy-tooth-06225229`, currently named **`neon-lime-button`** (auto-generated) | ⬜ **rename to `tenderfoot-db` OUTSTANDING** |
+| Neon project | `wispy-tooth-06225229`, named **`tenderfoot-db`** | ✅ **Renamed 2026-08-14 — from the VERCEL dashboard, not Neon.** See the callout below: the Neon console refuses outright |
 | Billing plan | **`launch_v3` (Launch), subscription** | ✅ Taken by default rather than chosen — see `DOOGIE` 2026-08-13 |
 | Compute | `ep-super-bonus-auoe43hj` (default branch) and `ep-withered-base-au6l4cjf` (`test` branch), both **0.25 → 8 CU** | ✅ **Resized 2026-08-13, verified by reading back.** Was 1→1 and **0.25→0.25** respectively — the *test* one was the tighter of the two and nobody had noticed |
 | Autosuspend | **300 s**, now explicit on both computes | ✅ **Confirmed twice.** Measured by observation this morning at 5 m 19 s while the value read `0`; the console then wrote `300` outright. The observational reading was right |
@@ -299,7 +299,9 @@ This section used to open *"we have no hosting platform, so it has no properties
 | Point-in-time restore | **24 hours** — longer than `kp-web-prod`'s 6 | ✅ |
 | Postgres | 17, `aws-us-east-1`, same region as the website | ✅ |
 
-> ### ⬜ Two changes decided 2026-08-13 and NOT YET APPLIED
+> ### ~~⬜ Two changes decided 2026-08-13 and NOT YET APPLIED~~ — ✅ BOTH APPLIED 2026-08-14
+>
+> *Kept for the reasoning and for the one prediction it got backwards; see the measured callout at the foot of this block.*
 >
 > **Verified still outstanding at time of writing** — the project name and the compute size are unchanged from provisioning. **Neither the Neon MCP nor the Vercel CLI can make these changes**: the MCP exposes create, delete, describe, list, branch, SQL and auth but no update; `vercel integration-resource` offers only `create-threshold`, `disconnect`, `remove`. So this needs the Neon console or the Neon API.
 >
@@ -315,7 +317,24 @@ This section used to open *"we have no hosting platform, so it has no properties
 >
 > **The second call is not redundant, and this is the half that fails silently.** `default_endpoint_settings` applies only to *newly created* endpoints. Change the project alone and the live compute stays pinned at 1 CU while the settings page reads 0.25–8 — which looks done and is not.
 >
-> **The Vercel resource name is a separate string** from the Neon project name; both currently read `neon-lime-button`. Renaming the Neon project will probably not rename the Vercel resource, which is cosmetic and changeable only in the Vercel dashboard.
+> ~~**The Vercel resource name is a separate string** from the Neon project name… Renaming the Neon project will probably not rename the Vercel resource.~~
+>
+> ### ✅ MEASURED 2026-08-14 — both changes applied, and the prediction above was backwards
+>
+> **The names are one string, not two, and the ownership runs the other way.** Renaming the **Vercel** resource renamed the **Neon** project; confirmed by reading `describe_project` back through the Neon MCP, which now returns `tenderfoot-db`. The guess here was that Neon was upstream and Vercel a cosmetic copy. It is the reverse.
+>
+> **The Neon console refuses the rename outright.** Editing Project name → Save in the Neon project settings returns:
+>
+> ```
+> action restricted; reason:"organization is managed by Vercel"
+> ```
+>
+> So the `PATCH .../projects/{id}` call above **would very likely also fail for a Vercel-managed org** — untested, because the dashboard route worked. **When a resource is provisioned through a marketplace integration, the marketplace owns its identity**, and the vendor's own console becomes read-only for exactly the fields the marketplace projected. That is worth generalising past Neon: *the surface that created a resource keeps naming rights over it.*
+>
+> **The rename path that works:** Vercel → Storage → the Neon resource → **Settings → Update Name → Save.**
+> ⚠️ **Two Neon resources sit in this team's Storage list** — `tenderfoot-db` (`store_mM0f1r2hzaSn22p5`, Neon `wispy-tooth-06225229`) and **`kp-web-prod` (`store_sZ5Zby3QCVhfWKPT`) — the live company website's production database.** The list re-renders after load and a click landed on the wrong one during this change. Nothing was modified, but **navigate by store ID rather than by position in that list.**
+>
+> **The compute default is applied:** project settings now read **`.25 ↔ 8 CU`**, read back on the page after saving. Neon's own dialog states the §2.17 hazard in its own words — *"Modifying these defaults does not alter the settings of any existing computes"* — which is why the second `PATCH` above was never redundant.
 
 > **The compute default is worth noting as a platform property rather than a preference.** A fixed floor of 1 CU on a database that idles most of the day is the wrong end of the trade for one user, and **nothing about the provisioning flow surfaces that choice** — it is simply what you get. That is the same class of fact as an auto-pausing free tier: a documented default with a cost, invisible unless someone reads it.
 

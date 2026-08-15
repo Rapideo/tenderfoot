@@ -227,7 +227,13 @@ A leaked database credential was rotated in the provider console. The obvious ch
 
 **Corollary, and it has to be planned for.** The negative test requires the old artifact, so it must be **captured before the change**. A rotation that discards the old string first cannot be verified at all — only assumed.
 
-**Why not promoted.** One instance. **But it is a shape rather than an accident** — the same structure as 2.5 (instrument for silent failure) and 2.9 (ask what was removed). A second instance in any project should send it straight to the playbook.
+**Second instance, same day, and it is the corollary above being violated by the person who wrote it.** The `test` branch was rotated later on 2026-08-14. The new credential was verified — connection works, full gate green, 92 tests. **The old string was overwritten in `.env` before it was captured, so the negative test could not be run at all.** The provider's dialog asserts the old password is no longer valid; nothing that was actually executed demonstrates it. The incident is closed on an assertion where the `main` branch's was closed on evidence.
+
+**What makes this the instructive one.** The corollary was already written, in this file, hours earlier, in these words: *"the negative test requires the old artifact, so it must be captured before the change."* It was not a gap in the analysis. **The rotation was performed step-by-step and the capture step simply never came up**, because the working sequence — reset, fetch new, write, test — has no natural place where the old value is still needed. **A precondition that appears nowhere in the happy path will be skipped no matter how well it is documented** (cf. §2.17's "a documented hazard is not a mitigated one" — same failure, different lesson).
+
+**The fix is a sequencing rule, not a reminder.** Make capturing the old artifact **step one of the revocation procedure**, before touching the provider — not a verification step afterwards. By the time verification is the current concern, the artifact is already gone.
+
+**✅ PROMOTION BAR MET.** This lesson's own note said a second instance should send it straight to the playbook. That instance has arrived, and it is stronger than the first because it was self-inflicted under full knowledge. **Not yet moved into `Proto2PRD.md` — that is a deliberate edit to the reusable playbook and is Matt's call to make, not a side effect of the incident that qualified it.**
 
 ### 2.17 Fixing every instance leaves the template that mints the next one
 

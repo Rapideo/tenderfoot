@@ -6,9 +6,11 @@
 >
 > **Also closed today:** all three of `three_open_questions.md`, and the full twenty-node SVRC `Imp`/`Pri` re-score (v0.6.0, fourteen moved).
 >
-> **Credential rotation is HALF done.** `main` is rotated and verified: old string dead, new one live, **201 solicitations intact**, full gate green on the new credential. **The `test` branch is still on the leaked password and still connects.**
+> **Credential rotation is COMPLETE — both branches, 2026-08-14.** `main` was rotated first (old string proved dead, new one live, 201 solicitations intact). **`test` rotated today**; `DATABASE_URL_TEST` re-derived from the unpooled endpoint and the **full gate re-run green on it**.
 >
-> **Three console clicks are pinned for Matt** — see *Waiting on Matt*. Nothing is blocked on Claude.
+> ⚠️ **One honest limit on the `test` rotation.** Per lesson §2.16 a revocation is proved by the OLD key failing, not the new one working — and **the old `test` string was overwritten before it was captured**, so that negative test could not be run. Neon's dialog asserts the old password is invalid; nothing here demonstrates it. **The `main` rotation was proved properly; this one is asserted.**
+>
+> **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. Nothing is pinned for Matt.
 >
 > Behind it: SP1 T12–T15 still outstanding (mock-layer re-extraction, minimal admin UI).
 
@@ -44,7 +46,7 @@
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
 | **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) outstanding — dashboard-only, six steps in workflow spec §8 |
-| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ◐ **All 10 tasks done 2026-08-13**, branch `sp2-design-system`, **26 commits**, gate green (**92 tests / 20 files**, re-verified 2026-08-14 on the rotated credential). **Sixteen primitives** on `/dev/gallery`. **NOT merged — waiting on Matt's sign-off**, which is the point of the slice |
+| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ✅ **SIGNED OFF 2026-08-14.** Branch `sp2-design-system`, **sixteen primitives** on `/dev/gallery`, gate green (**92 tests / 20 files**) after the three sign-off fixes. **Clear to merge — not yet merged** |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
 | ~~SP5~~ | ~~Matching engine~~ | **Removed 2026-08-11** |
@@ -81,17 +83,17 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 | | |
 |---|---|
 | Vercel | project `tenderfoot`, team `koehler-partners`, beside `kp-web` |
-| Neon | project `wispy-tooth-06225229`, org `Vercel: Koehler Partners`, beside `kp-web-prod`. Postgres 17, `aws-us-east-1` |
+| Neon | project `wispy-tooth-06225229`, named **`tenderfoot-db`** since 2026-08-14, org `Vercel: Koehler Partners`, beside `kp-web-prod`. Postgres 17, `aws-us-east-1` |
 | Billing | **`launch_v3` (Launch), subscription** — same org and bill as the website |
 | `DATABASE_URL` | pooled endpoint, injected by the integration into all three environments |
 | Compute — existing | ✅ **resized 0.25 → 8 CU on both computes 2026-08-13**, verified by reading back. The `test` compute had been the tighter of the two at 0.25→0.25 |
-| Compute — **default** | 🟡 **still `1 → 1` CU**, read from the project 2026-08-14. Governs computes that do **not exist yet**, so the row above is true and this one is also true. Every new branch is born wrong until it is fixed |
-| Branches | `main` (`br-super-breeze-aun4swjv`) · `test` (`br-delicate-leaf-auwo0czn`). **Role passwords are per branch** — `main` rotated 2026-08-14, `test` **not yet** |
-| ⬜ **Outstanding** | **rename `neon-lime-button` → `tenderfoot-db`.** Still unchanged as of 2026-08-14 — the resize landed, the rename did not. Not doable through the Neon MCP or the Vercel CLI — console or Neon API. Exact call in workflow spec §10.1. *Cosmetic; blocks nothing* |
+| Compute — **default** | ✅ **set to `0.25 → 8` CU 2026-08-14**, read back on the settings page. Governs computes that do **not exist yet** — new branches are now born right. Neon's own dialog states the §2.17 hazard verbatim: *"Modifying these defaults does not alter the settings of any existing computes"* |
+| Branches | `main` (`br-super-breeze-aun4swjv`) · `test` (`br-delicate-leaf-auwo0czn`). **Role passwords are per branch** — **both rotated 2026-08-14** |
+| ✅ **Rename** | **`neon-lime-button` → `tenderfoot-db`, done 2026-08-14 from the VERCEL dashboard.** The Neon console refuses it outright — `action restricted; reason:"organization is managed by Vercel"`. The spec had predicted the two names were independent strings with Neon upstream; **it is the reverse** — renaming the Vercel resource renamed the Neon project, confirmed by reading it back through the MCP. Details in workflow spec §10.1 |
 
 ## Waiting on Matt
 
-**The first one blocks the SP2 merge. The rest do not block SP0–SP2.**
+**Nothing here blocks SP0–SP2 any more.** The sign-off gate, all three open questions, and all three Neon console changes closed on 2026-08-14.
 
 | | Blocks |
 |---|---|

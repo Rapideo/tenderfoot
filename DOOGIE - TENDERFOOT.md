@@ -484,3 +484,19 @@ August 14, 2026:
 203. One thing I didn't expect: npm run dev has never loaded .env. The server dies immediately on DATABASE_URL not set. npm run check loads it, dev never did — and "npm run dev then open /dev/gallery" is literally the sign-off procedure written in STATUS. The documented gate procedure was broken and nobody hit it because the gallery is client-only. Fixed.
 
 204. SP2 is signed off. Gate green after all of it — 92 tests, 20 files, exit 0. Clear to merge.
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+205. Gave Claude the browser. All three Neon items done in one pass: test-branch password reset, compute default 0.25→8, project renamed to tenderfoot-db. Gate green afterwards on the new test credential — 92 tests, exit 0.
+
+206. The compute default was still 1 CU, confirmed on the settings page. And Neon's own dialog says the thing we wrote as lesson 2.17: "Modifying these defaults does not alter the settings of any existing computes." The vendor states the hazard in the UI and we still nearly shipped past it two days ago.
+
+207. The rename couldn't be done in Neon at all. Console returns: action restricted; reason "organization is managed by Vercel". Had to do it from the Vercel dashboard — Storage → the resource → Settings → Update Name. And renaming the VERCEL resource renamed the NEON project, which the workflow spec had predicted backwards; it assumed Neon was upstream and the Vercel name a cosmetic copy. It's the reverse. Generalisation worth keeping: the surface that created a resource keeps naming rights over it.
+
+208. Near-miss worth writing down. There are two Neon resources in that Vercel storage list — ours, and kp-web-prod, which is the live company website's production database. The list re-rendered between the screenshot and the click and Claude landed on kp-web-prod. Nothing was changed, it backed out and re-targeted by store ID instead of screen position. But that's the second time this week that a list which looks stable at read time wasn't stable at click time.
+
+209. And the bad one, which Claude flagged itself. Lesson 2.16 says a revocation is proved by the OLD key failing, not the new one working — and its own corollary says you have to capture the old artifact BEFORE the change or you can't verify at all. Claude overwrote the old test string before capturing it. So the test-branch rotation is closed on Neon's assertion, not on evidence. Main's was done properly. This one isn't.
+
+210. What makes that worth keeping rather than just annoying: the corollary was written hours earlier, by the same party, in this same file. It wasn't a gap in the analysis. The working sequence — reset, fetch new, write, test — has no step where the old value is still needed, so the precondition never came up. A precondition that appears nowhere in the happy path gets skipped no matter how well documented it is. Fix is to make capturing the old value step ONE of the procedure, not a verification step afterwards.
+
+211. 2.16 has now hit its own promotion bar — it said a second instance sends it to the playbook, and the second instance arrived, self-inflicted, under full knowledge. Claude left the actual promotion into Proto2PRD.md for me to decide rather than doing it off the back of the incident. Right call.
