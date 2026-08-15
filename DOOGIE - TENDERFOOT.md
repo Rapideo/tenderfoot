@@ -500,3 +500,13 @@ August 14, 2026:
 210. What makes that worth keeping rather than just annoying: the corollary was written hours earlier, by the same party, in this same file. It wasn't a gap in the analysis. The working sequence — reset, fetch new, write, test — has no step where the old value is still needed, so the precondition never came up. A precondition that appears nowhere in the happy path gets skipped no matter how well documented it is. Fix is to make capturing the old value step ONE of the procedure, not a verification step afterwards.
 
 211. 2.16 has now hit its own promotion bar — it said a second instance sends it to the playbook, and the second instance arrived, self-inflicted, under full knowledge. Claude left the actual promotion into Proto2PRD.md for me to decide rather than doing it off the back of the incident. Right call.
+
+212. Closing out. SP2 is merged to main and the gate is green after the merge, not just before it — 92 tests, exit 0, tokens still round-tripping to the bundle. Everything committed, tree clean.
+
+213. Promoted 2.16 into the playbook. What I like about how it went in: it leads with the sequencing rule — capture the old artifact as step one — rather than the maxim. The maxim was already written and got skipped by the person who wrote it, hours later, same day. That's the actual evidence, so that's what the entry argues from.
+
+214. Decided the remote: public, Rapideo/tenderfoot. Claude got blocked by its own permission classifier on gh repo create, which is fair enough for an irreversible public publish, so that one's mine to run. It flagged twice what goes public — the business docs, then separately the live infra IDs and the leak write-up — and I said push as-is both times. Eyes open.
+
+215. Pinned everything in STATUS under a RESUME HERE block rather than trusting either of us to remember. The one that actually blocks Claude is where long ingestion runs; the rest of its list it can start without me. Per-preview branching moved from my column to its column today, because the browser extension works now and the compute default is fixed — which was the thing that made creating branches unsafe in the first place.
+
+216. Left one thread deliberately open rather than quietly closed: the test-branch rotation is asserted, not proved. Only way to actually close it is to rotate again and capture the old string first. Not worth doing tonight, but it's written down as unproved instead of ticked off.

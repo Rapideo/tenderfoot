@@ -16,6 +16,45 @@
 
 ---
 
+## 🔖 RESUME HERE — pinned at the end of the 08-14 session
+
+**State is clean.** On `main`, working tree clean, **SP2 merged** (`ebbcf7c`), gate green *after* the merge — exit 0, 20 files, 92 tests, every token check passing. Nothing is half-finished and nothing is uncommitted.
+
+### Matt — one urgent, three whenever
+
+**1. 🔴 Create the remote and push. This is the only thing blocking anything.** Decided public at `Rapideo/tenderfoot`. `gh repo create` is blocked for Claude by the permission classifier, so it has to be Matt:
+
+```
+gh repo create Rapideo/tenderfoot --public --source=. --remote=origin --description "Tenderfoot -- government contract opportunity discovery for Koehler Partners. React + Express + Postgres on Neon, deployed on Vercel."
+git push -u origin main
+git push origin sp2-design-system
+```
+
+> **Expect CI to fail on that first push and do not read it as a regression.** `.github/workflows/ci.yml` is correct and **has never executed once**. Likely first-run causes: Windows-vs-Linux path assumptions, or `DATABASE_URL_TEST` not existing as a GitHub Actions secret. Paste the output and Claude fixes it.
+>
+> **Also settled before pushing:** history carries no real credential (the only matches are a discarded `tenderfoot:tenderfoot@localhost:5433` Docker placeholder), `.env` was never tracked, largest blob is 3.8 MB. **Matt chose to publish the live infra identifiers and the credential-incident write-up as-is**, having been asked specifically about both.
+
+**2. Where long ingestion runs — the one that actually blocks Claude.** Bounded candidate scrape / durable workflow / off-platform. This is the question the hosting decision created and did not answer: the host solves *when* ingestion runs, not *how long it may take*. It is coupled to a measured number — **~7 rows/second against a 300-second function ceiling**, which does not survive an 8,000-record contract register. **B3 for SP3 cannot be written without it.**
+
+**3. Two SP4 decisions, not yet needed.** Extraction runtime (Node / Python sidecar / smart mode — the largest open question in the stack) and the blob provider.
+
+**4. `THOUGHTS.md`** — whether the two live ideas become real backlog items.
+
+### Claude — next session, in this order
+
+1. **Per-preview DB branching** (workflow spec §8, six steps). **Until it is done every preview deployment writes to the production database.** Status changed on 08-14: its prerequisite is met (compute default now 0.25→8, so new branches are born right) **and it is no longer Matt's to click** — the browser extension works, so Claude can drive it.
+2. **§6 slice-order reconciliation** — unblocked by Q3. Two inputs to apply: `Shell A`/`Region A.1` dropped to `Pri 3`, so **§6 must now state "build the shell first" on its own** rather than inheriting it from a score; and `Screen 7` rose to `Pri 4` and **must not move earlier** — its `PARKED` marker holds it.
+3. **SP1 T12–T15** — re-extraction, minimal admin.
+4. **SP6 preconditions** — recessed-section primitive, spacing/shadow layers, `Button` danger-primary.
+
+### One open thread that is nobody's task yet
+
+**The `test` branch rotation is asserted, not proved.** The old string was overwritten before it was captured, so the negative test could not run — the failure mode that `Proto2PRD.md` §5.4 now exists to prevent. If it ever matters, the only way to close it properly is to rotate again, capturing the current string first.
+
+---
+
+---
+
 ## The shape
 
 **Stage A** establish what it is → **Stage B** plan it → **SP0…SP8** build it, one demo-able slice at a time.
