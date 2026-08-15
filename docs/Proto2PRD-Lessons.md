@@ -247,6 +247,24 @@ A database compute was resized from 1→1 to 0.25→8 CU. Both live computes rea
 
 ---
 
+### 2.18 A version number that tracks how much prose changed will miss the change that matters
+
+**Observed 2026-08-14, reconstructing the SVRC's missing revision notes.**
+
+Three consecutive changes to an adopted reference document. Re-pointing one node's `Proto` score from 70% to 95% took a **minor** bump, 0.4.1 → 0.5.0. Rewriting the scoring key's definition of `Pri` — from *"how soon this should be built"* to *"how much KP wants the thing"* — took **no bump at all** and left no revision note.
+
+**The second change is enormously larger than the first, and the version says the opposite.** One moved a single number. The other **silently reinterpreted all twenty existing values in the document**, because every one of them was written against the old definition. Nothing in the file recorded that two different meanings of `Pri` had both shipped as 0.5.0.
+
+**Proposed generalisation.** Editors size a version bump by **how much text moved**, because that is what is visible in a diff. The changes that most need announcing are **semantic**: a definition, a scale, a column's meaning, a default. These are often a one-line diff — which is exactly why they get typed as trivial and slip through unversioned.
+
+**The check that catches it.** Before committing a change to a reference document, ask: ***"does this change what any existing value in the document means?"*** If yes, it is a major revision regardless of its size, and it needs a note saying which values were reinterpreted. A one-line diff is a reason for suspicion, not comfort.
+
+**And the repair is a note, not a renumber.** Retroactively renumbering makes the history lie a second way. The version stays wrong; the note is how a reader finds out that it is.
+
+**Why not promoted.** One instance, and it is close kin to §2.17 — both are cases where the visible surface (instances; diff size) is not the surface where the defect lives. **They may eventually merge into one lesson about auditing the wrong surface**, but not on two observations.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.

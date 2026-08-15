@@ -614,6 +614,29 @@ Levels 3 and below take no grid and no labels.
 - **The marker is the only element that crosses the level-3 line**, because parking is a fact about a node rather than a judgment about it. `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid — which is also why Q2 was a one-node question about scoring and a three-node question about marking.
 - **Q3 is still open** — how much of the twenty-node `Imp`/`Pri` set Matt wants to re-score.
 
+*Amendment to 0.5.0, no version bump taken — Q1 ruled. Claude, 2026-08-13.*
+**⚠ Reconstructed 2026-08-14 from `9853653`. Not written at the time — that is the point of the note.**
+
+- **The scoring key's definition of `Pri` was rewritten** from *"how soon this should be built, all things considered"* to *"how much KP wants the thing"*, with the ruling blockquote added beneath it. Matt's answer to Q1.
+- **It shipped without a version bump, and that is the finding worth keeping.** This is a change to what a column *means* — **every one of the twenty existing values is silently reinterpreted by it.** A semantic change to the scoring key is the largest kind of change this document can take, and it is the one that left no trace in the version.
+- **Recorded rather than corrected.** Renumbering retroactively would make the history lie in a second way. The version says 0.5.0 for two different meanings of `Pri`; this note is how a reader finds that out.
+- **The near-cause is worth naming too.** The version tracked the *prose* — how much text changed — rather than the *semantics*. `d6b6000` moved one node's percentage and took a minor bump; this moved the meaning of a whole column and took none.
+
+*Revision note, 0.4.1 → 0.5.0 — `Proto` re-pointed to V1.2. Claude, 2026-08-13.*
+**⚠ Reconstructed 2026-08-14 from `d6b6000`; not written at the time.**
+
+- **One node moved: `Region A.1`, `Proto` 70% → 95% and `Conc` 75% → 90%.** Mean 84% → **85.2%**; twelve nodes at 90%+ became thirteen. The other nineteen were **confirmed unaffected by diffing the bundles rather than re-reading them.**
+- **The wordmark existed the whole time; only its label said otherwise.** V1.1's header carried a finished lockup with an 8px mono line beneath reading `WORDMARK — PLACEHOLDER` — **the placeholder was announcing the mark next to it as provisional.** V1.2 deletes that line and the now-single-child wrapper.
+- **It was nearly redesigned away.** The punch item read *"replace with a real mark,"* and a Design round given that instruction would very likely have discarded a checkbox mark that suits this product unusually well. **It survived because the header was read rather than inferred from its own placeholder text.**
+- **The re-score cost minutes, not a day** — six changed lines. **That is the argument for re-scoring at every freeze:** against a surgical change it is nearly free, and skipping it is how the column silently stops describing anything.
+
+*Revision note, 0.4.0 → 0.4.1 — the last three prototype answers ratified. Claude, 2026-08-13.*
+**⚠ Reconstructed 2026-08-14 from `da95f5c`; not written at the time.**
+
+- **All three ratified by Matt:** saved views as a first-class object, rot suspicion in persistent chrome, and the cleared state's pointer at the expiration radar. **Held open for two days precisely so silence could not adopt them**; adopted by decision instead, which is the only difference that matters.
+- **Nothing changed in the prototype.** Ratification confirms what it already drew; had any been overturned it would have become a V1.2 punch item. **SP2 builds against three decided answers rather than three provisional ones.**
+- **The desktop-only decision was taken in the same commit but did not touch this document** — it landed in the design spec and the plan of action. Noted so the version gap does not read as a missing SVRC change.
+
 *Revision note, 0.3.1 → 0.4.0 — eight decisions adopted from the prototype. Claude, 2026-08-12.*
 
 - **The review phase produced content, not just scores.** The `Proto` audit surfaced twelve prototype decisions this document had not made; Matt ruled on nine of them in one pass. Method generalised into `docs/Proto2PRD.md` §4.7.5 and marked **(T)**.
