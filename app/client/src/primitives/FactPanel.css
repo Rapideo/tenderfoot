@@ -1,0 +1,63 @@
+/* FactPanel -- matched against the bundle's "COST TO PURSUE" panel (V1.2,
+ * index ~562481), the only panel in the bundle actually named this:
+ *
+ *   title: font:500 9.5px/1 'IBM Plex Mono';letter-spacing:.14em;
+ *     color:var(--text7);margin-bottom:4px    ("COST TO PURSUE — FACTS, NOT A SCORE")
+ *   note:  font:400 11.5px/1.5 'IBM Plex Sans';color:var(--text5);margin-bottom:13px
+ *     ("Counted from the bundle. The light/moderate/heavy call is yours.")
+ *   grid:  display:grid;grid-template-columns:1fr 1fr;gap:1px;
+ *     background:var(--brdmid);border:1px solid var(--brdmid);
+ *     border-radius:8px;overflow:hidden
+ *
+ * title's declaration is byte-identical to MicroLabel's own -- confirmed
+ * directly by the brief ("FactPanel's title is a micro-label") -- so
+ * FactPanel.tsx renders it via that primitive, margin-bottom:4px applied
+ * here on FactPanel's own wrapper rather than by reaching into
+ * MicroLabel.css. --type-body-small is the note's exact shorthand (400
+ * 11.5px/1.5 sans); --line-mid is --brdmid; --radius-action is that exact
+ * 8px step.
+ *
+ * The grid's cells are FactTile children -- each already carries its own
+ * background:var(--surface);padding, so the grid itself supplies only the
+ * hairline divider (1px gap over --line-mid) and the outer border/radius,
+ * with no per-cell styling of its own.
+ *
+ * EMPTY STATE -- matched against the bundle's own "list is empty" pattern
+ * (the Pipeline Board's c.empty/emptyText, V1.2, index ~599427), the
+ * closest bundle precedent for "a container that normally holds a list of
+ * items, showing nothing":
+ *   border:1px dashed var(--brdctl3);border-radius:8px;padding:16px 12px;
+ *   text-align:center;font:400 11px/1.5 'IBM Plex Sans';color:var(--text8)
+ * Reproduced exactly as evidenced, including --line-control-3 rather than
+ * the "empty states, add-new targets"-named --line-dashed/--line-dashed-2 --
+ * the ACTUAL bundle instance uses --brdctl3, not --brddash, so that is what
+ * is matched here; flagged in task-6-report.md as a name/evidence mismatch,
+ * not resolved by substituting the differently-named token. */
+.fact-panel__title {
+  margin-bottom: 4px;
+}
+
+.fact-panel__note {
+  font: var(--type-body-small);
+  color: var(--text-muted);
+  margin-bottom: 13px;
+}
+
+.fact-panel__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-mid);
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-action);
+  overflow: hidden;
+}
+
+.fact-panel__empty {
+  border: 1px dashed var(--line-control-3);
+  border-radius: var(--radius-action);
+  padding: 16px 12px;
+  text-align: center;
+  font: var(--type-body-note-sm);
+  color: var(--text-disabled);
+}

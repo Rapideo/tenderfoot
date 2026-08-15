@@ -386,3 +386,117 @@ August 13, 2026:
 158. STILL OWED BY ME: rotate the Neon credentials (an agent printed them into a log while trying to redact them — nothing reached git, but they're live). Turn on per-preview database branching, six steps written into workflow spec §8; until then every preview writes to production. And decide whether we want a git remote, because CI has never run and can't, which means the local gate is the only gate.
 
 159. NEXT: SP2, the design system — and it just got bigger, because of 157. Before SP3 we need the ingestion round-trip fix (roughly 7 rows/second won't survive an 8,000-record register inside a measured 300-second function ceiling), the blob provider, and the ingestion scaffolding brainstorm. Still outstanding from before: my answers to the three open questions and the SVRC Imp/Pri review.
+
+August 14, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+160. SP2 built overnight. Ten tasks, 23 commits, sixteen primitives on a dev-only gallery route, gate green. Not merged — the sign-off gate is mine and merging before I've looked would defeat the point of having one.
+
+161. Prototype V1.2 landed first. Six lines, three hunks, 219 bytes smaller than V1.1. Claude verified it rather than trusting the summary: colours 132 to 132, zero added; media queries zero to zero so no responsive work leaked in against instruction; display:flex 74 to 73, exactly the one wrapper div the change disclosed. Then the token check I want to remember — it verified the EXISTING tokens.css against the NEW bundle before regenerating anything. Regenerating first and then verifying would have proved nothing, because the two agree by construction. We'd already been bitten once by a generator and verifier sharing a bug.
+
+162. The wordmark item turned out to be a deletion, not a design. The logo already existed — a 22x22 rounded square with an 8x8 square inside, beside TENDERFOOT. Only the 8px line beneath said "placeholder". And the mark is a CHECKBOX, sharing exact geometry with a checked checkbox elsewhere in the design. For a product whose whole job is take this one, pass on that one, that's a good mark, and a round asking for "a real wordmark" would very likely have thrown it away.
+
+163. Decided mobile by measurement instead of instinct. My rule was: if the design system supports an easy path to responsiveness, do all seven screens; if not, stay desktop-only and build a separate app later. Claude measured the frozen bundle — zero media queries, zero clamp, three flex-wrap across seventy-four flex containers, and grids with fixed column counts where several mix fixed tracks that overflow a phone outright. Not an easy path. So desktop-only, and the mobile client is now plan of record rather than an idea. That also converts spec §7.10's one named gap into a decision.
+
+164. Ratified the last three prototype answers — saved views as a first-class object, rot suspicion in the status bar, the cleared state pointing at the radar. They'd sat provisional for two days specifically so silence couldn't adopt them. Nothing changed in the artifact; SP2 now builds against decided answers instead of provisional ones, which was the point of asking before it started.
+
+165. Answered Q1: Pri is product priority — how much KP wants the thing — not build order. That breaks a circularity, because the plan derives slice ordering FROM Pri. A node can be Pri 5 and land in a late slice; that's not a contradiction to fix by lowering the number. Q2 and Q3 still open.
+
+166. Now the part worth writing down properly. SIXTEEN rulings got made without me overnight, and SIX of them were corrections to Claude's own work. Two wrong counts in the plan. A test timeout too tight for infrastructure it chose. A fidelity mandate citing a data VALUE as if it were fixed copy. An exit-criteria scan that couldn't match rgba, so a colour hiding in a box-shadow passed a check reporting zero hardcoded colours. And a comment in tokens.css claiming --signal-neg owned the low-score job when the bundle's own scoreColor() returns --warn — a false claim sitting in the file every downstream task treats as ground truth.
+
+167. Every one of those six was caught by a subagent checking the source instead of complying with the instruction. That's the argument for the whole method in one line. The instruction was wrong and the artifact was right, and the only thing that surfaced it was somebody going and looking.
+
+168. The pattern inside the pattern: three of the six were the SAME failure. A regex that couldn't match negative letter-spacing values reported seven when there were ten. A scan that couldn't match rgba reported zero hardcoded colours when there was one. A grep for "Deviation:" found two when the doc numbered them differently. A pattern that cannot match a category reports zero of it and looks exactly like a genuine pass. The fix that stuck was a conservation check — count what the bundle actually contains by literal substring, then assert the extracted total plus named exclusions equals it. It doesn't depend on any regex being right.
+
+169. Whole-branch review found a Critical nine task-scoped reviews had all missed, and it's the same shape as SP1.5's: the gallery's CSS was shipping to production. The JS tree-shook correctly; Vite treats a CSS import as a side effect and emits it regardless. Eighteen gallery selectors in the production stylesheet while the gate printed OK, because the guard only grepped for a JS marker. Task 3 built the guard and proved it with a JS import; Task 9 wrote the CSS. Neither scoped review could see the other half. Fixed at the root — the gallery now loads via a DEV-guarded lazy import — production CSS went 15.92kB to 8.67kB.
+
+170. It also found that the token layer represents one of TWO palettes and can't say so. The bundle defines 134 hex values across 67 names, all 67 redefined in a second dark block. Generator and verifier both keep the first and print PASS. Nothing anywhere mentioned a dark palette existed. Not a request for dark mode — a request that ground truth disclose the half it dropped. Now disclosed, with a conservation check that fails rather than reports.
+
+171. Three defects this slice were visible on screen and invisible to every test — a score bar collapsed to 16px by a dropped width:100%, a clipped table row, a wrong padding. All caught by rendering the page and looking at it. That's the case for the sign-off gate existing at all, made three times in one night.
+
+172. My machine crashed mid-task and then slept. The crash zeroed the branch ref — 41 null bytes, allocated but never flushed — so git called the branch broken. The reflog survived and named the lost commit; Claude verified the object was intact before touching anything, moved the zeroed file aside, and restored. fsck clean, nothing lost. The one real casualty risk was my own uncommitted Q1 answer, which got committed immediately.
+
+173. WAITING ON ME: run npm run dev, open /dev/gallery, and read the SECOND paragraph first — it names two decoy bundle files sitting beside the real one, and only V1.2 is the parity reference. Five findings need my ruling: 98 type tokens which is a census not a scale, no spacing or shadow token layer, StatusDot's rot=yellow/degraded=red which may be backwards in the prototype, a danger-primary button the prop set doesn't cover, and --brddash being misleadingly named. One known gap recorded: no primitive expresses the recessed section wrapper the bundle puts COST TO PURSUE inside.
+
+174. ALSO STILL MINE: rotate the Neon credentials, turn on per-preview database branching (six steps in workflow spec §8 — until then every preview writes to production), decide whether we want a git remote at all since CI has never run, and answer Q2 and Q3.
+
+175. Later the same day — I rotated the credentials. Production came back clean: the old string now fails authentication, the new one works, all 201 solicitations still there, full gate green at 92 tests across 20 files. That part went exactly as expected and I would have called the incident closed.
+
+176. It wasn't closed. Claude had told me one password reset would cover every branch, and that was wrong — the ROLE is a project-level object, its PASSWORD isn't. A branch copies the parent's roles and their passwords when it's created and the two drift apart from that moment. The reset landed on main and never touched test. What caught it was probing with the OLD strings rather than the new one: main failed authentication, test still connected. Connecting with the new string would have passed and told me nothing at all. That's the lesson I want to keep — a revocation is proved by the old key failing, not by the new key working, and the positive test is the one that feels like completion.
+
+177. Then the useful accident. The plan for closing the rest was to skip a second console trip by deleting the test branch and recreating it off main, which would inherit the new password and retire the leaked hostname in the same move. Genuinely the better fix, on its face. Checked the project first and found default_endpoint_settings still reading 1→1 CU. Yesterday's resize fixed both computes that exist and not the default that governs the ones that don't. So the recreated branch would have come up at 1 CU — the exact measured cause of the SP1.5 flaky gate — restored silently, with nothing in the code to explain it. The clever shortcut would have reintroduced a bug we had already paid to diagnose.
+
+178. And the spec had already warned about this. It said the default applies only to newly created endpoints, that the second API call was "not redundant," and that this was "the half that fails silently." Written by us, correct, read — and the second call still never got made. A documented hazard is not a mitigated one. Both of these went into the lessons file as 2.16 and 2.17.
+
+179. The default matters beyond today, because per-preview branching is still on my list and its entire job is creating branches. Every preview would have been born at 1 CU on a database that idles nearly always. So that default gets fixed BEFORE that gets turned on, not after.
+
+180. PINNED FOR MY RETURN — three console clicks: reset the test branch password (the still-live leaked credential), set the project compute default to 0.25→8, and rename neon-lime-button to tenderfoot-db while I'm in there. I don't need to copy anything back; the project stores passwords, so the new test string can be fetched programmatically once the reset is done. Then the SP2 sign-off gate at /dev/gallery with its five rulings, and Q2 and Q3.
+
+181. One loose thread worth naming: THOUGHTS.md is untracked, so git isn't protecting it — and the machine zeroed a branch ref last night. Four ideas in it, and at least two aren't scratch: "levels of research and qualifying against that research" sits right next to the qualification work we deliberately parked as undesigned, and "what analysis can we do on 20+ years of historical data" is a real question about the 2,160-contract corpus. Those probably want to be backlog items rather than a loose file.
+
+182. Told Claude to commit it, so that's closed — tracked verbatim, nothing edited or reordered. Whether the two live ones get promoted into real backlog items is still my call and I haven't made it.
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+183. Back from the break, and answered Q2 — option (d), a marker outside the grid. Parked node keeps its product scores and carries a bold PARKED line above the grid; planning excludes it by the marker rather than by a lowered number. Made it a standing rule in the scoring key, not a one-off for View 2.2, because the whole reason Imp/Pri went wrong in the first place was a convention nobody wrote down.
+
+184. The part I hadn't seen coming: the old stopgap wasn't just fragile, it was wrong. "Read their Pri as zero for V1" was sitting in three places and it instructed you to mentally rewrite a number that was never zero. Pri 4 is a true statement about the finished product. Three copies of a warning is a warning nobody reads, and the answer to that is never a fourth copy.
+
+185. Also worth noting what didn't move: View 2.2 stays at Pri 4 and View 2.3 stays at Pri 4, and they're now perfectly distinguishable anyway. That was the actual complaint — you couldn't tell them apart from the numbers — and it turned out not to need a number to fix it.
+
+186. Down to Q3, which is the only one that costs me anything: five nodes at ~5 minutes or all twenty at ~30. Still mine to decide.
+
+187. Said do all twenty rather than the five flagged, and that turned out to be the right call for a reason I didn't have when I made it. The two worst numbers in the whole document weren't on the flagged list and couldn't have been: Shell A and Region A.1 were both sitting at Pri 5, which under Q1's ruling means "KP wants this most" and was actually still saying "build this first." Q1 outlawed that definition on the 13th. The values sat there wrong for a full day afterward.
+
+188. That's the lesson and it's a good one. Changing what a column MEANS doesn't change the numbers already written in it, and nothing in a diff shows you the gap -- the definition moves in one line, the twenty stale values move in none. Claude staged it as 2.18 and folded in a second instance, so that one's close to being promoted into the playbook proper.
+
+189. The other half: every one of the five nodes I'd been shown was flagged as too LOW. Nobody thought to look for too HIGH. A targeted re-audit inherits the bias of whoever wrote the target list, and when the thing that moved is the yardstick itself, you don't get to spot-check.
+
+190. Fourteen of twenty moved. Biggest: View 1.2 Saved Views from Imp 2 Pri 2 to 4 and 4 -- with no ranking in V1, saved views are the only way the firehose gets carved. Screen 7 from Pri 1 to 4, and it picked up a PARKED marker while we were in there, because "deferred to a later phase" is the same shape as parked even though the cause is different. That's the Q2 rule fitting a case it wasn't written for, one day after we wrote it.
+
+191. Opening the doc mattered on its own, separate from the numbers. View 1.2's known-gaps still said "genuinely a candidate for cutting" and its open-questions still asked something I ratified on the 13th. If we'd edited grids from a list we'd have left a node arguing with itself.
+
+192. One I'm not fully settled on and it's flagged as such in the node: View 1.2 is now Imp 4 at Conc 45%, lowest completeness in the document. The argument for raising it is that my old 2s meant "haven't thought about this" rather than "doesn't matter" -- but that's Claude reading my intent from a year ago, and it says so. Revisit once anything's designed.
+
+193. Three open questions are closed. That file is history now. Which means the SVRC Imp/Pri review that was gating the section 6 slice-order reconciliation is done, and item 7 is Claude's to pick up. My remaining list is the three Neon console clicks and the SP2 sign-off gate.
+
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+194. Looked at the gallery. Liked everything I saw, no issues. So the visual half of the SP2 gate is done and the five rulings were what was left.
+
+195. Had Claude walk me through all five with a recommendation each, and two of them turned out not to be what the gate list said they were. That's worth more than the fixes.
+
+196. StatusDot was the good one. It was carried to me as "rot=yellow, degraded=red, possibly backwards in the prototype." It isn't backwards. The bundle says Rot suspected -> yellow and Failing -> red, which is exactly right: a suspicion warns, a confirmed failure errors. The problem was that whoever built it invented the state name "degraded" — picked "by elimination," their words — and degraded reads as LESS severe than rot, so the pair looks inverted. Renamed it to failing, which is what the bundle called it in the first place. Nothing rendered changed.
+
+197. That's a lesson about naming, not about colour. Inventing a state name next to a source that already had one produced a bug report about a bug that didn't exist. It cost a gate item and my attention. Also caught that the SVRC's Region A.2.1 said "green, degraded, or failing" — three states, and one of them fictional. Fixed to the four real ones.
+
+198. The type tokens: I'd been told "98, a census not a scale, merging breaks parity." True, and I accepted it. But the number that actually mattered wasn't in the framing — only 17 of the 88 are used by anything, and of the 25-token body family, four. So it's a census of the BUNDLE, not of a system, and there's no point collapsing it until a real screen shows which ones survive.
+
+199. What did need fixing there: --type-body-default was 12.5px with 7 uses, and --type-body-default-2 was 11px with 11. The one called "default" wasn't, and the family's most-used token was hiding behind a positional "-2." Now --type-body-para and --type-body-detail. Renamed in the generator too, because renaming only the output file would mint the old names straight back — which is lesson 2.17 landing on us again, one day after we wrote it.
+
+200. brddash was already fixed and the gate list was just stale. Struck it.
+
+201. Danger-primary button: deliberately not built. No consumer, and building a variant ahead of need is what the 3x recurrence bar is for. But it's a destructive confirm, so it goes on the SP6 list rather than nowhere.
+
+202. Three things now cluster on SP6 — the recessed-section primitive, the spacing/shadow layers, and the danger-primary. Named them together as SP6 preconditions so they can't get rediscovered one at a time.
+
+203. One thing I didn't expect: npm run dev has never loaded .env. The server dies immediately on DATABASE_URL not set. npm run check loads it, dev never did — and "npm run dev then open /dev/gallery" is literally the sign-off procedure written in STATUS. The documented gate procedure was broken and nobody hit it because the gallery is client-only. Fixed.
+
+204. SP2 is signed off. Gate green after all of it — 92 tests, 20 files, exit 0. Clear to merge.
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand.]*
+
+205. Gave Claude the browser. All three Neon items done in one pass: test-branch password reset, compute default 0.25→8, project renamed to tenderfoot-db. Gate green afterwards on the new test credential — 92 tests, exit 0.
+
+206. The compute default was still 1 CU, confirmed on the settings page. And Neon's own dialog says the thing we wrote as lesson 2.17: "Modifying these defaults does not alter the settings of any existing computes." The vendor states the hazard in the UI and we still nearly shipped past it two days ago.
+
+207. The rename couldn't be done in Neon at all. Console returns: action restricted; reason "organization is managed by Vercel". Had to do it from the Vercel dashboard — Storage → the resource → Settings → Update Name. And renaming the VERCEL resource renamed the NEON project, which the workflow spec had predicted backwards; it assumed Neon was upstream and the Vercel name a cosmetic copy. It's the reverse. Generalisation worth keeping: the surface that created a resource keeps naming rights over it.
+
+208. Near-miss worth writing down. There are two Neon resources in that Vercel storage list — ours, and kp-web-prod, which is the live company website's production database. The list re-rendered between the screenshot and the click and Claude landed on kp-web-prod. Nothing was changed, it backed out and re-targeted by store ID instead of screen position. But that's the second time this week that a list which looks stable at read time wasn't stable at click time.
+
+209. And the bad one, which Claude flagged itself. Lesson 2.16 says a revocation is proved by the OLD key failing, not the new one working — and its own corollary says you have to capture the old artifact BEFORE the change or you can't verify at all. Claude overwrote the old test string before capturing it. So the test-branch rotation is closed on Neon's assertion, not on evidence. Main's was done properly. This one isn't.
+
+210. What makes that worth keeping rather than just annoying: the corollary was written hours earlier, by the same party, in this same file. It wasn't a gap in the analysis. The working sequence — reset, fetch new, write, test — has no step where the old value is still needed, so the precondition never came up. A precondition that appears nowhere in the happy path gets skipped no matter how well documented it is. Fix is to make capturing the old value step ONE of the procedure, not a verification step afterwards.
+
+211. 2.16 has now hit its own promotion bar — it said a second instance sends it to the playbook, and the second instance arrived, self-inflicted, under full knowledge. Claude left the actual promotion into Proto2PRD.md for me to decide rather than doing it off the back of the incident. Right call.

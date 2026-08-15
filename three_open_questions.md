@@ -1,7 +1,14 @@
-# Three open questions — Matt owes answers
+# ~~Three open questions — Matt owes answers~~ — ✅ ALL THREE ANSWERED, CLOSED 2026-08-14
 
 **Raised 2026-08-12** by Claude, at Matt's request, so they are not lost between sessions.
 **Subject:** the `Imp` / `Pri` columns in [`reference/Tenderfoot SVRC.md`](reference/Tenderfoot%20SVRC.md).
+
+> **CLOSED 2026-08-14. Q1 answered 08-13; Q2 and Q3 answered 08-14.**
+> All three rulings are recorded in the SVRC — the two definitional ones in the scoring key, where a reader will actually be, and the re-score in the grids themselves (**v0.6.0, fourteen of twenty values moved**).
+>
+> **This file is now history and should not be consulted for current scores.** It is kept because the arguments in it are the record of *why* the numbers are what they are, and because the five nodes it flagged turned out to be the wrong five — which is the most useful thing in it.
+>
+> **Nothing is owed here any more.** The `Imp`/`Pri` review that gated `docs/Tenderfoot-Plan-of-Action.md` §6 reconciliation is done; item 7 there is unblocked.
 
 ---
 
@@ -23,13 +30,36 @@ They were nonetheless filled in by Claude when the document was drafted, because
 
 The scoring key defines `Pri` as *"how soon this should be built, all things considered."* But the plan of action derives slice ordering **from** `Pri`. If `Pri` already accounts for technical dependency, the two are circular.
 
-**Claude's reading, for confirmation or correction:** `Pri` should be **pure product judgment** — how much KP wants the thing, independent of what has to be built first. Dependency ordering is then applied on top, once, in the plan. Under that reading a node can legitimately be `Pri 5` and still land in a late slice because it depends on three other things.
+~~**Claude's reading, for confirmation or correction:**~~ ✅ **ANSWERED 2026-08-13 by Matt — the reading is confirmed.**
 
-**Answer needed:** confirm, or state the reading you intend.
+> **`Pri` is pure product judgment: how much KP wants the thing.** Independent of what has to be built first. Dependency ordering is applied on top, once, in the plan. **A node can legitimately be `Pri 5` and still land in a late slice** because three other things must exist first.
+
+**What this settles, and it is more than the definition.** The circularity is broken: `Pri` is now an *input* to slice ordering rather than a partial restatement of it, so §6's sequence can be reconciled against it without arguing in a circle.
+
+**What it does not settle.** The twenty existing `Pri` values were written by Claude against a system that **had a matching engine**, and several are wrong under that definition rather than merely stale — the five listed at the foot of this file. **Confirming the definition makes those disagreements arguable rather than vague, which is progress, but it does not resolve them.** Q3 is where that gets scoped.
+
+**Recorded in the SVRC's scoring key**, so the next person reading a grid does not have to find this file.
 
 ---
 
 ## Q2 — How should a parked node be scored?
+
+✅ **ANSWERED 2026-08-14 by Matt — option (d), a marker outside the grid.**
+
+> **A parked node keeps its product scores, and carries a bold `PARKED` line directly beneath its heading, above the grid.** Planning excludes it **by the marker, not by the number.**
+
+**Adopted as a standing rule in the scoring key**, not as a treatment of one node — so `Pri 4` stands on `View 2.2`, and the next node to be parked inherits the convention instead of a precedent someone has to notice.
+
+**Why (d) over the stopgap it replaces.** (a) kept the number honest but put the warning in prose — three copies of it, in the preamble, the node, and the audit trail, none of them where the eye lands. (d) keeps (a)'s virtue and removes its failure mode by moving the warning to where the reader already is. **`View 2.2` and `View 2.3` are now distinguishable without either grid changing.**
+
+**One correction it forces.** *"Read their `Pri` as zero for V1"* is superseded and was **wrong, not merely redundant** — it asked a reader to mentally rewrite a number that was never zero. The priority is not zero; the node is outside V1's scope. Struck in all three places.
+
+**The marker crosses the level-3 line, which grids and labels do not** — parking is a fact about a node rather than a judgment about it, so `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid. Q2 was a one-node question about *scoring* and a three-node question about *marking*.
+
+**Recorded in the SVRC's scoring key** (v0.5.1), so the next person reading a grid does not have to find this file.
+
+<details>
+<summary>The original question, kept for the reasoning</summary>
 
 ### What "parked" means here
 
@@ -73,9 +103,26 @@ The two carry near-identical grids today. One ships in the first release and is 
 
 **Answer needed:** which option, and whether it becomes a standing rule in the scoring key.
 
+</details>
+
 ---
 
 ## Q3 — How much re-scoring do you want to do?
+
+✅ **ANSWERED 2026-08-14 by Matt — all twenty. "Open the doc; do all 20."**
+
+**Fourteen of the twenty moved.** `Imp` and `Pri` are now rulings rather than placeholders, which closes the caveat this document exists because of. Applied in SVRC **v0.6.0**.
+
+**The choice was vindicated by what it caught, and the five-node option could not have caught it.** The two worst values in the document were `Shell A` and `Region A.1`, both at `Pri 5` — *"built once, early, everything assumes it"* — which is the build-order definition **Q1 had outlawed the day before.** They were not on the flagged list because the flagged list was assembled by asking *"what looks too low?"* **Every one of the five was an under-score. Nobody thought to look for an over-score.**
+
+**The general lesson, staged as `Proto2PRD-Lessons.md` §2.18.** Q1 changed what `Pri` *means*, and the twenty values written under the old meaning stayed put. **Redefining a column does not re-score it, and nothing in a diff shows the gap** — the definition moves in one line, the stale values move in none.
+
+**Opening the document mattered independently of the numbers.** `View 1.2`'s `Known gaps` still read *"genuinely a candidate for cutting"* and its `Open questions` still asked a question ratified on 08-13. Editing grids from a list would have left a node whose numbers and prose contradict each other.
+
+**One item deliberately left unsettled.** `View 1.2` is now `Imp 4` at `Conc 45%` — the lowest completeness in the document. The justification is that the old `2`s meant *"unexamined"* rather than *"unimportant,"* which is **Claude's reading of Matt's intent a year ago and the least-evidenced claim in the pass.** Flagged in the node itself to be revisited once anything is designed.
+
+<details>
+<summary>The original question</summary>
 
 | Scope | Cost | Gets you |
 |---|---|---|
@@ -83,6 +130,8 @@ The two carry near-identical grids today. One ships in the first release and is 
 | All twenty scored nodes | ~30 minutes with the doc open | A grid that is entirely yours rather than partly Claude's |
 
 **Answer needed:** which, and when.
+
+</details>
 
 ---
 
@@ -96,7 +145,7 @@ Offered as argument, not as a recommendation to adopt.
 | `View 2.3 : Extracted Fields` | `Imp 4` | With no scores, extraction accuracy is the **only** thing V1 can be right or wrong about (§8.4). Arguably a 5. |
 | `View 6.2 : Source Registry` | `Pri 4` | Switching a source on or off is V1's **entire** control surface. Arguably a 5. |
 | `View 3.1 : Expiration Radar` | `Pri 2` | Too low. `Eff 2`, `Imp 4`, data already collected, and §6.0 concluded its position improves under the V1 decision. |
-| `View 2.2 : Scores and Evidence` | `Pri 4` | Parked. Not defensible as a 4 for planning — but see Q2. |
+| ~~`View 2.2 : Scores and Evidence`~~ ✅ | `Pri 4` | ~~Parked. Not defensible as a 4 for planning~~ — **resolved by Q2, and the resolution was not to move the number.** `Pri 4` is a true statement about the finished product; the `PARKED` marker is what keeps it out of the V1 sequence. **Four nodes left, not five.** |
 
 ---
 

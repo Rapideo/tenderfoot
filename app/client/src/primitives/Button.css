@@ -1,0 +1,168 @@
+/* Button -- matched against the bundle's 49 <button> elements
+ * (prototype/PROTOTYPE/Tenderfoot UI Mockups V1.2.html). Not all 49 are this
+ * primitive: table/list rows (n.go, s.toggle, r.open, o.open x3, v.open),
+ * nav/tab toggles (item.go, t.go), pill-style multi-select toggles (c.pick,
+ * t.pick, fi.pick, dd.pick), the saved-views list selector (v.go), the
+ * queue-counter badge (goTriage), and the dark command-bar / guided-tour
+ * chrome (exitTriage, toggleNotes, undo, goAdmin, toggleTheme, startTour,
+ * endTour, tourBack) are all structurally different components (list rows,
+ * tabs, toggles, chrome) that belong to Surfaces (Task 6) or intelligence
+ * chrome (Task 7), not to a plain action button. Two further one-off
+ * declarations (toggleDrawer's chip2-background toggle, newView's dashed
+ * "+ New view" affordance) matched no cluster of 2+ and were left
+ * unimplemented -- see task-5-report.md.
+ *
+ * What's left clusters into four real, recurring visual styles:
+ *
+ *   PRIMARY (interestIt, the decision bar's "Interested"):
+ *     border:1px solid var(--accbrd);background:var(--acc);
+ *     border-radius:8px;padding:15px;font:600 14px/1 'IBM Plex Sans';
+ *     color:var(--surface)
+ *
+ *   SECONDARY (passIt, the decision bar's "Pass"):
+ *     border:1px solid var(--brdctl);background:var(--surface);
+ *     border-radius:8px;padding:15px;font:600 14px/1 'IBM Plex Sans';
+ *     color:var(--text3)
+ *
+ *   These two are THE reference: --radius-action's own tokens.css comment
+ *   names them explicitly ("primary actions (Interested / Pass)"), and so
+ * does --type-button's ("primary action buttons (Interested / Pass)", its
+ * only 2 uses in the bundle) -- the highest-traffic controls in the
+ * product, matched exactly per the brief.
+ *
+ *   PRIMARY/SECONDARY, size="sm" (Ruling 9, added on review): a second,
+ *   smaller cluster of the same two colour treatments, purpose-named by
+ *   --radius-button ("buttons, toolbars, toasts") and --type-ui-action /
+ *   --type-ui-action-primary, both with zero consumers before this.
+ *
+ *   sm primary -- saveView ("Create view"/"Save changes", editor footer):
+ *     border:1px solid var(--accbrd);background:var(--acc);
+ *     border-radius:7px;padding:10px 18px;font:600 12.5px/1 'IBM Plex Sans';
+ *     color:var(--surface)
+ *   (tourNext is the same cluster but border:var(--accbrd2) i.e.
+ *   --accent-bright, not --accbrd -- a one-off substitution; saveView's
+ *   --accbrd/--accent-line is what --type-ui-action-primary's own bundle
+ *   uses ("tour Next, editor Save") is built against here.)
+ *
+ *   sm secondary -- closeEditor ("Cancel", editor footer):
+ *     border:1px solid var(--brdctl);background:var(--surface);
+ *     border-radius:7px;padding:10px 16px;font:500 12.5px/1 'IBM Plex Sans';
+ *     color:var(--text4)
+ *   NOT var(--text3) -- cancelReason's "Back" (padding 11px 16px, same
+ *   family) confirms it: both are var(--text4)/--text-tertiary, a real
+ *   colour step down from default secondary's --text-secondary, not a
+ *   geometry-only resize. (Task-5 report originally mis-stated this as
+ *   "text3 at a smaller size"; corrected after review.)
+ *
+ *   TERTIARY -- not named in the brief. A bordered, surface-background
+ *   button whose label is accent-coloured rather than neutral, used for
+ *   secondary calls to action inside cards/panels rather than the decision
+ *   bar: openDetail ("Open full detail →", triage card), g.restore
+ *   ("Restore", undo log), t.open ("Open vendor record →", entity panel).
+ *   All three share border:1px solid var(--brdctl);background:var(--surface);
+ *   color:var(--acc) and differ only in radius/padding/font-size (7/10/12,
+ *   5/6x9/11, 6/8x11/11). This build matches t.open's exact declaration:
+ *     border:1px solid var(--brdctl);background:var(--surface);
+ *     border-radius:6px;padding:8px 11px;font:500 11px/1 'IBM Plex Sans';
+ *     color:var(--acc)
+ *   -- the one --type-ui-menu (its own comment: "menu/control text (Show
+ *   menu, Restore)") and --radius-control cover exactly. If this primitive
+ *   is a variant this task's brief did not name, that is deliberate: forcing
+ *   these three into "secondary" would silently overwrite their accent
+ *   colour with --text3, changing what the bundle actually shows.
+ *
+ *   GHOST (markRead's "CLEAR" -- also toggleAllScores, openDocs, identical
+ *   modulo a sub-pixel size/tracking difference; the wider text5/text7/bad
+ *   -coloured ghost family, e.g. goTriage's "← BACK TO QUEUE" and
+ *   deleteView's "Delete view", is the same shape but a colour this prop
+ *   set has no slot for -- see task-5-report.md):
+ *     border:none;background:none;padding:0;
+ *     font:500 10px/1 'IBM Plex Mono';letter-spacing:.06em;color:var(--acc)
+ *   --type-microlabel-queue is that exact font shorthand; --tracking-hint-
+ *   tight is that exact tracking, its own comment naming "CLEAR" by name.
+ *
+ * display:inline-flex + gap is added as a structural affordance for the
+ * optional trailing Keycap (its origin: the command-bar "Show menu"
+ * button's `display:flex;align-items:center;gap:7px` wrapper) -- not a
+ * colour/radius/font value, so not token-governed, same reasoning as the
+ * four Task 4 atoms' added `display: inline-block`. Primary/secondary
+ * override it with the decision bar's own gap:9px and justify-content, both
+ * present verbatim on passIt/interestIt. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.btn--primary {
+  border: 1px solid var(--accent-line);
+  background: var(--accent);
+  color: var(--ground-surface);
+  border-radius: var(--radius-action);
+  padding: 15px;
+  font: var(--type-button);
+  justify-content: center;
+  gap: 9px;
+}
+
+.btn--secondary {
+  border: 1px solid var(--line-control);
+  background: var(--ground-surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-action);
+  padding: 15px;
+  font: var(--type-button);
+  justify-content: center;
+  gap: 9px;
+}
+
+/* size="sm" -- higher specificity (two classes) than the single-class
+ * variant rules above, so these win regardless of source order. */
+.btn--primary.btn--sm {
+  border-radius: var(--radius-button);
+  padding: 10px 18px;
+  font: var(--type-ui-action-primary);
+}
+
+.btn--secondary.btn--sm {
+  border-radius: var(--radius-button);
+  padding: 10px 16px;
+  font: var(--type-ui-action);
+  color: var(--text-tertiary);
+}
+
+.btn--tertiary {
+  border: 1px solid var(--line-control);
+  background: var(--ground-surface);
+  color: var(--accent);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  font: var(--type-ui-menu);
+}
+
+.btn--ghost {
+  border: none;
+  background: none;
+  padding: 0;
+  font: var(--type-microlabel-queue);
+  letter-spacing: var(--tracking-hint-tight);
+  color: var(--accent);
+}
+
+/* Disabled: never colour-only. The `disabled` attribute (set in Button.tsx)
+ * is the primary signal -- it is what assistive tech actually receives,
+ * removing the control from the tab order and announcing it as
+ * unavailable. This token-driven colour change is the secondary, sighted
+ * signal, using the existing --text-disabled role (tokens.css: "disabled
+ * and placeholder") rather than inventing a new colour, which tokens.css
+ * warns would risk landing inside one of its 90 sub-JND pairs. opacity is a
+ * structural (non-colour/radius/font) property, added so the dimming reads
+ * even for the filled --btn--primary background, which a text-colour change
+ * alone would not touch. Higher specificity than any single variant class
+ * (:disabled adds a pseudo-class), so it wins regardless of source order. */
+.btn:disabled {
+  cursor: not-allowed;
+  color: var(--text-disabled);
+  opacity: 0.6;
+}

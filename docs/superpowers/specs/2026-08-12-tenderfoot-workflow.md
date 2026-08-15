@@ -270,6 +270,8 @@ This section used to open *"we have no hosting platform, so it has no properties
 | **Neon** | Autosuspend delay, and cold-start latency after it | Triage "must feel instant." One user means the database is *usually* idle, so this is the common path, not the rare one | ✅ **~5 min, measured 2026-08-13.** Cold-start latency also measured 2026-08-13, reported unaveraged since the cold path is the normal one for a one-user database: **first request after idle — 1087 ms** (connect 1052 ms + query 35 ms) **vs. an immediate second (warm) request — 317 ms** (connect 282 ms + query 35 ms). One `SELECT 1` round trip via `node --env-file=.env`, direct against `DATABASE_URL` — not through the deployed function, so Vercel's own cold start is not included here |
 | **Neon** | Connection limit, pooled vs direct endpoint | Serverless concurrency against a connection ceiling is the classic failure. Pooled endpoint by default | ✅ **2026-08-13 — pooled by default, confirmed.** `DATABASE_URL` resolves to the `-pooler` host and `DATABASE_URL_UNPOOLED` to the direct one. **The integration got this right without being asked**, so the requirement is satisfied by construction rather than by discipline. The connection *count* ceiling is still unread |
 | **Neon** | Compute-hour and storage allowance on the plan | The thing that silently stops working, exactly as Supabase did | **Partial 2026-08-13** — see below |
+| **Neon** | Whether a role-password reset applies project-wide or per branch | Credential rotation is only complete if it reaches every branch. Getting this wrong leaves a leaked credential live while the incident reads as closed | ✅ **Per branch, measured 2026-08-14** — see below |
+| **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |
 
 **Read from the account 2026-08-13**, via the Neon API rather than from memory. These are **org-level facts and the settings of the existing `kp-web-prod` project**; a newly created Tenderfoot project may not inherit all of them, so the project-level rows are re-checked once it exists.
 
@@ -289,7 +291,7 @@ This section used to open *"we have no hosting platform, so it has no properties
 | | | Status |
 |---|---|---|
 | Vercel project | `tenderfoot`, team `koehler-partners`, alongside `kp-web` | ✅ |
-| Neon project | `wispy-tooth-06225229`, currently named **`neon-lime-button`** (auto-generated) | ⬜ **rename to `tenderfoot-db` OUTSTANDING** |
+| Neon project | `wispy-tooth-06225229`, named **`tenderfoot-db`** | ✅ **Renamed 2026-08-14 — from the VERCEL dashboard, not Neon.** See the callout below: the Neon console refuses outright |
 | Billing plan | **`launch_v3` (Launch), subscription** | ✅ Taken by default rather than chosen — see `DOOGIE` 2026-08-13 |
 | Compute | `ep-super-bonus-auoe43hj` (default branch) and `ep-withered-base-au6l4cjf` (`test` branch), both **0.25 → 8 CU** | ✅ **Resized 2026-08-13, verified by reading back.** Was 1→1 and **0.25→0.25** respectively — the *test* one was the tighter of the two and nobody had noticed |
 | Autosuspend | **300 s**, now explicit on both computes | ✅ **Confirmed twice.** Measured by observation this morning at 5 m 19 s while the value read `0`; the console then wrote `300` outright. The observational reading was right |
@@ -297,7 +299,9 @@ This section used to open *"we have no hosting platform, so it has no properties
 | Point-in-time restore | **24 hours** — longer than `kp-web-prod`'s 6 | ✅ |
 | Postgres | 17, `aws-us-east-1`, same region as the website | ✅ |
 
-> ### ⬜ Two changes decided 2026-08-13 and NOT YET APPLIED
+> ### ~~⬜ Two changes decided 2026-08-13 and NOT YET APPLIED~~ — ✅ BOTH APPLIED 2026-08-14
+>
+> *Kept for the reasoning and for the one prediction it got backwards; see the measured callout at the foot of this block.*
 >
 > **Verified still outstanding at time of writing** — the project name and the compute size are unchanged from provisioning. **Neither the Neon MCP nor the Vercel CLI can make these changes**: the MCP exposes create, delete, describe, list, branch, SQL and auth but no update; `vercel integration-resource` offers only `create-threshold`, `disconnect`, `remove`. So this needs the Neon console or the Neon API.
 >
@@ -313,7 +317,24 @@ This section used to open *"we have no hosting platform, so it has no properties
 >
 > **The second call is not redundant, and this is the half that fails silently.** `default_endpoint_settings` applies only to *newly created* endpoints. Change the project alone and the live compute stays pinned at 1 CU while the settings page reads 0.25–8 — which looks done and is not.
 >
-> **The Vercel resource name is a separate string** from the Neon project name; both currently read `neon-lime-button`. Renaming the Neon project will probably not rename the Vercel resource, which is cosmetic and changeable only in the Vercel dashboard.
+> ~~**The Vercel resource name is a separate string** from the Neon project name… Renaming the Neon project will probably not rename the Vercel resource.~~
+>
+> ### ✅ MEASURED 2026-08-14 — both changes applied, and the prediction above was backwards
+>
+> **The names are one string, not two, and the ownership runs the other way.** Renaming the **Vercel** resource renamed the **Neon** project; confirmed by reading `describe_project` back through the Neon MCP, which now returns `tenderfoot-db`. The guess here was that Neon was upstream and Vercel a cosmetic copy. It is the reverse.
+>
+> **The Neon console refuses the rename outright.** Editing Project name → Save in the Neon project settings returns:
+>
+> ```
+> action restricted; reason:"organization is managed by Vercel"
+> ```
+>
+> So the `PATCH .../projects/{id}` call above **would very likely also fail for a Vercel-managed org** — untested, because the dashboard route worked. **When a resource is provisioned through a marketplace integration, the marketplace owns its identity**, and the vendor's own console becomes read-only for exactly the fields the marketplace projected. That is worth generalising past Neon: *the surface that created a resource keeps naming rights over it.*
+>
+> **The rename path that works:** Vercel → Storage → the Neon resource → **Settings → Update Name → Save.**
+> ⚠️ **Two Neon resources sit in this team's Storage list** — `tenderfoot-db` (`store_mM0f1r2hzaSn22p5`, Neon `wispy-tooth-06225229`) and **`kp-web-prod` (`store_sZ5Zby3QCVhfWKPT`) — the live company website's production database.** The list re-renders after load and a click landed on the wrong one during this change. Nothing was modified, but **navigate by store ID rather than by position in that list.**
+>
+> **The compute default is applied:** project settings now read **`.25 ↔ 8 CU`**, read back on the page after saving. Neon's own dialog states the §2.17 hazard in its own words — *"Modifying these defaults does not alter the settings of any existing computes"* — which is why the second `PATCH` above was never redundant.
 
 > **The compute default is worth noting as a platform property rather than a preference.** A fixed floor of 1 CU on a database that idles most of the day is the wrong end of the trade for one user, and **nothing about the provisioning flow surfaces that choice** — it is simply what you get. That is the same class of fact as an auto-pausing free tier: a documented default with a cost, invisible unless someone reads it.
 
@@ -331,7 +352,51 @@ This section used to open *"we have no hosting platform, so it has no properties
 > 2. **A cron-driven ingestion run wakes a suspended database every time.** Harmless for a nightly job; worth knowing before anyone concludes a scheduled run is "slow."
 >
 > **What this does NOT justify is disabling autosuspend.** Suspension is why a one-user database is cheap, and paying for an always-on compute to save one resume per session is the wrong trade. **Measure the resume first** (§9.6's sibling question), then decide.
-| **Blob provider** | Per-object size cap and egress cost | Thousands of bundles up to 21 MB. This is now a bill | — |
+
+> ### ✅ MEASURED 2026-08-14 — a Neon role password is per BRANCH, not per project
+>
+> **This was asserted from memory and the assertion was wrong.** Before the rotation it was stated that resetting `neondb_owner` would cover every branch, because the role is a project-level object. The role is; **its password is not.** A branch copies its parent's roles *and their passwords* at creation, and the two are independent from that moment on.
+>
+> **Measured by connecting, not by reading a dashboard.** After the console password reset on `main`, one probe against both strings:
+>
+> ```
+> DATABASE_URL       (main, pooled)     -> FAILS: password authentication failed for user "neondb_owner"
+> DATABASE_URL_TEST  (test, unpooled)   -> STILL WORKS
+> ```
+>
+> **The reset landed on `main` and did not reach `test`.** The two branches now hold different passwords for the same role name.
+>
+> **Why this is load-bearing rather than trivia.** It is a silent-partial-success — the same shape as `default_endpoint_settings` above, and the same shape as the source platforms that accept a parameter and ignore it. The console reports the reset as done, and it *is* done, for one branch. **Nothing in the flow says the word "branch."** An incident closed on the strength of that report leaves a live credential behind, and the only way to find out is to try the other string.
+>
+> **The rule that follows: rotation is not complete until every branch is rotated and each one is verified by a failed connection on the old string.** A successful connection on the new string proves the new credential works; only a *failed* connection on the old one proves the old credential is dead. Both halves are required, and the second is the one that gets skipped.
+>
+> **Rotation is cheap to finish, because `store_passwords: true` on this project.** Neon keeps the role password, so `get_connection_string` returns the live one. Once a branch is reset in the console, the new string can be fetched programmatically — nothing needs copying by hand.
+>
+> **The tempting shortcut is wrong here, for a reason worth keeping.** Deleting and recreating the `test` branch would inherit `main`'s new password and retire the leaked hostname too, with no console trip. **Do not** — see the next note.
+
+> ### 🔴 LATENT 2026-08-14 — `default_endpoint_settings` is still 1→1 CU, so every NEW branch is born wrong
+>
+> Read from the project this morning:
+>
+> ```
+> "default_endpoint_settings": { "autoscaling_limit_min_cu": 1,
+>                                "autoscaling_limit_max_cu": 1,
+>                                "suspend_timeout_seconds": 0 }
+> ```
+>
+> **The 2026-08-13 resize fixed the two existing endpoints and not the project default.** Both live computes read 0.25→8 and verify on read-back, so the change looks complete and, for anything that exists today, is. **The callout above predicted exactly this half and it happened anyway** — the endpoint PATCH was applied, the project PATCH was not.
+>
+> **Two consequences, and the second is the expensive one:**
+>
+> 1. **Never rebuild the `test` branch by deleting and recreating it.** Its compute would come up at 1→1 CU. That is not cosmetic: the SP1.5 flaky gate was diagnosed to a fixed test compute, and the fix was verified because the predicted metric moved — collect time 48.84 s under contention → 2.9–4.4 s after the resize. Recreating the branch silently restores the failure and the gate goes flaky again with no change in the code to explain it.
+> 2. **Per-preview database branching (§8) is still outstanding, and it creates branches.** Every preview branch will be born at 1→1 CU on a database that idles nearly always — the wrong end of the trade, multiplied by the number of previews. **Fix the project default before §8 is turned on, not after.**
+>
+> ```
+> PATCH https://console.neon.tech/api/v2/projects/wispy-tooth-06225229
+>   {"project":{"default_endpoint_settings":{"autoscaling_limit_min_cu":0.25,
+>                                            "autoscaling_limit_max_cu":8}}}
+> ```
+
 
 ### 10.2 Other people's platforms — already measured
 

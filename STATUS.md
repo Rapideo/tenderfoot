@@ -1,10 +1,18 @@
 # Tenderfoot — status
 
-**Updated 2026-08-13.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-08-14.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **Now:** **Persistence changed — SQLite is out, Neon Postgres on Vercel is in** (decided 2026-08-13). **No data lost; the database was always derived from `corpus/` and the seed migrations.** Cost is ~600 lines of server code in the one merged slice. **SP1.5 is the port, and it comes next.**
+> **Now: SP2 is SIGNED OFF (2026-08-14) and clear to merge.** Sixteen primitives on `/dev/gallery`, reviewed against the V1.2 bundle with no issues raised; **all five gate rulings resolved** — two of them turned out not to be what the gate list said. Three fixes applied (`--type-body-default` → `--type-body-para`/`-detail`, `StatusDot` `degraded` → `failing`, and `npm run dev` now loads `.env`), gate re-run **green: 92 tests, 20 files, exit 0**.
 >
-> Behind it: SP1 T12–T15 still outstanding (mock-layer re-extraction, minimal admin UI). 33 tests green as of the last run.
+> **Also closed today:** all three of `three_open_questions.md`, and the full twenty-node SVRC `Imp`/`Pri` re-score (v0.6.0, fourteen moved).
+>
+> **Credential rotation is COMPLETE — both branches, 2026-08-14.** `main` was rotated first (old string proved dead, new one live, 201 solicitations intact). **`test` rotated today**; `DATABASE_URL_TEST` re-derived from the unpooled endpoint and the **full gate re-run green on it**.
+>
+> ⚠️ **One honest limit on the `test` rotation.** Per lesson §2.16 a revocation is proved by the OLD key failing, not the new one working — and **the old `test` string was overwritten before it was captured**, so that negative test could not be run. Neon's dialog asserts the old password is invalid; nothing here demonstrates it. **The `main` rotation was proved properly; this one is asserted.**
+>
+> **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. Nothing is pinned for Matt.
+>
+> Behind it: SP1 T12–T15 still outstanding (mock-layer re-extraction, minimal admin UI).
 
 ---
 
@@ -17,8 +25,8 @@
 | | |
 |---|---|
 | Design spec | ✅ `docs/superpowers/specs/2026-08-03-tenderfoot-design.md` |
-| SVRC (screen outline) | ✅ v0.4.0, adopted |
-| Prototype | ✅ V1.1, frozen, reference-only |
+| SVRC (screen outline) | ✅ v0.6.0, adopted — `Imp`/`Pri` ruled by Matt 08-14 |
+| Prototype | ✅ V1.2, frozen, reference-only |
 | Tokens extracted + verified | ✅ 67 colours, 13 radii |
 | Corpus | ✅ 76 live + 140 calibration + 2,160 contracts |
 | Source research | ✅ Complete 2026-08-12 |
@@ -38,7 +46,7 @@
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
 | **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) outstanding — dashboard-only, six steps in workflow spec §8 |
-| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | — |
+| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ✅ **SIGNED OFF 2026-08-14.** Branch `sp2-design-system`, **sixteen primitives** on `/dev/gallery`, gate green (**92 tests / 20 files**) after the three sign-off fixes. **Clear to merge — not yet merged** |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | — |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
 | ~~SP5~~ | ~~Matching engine~~ | **Removed 2026-08-11** |
@@ -48,42 +56,71 @@
 
 ---
 
-## Infrastructure — live as of 2026-08-13
+## ~~Waiting for Matt at the SP2 gate~~ — ✅ SIGNED OFF 2026-08-14
+
+**Matt drove `/dev/gallery` against the V1.2 bundle and passed the visual review with no issues raised.** The five rulings were then walked through individually and all resolved. **Two of the five were not what the gate list said they were.**
+
+| Ruling | Outcome |
+|---|---|
+| **98 type tokens** | ✅ **Census accepted, one name fixed.** Measured: **17 of 88 font tokens are actually consumed**; the 25-member `--type-body-*` family is 7 sizes × 8 leadings, of which **four are used**. Kept as a census — parity outranks elegance and 17/88 means nobody yet knows which survive a real screen. **But `--type-body-default` (12.5px, 7 uses) was outweighed by `--type-body-default-2` (11px, 11 uses)** — a token named "default" that wasn't, beside the family's most-used member hidden behind a positional `-2`. Renamed **`--type-body-para`** and **`--type-body-detail`**, *in the generator as well as the emitted file* |
+| **No spacing layer, no shadow layer** | ✅ **Accepted, with a date instead of a "later."** Extract when the second consumer appears; sixteen primitives and **zero composed screens** cannot distinguish systematic spacing from incidental. `Card`'s `rgba` shadow has exactly one consumer. **Now a named SP6 precondition** |
+| ~~**`StatusDot`: `rot` = yellow, `degraded` = red**~~ | ✅ **Not backwards — the colours were right and the NAME was wrong.** The bundle is coherent: *"Rot suspected"* is a suspicion and warns yellow; *"Failing"* is confirmed and errors red. The apparent inversion came from the state being called **`degraded`**, picked *"by elimination"* rather than from the bundle — and "degraded" reads as *less* severe than "rot." **Renamed `degraded` → `failing`** to match the bundle's own label. TypeScript union member: **zero parity impact, nothing rendered changed.** The four states now read green/yellow/red/grey in plain ascending severity |
+| ~~**`--brddash` is misnamed**~~ | ✅ **Already fixed; struck from the list.** It is `--line-dashed` now with the description corrected, `--brddash` retained as one of ~16 bundle-name aliases. **Nothing consumes either** — the only dashed affordances are the two unimplemented singletons. This row was stale |
+| **Gaps in `Button`** | ✅ **Danger-primary deliberately not added.** It is `confirmReason`'s pass branch (`--bad`/`--baddk`), driven by app state rather than any prop — no consumer exists, and building a variant ahead of need is what the 3× recurrence bar prevents. **Deferred to SP6 as a named precondition**, because it is a *destructive confirm* and SP6 composes the decision bar. The two singletons (`toggleDrawer`, dashed "+ New view") stay out unless they recur |
+
+### SP6 preconditions — three items, one gate
+
+Named together so they cannot be rediscovered piecemeal. **None block the SP2 merge; all three block SP6 composing a real screen.**
+
+| | Why it waits for SP6 |
+|---|---|
+| **A "recessed section" primitive** | The bundle's `COST TO PURSUE` panel sits in a `--surface3` recessed wrapper no primitive expresses, so the gallery draws it on plain white. Colour difference is near-imperceptible — **the real gap is the missing primitive, not the colour** |
+| **Spacing + shadow token layers** | Extract when a composed screen shows which values are systematic |
+| **`Button` danger-primary** | A destructive confirm; decide the affordance when the decision bar exists |
+
+## Infrastructure — live, re-read from the account 2026-08-14
 
 | | |
 |---|---|
 | Vercel | project `tenderfoot`, team `koehler-partners`, beside `kp-web` |
-| Neon | project `wispy-tooth-06225229`, org `Vercel: Koehler Partners`, beside `kp-web-prod`. Postgres 17, `aws-us-east-1` |
+| Neon | project `wispy-tooth-06225229`, named **`tenderfoot-db`** since 2026-08-14, org `Vercel: Koehler Partners`, beside `kp-web-prod`. Postgres 17, `aws-us-east-1` |
 | Billing | **`launch_v3` (Launch), subscription** — same org and bill as the website |
 | `DATABASE_URL` | pooled endpoint, injected by the integration into all three environments |
-| ⬜ **Outstanding** | **rename `neon-lime-button` → `tenderfoot-db`** · **resize compute 1→1 CU to 0.25→8 CU.** Neither is doable through the Neon MCP or the Vercel CLI — console or Neon API. Exact calls in workflow spec §10.1 |
+| Compute — existing | ✅ **resized 0.25 → 8 CU on both computes 2026-08-13**, verified by reading back. The `test` compute had been the tighter of the two at 0.25→0.25 |
+| Compute — **default** | ✅ **set to `0.25 → 8` CU 2026-08-14**, read back on the settings page. Governs computes that do **not exist yet** — new branches are now born right. Neon's own dialog states the §2.17 hazard verbatim: *"Modifying these defaults does not alter the settings of any existing computes"* |
+| Branches | `main` (`br-super-breeze-aun4swjv`) · `test` (`br-delicate-leaf-auwo0czn`). **Role passwords are per branch** — **both rotated 2026-08-14** |
+| ✅ **Rename** | **`neon-lime-button` → `tenderfoot-db`, done 2026-08-14 from the VERCEL dashboard.** The Neon console refuses it outright — `action restricted; reason:"organization is managed by Vercel"`. The spec had predicted the two names were independent strings with Neon upstream; **it is the reverse** — renaming the Vercel resource renamed the Neon project, confirmed by reading it back through the MCP. Details in workflow spec §10.1 |
 
 ## Waiting on Matt
 
-**None of these block SP0–SP2.**
+**Nothing here blocks SP0–SP2 any more.** The sign-off gate, all three open questions, and all three Neon console changes closed on 2026-08-14.
 
 | | Blocks |
 |---|---|
-| `three_open_questions.md` — the SVRC `Imp`/`Pri` review | Slice order from SP3 on |
+| ~~🔴 **The SP2 sign-off gate**~~ | ✅ **SIGNED OFF 2026-08-14.** Gallery reviewed against V1.2, no issues raised; all five rulings resolved above. **SP2 is clear to merge** |
+| ~~`three_open_questions.md`~~ ✅ **ALL THREE CLOSED 2026-08-14.** Q1 `Pri` = product priority · Q2 parked nodes keep their scores and carry a `PARKED` marker · Q3 all twenty re-scored, **fourteen moved**. `Imp`/`Pri` are rulings now, not placeholders. **The §6 slice-order reconciliation is unblocked** | ~~Slice order from SP3 on~~ — now Claude's |
 | ~~User stories~~ | ✅ **93 drafted 2026-08-12** — `docs/user-stories-source.html` and the published story map. Yours to edit |
 | **Extraction runtime** — Node / Python sidecar / smart mode | **SP4** |
-| 🔴 **Rotate the Neon credentials.** An agent printed live connection strings into a log while attempting to redact them. **Nothing reached git** — local scratch only — but they are live | **Now** |
-| 🔴 **Per-preview database branching.** Six numbered steps in workflow spec §8; dashboard-only. **Until it is done, every preview deployment writes to the production database** | SP2 onward |
+| 🟡 **Rotate the Neon credentials — HALF DONE 2026-08-14.** `main` is rotated: the old string now fails authentication, the new one works, 201 solicitations intact, full gate green (92 tests). **The `test` branch is still on the leaked password and still connects.** A Neon role password is per *branch*, not per project — this was asserted the other way and was wrong; see workflow spec §10.1. One console reset on the `test` branch closes it | **Now** |
+| 🔴 **Per-preview database branching.** Six numbered steps in workflow spec §8; dashboard-only. **Until it is done, every preview deployment writes to the production database.** ⚠️ **Do the compute-default fix below FIRST** — this step creates branches, and today every new branch is born at 1→1 CU | SP2 onward |
+| 🟡 **Set the project compute DEFAULT to 0.25→8 CU.** The 2026-08-13 resize fixed the two existing computes; `default_endpoint_settings` still reads **1→1**, and it applies only to *newly created* endpoints. Harmless today, wrong the moment any branch is created. Also the reason the `test` branch must be password-reset rather than rebuilt — rebuilding it would restore the SP1.5 flaky gate. Exact call in workflow spec §10.1 | **Before per-preview branching** |
 | **A git remote — or accept that CI is decorative.** `.github/workflows/ci.yml` is correct and has never run. Without it the local gate is the *only* gate | Decide before SP3 |
 | ~~Express or framework route handlers?~~ | ✅ **Ruled 2026-08-13: Express stays.** Workflow spec §9.5 stays open on its own terms; the port did not decide it by momentum |
 | **Which blob provider** — Vercel Blob / S3 / R2 | **SP4** |
 | **Where long ingestion runs** — bounded candidate scrape / durable workflow / off-platform. **The one the hosting decision created and did not answer:** the host solves *when* ingestion runs, not *how long it may run* | **SP3** |
 | ~~Doc storage on filesystem~~ · one-database-per-firm · auth in V1 | **Auth got sharper — it is a public URL now, not one laptop** |
 | Ingestion scaffolding brainstorm | **SP3** |
-| Prototype V1.2 — wordmark, mobile breakpoints | External sharing of the explainer |
+| ~~Prototype V1.2 — wordmark, mobile breakpoints~~ | ✅ **Both closed 2026-08-13.** V1.2 landed and was verified against V1.1 rather than trusted (colours 132→132, media queries 0→0, `display:flex` 74→73 — exactly the one disclosed wrapper). **The wordmark item turned out to be a deletion, not a design** — the logo already existed; only the 8px placeholder *label* was provisional. **Mobile ruled desktop-only** by measurement, not instinct; a separate mobile client is now plan of record |
+| 📎 **`THOUGHTS.md`** — ✅ **tracked 2026-08-14**, committed verbatim. Four ideas from 08-11. **Two bear on open questions:** *levels of research and qualifying against that research* collides with the qualification work spec §1.1 parks as **undesigned** — note the collision, don't resolve it — and *what analysis 20+ years of historical data enables* is real against the 2,160-contract corpus (Illinois backtests to 2018). The other two are V2-shaped, past SP8. **Still to decide: promote the live two into backlog, or leave filed** | Nothing |
 
 ## Waiting on Claude
 
 | | |
 |---|---|
-| ~~B3 for SP0~~ · ~~B3 for SP1.5~~ | ✅ written and executed |
+| ~~B3 for SP0~~ · ~~B3 for SP1.5~~ · ~~B3 for SP2~~ | ✅ written and executed. SP2's scope grew 2026-08-13 — the parked intelligence chrome is built inert, so it was never "mostly transcription" |
 | SP1 T12–T15 | Re-extraction + minimal admin |
-| **B3 for SP2** | **Next.** Scope grew 2026-08-13 — the parked intelligence chrome is now built inert, so SP2 is no longer "mostly transcription" |
+| **B3 for SP3** | **Next**, but gated: §9.6 (where long ingestion runs), the round-trip fix, and the scaffolding brainstorm all land in the plan rather than after it |
+| **A "recessed section" primitive** | The one known SP2 gap, ruled not gate-blocking. Needed **before SP6** composes `FactPanel` into a real screen |
 | **The ingestion round-trip fix** | **Blocks SP3.** ~7 rows/sec against a *measured* 300s function ceiling: an 8,000-record register is ~19 minutes and does not fit. Multi-row `INSERT`/`UNNEST` |
 
 ---
@@ -100,6 +137,9 @@
 - **Sources:** Illinois `in` and backtest-capable (2,155 closed to 2018) · Michigan + Kentucky `in`, current-only · Ohio `manual-only`
 
 ## Known risks
+
+- 🔴 **NEW — a leaked database credential is still live on the `test` branch.** Rotation closed `main` and not `test`, because a Neon role password is per *branch*. **Verified by connecting, not assumed:** the old `main` string fails auth, the old `test` string still works. One console reset closes it. **The general rule this produced — a revocation is proved by the OLD key failing, not the new key working** — is lessons `2.16`
+- 🟡 **NEW — the compute default that mints future branches is still wrong (1→1 CU).** Harmless today because every compute that exists was fixed; wrong the instant anything is created. **The spec had already written the warning and it happened anyway.** Lessons `2.17`
 
 - ~~**Deployment expires at SP7.** A closed laptop does not scrape~~ **RETIRED 2026-08-13** — Vercel Cron answers it. Arrived four slices early, with the answer attached
 - ~~**A second reader means a second copy**~~ **RETIRED 2026-08-13** — managed Postgres answers it

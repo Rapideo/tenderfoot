@@ -1,9 +1,22 @@
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { useTestSchema, resetSchema } from "./testdb.js";
 
 /* Scratch schema. Set before importing anything that opens a pool. */
 const SCHEMA = useTestSchema("test_schema");
 await resetSchema();
+
+/* Ruling 6 (SP2 T2 coordinator review). Vitest's default 5000ms testTimeout
+ * is too tight for tests that do live network round trips against the
+ * shared Neon test-branch compute: a cold start alone measures ~1.1s, and
+ * several agents can be running the suite concurrently against the same
+ * compute (each gets its own SCHEMA -- SP1.5 Ruling 3 -- but they still
+ * contend for the one compute's connections). corpus.test.ts already
+ * carries a 120000ms hook timeout for the exact same underlying reason
+ * (~200 rows, each several round trips); 30000ms here is the equivalent
+ * margin sized to this file's much smaller workload -- generous enough to
+ * absorb contention, not so high that a genuine hang would pass for a slow
+ * test. */
+vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("./migrate.js");
 const { all, one, run, insert, close } = await import("./index.js");

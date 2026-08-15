@@ -26,6 +26,8 @@
  * actually runs) still sees whatever DATABASE_URL its own environment
  * provides. */
 import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 function run(npmScript, env = process.env) {
   // One joined command string, not a separate args array -- npmScript is
@@ -37,6 +39,113 @@ function run(npmScript, env = process.env) {
     process.exit(result.status ?? 1);
   }
 }
+
+/* SP2 T3 review (Important): the DEV guard on /dev/gallery in
+ * app/client/src/router.tsx is convention-enforced, not tool-enforced --
+ * nothing stops a future `import { Gallery } from "./dev/Gallery"` from
+ * outside that guarded branch (a debug link, a barrel export, a lazy import
+ * "for convenience") from shipping it anyway. A comment on the guard cannot
+ * catch that; only something that runs is a guard.
+ *
+ * So this runs. app/client/src/dev/Gallery.tsx carries a marker string that
+ * exists nowhere else in the source tree. This function greps the actual
+ * production build for it -- after `build` below has produced dist/ --
+ * and fails the gate if it is present, whatever route it arrived by. */
+/* C1 (2026-08-14 fix wave): this used to grep for a marker that lived ONLY
+ * in Gallery.tsx's JS. That missed a real, currently-shipping defect: Vite
+ * bundles a CSS side-effect import (`import "./Gallery.css"` in
+ * Gallery.tsx) unconditionally, independently of whether the JS that
+ * imports it is tree-shaken -- a clean build at HEAD shipped 18
+ * `.gallery-*` selectors into dist/assets/index-*.css while this exact
+ * function printed OK, because the marker it was grepping for had only ever
+ * existed on the JS side. The marker now ALSO lives in Gallery.css (a
+ * --dev-gallery-marker custom property -- a real declaration, not a
+ * comment, because Vite's production CSS minifier strips comments and a
+ * marker living only in one would never reach dist). This function's own
+ * whole-dist-tree grep did not need to change to cover both; only the
+ * marker's footprint did. Root cause fixed separately in router.tsx
+ * (Gallery is now built only inside `if (import.meta.env.DEV)`, as a
+ * React.lazy()-wrapped dynamic import(), so Rollup can prove the whole
+ * branch -- JS and CSS alike -- is unreachable in production and drop it);
+ * this check is what proves that fix actually holds, and what will catch a
+ * regression if a future static import reintroduces the leak. */
+function checkGalleryMarkerAbsentFromBuild() {
+  const marker = "dev-gallery-marker";
+  const distDir = join(process.cwd(), "app", "client", "dist");
+  const leaks = [];
+  for (const rel of readdirSync(distDir, { recursive: true })) {
+    const full = join(distDir, rel);
+    if (statSync(full).isDirectory()) continue;
+    if (readFileSync(full, "utf8").includes(marker)) leaks.push(full);
+  }
+  if (leaks.length > 0) {
+    console.error(
+      `FAIL: a dev-only surface reached the production build.\n` +
+        `"${marker}" -- a marker that exists ONLY in ` +
+        `app/client/src/dev/Gallery.tsx and app/client/src/dev/Gallery.css, ` +
+        `both DEV-ONLY -- was found in:\n` +
+        leaks.map((f) => `  ${f}`).join("\n") +
+        `\n\nThis means /dev/gallery, or something that imports Gallery.tsx ` +
+        `or Gallery.css from outside the import.meta.env.DEV branch in ` +
+        `app/client/src/router.tsx, shipped to production. Find and remove ` +
+        `whatever imports either file outside that guarded branch, then ` +
+        `rebuild and re-run this check.`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `OK     "${marker}" absent from ${distDir} -- the dev-only gallery route did not ship.`,
+  );
+}
+
+/* SP2 T9: companion to checkGalleryMarkerAbsentFromBuild() below, and the
+ * deferred item that check was carrying (progress.md, Task 3 minor --
+ * "CARRIED INTO TASK 9"). That check greps the production BUILD for the
+ * marker's absence; nothing anywhere asserted the marker was present in
+ * SOURCE to begin with. Delete "dev-gallery-marker" from Gallery.tsx and
+ * the absence check passes vacuously -- there is nothing to find in the
+ * build because there was never anything to find, not because the route
+ * didn't ship. Same shape as a test that cannot fail. Task 9 reorganises
+ * the exact file that holds the marker, which is exactly when a string
+ * with no visible purpose is most likely to be edited away. Runs first,
+ * before typecheck/test/build, so a deleted marker fails fast rather than
+ * burning the rest of the gate first. */
+/* C1 (2026-08-14 fix wave): checks Gallery.css too, not just Gallery.tsx.
+ * Gallery.css carries its own copy of the marker (a --dev-gallery-marker
+ * custom property) precisely because a CSS side-effect import ships to
+ * production independently of JS tree-shaking -- see the comment on
+ * checkGalleryMarkerAbsentFromBuild() below. The same vacuous-pass risk
+ * Task 3 found for the JS marker applies here identically: if someone
+ * deletes the CSS marker while Gallery.css can still reach a build, the
+ * absence check downstream would have nothing to find and would pass
+ * whether or not the leak actually happened. */
+function checkGalleryMarkerPresentInSource() {
+  const marker = "dev-gallery-marker";
+  const sources = [
+    join(process.cwd(), "app", "client", "src", "dev", "Gallery.tsx"),
+    join(process.cwd(), "app", "client", "src", "dev", "Gallery.css"),
+  ];
+  for (const path of sources) {
+    const source = readFileSync(path, "utf8");
+    if (!source.includes(marker)) {
+      console.error(
+        `FAIL: "${marker}" is missing from ${path}.\n` +
+          `checkGalleryMarkerAbsentFromBuild() (later in this script) greps the ` +
+          `production build for this exact string and treats its ABSENCE there ` +
+          `as proof /dev/gallery -- JS and CSS alike -- did not ship. If the ` +
+          `marker isn't in every one of its source files, that check passes ` +
+          `whether or not the gallery actually shipped -- it would be proving ` +
+          `nothing. Restore "${marker}" to ${path} and re-run.`,
+      );
+      process.exit(1);
+    }
+  }
+  console.log(
+    `OK     "${marker}" present in ${sources.length} dev-gallery source file(s) -- the build-absence check has something to grep for.`,
+  );
+}
+
+checkGalleryMarkerPresentInSource();
 
 run("typecheck");
 
@@ -74,5 +183,7 @@ run("test", testEnv);
  * would trust it exists. The gate's own build step must never see
  * production -- see I2 above. */
 run("build", { ...process.env, DATABASE_URL: process.env.DATABASE_URL_TEST });
+
+checkGalleryMarkerAbsentFromBuild();
 
 run("tokens");

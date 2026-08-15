@@ -40,6 +40,24 @@ NOTE_WATCH = (
     "     * changed without lying. Whether the direction needs two caution hues is open."
 )
 NOTE_NEG = "negative. Overloaded -- see the note at the foot of this group."
+NOTE_DASHED = (
+    "a DEFERRED-FEATURE placeholder, not an empty-state token (I4, 2026-08-14\n"
+    "     * fix wave -- the exact twin of --signal-neg's false low-score\n"
+    "     * claim, Ruling 12). Read at all 4 of its bundle uses: every one\n"
+    "     * marks a layout slot for something deliberately not built yet,\n"
+    "     * captioned inline -- \"DOCUMENT RENDER — PLACEHOLDER\", \"Rescore\n"
+    "     * history has no treatment yet (§6.4)\", \"Records are not\n"
+    "     * accessible to this project. The slot stays in the layout...\",\n"
+    "     * \"Recall is quoted against its denominator...\". NEVER an empty\n"
+    "     * list -- the bundle's OWN \"list has nothing in it\" treatment\n"
+    "     * (FactPanel's and ScoreBar's empty states alike) uses --brdctl3\n"
+    "     * instead (F4, SP2 fidelity audit, corrected the same day). Two\n"
+    "     * consumers (FactPanel.css, ScoreBar.css) carry a comment\n"
+    "     * explaining why they ignore this token's old, flattering\n"
+    "     * description; correcting the description here is the actual fix --\n"
+    "     * a comment surviving in two consumers to explain around a wrong\n"
+    "     * claim means the claim, not the consumers, was the defect."
+)
 
 GROUPS = [
  ("GROUND -- light backgrounds, ordered by depth", [
@@ -63,7 +81,7 @@ GROUPS = [
   ("--line-control-2", "--brdctl2",  "second control border"),
   ("--line-control-3", "--brdctl3",  "third control border"),
   ("--line-control-4", "--brdctl4",  "fourth control border"),
-  ("--line-dashed",    "--brddash",  "dashed affordance: empty states, add-new targets"),
+  ("--line-dashed",    "--brddash",  NOTE_DASHED),
   ("--line-dashed-2",  "--brddash2", "second dashed affordance"),
  ]),
  ("TEXT -- foreground on light ground, darkest first", [
@@ -148,20 +166,34 @@ FOOTERS = {
    * Same discipline as the radii. Handed back. */
 ''',
  "SIGNAL -- semantic. Kept separate from --accent by rule (Proto2PRD 4.5).": '''  /* --signal-neg IS OVERLOADED, and this is the note referred to above.
-   * One value, three jobs, observed in the bundle:
+   * One value, two jobs, observed in the bundle:
    *   1. a data-quality flag  -- "DEADLINE DISAGREEMENT -- NOT RESOLVED"
    *   2. a destructive action -- "Delete view"
-   *   3. a score or verdict   -- low fit, Pass
    *
    * These are not the same thing and they do not always co-occur. A record can
-   * carry a deadline conflict while scoring well; a destructive button is not a
-   * judgement about an opportunity. Rendering all three in the same red means
-   * the interface cannot say "this is wrong" and "this is bad news" differently.
+   * carry a deadline conflict while a destructive control elsewhere carries no
+   * judgement about that record at all. Rendering both in the same red means
+   * the interface cannot say "this is wrong" and "this action cannot be undone"
+   * differently.
    *
    * This matters more here than it would elsewhere, because the whole system is
    * a judgement tool -- see docs/Proto2PRD.md 4.5, where the REASON outranks the
-   * decision. A colour that conflates data integrity with a verdict undercuts
-   * that.
+   * decision. A colour that conflates data integrity with an irreversible
+   * action undercuts that.
+   *
+   * A THIRD JOB WAS CLAIMED HERE UNTIL 2026-08-13 AND IS NOT REAL. This note
+   * previously listed a third overloaded job, "a score or verdict -- low fit,
+   * Pass". It does not exist. The bundle's own scoreColor(v) -- the one
+   * function that colours every numeric score anywhere in the direction --
+   * returns var(--warn) for a low score, never var(--bad)/--signal-neg,
+   * confirmed against all five mock opportunity records:
+   *   scoreColor(v) { return v >= 70 ? "var(--ok)" : v >= 45 ? "var(--acc)" : "var(--warn)"; }
+   * The claim was written from memory rather than checked against the bundle,
+   * then treated as ground truth for most of a working day (SP2 T7) before an
+   * implementer building ScoreBar's fill colour checked scoreColor() directly
+   * and found the disagreement. Removed rather than left here to mislead the
+   * next reader -- a comment asserting a mechanism the artifact does not have
+   * is exactly the failure this project has spent the day hunting elsewhere.
    *
    * NOT SPLIT HERE. Splitting introduces a colour, which is a design decision.
    * Recorded so the choice is deliberate rather than inherited. */
@@ -227,6 +259,24 @@ HEAD = '''/* ===================================================================
  * sampled from, which applies only where a slot-4 palette source exists. These
  * came out of the generator, so the tokens record WHAT but not WHY, and the
  * do-not-revisit discipline has nothing to anchor to until a source is named.
+ *
+ * SECOND PALETTE, NOT EXTRACTED (I3, 2026-08-14 fix wave). The bundle defines
+ * every one of these 67 names TWICE: once under :root (the light values
+ * below) and again, immediately after, under a `[data-theme="dark"]`
+ * selector -- 134 hex values total, a complete second dark palette, not a
+ * handful of overrides. This generator's extraction loop keeps only the
+ * FIRST definition of each name (`if n not in defs`), so every value below
+ * is the LIGHT one; the dark one is read, matched, and silently discarded.
+ * That is not a bug in the regex -- both selectors satisfy the same
+ * `--name:#hex` pattern on purpose, because :root and [data-theme="dark"]
+ * are just two more curly-brace blocks to it -- it is a scope this file has
+ * never claimed to cover. This is that claim, made explicitly: A DARK THEME
+ * EXISTS IN THE BUNDLE. IT IS NOT BUILT HERE. Nothing below should be read
+ * as "the bundle has no dark palette" -- only as "this generator emits the
+ * light one." prototype/tools/verify-tokens.py's conservation check counts
+ * both palettes and fails if that count ever drifts from 67, so this
+ * disclosure cannot go silently stale the way the --line-dashed and
+ * --signal-neg comments did (I4, Ruling 12).
  * ==========================================================================*/
 
 :root {

@@ -1,0 +1,19 @@
+/* TableRow -- see TableRow.tsx for the ten bundle row instances this was
+ * measured against, and for why grid-template-columns, background, and
+ * padding are not exclusively here (they are per-instance data, overridable
+ * inline).
+ *
+ * --line-row is --brdrow ("table row rules; the faintest division that
+ * still reads" -- tokens.css), the border colour shared by all ten
+ * instances without exception. Padding has no token layer (as with every
+ * prior primitive), so it stays a literal -- the plurality value (four of
+ * ten instances), left here as the default per Ruling 14 (SP2 T8 review)
+ * rather than moved into the component wholesale, so nothing already built
+ * moves. */
+.table-row {
+  display: grid;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 24px;
+  border-bottom: 1px solid var(--line-row);
+}

@@ -37,6 +37,8 @@ Recorded so the end-of-project pass does not re-litigate settled ground.
 
 **The `(T)` provenance marker.** Validated-on-Tenderfoot, sitting between recovered and untested. *Trigger:* two mechanisms qualified and `(N)` had stopped being honest about either.
 
+**§5.4 — a removal is proved by the OLD thing failing, and the old thing must be captured first.** Promoted 2026-08-14. *Trigger:* observed twice in one day — a per-branch password reset that left the leaked credential live, then the corollary being violated by the party that had written it hours earlier. **The mechanism is what earned it:** the working sequence for a revocation contains no step at which the old value is still needed, so the precondition is invisible to anyone following the happy path. That is why the playbook entry moves the step rather than adding a reminder. *Evidence:* §2.16 below, both instances.
+
 **`ClaudeDesign_Proto_Cleanup.md`** — a companion procedure for turning a generated bundle into a specification-grade prototype, including the re-extraction section added when V1.1 landed hours after V1 was extracted.
 
 ---
@@ -214,6 +216,70 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 **Corollary worth keeping separately:** when a flake is fixed, confirm the *metric predicted to move* actually moved. A failure that stops reproducing is not the same as a cause that has been removed.
 
 **Why not promoted.** One project, though two instances. **The second half — verify by the predicted metric, not by the symptom's absence — may deserve promotion on its own**, since it is the difference between a diagnosis and a coincidence.
+
+---
+
+### ~~2.16~~ ✅ PROMOTED 2026-08-14 → `Proto2PRD.md` §5.4 — a revocation is proved by the OLD key failing
+
+*Kept here in full: the playbook carries the rule, this carries the two incidents it was derived from.*
+
+**Observed 2026-08-14.**
+
+A leaked database credential was rotated in the provider console. The obvious check — connect with the new string — passed, and on its own would have closed the incident. **The check that mattered was connecting with the OLD string, which still worked on one of the two branches.** The provider resets a role password *per branch*: the role is a project-level object and its password is not. Nothing in the console flow says the word "branch," and the reset genuinely succeeded for the branch it was aimed at. The report was accurate and the incident was still open.
+
+**Proposed generalisation.** For any change whose purpose is to **remove** something — a credential, an access grant, a feature flag, a route, a permission, a file — the positive test confirms the replacement exists and says **nothing whatsoever** about whether the original is gone. The two are independent facts. **The negative test is the one that carries the claim, and it is the one that gets skipped**, because a passing positive test feels like completion and produces the same green.
+
+**Corollary, and it has to be planned for.** The negative test requires the old artifact, so it must be **captured before the change**. A rotation that discards the old string first cannot be verified at all — only assumed.
+
+**Second instance, same day, and it is the corollary above being violated by the person who wrote it.** The `test` branch was rotated later on 2026-08-14. The new credential was verified — connection works, full gate green, 92 tests. **The old string was overwritten in `.env` before it was captured, so the negative test could not be run at all.** The provider's dialog asserts the old password is no longer valid; nothing that was actually executed demonstrates it. The incident is closed on an assertion where the `main` branch's was closed on evidence.
+
+**What makes this the instructive one.** The corollary was already written, in this file, hours earlier, in these words: *"the negative test requires the old artifact, so it must be captured before the change."* It was not a gap in the analysis. **The rotation was performed step-by-step and the capture step simply never came up**, because the working sequence — reset, fetch new, write, test — has no natural place where the old value is still needed. **A precondition that appears nowhere in the happy path will be skipped no matter how well it is documented** (cf. §2.17's "a documented hazard is not a mitigated one" — same failure, different lesson).
+
+**The fix is a sequencing rule, not a reminder.** Make capturing the old artifact **step one of the revocation procedure**, before touching the provider — not a verification step afterwards. By the time verification is the current concern, the artifact is already gone.
+
+**✅ PROMOTED 2026-08-14 by Matt's decision**, into `Proto2PRD.md` §5.4, beside *"verify against expected output, not exit status"* — the same family, since both are verifications that assert the wrong thing. **The playbook entry leads with the sequencing rule rather than the maxim**, because the second instance proved the maxim alone does not survive contact with the happy path.
+
+### 2.17 Fixing every instance leaves the template that mints the next one
+
+**Observed 2026-08-14 — and the spec had already written the warning.**
+
+A database compute was resized from 1→1 to 0.25→8 CU. Both live computes read the new value and verified on read-back, so the change was recorded as done. **The project-level `default_endpoint_settings`, which governs computes that do not exist yet, still read 1→1.** Every future branch would be born at the wrong size — including the per-preview branches that a still-outstanding task exists specifically to start creating.
+
+**The sharpest part is that the hazard was documented.** The workflow spec said in as many words that the default applies only to newly created endpoints, that the second API call was *"not redundant,"* and that this was *"the half that fails silently."* The warning was correct, it was written by the person doing the work, and the second call still was not made. **A documented hazard is not a mitigated one.**
+
+**Proposed generalisation.** Where a setting exists at both **instance** and **template** level, fixing every instance produces a complete-looking audit and a wrong system — because the audit surface is *what exists*, and the defect lives in *what does not exist yet*. It surfaces only when something new is created, which is typically later, under different circumstances, and gets attributed to the new thing.
+
+**The check that catches it.** After changing a setting across every instance, ask: ***"what mints the next instance, and did it change?"*** Then create one and read it back. Nothing short of creating one distinguishes a fixed template from an unfixed one.
+
+**Second-order value, recorded 2026-08-14.** The near-miss here was a *shortcut*: rebuilding the test branch instead of resetting its password would have inherited the rotated credential and retired the leaked hostname in one move. It was rejected only because the template defect was found first — otherwise it would have silently restored the SP1.5 flaky gate, whose cause had already been measured and paid for. **A shortcut that creates a new instance inherits the template's defects, and that is invisible at the moment the shortcut looks clever.**
+
+**Why not promoted.** One instance. **The warning-was-written-and-ignored half may be the more valuable one**, and it generalises past configuration entirely: it is a claim about whether documentation is actually consulted at the moment of action, or only at the moment of writing.
+
+---
+
+### 2.18 A change to what something *means* moves nothing and breaks everything — two instances
+
+**Observed 2026-08-14, reconstructing the SVRC's missing revision notes.**
+
+Three consecutive changes to an adopted reference document. Re-pointing one node's `Proto` score from 70% to 95% took a **minor** bump, 0.4.1 → 0.5.0. Rewriting the scoring key's definition of `Pri` — from *"how soon this should be built"* to *"how much KP wants the thing"* — took **no bump at all** and left no revision note.
+
+**The second change is enormously larger than the first, and the version says the opposite.** One moved a single number. The other **silently reinterpreted all twenty existing values in the document**, because every one of them was written against the old definition. Nothing in the file recorded that two different meanings of `Pri` had both shipped as 0.5.0.
+
+**Proposed generalisation.** Editors size a version bump by **how much text moved**, because that is what is visible in a diff. The changes that most need announcing are **semantic**: a definition, a scale, a column's meaning, a default. These are often a one-line diff — which is exactly why they get typed as trivial and slip through unversioned.
+
+**The check that catches it.** Before committing a change to a reference document, ask: ***"does this change what any existing value in the document means?"*** If yes, it is a major revision regardless of its size, and it needs a note saying which values were reinterpreted. A one-line diff is a reason for suspicion, not comfort.
+
+**And the repair is a note, not a renumber.** Retroactively renumbering makes the history lie a second way. The version stays wrong; the note is how a reader finds out that it is.
+
+**Second instance, same day, and it is the stronger one.** Q1 redefined the SVRC's `Pri` column on 2026-08-13 — one line in the scoring key. **The twenty values already written under the old definition stayed exactly where they were.** A day later, `Shell A` and `Region A.1` were still carrying `Pri 5` meaning *"build this first"* — the reading the ruling had explicitly outlawed. **Redefining a column does not re-score it**, and the gap is invisible in a diff: the definition moves in one line and the stale values move in none.
+
+**What makes it the stronger instance.** Nobody had to be careless. The ruling was correct, recorded, and prominently placed; the person who wrote it then wrote *"confirming the definition makes those disagreements arguable rather than vague — it does not resolve them"* **and still did not go re-read the twenty numbers.** The failure is structural: a definition and its instances are edited in different passes, and only the definition feels like the decision.
+
+**The check that catches this one.** After changing what a field *means*, ask: ***"how many existing values were written under the old meaning, and who is re-reading them?"*** If the answer is *"all of them"* and *"nobody,"* the change is not finished. **Sizing the version bump by semantics rather than diff is the same discipline applied to the same defect** — which is why these are one lesson and not two.
+
+**A corollary worth keeping separately.** The re-score was driven by a list of five nodes flagged as suspect. **All five were flagged as too *low*; the two worst values in the document were too *high*, and no amount of examining the five would have found them.** A targeted re-audit inherits the bias of whoever wrote the target list. **When the underlying definition changed, the audit has to be exhaustive, because the thing that moved was the yardstick.**
+
+**Why not promoted yet.** Two instances now, one of them strong, and it is close kin to §2.17 — all three are cases where the visible surface (instances; diff size; the flagged list) is not the surface where the defect lives. **Candidate title if they merge: *auditing the wrong surface*.** Worth one more observation before promoting, and it is close.
 
 ---
 

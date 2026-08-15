@@ -1,0 +1,173 @@
+/* Layout only for the dev gallery -- no colour, radius, or font literal
+ * belongs here beyond what a primitive's own CSS already supplies. The one
+ * exception is the ink-context swatch: Keycap is styled for an ink (dark)
+ * surface in the bundle (V1.2's command-bar "Show menu" control), so this
+ * reproduces that surface -- from tokens, not a hardcoded hex -- rather than
+ * showing the atom floating, illegibly, on the gallery's light ground. */
+
+/* dev-gallery-marker (C1, 2026-08-14 fix wave): a SECOND copy of the same
+ * marker Gallery.tsx's <h1> carries, deliberately duplicated here rather than
+ * assumed to travel with it. Vite bundles a CSS side-effect import
+ * (Gallery.tsx:22, `import "./Gallery.css"`) unconditionally, independently
+ * of whether import.meta.env.DEV tree-shakes the JS that imports it -- a
+ * clean build at HEAD shipped 18 `.gallery-*` selectors into
+ * dist/assets/index-*.css while scripts/check.mjs's marker grep, which only
+ * ever looked for the JS-side string, reported the build clean. A CUSTOM
+ * PROPERTY, not a comment: Vite's production CSS minifier strips comments,
+ * so a marker living only in one would never reach dist and this would
+ * prove nothing. The declaration below is otherwise inert -- nothing reads
+ * --dev-gallery-marker -- and checkGalleryMarkerAbsentFromBuild() in
+ * scripts/check.mjs is what actually greps for it in the built output. */
+.gallery-section {
+  margin-top: 32px;
+  --dev-gallery-marker: "dev-gallery-marker";
+}
+
+.gallery-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.gallery-ink-context {
+  background: var(--ink-surface);
+  padding: 16px;
+  border-radius: var(--radius-panel);
+}
+
+.gallery-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gallery-button-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.gallery-note {
+  margin-top: 16px;
+  max-width: 640px;
+}
+
+/* Task 6 -- Surfaces. gallery-card-demo/gallery-panel-item are pure layout
+ * (width caps so Card doesn't stretch full-bleed in the gallery); the
+ * padding inside gallery-card-body is gallery presentation only, not a
+ * claim about Card's or FactPanel's own CSS -- neither primitive carries
+ * internal padding, since the bundle's card sections each bring their own
+ * (rows/shell chrome, Task 8). gallery-fact-trio reproduces the bundle's
+ * own DEADLINE/EST. VALUE/POSTED wrapping grid exactly (V1.2, index
+ * ~556908): display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ * gap:1px;background:var(--brdsoft);border:1px solid var(--brdsoft);
+ * border-radius:8px;overflow:hidden -- token-driven throughout
+ * (--line-soft, --radius-action), not a hardcoded value. */
+.gallery-card-demo {
+  max-width: 640px;
+}
+
+.gallery-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gallery-fact-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-action);
+  overflow: hidden;
+}
+
+.gallery-row--align-top {
+  align-items: flex-start;
+}
+
+/* Task 7 -- ScoreStrip's decorative bar track has no in-flow text content
+ * (its fill is position:absolute, so it never contributes to intrinsic
+ * sizing). FactPanel's FactTile trio above sits in the same
+ * gallery-panel-item (align-items:flex-start, a shrink-to-fit column) and
+ * still reaches the full 340px cap, because its real text content (dollar
+ * amounts, dates) naturally wants MORE than 340px and gets clamped there.
+ * ScoreStrip's own natural width does not push that far, so without this it
+ * settles at whatever its label/value text alone demands (~230px,
+ * confirmed by rendering it) rather than the 340px every other panel demo
+ * in this gallery uses. width (not max-width, unlike gallery-card-demo)
+ * gives Card a definite box to fill, matching the rest of the gallery
+ * rather than an accidental, content-driven size -- gallery layout only,
+ * same reasoning gallery-card-demo already documents for Card not
+ * stretching full-bleed on its own. */
+.gallery-score-demo {
+  width: 340px;
+}
+
+.gallery-panel-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 340px;
+}
+
+/* Ruling 11 (SP2 T6 review) -- ShortcutCard sits beside Card so the absent
+ * box-shadow is directly comparable. gap:12px reproduces the bundle's own
+ * goRadars/goReports wrapper (display:grid;gap:12px). */
+.gallery-shortcut-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Task 8 -- TableRow demo. Not a flex container, so TableRow's own grid
+ * sizing is never shrink-wrapped by an align-items:flex-start ancestor
+ * (same reasoning gallery-card-demo documents for Card). 800px, not the
+ * 640px every other panel demo uses: the Source Registry row's own five
+ * columns (minmax(200px,1fr) 120px 84px 112px 112px, 14px gaps, 24px
+ * horizontal padding) sum to just over 730px before the first column even
+ * grows -- a narrower cap clipped the HEALTH column against Card's own
+ * overflow:hidden, caught only by rendering the gallery and looking. */
+.gallery-tablerow-demo {
+  max-width: 800px;
+}
+
+/* Task 8 -- StatusBar demo. MicroLabel is inline by default; made block
+ * here, with the bar left in normal block flow beneath it (not a flex
+ * child), so it gets its containing block's full width the plain way --
+ * see the comment in Gallery.tsx for why that matters for this specific
+ * primitive. */
+.gallery-statusbar-item .micro-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* Task 9 -- the reorganised page's own framing text: the intro paragraph,
+ * each group's "compare in the frozen bundle" citation, and the standing
+ * note above Intelligence. All three are prose, so they get the same
+ * width cap gallery-note already uses rather than stretching full-bleed. */
+.gallery-intro {
+  max-width: 640px;
+}
+
+.gallery-compare {
+  margin-top: 4px;
+  max-width: 640px;
+}
+
+/* border-top:var(--line-soft) -- the same token gallery-fact-trio already
+ * uses for a hairline -- sets the standing note apart from the Intelligence
+ * heading above it without inventing a new colour or a box the bundle has
+ * no counterpart for. */
+.gallery-standing-note {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}

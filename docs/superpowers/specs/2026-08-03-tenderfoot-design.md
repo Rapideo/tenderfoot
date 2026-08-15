@@ -514,7 +514,13 @@ Two kinds of interruption and only two. Everything else is pull.
 - **Same tokens** — `prototype/PROTOTYPE/src/tokens.css`, 67 role-named colours and 13 radius tokens, verified byte-identical to the bundle by `prototype/tools/verify-tokens.py`. CI runs that check (workflow spec §6).
 - **Same spacing scale, radii, shadows, typography.**
 - **Same container width, header height, mark size.**
-- **Copy verbatim.** Titles, button labels, micro-labels, modal bodies, toast messages, empty states. `ORDER · AMBIGUITY FIRST`, `MACHINE SCORES — A READING AID`, `COST TO PURSUE — FACTS, NOT A SCORE`, `GATED ITEMS — FILED, NOT DELETED (§6.2)` — these are specification, not placeholder text. Several of them carry an argument.
+- **Copy verbatim.** Titles, button labels, micro-labels, modal bodies, toast messages, empty states. **`MACHINE SCORES — A READING AID`, `COST TO PURSUE — FACTS, NOT A SCORE`, `GATED ITEMS — FILED, NOT DELETED (§6.2)`** — these are specification, not placeholder text, and each carries an argument. **Verified present in the V1.2 bundle: 1, 1 and 2 occurrences respectively.**
+
+  > **⚠ Corrected 2026-08-13. This list previously opened with `ORDER · AMBIGUITY FIRST`, which is NOT literal copy** — the substring `AMBIGUITY` occurs **zero** times in the bundle. It renders on screen because the mock data layer supplies it as a **value**: the label is `ORDER ·` and the rest is *the currently selected ordering*.
+  >
+  > **Treating it as fixed copy would have contradicted a ratified decision.** SVRC View 1.1 ratified that queue ordering is **switchable**, and recorded that *"switchable is the part worth having"* — a component hardcoding `AMBIGUITY FIRST` would have built the opposite of what was decided.
+  >
+  > **Found by an implementer searching the bundle for a string this document told it to expect.** The lesson generalises: **a copy list must distinguish labels from values**, because a rendered screenshot shows both and looks identical either way. Ambiguity-first remains the *default* ordering, which is a decision — it is simply not a string.
 
 #### Three clauses this project needs that IMPACT's did not
 

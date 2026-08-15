@@ -24,7 +24,7 @@ Component IDs throughout (`0A`, `2B`, `5C`…) refer to the build inventory. Sec
 | Scope boundaries | ✅ Capacity-agnostic, discovery-only, management deferred. Past-performance citation cut 2026-08-10 (§7.3). **Matching parked 2026-08-11 — V1 returns everything active sources return (spec §1.1)** |
 | Component inventory | ✅ 48 in-scope components with dependencies |
 | Source research | ✅ Platform-bound adapters, verified archive depths (§5.7–5.8). One question left: do licensed platforms retain closed solicitations |
-| UI outline | ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`. Drafted by Claude, used to generate the prototype, then adopted. **`Imp`/`Pri` were placeholders and are now inputs to §6 — review once.** |
+| UI outline | ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`, now **v0.6.0**. Drafted by Claude, used to generate the prototype, then adopted. ~~`Imp`/`Pri` were placeholders — review once.~~ ✅ **Reviewed in full 2026-08-14; fourteen of twenty moved. They are rulings now.** |
 | User stories | 🔜 **Matt** — no draft, no stand-in |
 | Design references | ✅ **Closed 2026-08-10 without gathering any** — the prototype direction establishes the design language. Slot 3 of the two-slot model, legitimately empty (§A1.1) |
 | Brand artifact | ❌ Not gathered — *separate input from references, see §4.1* |
@@ -224,7 +224,8 @@ Nine sub-projects. Each ≤50 tasks, each ending in something demo-able, each de
 | **SP0** | Infrastructure | 0D + CI, hooks, environments | Hello-world through the **full** deploy path, touching the DB |
 | **SP1** | The entity graph | 0A, 0B, 0C, 1A, 1C, 1E, 1F, 4J *(minimal)* | The prototype's real solicitations load into the real schema; profile and source registry editable |
 | ~~**SP1.5**~~ | **Postgres port + first deploy** *(added and completed 2026-08-13)* | — *(no new components)* | ✅ **MERGED** `703ea77`. 201 solicitations in Neon, reached at a deployed preview URL; 37 tests, gate 5/5 green. **One clause of the criterion knowingly unmet: preview deploys do NOT yet get their own database branch** — dashboard-only, six steps in workflow spec §8, so every preview writes to production until then |
-| **SP2** | Design system | — *(tokens + primitives from the frozen prototype)* | Every primitive on a dev-only route. **Sign-off gate.** [Plan written 2026-08-13](superpowers/plans/2026-08-13-sp2-design-system.md) — 10 tasks. **Re-costed:** the stack assessment called this *"unusually cheap, mostly transcription"*; it grew when the intelligence chrome became build-inert, and again when typography turned out to have no token layer at all |
+| ~~**SP2**~~ | Design system | — *(tokens + primitives from the frozen prototype)* | ◐ **All 10 tasks complete 2026-08-13** — branch `sp2-design-system`, 22 commits, 73 files, gate green. **Sixteen primitives**, not the thirteen earlier notes claimed. **Deliberately NOT merged: the sign-off gate is the point of the slice**, and merging before Matt sees the gallery would defeat it. Five findings await his ruling and one known gap is recorded — see `STATUS.md` and [`SP2-fidelity-audit.md`](SP2-fidelity-audit.md) |
+
 | **SP3** | Federal ingestion | 2A, 2B, 2F, 2G, 5E | `--since 24mo` pulls real SAM.gov + USASpending into the graph; dedup works; per-source yield visible |
 | **SP4** | Fetch and extraction | 2H, 2I, 5D | Documents pulled and parsed; every field carries confidence + a source pointer; accuracy measured against A1's labels |
 | **SP5** | ~~Matching engine~~ **PARKED** | — | **Removed from the sequence 2026-08-11.** V1 returns everything (spec §1.1); qualification is undesigned and will be re-imagined after ingestion runs. |
@@ -356,11 +357,18 @@ Everything else is buildable without blocking on him.
 ## 8. Immediate next actions
 
 1. ~~**Claude:** collect real solicitations with documents.~~ ✅ Done — `corpus/`, 76 banded, 11 band A bundles pulled, findings in `corpus/FINDINGS.md`.
-2. ~~**Matt:** the SVRC.~~ ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`, pending small edits. **Two follow-ups:** review `Imp`/`Pri`, which were placeholders and are now the input to §6 slice ordering; and fill `Proto`, stale at 0% now that a direction exists. **User stories are still owed and have no stand-in.**
+2. ~~**Matt:** the SVRC.~~ ✅ **Adopted 2026-08-10** — `../reference/Tenderfoot SVRC.md`. ~~**Two follow-ups:**~~ **Both closed.** `Imp`/`Pri` reviewed in full 2026-08-14 (fourteen of twenty moved, v0.6.0); `Proto` filled 08-12 against V1.1 and re-pointed 08-13 to V1.2, mean 85.2%. **User stories are still owed and have no stand-in** — the last thing outstanding on this item.
 3. ~~**Matt:** inspiration images.~~ ✅ **Closed 2026-08-10 without gathering any** — the prototype direction supplies the design language (§A1.1).
 4. ~~**Matt:** tech stack outline.~~ ✅ **Closed 2026-08-13.** The IDE8 stack above the database, **Vercel hosting with a Neon Postgres database below it.** Constraints in [`Stack-Requirements.md`](Stack-Requirements.md); the assessment and its 08-13 revision are at the foot of that file. **Six open questions now sit inside the choice** (workflow spec §9), two of them new and two carrying deadlines they did not have before: *where long ingestion runs* (SP3) and *which blob provider* (SP4). The largest is still whether extraction is rules-based or model-based.
    > **One requirement the checklist was missing, worth fixing in the template rather than just here:** it never asked **where the thing runs, and what it is allowed to write to.** That omission is the whole reason the persistence answer had to be given twice. Staged as a playbook lesson (`Proto2PRD-Lessons.md` §2.12).
-4b. **Matt owes answers — [`../three_open_questions.md`](../three_open_questions.md), pinned 2026-08-12.** The SVRC's `Imp`/`Pri` columns: whether `Pri` is product or build priority, how a parked node should be scored, and how much re-scoring to do. **These gate the `Imp`/`Pri` review, which in turn gates any reconciliation of §6 slice ordering** — so item 7 below is blocked behind them.
+4b. ~~**Matt owes answers — three of them.**~~ **Two down, one to go — [`../three_open_questions.md`](../three_open_questions.md), pinned 2026-08-12.**
+   - ✅ **Q1 answered 2026-08-13** — `Pri` is **pure product judgment**, not build order. Dependency ordering is applied once, on top, here. **A node can be `Pri 5` and still land in a late slice**, and that is not a contradiction to fix by lowering the number.
+   - ✅ **Q2 answered 2026-08-14** — a parked node **keeps its product scores and carries a bold `PARKED` marker above its grid.** **§6 must exclude a parked node by that marker, not by its number** — read the marker first and the `Pri` second. Three nodes are affected: Region 1.1.2, Region 1.1.5, View 2.2.
+   - ✅ **Q3 answered 2026-08-14 — all twenty re-scored, fourteen moved.** `Imp` and `Pri` are Matt's rulings now, not Claude's placeholders. SVRC **v0.6.0**.
+
+   **✅ CLOSED. Item 7 is unblocked** — §6 can now be reconciled against ratified numbers rather than guesses.
+
+   **Two of the fourteen change the input to §6 directly, and in opposite directions.** `Shell A` and `Region A.1` dropped `Pri 5 → 3` because *"built once, early, everything assumes it"* is a statement **this section owns and the SVRC no longer makes** — they are still built first, and §6 must now say so on its own rather than inheriting it from a score. `Screen 7` rose `Pri 1 → 4` and **must not move earlier for it**; it carries a `PARKED` marker (§9 deferral) and §6 excludes it by that marker, not by its number.
 5. **Matt, in progress 2026-08-10:** the prototype. Per §A3 the bake-off may run in Claude
    Design; the build-out returns to the repo (Proto2PRD §4.3.2). It ran *ahead* of the SVRC,
    which was flagged as a departure from the stated order — **the objection is now moot**, since

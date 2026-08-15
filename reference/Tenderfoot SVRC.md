@@ -1,6 +1,6 @@
 # Tenderfoot
 
-**Tenderfoot SVRC — version 0.5.0, 2026-08-13.**
+**Tenderfoot SVRC — version 0.6.0, 2026-08-14.**
 **Adopted.** This is the working outline, not a draft.
 
 > ### Eight decisions adopted from the prototype — 2026-08-12
@@ -27,7 +27,9 @@
 >
 > **Decided 2026-08-11.** The application returns everything every active source returns: no ranking, no scoring, no filtering (spec §1.1). Qualification is parked and will be re-imagined after ingestion runs.
 >
-> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). Their grids are left filled rather than blanked — the scoring key forbids a half-filled grid, and blanking them would misreport parked work as unscored work. **Read their `Pri` as zero for V1, and unchanged for the product.**
+> **Three nodes below describe machine judgment and are therefore parked**, not cut: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), and Region 1.1.5 (Gated Items Drawer). **Each carries a bold `PARKED` marker above its grid** — ruled 2026-08-14 and written into the scoring key. Grids stay filled and `Imp`/`Pri` stay true, because they are judgments about the finished product. **Planning excludes these nodes by the marker, not by the number.**
+>
+> ~~Read their `Pri` as zero for V1.~~ **Superseded, and it was wrong rather than merely fragile** — it asked a reader to mentally rewrite a number that was never zero. The priority is not zero; the node is outside V1's scope.
 >
 > **Parked for V1, not removed from the product.** Matt, 2026-08-11: the prototype represents the final released product and serves as demo material, and it renders all three of these. **This outline describes the destination; V1 builds a subset of it.** So these nodes are not candidates for deletion in a later revision, and a Design iteration that develops them further is on-plan rather than scope creep.
 >
@@ -39,7 +41,9 @@
 >
 > Three things a reader still needs to know.
 >
-> **`Imp` and `Pri` were placeholders and are now load-bearing.** They were filled because the scoring key forbids a half-filled grid, not because they were known. Adoption promotes them from guesses to inputs — `docs/Tenderfoot-Plan-of-Action.md` §6 reconciles slice ordering against `Pri`. **They should be reviewed once with that consequence in mind**, because a placeholder that silently becomes a build order is exactly the failure the `·` convention exists to prevent. `Eff` is a genuine estimate. `Conc` reflects how settled the spec is.
+> ~~**`Imp` and `Pri` were placeholders and are now load-bearing.**~~ **REVIEWED IN FULL 2026-08-14 by Matt — all twenty nodes. `Imp` and `Pri` are now rulings, not proposals.** They had been filled by Claude because the scoring key forbids a half-filled grid, not because they were known, and adoption had quietly promoted them from guesses to inputs. **Fourteen of the twenty moved.** `Eff` remains a Claude estimate; `Conc` reflects how settled the spec is.
+>
+> **The two largest errors were not the ones flagged in advance, and they point the same way.** `Shell A` and `Region A.1` both carried `Pri 5` — the old *"build this first"* definition that Q1 had already outlawed on 08-13, still sitting in the values a day later. **Q1 changed what the column meant and nobody re-read the twenty numbers against the new meaning.** The five nodes flagged before the pass were all *too low*; nobody had thought to look for *too high*.
 >
 > ~~**`Proto` is stale everywhere.**~~ **Filled 2026-08-12 against V1.1**, **re-pointed 2026-08-13 to V1.2**, by driving the bundle and comparing each node's `Overview` and `Known gaps` to what is actually drawn. **Mean 85.2%; thirteen of twenty at 90% or above; nothing below 55%.**
 >
@@ -69,7 +73,7 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 90%   | 70%  |
+| 2   | 4   | 3   | 2   | 90%   | 70%  |
 
 **Overview** — The persistent application frame. Tenderfoot is a small app with a strong daily habit attached to one screen, so the shell's job is mostly to stay out of the way and to make the queue count visible from anywhere. It is scored as a parent because it says something its regions do not: it is built once, early, and everything else assumes it.
 
@@ -81,7 +85,7 @@ A note on what is missing from this outline by design. The scoring engine, the a
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 5   | 2   | 95%   | 90%  |
+| 2   | 4   | 3   | 2   | 95%   | 90%  |
 
 **Overview** — Wordmark, primary navigation, and the queue counter.
 
@@ -111,7 +115,7 @@ It should show zero proudly. An empty queue is the goal state, not an empty stat
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 3   | 90%   | 60%  |
+| 2   | 4   | 4   | 3   | 90%   | 60%  |
 
 **Overview** — Ingestion health at a glance: when adapters last ran, and whether any are failing.
 
@@ -121,7 +125,11 @@ It should show zero proudly. An empty queue is the goal state, not an empty stat
 
 ### Region A.2.1 : Source Health Indicator
 
-Green, degraded, or failing, deep-linking into the Source Registry (`4J`). Derived from the per-source yield figures §5.4 requires the adapters to record.
+~~Green, degraded, or failing~~ — **corrected 2026-08-14 at the SP2 sign-off gate. Four states, not three, and "degraded" was never one of them.** The bundle's own Source Registry vocabulary is **`Healthy` (green) · `Rot suspected` (yellow) · `Failing` (red) · `Not ingested` (grey)**, and the built `StatusDot` now uses those names exactly.
+
+**The discarded word caused a real false alarm.** `degraded` had been invented here, bound in code to the bundle's *"Failing"*, and carried to the sign-off gate as a suspected colour inversion — because "degraded" reads as *less* severe than "rot," so degraded=red beside rot=yellow looks backwards. **It never was.** A suspicion warns; a confirmed failure errors. **Inventing a state name next to a source that already had one is what produced a bug report about a bug that did not exist.**
+
+Deep-links into the Source Registry (`4J`). Derived from the per-source yield figures §5.4 requires the adapters to record.
 
 ### Region A.2.2 : Last Run
 
@@ -173,9 +181,11 @@ Deadline gets special treatment. It is the highest-consequence extracted field (
 
 ### Region 1.1.2 : Score Strip — PARKED
 
+**PARKED 2026-08-11** with §6 — V1 has no scores, so this region does not render.
+
 The four machine scores — Fit, Winnability, Value, Timing (§6.3) — each expandable to its citation. Collapsed by default. The scores are a reading aid, not a verdict, and a strip that demands attention would turn triage into score-review.
 
-**Parked 2026-08-11** with §6. V1 has no scores, so this region does not render. **Nothing takes its place in the card** — the deciding facts are already in 1.1.1 and the cost facts in 1.1.3, and inventing a substitute strip would be adding a judgment surface by the back door. The row is shorter in V1, which is the honest consequence.
+**Nothing takes its place in the card** — the deciding facts are already in 1.1.1 and the cost facts in 1.1.3, and inventing a substitute strip would be adding a judgment surface by the back door. The row is shorter in V1, which is the honest consequence.
 
 ### Region 1.1.3 : Pursuit-Cost Fact Panel
 
@@ -197,13 +207,13 @@ Chips need a free-text escape hatch. The hand-run is currently producing reasons
 
 ### Region 1.1.5 : Gated Items Drawer — PARKED, AND THE REASON IT EXISTS DID NOT GO AWAY
 
+**PARKED 2026-08-11** — V1 has no gates, so nothing is gated and the drawer has no contents.
+
 Items eliminated by Stage 0 hard gates (§6.1), filed rather than deleted.
 
 This region exists because of a documented near-miss, not a principle. A stale deadline extracted from the wrong PDF would have silently killed KP's single best-fit opportunity three weeks before it actually closed. §6.2's "gated items are filed, not deleted" is the only thing that makes that recoverable, and a rejection you cannot inspect is a bug you will never find.
 
 Low traffic by design. It needs to exist, not to be prominent.
-
-**Parked 2026-08-11.** V1 has no gates, so nothing is gated and the drawer has no contents.
 
 **But the near-miss it was built for is an extraction failure, not a gating failure**, and V1 is fully exposed to it. A bundle shipping two deadlines still ships two deadlines; the wrong one still kills the best-fit opportunity three weeks early. What protects against it in V1 is Region 1.1.1's rule — *show the disagreement rather than silently picking a winner* — which is now carrying this risk alone. **Reinstate this drawer the same day anything gates**, and until then treat 1.1.1's conflict display as the higher-priority node it has become.
 
@@ -213,13 +223,15 @@ Low traffic by design. It needs to exist, not to be prominent.
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 2   | 2   | 3   | 85%   | 45%  |
+| 2   | 4   | 4   | 3   | 85%   | 45%  |
 
 **Overview** — Persisted custom queries (§7.7, `4I`). Scope the queue to a sector, a jurisdiction, a value band.
 
-**Known gaps** — Nothing establishes that anyone wants this yet. It is in the spec as a convenience and it is the kind of feature that gets built because it is easy rather than because it is needed. Genuinely a candidate for cutting.
+**Re-scored 2026-08-14 by Matt: `Imp 2 → 4`, `Pri 2 → 4`.** The old scores assumed a matching engine would make the volume tractable. **V1 returns everything and never ranks, so saved views are the only way the firehose gets carved** — a primary interaction, not a convenience.
 
-**Open questions** — Is this a queue filter or a first-class saved object? The second is a much larger commitment and the spec does not distinguish.
+**Known gaps** — ~~Nothing establishes that anyone wants this yet… genuinely a candidate for cutting.~~ **Struck 2026-08-14 — that assessment was written against a system with a matching engine and it inverted.** The real gap now is the one the numbers expose: **`Conc` is 45%, the lowest in the document, and this node is scored `Imp 4`.** Those are hard to hold together. The reading taken is that the old 2s were *"we have not thought about this"* wearing the costume of *"this does not matter"* — **but that diagnosis was made by Claude about a judgment of Matt's, and it is the least-evidenced claim in the re-score.** Worth revisiting once anything is designed.
+
+**Open questions** — ~~Is this a queue filter or a first-class saved object?~~ ✅ **Answered 2026-08-13: a first-class object**, ratified from the prototype. **It is a schema decision wearing a UI costume** — named views need storage, naming, editing, deletion and eventually sharing; remembered filter state needs one blob. **That is what `Conc 45%` is measuring**: the *shape* is decided, almost nothing beneath it is.
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -277,11 +289,11 @@ The app's remaining case is the triage queue's reason capture (§7.1), which is 
 
 ## View 2.2 : Scores and Evidence — PARKED
 
+**PARKED 2026-08-11** with spec §6 — V1 has no scores, so this view does not ship. **In the finished product it is worth what the grid says.** The marker is what holds it out of the V1 sequence; the numbers are not lowered to do that job (scoring key).
+
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
 | 3   | 4   | 4   | 3   | 90%   | 70%  |
-
-**Parked 2026-08-11** with spec §6. V1 has no scores and this view does not ship. The grid is left as scored rather than blanked — per the scoring key a half-filled grid is forbidden, and zeroing it would misreport parked work as unestimated work. **Read `Pri` as zero for V1 regardless of the 4.**
 
 **Overview** — The four scores at full width, each with the evidence that produced it, quoted and linked back into the source document.
 
@@ -299,7 +311,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 2   | 75%   | 75%  |
+| 3   | 5   | 4   | 2   | 75%   | 75%  |
 
 **Overview** — Every extracted field with its confidence and a pointer to where it came from. Deadlines, values, set-asides, eligibility requirements, contacts.
 
@@ -313,7 +325,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 3   | 3   | 3   | 55%   | 55%  |
+| 4   | 4   | 3   | 3   | 55%   | 55%  |
 
 **Overview** — The bundle inline, with extraction highlights pointing back into the source.
 
@@ -325,7 +337,7 @@ A score without a citation is an assertion, and the spec's position throughout i
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 3   | 2   | 65%   | 80%  |
+| 3   | 4   | 4   | 2   | 65%   | 80%  |
 
 **Overview** — Every Sighting and addendum in order. This is what the Sighting table exists for (§4.4), and it is what makes an extracted deadline trustworthy in seconds — you can see when it changed, in which source, and whether anything said so.
 
@@ -353,7 +365,7 @@ Both radars are **post-gate work** — slice SP8, after the go/no-go — and the
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 2   | 3   | 95%   | 75%  |
+| 2   | 4   | 4   | 3   | 95%   | 75%  |
 
 **Overview** — Contracts approaching their end date, read as predicted re-competes months ahead of any RFP (`4E`). The lead-time advantage, and the direct answer to problem #2, *finding out too late* (§1).
 
@@ -371,7 +383,7 @@ There is a live fixture waiting for it: 231 contracts across 149 vendors all exp
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 3   | 2   | 4   | 80%   | 50%  |
+| 3   | 3   | 3   | 4   | 80%   | 50%  |
 
 **Overview** — Who wins work KP could sub on. KP's WBE certification makes it attractive to primes carrying participation goals (`4F`, §4.6), which turns some unreachable opportunities into reachable ones.
 
@@ -397,7 +409,7 @@ Win history infers capability without anyone maintaining a taxonomy — which is
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 3   | 3   | 2   | 95%   | 65%  |
+| 2   | 4   | 3   | 2   | 95%   | 65%  |
 
 **Overview** — Buyers, with what they have bought, from whom, how often, and on what cycle.
 
@@ -445,7 +457,7 @@ Win rate becomes a report once there is enough history to populate one. **It is 
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 5   | 3   | 3   | 90%   | 70%  |
+| 3   | 5   | 4   | 3   | 90%   | 70%  |
 
 **Overview** — The backtest as a standing view. The output the whole project is judged against: *"63 opportunities you were eligible for. 22 strong fits, combined value $4.1M. You saw one of them."* (§3.1)
 
@@ -459,7 +471,7 @@ Highest impact in the document and mid priority, which is not a contradiction �
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 2   | 4   | 3   | 2   | 80%   | 80%  |
+| 2   | 4   | 4   | 2   | 80%   | 80%  |
 
 **Overview** — What each source actually produced: records ingested, survived gates, reached triage, marked interested. Retires sources that do not earn their maintenance.
 
@@ -495,7 +507,7 @@ The rule this screen enforces: no fact about Koehler Partners appears in code. A
 
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 3   | 4   | 4   | 2   | 95%   | 80%  |
+| 3   | 4   | 5   | 2   | 95%   | 80%  |
 
 **Overview** — Sources as **data rows, not code** (§5). Each carries its adapter tier, platform, archive depth, legal posture, and health. Adding a source is a row and a config, not a deploy.
 
@@ -507,13 +519,15 @@ The platform field is what makes this scale: states mostly license about five pl
 
 #######################################################
 
-# Screen 7 - Pipeline Board
+# Screen 7 - Pipeline Board — PARKED
 
 #######################################################
 
+**PARKED — deferred to a later phase (§9), not by the V1 scoring decision.** Pursuit *management* comes after pursuit *seeking*. **The cause differs from the other three parked nodes and the consequence is identical**, which is the first evidence the marker generalises: it was written for machine judgment and it fits a phase deferral without amendment.
+
 | Eff | Imp | Pri | Vol | Proto | Conc |
 |:---:|:---:|:---:|:---:|:-----:|:----:|
-| 4   | 3   | 1   | 5   | 60%   | 30%  |
+| 4   | 3   | 4   | 5   | 60%   | 30%  |
 
 **Overview** — Pursuits across their states: `Watching → Bid/No-Bid → Drafting → Submitted → Outcome`, with ownership and assignment (§7.2, `4C`). The system of record, and the answer to problem #4 — opportunities living in email and memory.
 
@@ -522,7 +536,9 @@ The platform field is what makes this scale: states mostly license about five pl
 - **`Drafting` added.** The gap between deciding to bid and submitting is where a pursuit actually dies, and the original machine had no state for it — a decided-but-unwritten proposal was indistinguishable from one nobody had started. This is the longest-lived state on the board and it was missing.
 - **`Won/Lost` → `Outcome`.** One state holding a result, rather than two terminal states. It also absorbs the results the original pair could not express: withdrawn, cancelled by the buyer, no award made. All three occur in real procurement records.
 
-**Specified and deliberately not built.** Pursuit management is deferred to a later phase (§9). Tenderfoot's current job is contract *seeking*; seeking *and* management comes later. It is scored as a leaf because it has no views yet, and `Pri 1` is the whole point.
+**Specified and deliberately not built.** Pursuit management is deferred to a later phase (§9). Tenderfoot's current job is contract *seeking*; seeking *and* management comes later. It is scored as a leaf because it has no views yet.
+
+~~`Pri 1` is the whole point.~~ **Corrected 2026-08-14 to `Pri 4`, and this node is the cleanest example of why Q1 mattered.** `Pri 1` did not mean *KP does not want a pipeline board* — it meant *we are not building one yet*, which is the circular definition Q1 outlawed. **KP wants this: it is the answer to problem #4**, opportunities living in email and memory, and the 08-11 revision above concedes that being a system of record is one of the three things V1's triage queue earns its login on. **The number went up and the schedule did not move**, which is exactly what the `PARKED` marker exists to make possible.
 
 **Known gaps** — Everything below the state machine. Volatility is 5 because a year of using the triage queue will change what this needs to be, and designing it now would mostly produce something to throw away.
 
@@ -540,13 +556,15 @@ The platform field is what makes this scale: states mostly license about five pl
 
 **Search is absent deliberately.** The shell has no global search because six screens do not need one and the filters inside each view are more useful. Worth revisiting only if the entity browser grows.
 
-**What is scored `Pri 5` and why.** Only the shell, its header, and the triage queue. Everything else waits, because the queue is the only screen that can be used before the scoring engine is trustworthy — someone can clear a queue of badly-ranked opportunities and their reasons still make the next version better.
+**What is scored `Pri 5` and why.** ~~Only the shell, its header, and the triage queue. Everything else waits, because…~~ **Rewritten 2026-08-14 — the old text was an argument about build order, in a document that no longer keeps build order in this column.**
+
+**`Pri 5` is now carried by exactly two nodes: `View 1.1` (the queue) and `View 6.2` (the source registry).** The queue is the screen the product lives or dies on; the registry is V1's entire control surface — switching a source on or off is the only lever there is. **The shell and its header dropped from 5 to 3**, not because they matter less but because *"built once, early, and everything assumes it"* is a statement §6 owns and this column does not.
 
 #######################################################
 
 # Scoring key
 
-Scored nodes carry the same six-column grid. **All 1–5 scales run low to high** — `5` is the most of the thing, so `Pri 5` means do it first and `Eff 5` means it is expensive. **`·` means not yet scored**, which is deliberately not the same as `0`.
+Scored nodes carry the same six-column grid. **All 1–5 scales run low to high** — `5` is the most of the thing, so ~~`Pri 5` means do it first~~ **`Pri 5` means KP wants it most** (corrected 2026-08-14 — this sentence still carried the pre-Q1 definition after the table above had been fixed) and `Eff 5` means it is expensive. **`·` means not yet scored**, which is deliberately not the same as `0`.
 
 **Scores sit at the level where the judgment is made.** Every *leaf* carries a grid — a node with nothing scored beneath it. A screen whose views each carry their own scores is deliberately left without one: a screen-level grid would only roll up judgments already made a level down, and one judgment kept in two places can disagree with itself. Scoring a parent as well is allowed where it says something its children do not — the Shell does. **What is never allowed is an unscored leaf, a half-filled grid, or an ungridded parent whose children are not themselves finished.**
 
@@ -556,7 +574,19 @@ Scored nodes carry the same six-column grid. **All 1–5 scales run low to high*
 |---|---|---|---|
 | `Eff` | Effort | 1–5 | Cost to build. 5 = expensive. |
 | `Imp` | Impact | 1–5 | Value to the user. 5 = high. |
-| `Pri` | Priority | 1–5 | How soon this should be built, all things considered. 5 = soonest. |
+| `Pri` | Priority | 1–5 | **How much KP wants the thing.** 5 = most. **Pure product judgment, independent of what has to be built first.** |
+
+> ### `Pri` is product priority, not build order — ruled by Matt, 2026-08-13
+>
+> This cell previously read *"how soon this should be built, all things considered"*, which was **circular**: `docs/Tenderfoot-Plan-of-Action.md` §6 derives slice ordering **from** `Pri`, so a `Pri` that already accounted for technical dependency was partly a restatement of the thing it was supposed to inform.
+>
+> **The rule now: `Pri` is what KP wants. Dependency ordering is applied once, on top, in the plan.** So **a node can legitimately be `Pri 5` and still land in a late slice** because three other things must exist first — and that is not a contradiction to be resolved by lowering the number.
+>
+> **Consequence worth stating.** The twenty existing values were written by Claude against a system that **had a matching engine**, before V1 was decided to return everything and rank nothing (§1.1). Under this definition several are **wrong rather than merely stale** — five are argued in [`three_open_questions.md`](../three_open_questions.md), most notably `View 1.2 : Saved Views` at `Imp 2 · Pri 2`, which with no ranking is **the only way the firehose gets carved** and is a primary interaction rather than a convenience.
+>
+> **Confirming the definition makes those disagreements arguable rather than vague. It does not resolve them.**
+>
+> ✅ **Resolved 2026-08-14** — Matt reviewed all twenty and fourteen moved, `View 1.2` among them (`Imp 2 · Pri 2` → `4 · 4`). **The values above are historical from this date; read the grids, not this note.** And the correction this ruling most needed was not in the five flagged here: `Shell A` and `Region A.1` sat at `Pri 5` under the definition this very blockquote had just outlawed, for a full day, because **changing what a column means does not change the numbers already written in it.**
 | `Vol` | Volatility | 1–5 | How likely this is to change. 5 = expect churn. Independent of `Conc`. |
 | `Proto` | Prototype accuracy | 0–100% | How close the prototype is to what we actually want. **0% throughout — no prototype exists.** |
 | `Conc` | Conceptual completeness | 0–100% | How settled the idea is, whether or not anything is drawn. |
@@ -574,9 +604,68 @@ Beneath the grid, four labels, **bold rather than headings** so they never enter
 
 Levels 3 and below take no grid and no labels.
 
+> ### `PARKED` is a marker, not a score — ruled by Matt, 2026-08-14
+>
+> **A parked node is deferred out of V1 but still part of the finished product.** Not cut, not deprecated, not a candidate for deletion — the prototype renders it and it ships eventually.
+>
+> **A parked node keeps its scores.** `Imp` and `Pri` are judgments about the product, and the product still wants the thing. Lowering them so a planning document reads correctly would destroy the judgment and force someone to reconstruct it by guessing when the node un-parks — **which is exactly how the `Imp`/`Pri` problem started**, and is not repeated here.
+>
+> **Instead the node carries a bold `PARKED` line directly beneath its heading, above the grid**, giving the date, the decision that parked it, and what does not ship. **Planning excludes a parked node by that marker, not by its number** — `docs/Tenderfoot-Plan-of-Action.md` §6 reads the marker first and the `Pri` second.
+>
+> **Above the grid rather than beneath it, and that placement is the whole fix.** The four labels sit below because they elaborate; this one is not a label and does not elaborate. A reader must not reach the numbers before knowing they describe something V1 does not build.
+>
+> **The marker is the only element that crosses the level-3 line.** Grids and labels stop at level 2 because that is where judgments are made. Parking is a *fact* about a node rather than a judgment about it, so `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid. A heading may also repeat `— PARKED` as a scanning aid in a long outline; the marker is the part that governs.
+>
+> **The marker states its cause, because there is more than one.** Three nodes are parked by the V1 scoring decision (§1.1) — Region 1.1.2, Region 1.1.5, View 2.2. **`Screen 7` is parked by a phase deferral (§9)**, and was carrying `Pri 1` for it until 2026-08-14. Different reasons, identical consequence: **out of the sequence, scores untouched.** That the rule fit a case it was not written for, within a day of being written, is the first evidence it generalises.
+>
+> **Superseded: "read their `Pri` as zero for V1."** That was the previous stopgap, it lived in three places, and it was **wrong rather than merely fragile** — it asked a reader to mentally rewrite a number that was never zero. The priority is not zero; the node is simply outside V1's scope.
+
 #######################################################
 
 # Revision history
+
+*Revision note, 0.5.1 → 0.6.0 — `Imp` and `Pri` reviewed in full and become rulings. Matt, 2026-08-14.*
+
+**Minor by diff size, major by semantics — bumped on the second, per the rule §2.18 of `docs/Proto2PRD-Lessons.md` was written from an hour earlier.** Fourteen numbers moved and the column changed owner; that is not a patch.
+
+- **Q3 answered: all twenty, not the five flagged.** Fourteen moved. **`Imp` and `Pri` are now Matt's rulings rather than Claude's placeholders**, which closes the caveat this document has carried in its preamble since adoption on 2026-08-10.
+- **The two largest errors were not on the flagged list, and the flagged list could not have found them.** `Shell A` and `Region A.1` carried `Pri 5` — *"built once, early, everything assumes it"* — which is precisely the build-order reading Q1 had outlawed the previous day. **The five flagged nodes were all too low; nobody thought to look for too high.** A pass that re-examines only the entries you already suspect will confirm your suspicions and miss the rest.
+- **The general form, and it is the same shape as §2.18.** Q1 changed what `Pri` *means*; the twenty values written under the old meaning were left standing. **Redefining a column does not re-score it, and the gap between the two is invisible in a diff** — the definition changes in one line and the stale values change in none.
+- **`Screen 7` gains a `PARKED` marker and `Pri 1 → 4`.** It was parked by a *phase deferral* (§9) rather than by the V1 scoring decision (§1.1) — a cause the marker was not written for, which it fit without amendment. **First evidence the 0.5.1 rule generalises**, and it arrived within a day.
+- **Two sentences elsewhere still carried the pre-Q1 definition** and were corrected: the scoring key's *"`Pri 5` means do it first"*, and the summary claiming `Pri 5` belongs to *"the shell, its header, and the triage queue."* Both had survived the Q1 edit because that edit changed the table row and stopped there. **`Pri 5` is now `View 1.1` and `View 6.2`, and nothing else.**
+- **`View 1.2` needed prose surgery, not just numbers.** Its `Known gaps` still read *"genuinely a candidate for cutting"* and its `Open questions` still asked a question ratified on 08-13. **A node can be re-scored and left self-contradicting**, which is the argument for opening the document rather than editing the grids from a list.
+- **The one to revisit.** `View 1.2` is now `Imp 4` at `Conc 45%`, the lowest completeness in the document. The reading — that the old `2`s meant *"unexamined"* rather than *"unimportant"* — is **Claude's diagnosis of a judgment of Matt's, and the least-evidenced claim in the pass.**
+
+*Revision note, 0.5.0 → 0.5.1 — parked nodes get a marker instead of a footnote. Claude, 2026-08-14.*
+
+- **Q2 of [`three_open_questions.md`](../three_open_questions.md) ruled by Matt: option (d), a marker outside the grid.** A parked node keeps its product scores and carries a bold `PARKED` line above its grid; planning excludes it by that marker rather than by a lowered number. **Written into the scoring key as a rule**, so it governs the next parked node rather than being a treatment of this one.
+- **The previous stopgap is superseded, and it was wrong rather than merely fragile.** *"Read their `Pri` as zero for V1"* appeared in three places — preamble, node, audit trail — and asked a reader to mentally rewrite a number that was never zero. **Three copies of a warning is a warning nobody reads, and the fix is not a fourth copy.**
+- **What it buys, concretely.** `View 2.2` (parked, not buildable for a year) and `View 2.3` (ships in V1 and is arguably the most important thing in it) carried near-identical grids and could not be told apart from the numbers. They now can, without either number moving.
+- **The marker is the only element that crosses the level-3 line**, because parking is a fact about a node rather than a judgment about it. `Region 1.1.2` and `Region 1.1.5` carry it despite having no grid — which is also why Q2 was a one-node question about scoring and a three-node question about marking.
+- **Q3 is still open** — how much of the twenty-node `Imp`/`Pri` set Matt wants to re-score.
+
+*Amendment to 0.5.0, no version bump taken — Q1 ruled. Claude, 2026-08-13.*
+**⚠ Reconstructed 2026-08-14 from `9853653`. Not written at the time — that is the point of the note.**
+
+- **The scoring key's definition of `Pri` was rewritten** from *"how soon this should be built, all things considered"* to *"how much KP wants the thing"*, with the ruling blockquote added beneath it. Matt's answer to Q1.
+- **It shipped without a version bump, and that is the finding worth keeping.** This is a change to what a column *means* — **every one of the twenty existing values is silently reinterpreted by it.** A semantic change to the scoring key is the largest kind of change this document can take, and it is the one that left no trace in the version.
+- **Recorded rather than corrected.** Renumbering retroactively would make the history lie in a second way. The version says 0.5.0 for two different meanings of `Pri`; this note is how a reader finds that out.
+- **The near-cause is worth naming too.** The version tracked the *prose* — how much text changed — rather than the *semantics*. `d6b6000` moved one node's percentage and took a minor bump; this moved the meaning of a whole column and took none.
+
+*Revision note, 0.4.1 → 0.5.0 — `Proto` re-pointed to V1.2. Claude, 2026-08-13.*
+**⚠ Reconstructed 2026-08-14 from `d6b6000`; not written at the time.**
+
+- **One node moved: `Region A.1`, `Proto` 70% → 95% and `Conc` 75% → 90%.** Mean 84% → **85.2%**; twelve nodes at 90%+ became thirteen. The other nineteen were **confirmed unaffected by diffing the bundles rather than re-reading them.**
+- **The wordmark existed the whole time; only its label said otherwise.** V1.1's header carried a finished lockup with an 8px mono line beneath reading `WORDMARK — PLACEHOLDER` — **the placeholder was announcing the mark next to it as provisional.** V1.2 deletes that line and the now-single-child wrapper.
+- **It was nearly redesigned away.** The punch item read *"replace with a real mark,"* and a Design round given that instruction would very likely have discarded a checkbox mark that suits this product unusually well. **It survived because the header was read rather than inferred from its own placeholder text.**
+- **The re-score cost minutes, not a day** — six changed lines. **That is the argument for re-scoring at every freeze:** against a surgical change it is nearly free, and skipping it is how the column silently stops describing anything.
+
+*Revision note, 0.4.0 → 0.4.1 — the last three prototype answers ratified. Claude, 2026-08-13.*
+**⚠ Reconstructed 2026-08-14 from `da95f5c`; not written at the time.**
+
+- **All three ratified by Matt:** saved views as a first-class object, rot suspicion in persistent chrome, and the cleared state's pointer at the expiration radar. **Held open for two days precisely so silence could not adopt them**; adopted by decision instead, which is the only difference that matters.
+- **Nothing changed in the prototype.** Ratification confirms what it already drew; had any been overturned it would have become a V1.2 punch item. **SP2 builds against three decided answers rather than three provisional ones.**
+- **The desktop-only decision was taken in the same commit but did not touch this document** — it landed in the design spec and the plan of action. Noted so the version gap does not read as a missing SVRC change.
 
 *Revision note, 0.3.1 → 0.4.0 — eight decisions adopted from the prototype. Claude, 2026-08-12.*
 
@@ -600,7 +689,7 @@ Levels 3 and below take no grid and no labels.
 *Revision note, 0.2.0 → 0.3.0 — V1 has no scores. Claude, 2026-08-11.*
 
 - **Matching parked in full** (Matt, 2026-08-11). V1 returns everything every active source returns — no ranking, no scoring, no filtering. Recorded in spec §1.1 and §6; SP5 removed from the plan of action's slice sequence rather than reordered.
-- **Three nodes parked, none cut**: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), Region 1.1.5 (Gated Items Drawer). **Grids left filled deliberately.** The scoring key forbids a half-filled grid, and blanking a parked node would report it as unestimated rather than as descoped — a different and worse claim. Each carries a prose note instead, and the preamble says to read their `Pri` as zero.
+- **Three nodes parked, none cut**: Region 1.1.2 (Score Strip), View 2.2 (Scores and Evidence), Region 1.1.5 (Gated Items Drawer). **Grids left filled deliberately.** The scoring key forbids a half-filled grid, and blanking a parked node would report it as unestimated rather than as descoped — a different and worse claim. Each carries a prose note instead, and ~~the preamble says to read their `Pri` as zero~~ — **superseded 2026-08-14: the prose note became a `PARKED` marker above the grid, and the read-as-zero instruction was struck as wrong.**
 - **The outline survived the removal of its scoring layer largely intact**, which is the most interesting thing this revision found. Screen 1 loses one region of four and still works, because 1.1.1, 1.1.3, and 1.1.4 were built around facts and decisions rather than around scores. That is evidence the structure was sound, reached by deleting a third of the machine's output and seeing what broke.
 - **Region 1.1.5's parking exposed a live risk rather than closing one.** The drawer was justified by a real near-miss — a bundle shipping two deadlines, the wrong one three weeks early — but that near-miss is an *extraction* failure, not a *gating* failure. V1 is fully exposed to it and the drawer is gone, so Region 1.1.1's show-the-disagreement rule is now carrying that risk alone and is more load-bearing than its grid suggests.
 - **Reason chips parked; V1 records free text.** Region 1.1.4 already argued the vocabulary should be derived from the hand-run rather than invented ahead of it. With nothing consuming reasons, that ordering is enforced by circumstance instead of discipline.

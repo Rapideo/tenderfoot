@@ -1,0 +1,53 @@
+/* StatusDot -- the 7x7 circular source-health indicator (V1.2, Source
+ * Registry drawer, index ~617159):
+ *   width:7px;height:7px;border-radius:50%;background:{{ s.dot }}
+ * --radius-round is that exact 50% step, whose own tokens.css comment names
+ * it "status dots and anything circular. Not a step in the scale -- a
+ * separate primitive." Width/height have no token (no size scale exists
+ * yet), so they stay literal, exactly as in the bundle.
+ *
+ * The four `s.dot` values actually used in the bundle's Source Registry data
+ * (name -> health -> dot):
+ *   Healthy       -> var(--ok)    (--signal-pos)
+ *   Failing       -> var(--bad)   (--signal-neg)
+ *   Rot suspected -> var(--yellow)(--signal-watch)
+ *   Not ingested  -> var(--text7) (--text-label)
+ * mapped onto this component's state names by literal name match.
+ *
+ * RENAMED AT THE SP2 SIGN-OFF GATE, 2026-08-14: state="failing" was
+ * state="degraded", which had been picked "by elimination" rather than
+ * from the bundle. That name is why this component was carried to the
+ * gate as a suspected inversion -- "degraded" reads as LESS severe than
+ * "rot", so degraded=red beside rot=yellow looks backwards. It never was.
+ * The bundle is coherent: "Rot suspected" is a suspicion and warns in
+ * yellow; "Failing" is confirmed and errors in red. Only the invented
+ * name disagreed with the colours, so the name moved and no rendered
+ * value changed. The four states now read green/yellow/red/grey in plain
+ * ascending severity.
+ *
+ * tokens.css flags 90 colour pairs below the JND threshold, so colour alone
+ * cannot be trusted to distinguish these four states -- see StatusDot.tsx
+ * for the non-colour affordance (data-state + accessible name) required
+ * alongside these fills. No new colour is introduced here; parity holds. */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-round);
+}
+
+.status-dot--ok {
+  background: var(--signal-pos);
+}
+
+.status-dot--failing {
+  background: var(--signal-neg);
+}
+
+.status-dot--rot {
+  background: var(--signal-watch);
+}
+
+.status-dot--off {
+  background: var(--text-label);
+}

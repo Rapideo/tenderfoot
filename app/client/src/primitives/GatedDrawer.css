@@ -1,0 +1,28 @@
+/* GatedDrawer -- see GatedDrawer.tsx for the exact bundle declaration this
+ * was matched against (V1.2, index ~567216) and why only the closed-state
+ * toggle chip is reproduced, not the disclosed panel.
+ *
+ * --line-control-3/--ground-chip/--radius-control/--text-tertiary are the
+ * chip's exact border/background/radius/colour tokens (border:1px solid
+ * var(--brdctl3);background:var(--chip2);border-radius:6px;
+ * color:var(--text4)). --type-microlabel-cmd is the chip's exact font
+ * shorthand (500 11px/1 IBM Plex Mono) -- 14 uses in the bundle, this
+ * being one of them. --tracking-hint-tight is its exact letter-spacing
+ * (.06em), the same token Button.css's ghost variant ("CLEAR") already
+ * consumes -- a second, independent bundle instance of the same tracking
+ * step, not a new one invented for this component.
+ *
+ * cursor:pointer is NOT added (contrast Button.css's .btn base class):
+ * that would signal an affordance this control does not have -- see
+ * GatedDrawer.tsx for why there is no onClick. Padding has no token layer
+ * (as with every prior primitive), so it stays a literal, exactly as in
+ * the bundle. */
+.gated-drawer {
+  border: 1px solid var(--line-control-3);
+  background: var(--ground-chip);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  font: var(--type-microlabel-cmd);
+  letter-spacing: var(--tracking-hint-tight);
+  color: var(--text-tertiary);
+}

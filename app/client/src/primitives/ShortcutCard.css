@@ -1,0 +1,50 @@
+/* ShortcutCard -- matched directly against the bundle's goRadars/goReports
+ * buttons (V1.2, index ~570279/570759), verified myself against the bundle
+ * rather than taken on a second-hand reading (SP2 T6 Ruling 11):
+ *
+ *   <button style="border:1px solid var(--brd);background:var(--surface);
+ *     border-radius:9px;padding:16px 18px;text-align:left">
+ *     <div style="font:600 13px/1.3 'IBM Plex Sans'">3 contracts expire inside your sectors</div>
+ *     <div style="font:400 12px/1.5 'IBM Plex Sans';color:var(--text5);margin-top:4px">
+ *       Expiration radar — re-competes, months early</div>
+ *   </button>
+ *
+ * NO box-shadow -- the one visible difference from `Card` (see task-6-report
+ * .md and Card.css: Card's triage/detail card carries a two-layer
+ * box-shadow, this does not). --radius-card is that exact 9px step ("cards
+ * and content panels"), and --line-card/--brd is the same border colour
+ * `Card` uses -- both were still zero-consumer before this. --type-heading-
+ * callout is the title's exact shorthand (600 13px/1.3 sans) -- its own
+ * tokens.css comment names these two buttons directly ("callout headline
+ * (contracts-expire banner, ingest notice)"), despite the name having
+ * nothing to do with the `Callout` primitive. --type-body-note is the
+ * description's exact shorthand -- the SAME token `Callout` already
+ * consumes (400 12px/1.5 sans), a second, independent bundle instance of
+ * the same role, not a new one invented for this component.
+ *
+ * display:block;width:100%;text-align:left -- the bundle's own declaration
+ * carries text-align:left explicitly (the only way to override a <button>'s
+ * UA-stylesheet centred text), and width:100%/display:block reproduce the
+ * full-bleed layout the bundle's `<div style="display:grid;grid-template-
+ * columns:1fr 1fr...">` wrapper produces for each cell. cursor:pointer is
+ * structural, same reasoning Button.css uses for its own base class. */
+.shortcut-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--line-card);
+  background: var(--ground-surface);
+  border-radius: var(--radius-card);
+  padding: 16px 18px;
+}
+
+.shortcut-card__title {
+  font: var(--type-heading-callout);
+}
+
+.shortcut-card__description {
+  font: var(--type-body-note);
+  color: var(--text-muted);
+  margin-top: 4px;
+}

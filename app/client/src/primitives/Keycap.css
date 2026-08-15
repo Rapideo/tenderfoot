@@ -1,0 +1,24 @@
+/* Keycap -- the single keyboard-hint badge in the bundle, the ESC key in the
+ * command-bar "Show menu" control (V1.2, index ~550324):
+ *   font:500 9.5px/1 'IBM Plex Mono';color:var(--inktx);
+ *   border:1px solid var(--ink5);border-radius:3px;padding:3px 4px
+ * --type-microlabel is that exact font shorthand (the same 500 9.5px/1 mono
+ * used by the microlabel family); --on-ink-muted is --inktx; --ink-line is
+ * --ink5, whose own comment in tokens.css names this exact use ("borders on
+ * ink (the ESC keycap)"); --radius-micro is that exact 3px step, named for
+ * "score meters, keycaps, checkbox outer". No letter-spacing in the source
+ * declaration, so none is added here.
+ *
+ * The bundle's ESC key sits inside a flex row, which blockifies its default
+ * inline span so width/height/padding render as intended (CSS Flexbox
+ * "flex items are blockified"). This primitive is meant to stand on its own
+ * outside that context, so display:inline-block is added -- a structural
+ * property, not a colour/radius/font value, so it is not token-governed. */
+.keycap {
+  display: inline-block;
+  font: var(--type-microlabel);
+  color: var(--on-ink-muted);
+  border: 1px solid var(--ink-line);
+  border-radius: var(--radius-micro);
+  padding: 3px 4px;
+}

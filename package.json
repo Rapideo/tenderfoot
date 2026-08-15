@@ -3,18 +3,27 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=20.12" },
-  "workspaces": ["app/client", "app/server", "app/shared"],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "workspaces": [
+    "app/client",
+    "app/server",
+    "app/shared"
+  ],
   "scripts": {
     "dev": "npm run dev --workspace app/server & npm run dev --workspace app/client",
     "migrate:deploy": "tsx app/server/src/db/migrate.ts",
     "build": "npm run migrate:deploy && npm run build --workspace app/client",
     "typecheck": "tsc --build --force",
     "test": "vitest run",
-    "tokens": "python prototype/tools/verify-tokens.py",
+    "sync:tokens": "node scripts/sync-tokens.mjs",
+    "tokens": "python prototype/tools/verify-tokens.py && python prototype/tools/verify-type.py && node scripts/sync-tokens.mjs --check",
     "check": "node --env-file-if-exists=.env scripts/check.mjs"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "jsdom": "^29.1.1",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

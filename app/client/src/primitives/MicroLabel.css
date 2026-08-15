@@ -1,0 +1,15 @@
+/* MicroLabel -- the uppercase mono microlabel: DEADLINE, EST. VALUE, POSTED...
+ * Matched against the bundle's own declaration for the "DEADLINE" label in
+ * the triage card (prototype/PROTOTYPE/Tenderfoot UI Mockups V1.2.html):
+ *   font:500 9.5px/1 'IBM Plex Mono';letter-spacing:.14em;color:var(--text7)
+ * --type-microlabel is that exact shorthand (32 uses, the most-used type
+ * declaration in the bundle); --tracking-label-wide is that exact tracking
+ * (13 uses, named for DEADLINE/EST. VALUE/POSTED/CLEARING QUEUE); --text7 is
+ * the compatibility alias for --text-label, the role name written here.
+ * The bundle carries no text-transform anywhere -- uppercase is achieved by
+ * the caller supplying uppercase copy, not by CSS, so none is added here. */
+.micro-label {
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-wide);
+  color: var(--text-label);
+}

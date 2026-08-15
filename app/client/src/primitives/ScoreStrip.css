@@ -1,0 +1,29 @@
+/* ScoreStrip -- the "MACHINE SCORES — A READING AID" panel. See
+ * ScoreStrip.tsx for the bundle match (V1.2, index ~559895) and what was
+ * deliberately dropped (EXPAND ALL / COLLAPSE ALL, per-row citation
+ * disclosure).
+ *
+ * The bundle's title row is
+ * display:flex;align-items:baseline;justify-content:space-between;
+ * margin-bottom:12px -- laying the title span beside the now-dropped
+ * toggleAllScores button. With that button gone there is nothing left to
+ * justify apart, so this keeps only the margin, the one property that is
+ * actually about the title rather than about that layout -- same
+ * reasoning FactPanel.css uses for its own title wrapper. The list is the
+ * bundle's own values unchanged: display:flex;flex-direction:column;
+ * gap:7px.
+ *
+ * The panel's own outer padding:20px 30px 24px;border-right:1px solid
+ * var(--brdsoft) is NOT reproduced here -- that belongs to the two-column
+ * layout the panel sits inside in the bundle (a Card, or Task 8/9's shell
+ * chrome), not to the panel itself. Same reasoning Callout.css gives for
+ * excluding its own bundle instance's margin-top. */
+.score-strip__title {
+  margin-bottom: 12px;
+}
+
+.score-strip__list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}

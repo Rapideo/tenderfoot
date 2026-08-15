@@ -1,0 +1,46 @@
+/* HeaderLockup -- see HeaderLockup.tsx for the exact bundle declaration
+ * this was matched against (V1.2, index ~549237).
+ *
+ * The mark is a checkbox: --radius-micro (3px, outer) and --radius-mark
+ * (1px, inner) are tokens.css's own worked examples for exactly this shape
+ * -- its RADII section intro names the ramp by tracking "element size":
+ * "An 8x8 mark takes 1px, a 22x22 checkbox 3px". Confirmed directly against
+ * the bundle too: `border-radius:1px` and `border:1.5px solid` each occur
+ * exactly ONCE in the whole of V1.2, both right here -- a single frozen
+ * instance, transcribed once, not improved.
+ *
+ * --accent is --acc, both the border and the inner fill -- the same value
+ * for both, not a border/fill pair from two different steps.
+ *
+ * --type-wordmark (600 13.5px/1 'IBM Plex Sans') and --tracking-wordmark
+ * (.16em) are each a single-use token named for this one control
+ * ("the TENDERFOOT brand wordmark" / "the widest tracking in the
+ * direction -- the TENDERFOOT wordmark") -- not shared with anything else
+ * in the direction. */
+.header-lockup {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.header-lockup__mark {
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-micro);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-lockup__mark-inner {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: var(--radius-mark);
+}
+
+.header-lockup__wordmark {
+  font: var(--type-wordmark);
+  letter-spacing: var(--tracking-wordmark);
+}

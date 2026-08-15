@@ -1,0 +1,32 @@
+/* Callout -- matched against the bundle's only buyerNote instance (V1.2,
+ * index ~629092 for the data, rendered at ~556799): "Listed on Indiana's
+ * portal — the buyer is NY OGS, not Indiana. Cooperative award,
+ * participating states TBD." -- the entity-resolution finding surfaced to a
+ * human, an SP1 verification-caught defect made visible in the UI, not
+ * decoration:
+ *
+ *   font:400 12px/1.5 'IBM Plex Sans';color:var(--warntx);
+ *   background:var(--warnbg);border:1px solid var(--warnbrd);
+ *   border-radius:5px;padding:6px 9px;display:inline-block
+ *
+ * --type-body-note is that exact shorthand (400 12px/1.5 sans, 7 uses);
+ * --radius-control-sm is that exact 5px step, whose own tokens.css comment
+ * names "compact controls and inline callouts" directly. --signal-caution-
+ * line/--warnbrd has exactly ONE use in the whole bundle -- this is it, the
+ * single most concentrated piece of evidence of any token match in this
+ * task.
+ *
+ * margin-top:6px in the bundle is contextual to this one usage (spacing
+ * after the buyer name it follows) rather than intrinsic to the callout
+ * itself, so it is not reproduced here -- same reasoning MicroLabel used to
+ * leave its own sibling margins to the composing context. Padding has no
+ * token layer, so it stays a literal, exactly as in the bundle. */
+.callout {
+  display: inline-block;
+  font: var(--type-body-note);
+  color: var(--signal-caution-text);
+  background: var(--signal-caution-wash);
+  border: 1px solid var(--signal-caution-line);
+  border-radius: var(--radius-control-sm);
+  padding: 6px 9px;
+}
