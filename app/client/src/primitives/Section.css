@@ -1,0 +1,48 @@
+/* Section -- the outer/section-level chrome that Tasks 4-8 never built,
+ * recorded as Deviation D6 in docs/SP2-fidelity-audit.md §2.3 and carried
+ * forward as a named SP6 precondition. Two matched bundle instances, both
+ * V1.2:
+ *
+ *   FactPanel's wrapper ("COST TO PURSUE", index ~562481)
+ *     padding:20px 30px 24px;background:var(--surface3)
+ *   ScoreStrip's panel   ("MACHINE SCORES", index ~559895)
+ *     padding:20px 30px 24px;border-right:1px solid var(--brdsoft)
+ *
+ * WHAT THE TWO SHARE IS THE PADDING, AND ONLY THE PADDING. The recess and
+ * the right rule are independent treatments that appear one apiece, which
+ * is why they are separate modifiers rather than one "recessed" variant --
+ * `--recessed` alone cannot express the ScoreStrip instance, and folding
+ * the border into it would invent a pairing the bundle does not show.
+ *
+ * WHY NOT NAMED RecessedSection, the name STATUS.md and the audit both use.
+ * Only one of the two instances is recessed; the other sits on the ordinary
+ * --ground-surface plane and is distinguished by its divider. Naming the
+ * container after the treatment that half its evidence lacks is the same
+ * error D5 records for --line-dashed: choosing the more suggestive name
+ * over the instance actually in front of you. The recess survives as the
+ * modifier it is.
+ *
+ * --surface3 is --ground-recess-1 (#fbfcfd, 4 uses in V1.2); --brdsoft is
+ * --line-soft (#edf1f3, 32 uses -- the bundle's default soft rule).
+ *
+ * THE PADDING IS A BARE LITERAL ON PURPOSE. No spacing token layer exists
+ * (audit Finding F3), and the ruling on extracting one is explicitly "when
+ * a composed screen shows which values are systematic" -- which has not
+ * happened yet: this is the first container to carry the 20px 30px 24px
+ * step, and one consumer cannot distinguish a scale from a coincidence.
+ * Sixteen primitives inline their spacing the same way; this makes
+ * seventeen, and it is the value the extraction pass will collect. */
+.section {
+  padding: 20px 30px 24px;
+}
+
+.section--recessed {
+  background: var(--ground-recess-1);
+}
+
+/* Right-hand rule, not a general border: the bundle instance is the left
+ * column of a two-column layout, and the rule is the division between the
+ * columns rather than an outline around the section. */
+.section--divider {
+  border-right: 1px solid var(--line-soft);
+}

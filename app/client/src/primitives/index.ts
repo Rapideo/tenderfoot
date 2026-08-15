@@ -12,6 +12,7 @@ export { Keycap } from "./Keycap";
 export { MicroLabel } from "./MicroLabel";
 export { ScoreBar } from "./ScoreBar";
 export { ScoreStrip } from "./ScoreStrip";
+export { Section } from "./Section";
 export { ShortcutCard } from "./ShortcutCard";
 export { StatusBar } from "./StatusBar";
 export { StatusDot } from "./StatusDot";

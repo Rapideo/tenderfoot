@@ -32,6 +32,7 @@ import {
   Keycap,
   MicroLabel,
   ScoreStrip,
+  Section,
   ShortcutCard,
   StatusBar,
   StatusDot,
@@ -571,6 +572,75 @@ export function Gallery() {
           <MicroLabel>HEADER LOCKUP</MicroLabel>
           <div className="gallery-row">
             <HeaderLockup />
+          </div>
+        </div>
+      </section>
+
+      {/* ============================ SECTION CHROME =======================
+       * Section -- added 2026-08-15 as an SP6 precondition, closing the
+       * part of Deviation D6 (audit §2.3) that a primitive can close.
+       *
+       * The entries above deliberately DO NOT change. D6's complaint is
+       * that FactPanel and ScoreStrip render on plain --ground-surface in
+       * the gallery when the bundle shows them inside section chrome --
+       * but rewiring those entries is a COMPOSITION decision, and SP6 is
+       * the slice that composes. SP2 is signed off; re-dressing its
+       * reviewed output on the way past would change what was signed off
+       * without anyone looking at it again. The wrapper is shown here on
+       * its own instead, next to a FactPanel, so the difference D6 names
+       * is visible side by side and can be judged when SP6 composes.
+       *
+       * The recess is genuinely near-imperceptible on screen (#fbfcfd on
+       * #ffffff, dE ~0.4 -- tokens.css calls out this exact pair as a
+       * candidate merge). STATUS.md already records that: "colour
+       * difference is near-imperceptible -- the real gap is the missing
+       * primitive, not the colour." It is labelled here rather than
+       * exaggerated, because making it legible would mean not matching
+       * the bundle. */}
+      <section className="gallery-section">
+        <h2>Section chrome</h2>
+        <p className="gallery-compare">
+          Compare in the frozen bundle -- the recessed wrapper around
+          "COST TO PURSUE" index ~562481, and the "MACHINE SCORES" panel's
+          own padding and right-hand rule index ~559895. Only the padding
+          is common to both; the recess and the divider appear one apiece.
+        </p>
+
+        <div className="gallery-section">
+          <div className="gallery-row gallery-row--align-top">
+            <span className="gallery-panel-item">
+              <MicroLabel>PLAIN — PADDING ONLY</MicroLabel>
+              <Card>
+                <Section>
+                  <FactPanel title={FACT_PANEL_TITLE} note={FACT_PANEL_NOTE}>
+                    <FactTile label="Required forms" value="7" />
+                    <FactTile label="Page limit" value="40 pp" />
+                  </FactPanel>
+                </Section>
+              </Card>
+            </span>
+            <span className="gallery-panel-item">
+              <MicroLabel>RECESSED — AS THE BUNDLE SHOWS IT</MicroLabel>
+              <Card>
+                <Section recessed>
+                  <FactPanel title={FACT_PANEL_TITLE} note={FACT_PANEL_NOTE}>
+                    <FactTile label="Required forms" value="7" />
+                    <FactTile label="Page limit" value="40 pp" />
+                  </FactPanel>
+                </Section>
+              </Card>
+            </span>
+          </div>
+        </div>
+
+        <div className="gallery-section">
+          <MicroLabel>DIVIDER — THE TWO-COLUMN LEFT EDGE</MicroLabel>
+          <div className="gallery-row gallery-row--align-top">
+            <Card>
+              <Section divider>
+                <ScoreStrip scores={SCORE_STRIP_EXAMPLE} />
+              </Section>
+            </Card>
           </div>
         </div>
       </section>

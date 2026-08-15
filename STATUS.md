@@ -60,7 +60,7 @@
 2. ~~⏸ **Per-preview DB branching**~~ **→ HANDED TO MATT 2026-08-15. The dialog half is done; the remaining half is not Claude's.** The setting is enabled and verified persisted (`Require Active Resource` on, `Preview` checked, `Production` unchecked). **It is inert, and that is now proven:** a throwaway preview deploy created no Neon branch and its ping moved production's `last_ping`. **The blocker is that the Vercel project has no connected Git repository** — Neon branches per *Git* preview, and every deploy this project has ever made was CLI-driven. Connecting it changes the deploy model, so it is Matt's call. **Until then every preview deployment still writes to the production database.** Full trace and two corrections to §8's steps in workflow spec §8.
 3. ~~**§6 slice-order reconciliation**~~ ✅ **DONE 2026-08-15 — Plan of Action §6.4.** **No slice moved.** Both named inputs applied: shell-first is now a **stated hard dependency** rather than an inherited score, and parked nodes are excluded **by marker, not number** (`Screen 7` and `View 2.2` both rule `Pri 4` and would otherwise jump ahead of shipping work). §4's list of hard ordering constraints **was incomplete and gained a third** — containment. §6.0's flag closed; the radar stays in SP8. **One finding went to Matt — see A3 below.**
 4. **SP1 T12–T15** — re-extraction, minimal admin. **Coupled to item 1 now**, since the manual scrape needs somewhere to live.
-5. **SP6 preconditions** — recessed-section primitive, spacing/shadow layers, `Button` danger-primary.
+5. **SP6 preconditions** — ✅ **section primitive DONE 2026-08-15** (`Section`, 5 tests, gate green 97/21). ⛔ **The other two are NOT startable, by their own stated triggers** — and "precondition" misled me into thinking they were. **Spacing/shadow layers** rule is *"extract when a composed screen shows which values are systematic"*; there are still zero composed screens and `Card`'s shadow still has one consumer. **`Button` danger-primary** rule is *"decide the affordance when the decision bar exists"*; SP6 *composes* the decision bar. **Both are first-moves INSIDE SP6, not work that precedes it.** Building either now would invent a scale, or a variant, from a single instance — exactly what the 3× recurrence bar exists to stop.
 
 ### One open thread that is nobody's task yet
 
@@ -128,7 +128,7 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 
 | | Why it waits for SP6 |
 |---|---|
-| **A "recessed section" primitive** | The bundle's `COST TO PURSUE` panel sits in a `--surface3` recessed wrapper no primitive expresses, so the gallery draws it on plain white. Colour difference is near-imperceptible — **the real gap is the missing primitive, not the colour** |
+| ~~**A "recessed section" primitive**~~ ✅ **DONE 2026-08-15 — `Section`** | The bundle's `COST TO PURSUE` panel sits in a `--surface3` recessed wrapper no primitive expressed, so the gallery drew it on plain white. Colour difference is near-imperceptible — **the real gap was the missing primitive, not the colour**, and that is what got built. `--ground-recess-1` had **zero consumers** before this; it has one now |
 | **Spacing + shadow token layers** | Extract when a composed screen shows which values are systematic |
 | **`Button` danger-primary** | A destructive confirm; decide the affordance when the decision bar exists |
 
@@ -176,7 +176,7 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 | ~~B3 for SP0~~ · ~~B3 for SP1.5~~ · ~~B3 for SP2~~ | ✅ written and executed. SP2's scope grew 2026-08-13 — the parked intelligence chrome is built inert, so it was never "mostly transcription" |
 | SP1 T12–T15 | Re-extraction + minimal admin |
 | **B3 for SP3** | **Next and UNGATED as of 2026-08-15** — §9.6 is ruled. The round-trip fix and the scaffolding brainstorm still land *in* the plan rather than after it. Two things the ruling hands the plan: behaviour when the operator asks for more than fits, and where the human-reachable trigger lives (T12–T15's admin UI) |
-| **A "recessed section" primitive** | The one known SP2 gap, ruled not gate-blocking. Needed **before SP6** composes `FactPanel` into a real screen |
+| ~~**A "recessed section" primitive**~~ | ✅ **BUILT 2026-08-15 as `Section`** — the one known SP2 gap, now closed as far as a primitive can close it. **Landed under a different name on purpose:** only one of D6's two section instances is recessed (the other sits on `--ground-surface` and is distinguished by a right-hand divider), so the shared property is the padding and `recessed` is one of two independent modifiers. Naming the container after a treatment half its evidence lacks is D5's `--line-dashed` error repeated. **The composition half stays open for SP6** — the existing gallery entries were deliberately not rewired |
 | **The ingestion round-trip fix** | **No longer a blocker — it changed job on 2026-08-15.** ~7 rows/sec against a *measured* 300s ceiling was fatal while a full register had to fit one invocation. Under a hand-scoped run it is a **scope multiplier**: every row/second buys depth the operator can ask for. Multi-row `INSERT`/`UNNEST`, still before SP3 ships |
 
 ---
