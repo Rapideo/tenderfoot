@@ -8,6 +8,8 @@
 >
 > **Also done 2026-08-15: the §6 slice-order reconciliation** (Plan of Action §6.4). **No slice moved.** One finding went back to Matt: whether source health belongs in front of the GO gate rather than in SP7.
 >
+> **Also done 2026-08-15: the `Section` primitive** — the one known SP2 gap (Deviation D6), closed as far as a primitive can close it. **Gate green at 97 tests / 21 files.** Landed as `Section` rather than `RecessedSection` because only one of its two bundle instances is recessed. **The other two "SP6 preconditions" turned out not to be preconditions at all** — spacing/shadow layers and `Button` danger-primary are both gated on SP6 existing, so they are first moves *inside* the slice.
+>
 > **Behind that: SP2 is SIGNED OFF (2026-08-14) and merged.** Sixteen primitives on `/dev/gallery`, reviewed against the V1.2 bundle with no issues raised; **all five gate rulings resolved** — two of them turned out not to be what the gate list said. Three fixes applied (`--type-body-default` → `--type-body-para`/`-detail`, `StatusDot` `degraded` → `failing`, and `npm run dev` now loads `.env`), gate re-run **green: 92 tests, 20 files, exit 0**.
 >
 > **Also closed today:** all three of `three_open_questions.md`, and the full twenty-node SVRC `Imp`/`Pri` re-score (v0.6.0, fourteen moved).
@@ -24,7 +26,7 @@
 
 ## 🔖 RESUME HERE — updated 2026-08-15
 
-**State is clean apart from this file.** On `main`, **SP2 merged** (`ebbcf7c`), gate green locally *and* on CI — 20 files, 92 tests, every token check passing. ⚠️ **`STATUS.md` and the workflow spec have uncommitted edits** — the per-preview-branching result. Nothing else is dirty and **no code changed** (this session touched Vercel/Neon settings and docs only).
+**Working tree is clean.** On `main`, **SP2 merged** (`ebbcf7c`), **gate green locally at 97 tests / 21 files**, every token check passing. ⚠️ **Two commits are unpushed** — `36ee8ed` (the per-preview-branching result) and `ad034f9` (the `Section` primitive). **CI's last recorded run is 92/20**, which predates `Section`; the next push is what re-proves it at 97/21.
 
 > **First thing to know on resume, 2026-08-15.** **Per-preview branching is enabled but inert, and previews still write to production — proven with a real deploy, not inferred.** The blocker is that **the Vercel project has no connected Git repository**; Neon branches per *Git* preview, and every deploy this project has ever made was CLI-driven. Connecting it is Matt's call because pushes to `main` would then auto-deploy to production. Full trace in workflow spec §8. **Two of §8's six steps were also wrong** — the branch checkboxes are disabled until `Require Active Resource` is on, and its `vercel env ls` success signal never fires.
 >
@@ -99,7 +101,7 @@
 |---|---|---|
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
-| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) outstanding — dashboard-only, six steps in workflow spec §8 |
+| **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) **half-done 2026-08-15** — the setting is on and verified, but it is inert until the Vercel project is connected to Git, and a real preview deploy proved previews still write to production. Workflow spec §8 |
 | **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ✅ **SIGNED OFF 2026-08-14.** Branch `sp2-design-system`, **sixteen primitives** on `/dev/gallery`, gate green (**92 tests / 20 files**) after the three sign-off fixes. **Clear to merge — not yet merged** |
 | **SP3** | Federal ingestion — SAM.gov + USASpending | ◐ **B3 unblocked 2026-08-15** — §9.6 ruled. Hand-invoked, operator-scoped |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
@@ -126,11 +128,13 @@
 
 Named together so they cannot be rediscovered piecemeal. **None block the SP2 merge; all three block SP6 composing a real screen.**
 
+> **Revised 2026-08-15 — "precondition" was the wrong word for two of the three, and it misled a session into trying to start them.** Only the section primitive was work that could precede SP6, and it is now done. **The other two are gated on SP6 *existing*:** each names a trigger — a composed screen, a decision bar — that SP6 is the slice that creates. They are **first moves inside SP6**, not a queue to clear before it. Attempting either early means inventing a spacing scale, or a button variant, from a single instance, which is the exact thing the 3× recurrence bar and the "extract on the second consumer" rule exist to prevent.
+
 | | Why it waits for SP6 |
 |---|---|
 | ~~**A "recessed section" primitive**~~ ✅ **DONE 2026-08-15 — `Section`** | The bundle's `COST TO PURSUE` panel sits in a `--surface3` recessed wrapper no primitive expressed, so the gallery drew it on plain white. Colour difference is near-imperceptible — **the real gap was the missing primitive, not the colour**, and that is what got built. `--ground-recess-1` had **zero consumers** before this; it has one now |
-| **Spacing + shadow token layers** | Extract when a composed screen shows which values are systematic |
-| **`Button` danger-primary** | A destructive confirm; decide the affordance when the decision bar exists |
+| **Spacing + shadow token layers** | Extract when a composed screen shows which values are systematic. **Still zero composed screens; `Card`'s shadow still has one consumer.** `Section`'s `20px 30px 24px` is the first section-level spacing value and will be part of what the extraction pass collects — one consumer, so it does not trigger it |
+| **`Button` danger-primary** | A destructive confirm; decide the affordance when the decision bar exists. **Still no consumer, still below the 3× bar** |
 
 ## Infrastructure — live, re-read from the account 2026-08-14
 
