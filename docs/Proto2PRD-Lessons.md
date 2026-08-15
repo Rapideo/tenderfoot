@@ -37,6 +37,8 @@ Recorded so the end-of-project pass does not re-litigate settled ground.
 
 **The `(T)` provenance marker.** Validated-on-Tenderfoot, sitting between recovered and untested. *Trigger:* two mechanisms qualified and `(N)` had stopped being honest about either.
 
+**§5.4 — a removal is proved by the OLD thing failing, and the old thing must be captured first.** Promoted 2026-08-14. *Trigger:* observed twice in one day — a per-branch password reset that left the leaked credential live, then the corollary being violated by the party that had written it hours earlier. **The mechanism is what earned it:** the working sequence for a revocation contains no step at which the old value is still needed, so the precondition is invisible to anyone following the happy path. That is why the playbook entry moves the step rather than adding a reminder. *Evidence:* §2.16 below, both instances.
+
 **`ClaudeDesign_Proto_Cleanup.md`** — a companion procedure for turning a generated bundle into a specification-grade prototype, including the re-extraction section added when V1.1 landed hours after V1 was extracted.
 
 ---
@@ -217,7 +219,9 @@ The method that catches it is trivial: **vary one parameter and watch the total 
 
 ---
 
-### 2.16 A revocation is proved by the OLD key failing, not by the new key working
+### ~~2.16~~ ✅ PROMOTED 2026-08-14 → `Proto2PRD.md` §5.4 — a revocation is proved by the OLD key failing
+
+*Kept here in full: the playbook carries the rule, this carries the two incidents it was derived from.*
 
 **Observed 2026-08-14.**
 
@@ -233,7 +237,7 @@ A leaked database credential was rotated in the provider console. The obvious ch
 
 **The fix is a sequencing rule, not a reminder.** Make capturing the old artifact **step one of the revocation procedure**, before touching the provider — not a verification step afterwards. By the time verification is the current concern, the artifact is already gone.
 
-**✅ PROMOTION BAR MET.** This lesson's own note said a second instance should send it straight to the playbook. That instance has arrived, and it is stronger than the first because it was self-inflicted under full knowledge. **Not yet moved into `Proto2PRD.md` — that is a deliberate edit to the reusable playbook and is Matt's call to make, not a side effect of the incident that qualified it.**
+**✅ PROMOTED 2026-08-14 by Matt's decision**, into `Proto2PRD.md` §5.4, beside *"verify against expected output, not exit status"* — the same family, since both are verifications that assert the wrong thing. **The playbook entry leads with the sequencing rule rather than the maxim**, because the second instance proved the maxim alone does not survive contact with the happy path.
 
 ### 2.17 Fixing every instance leaves the template that mints the next one
 

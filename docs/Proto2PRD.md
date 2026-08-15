@@ -707,6 +707,22 @@ It was caught by one thing only: the plan's verification step said **"run it twi
 
 **Two supporting habits from the same slice.** Verify the *idempotent* path, not only the first run: applying a migration twice is where the interesting bug lives. And verify that a written value *survives a re-read*, rather than trusting the write's own response — SP0's health check reads back after its ping for that reason.
 
+#### A removal is proved by the OLD thing failing — and the old thing must be captured FIRST **(T)**
+
+**Learned on Tenderfoot, 2026-08-14, twice in one day. The second time was self-inflicted with the first already written down.**
+
+A leaked database credential was rotated in the provider console. The obvious check — connect with the new string — passed, and on its own would have closed the incident. **The check that mattered was connecting with the OLD string, which still worked**, because that provider resets a role password *per branch* and the reset had been aimed at one of two. The reset genuinely succeeded. The report was accurate. The incident was still open.
+
+> **For any change whose purpose is to REMOVE something** — a credential, an access grant, a feature flag, a route, a permission, a file — **the positive test confirms the replacement exists and says nothing whatsoever about whether the original is gone.** They are independent facts. **The negative test is the one that carries the claim, and it is the one that gets skipped**, because a passing positive test feels like completion and produces the same green.
+
+**Now the half that is easy to write and hard to do.** The negative test needs the old artifact, so **capturing it is step one of the procedure — before the provider is touched at all.** Not a verification step at the end.
+
+**That ordering is the entire lesson, and here is the evidence for why it has to be structural.** The corollary above was already written, in this project's own staging file, hours before the second rotation. It was skipped anyway. The reason is not carelessness: **the working sequence — reset, fetch the new value, write it, test it — contains no step at which the old value is still needed.** A precondition that appears nowhere in the happy path will be skipped no matter how prominently it is documented, by whoever documented it, on the same day they documented it.
+
+> **So do not add a reminder. Move the step.** Anything that must happen *before* an irreversible action belongs at position one of the written procedure, where the happy path runs through it — not in a note beside the verification that comes after.
+
+**And when the capture is missed, say so.** A revocation verified only by the provider's own success message is **asserted, not proved**. That distinction costs nothing to record and is the difference between a closed incident and one that looks closed.
+
 ---
 
 ## 6. Phase 2 — Infrastructure
