@@ -260,6 +260,10 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 > **What this retires.** Every preview deployment from a Git branch now gets its own copy-on-write database. The branches are born at the corrected `0.25 → 8` CU default (§2.17's template fix, made on 08-14 specifically so this feature would not multiply the wrong compute size — that sequencing paid off exactly as intended).
 >
 > **What it does not cover.** `vercel deploy` from a laptop still produces a branchless preview pointed at production, because there is no Git branch to key on. **The CLI path is still the footgun**; only the Git path is safe. Anyone reaching for `vercel deploy` to "just check something quickly" is reaching for the unsafe one.
+>
+> **Teardown is not proven, and it is the half nobody will notice failing.** Deleting the Git branch `verify-preview-branching` did **not** remove `preview/verify-preview-branching` within ~10 minutes; it was deleted by hand via the Neon MCP. **That is one observation over ten minutes on one branch** — cleanup may simply be delayed, or may be tied to removing the *deployment* rather than the branch. Recorded as what happened, not as "cleanup does not work" (§2.15). **The reason it matters: creation is verifiable in seconds and deletion is not, so a teardown that silently never fires shows up as a storage-and-compute bill months later rather than as a broken preview.** Check it on the first real PR, and check it by looking rather than by assuming.
+>
+> **One thing this closed by accident, which is worth naming as luck rather than work.** Production had been in `● Error` for two days. The first Git-triggered production deploy came back `● Ready` in 23s and serves `{"ok":true}` with migrations 001–004. **Nothing here diagnosed it** — it was never investigated, and the fix was a side effect of connecting Git. If it recurs, there is no cause on file to consult.
 
 ---
 
