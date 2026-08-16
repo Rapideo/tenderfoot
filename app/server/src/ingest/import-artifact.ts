@@ -86,11 +86,42 @@ export async function importArtifact(path: string): Promise<ImportResult> {
       [src.id, advanceTo, sha, art.sightings.length],
     );
 
-    for (const s of art.sightings) {
+    /* ONE STATEMENT, WHATEVER THE ROW COUNT -- and UNNEST rather than a
+     * multi-row VALUES list, which is the part worth explaining.
+     *
+     * Both collapse N round trips to one; only this one collapses N*7 bind
+     * parameters to 7. Postgres caps a statement at 65535 parameters, so a
+     * VALUES list of seven-column rows dies at ~9,362 sightings -- a limit
+     * that would sit quietly below every test fixture and appear for the
+     * first time on a real register. Five arrays and two scalars have no
+     * such ceiling.
+     *
+     * The casts are explicit because the artifact stores everything as
+     * SQLite TEXT: `raw` is a JSON string bound for a jsonb column and
+     * `seen_at` an ISO string bound for timestamptz. The per-row version
+     * got those conversions for free from the target column's type; a
+     * SELECT list has to ask.
+     *
+     * The five arrays are all mapped from `art.sightings`, so they cannot
+     * differ in length. That matters: unnest NULL-PADS to the longest array
+     * rather than erroring, so ragged inputs would land rows with a NULL
+     * external_id instead of failing. */
+    if (art.sightings.length) {
       await q.run(
         `INSERT INTO sighting (source_id, external_id, seen_at, raw, extractor_ver, mode, ingest_run_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [src.id, s.external_id, s.seen_at, s.raw, s.extractor_ver, s.mode, runId],
+         SELECT $1::int, s.external_id, s.seen_at::timestamptz, s.raw::jsonb,
+                s.extractor_ver, s.mode, $2::int
+           FROM unnest($3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+             AS s(external_id, seen_at, raw, extractor_ver, mode)`,
+        [
+          src.id,
+          runId,
+          art.sightings.map((s) => s.external_id),
+          art.sightings.map((s) => s.seen_at),
+          art.sightings.map((s) => s.raw),
+          art.sightings.map((s) => s.extractor_ver),
+          art.sightings.map((s) => s.mode),
+        ],
       );
     }
 

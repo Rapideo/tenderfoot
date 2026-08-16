@@ -26,9 +26,9 @@
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-15
+## 🔖 RESUME HERE — updated 2026-08-16
 
-**You are on branch `sp3-federal-ingestion`, not `main`.** 22 commits, **gate green at 159 tests / 33 files**, `npm run check` exit 0. Not merged, not pushed.
+**You are on branch `sp3-federal-ingestion`, not `main`.** 24 commits, **gate green at 162 tests / 33 files**, `npm run check` exit 0. **Not merged.** ⚠️ **This line read *"not pushed"* for a day and was wrong** — `origin/sp3-federal-ingestion` has tracked it since 2026-08-15, tip identical to local. Corrected 2026-08-16.
 
 > ## 🚨 FIRST THING TO KNOW ON RESUME — SP3 AND SP3.5 ARE BUILT
 >
@@ -45,6 +45,8 @@
 > ⚠️ **Nothing will scrape until you enable a source.** All 13 registry rows are `enabled = false`, and the scraper now refuses a disabled source *before* fetching. That is deliberate — it is the fail-closed posture the spec always demanded and nothing had implemented. Flip `SAM.gov` to `enabled = true` to see real postings.
 >
 > ⚠️ **`ADMIN_SCRAPE_SECRET` must be set** or `/api/admin/scrape` returns 503. Unset fails closed by design.
+>
+> **Import is no longer the slow step — 2026-08-16.** `npm run import` batches its sightings into one `UNNEST` statement: **1,038 rows/sec measured**, up from 12, so a 2,000-row artifact lands in about two seconds rather than three minutes. **Scrape is now the only part of a run whose cost scales with what you ask for.**
 >
 > **Two things the reviews caught that would otherwise have shipped:** the branch could not complete a single real lifecycle (adapter keys `sam`/`usaspending` never matched the seeded names `SAM.gov`/`USASpending`), and resume could livelock forever on SAM's second-precision timestamp ties. Both fixed; the second is *detected and reported*, not solved — see below.
 >
@@ -211,7 +213,8 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 | SP1 T12–T15 | Re-extraction + minimal admin |
 | **B3 for SP3** | **Next, and now fully UNGATED as of 2026-08-15** — §9.6 ruled *and* the scaffolding brainstorm specced. Both questions the ruling handed the plan are answered: over-ask is **checkpoint-and-resume**, and the trigger lives on **T12–T15's admin UI**. What still lands *in* the plan: the round-trip fix, **SP3.5**, and the spec's two remaining open items |
 | ~~**A "recessed section" primitive**~~ | ✅ **BUILT 2026-08-15 as `Section`** — the one known SP2 gap, now closed as far as a primitive can close it. **Landed under a different name on purpose:** only one of D6's two section instances is recessed (the other sits on `--ground-surface` and is distinguished by a right-hand divider), so the shared property is the padding and `recessed` is one of two independent modifiers. Naming the container after a treatment half its evidence lacks is D5's `--line-dashed` error repeated. **The composition half stays open for SP6** — the existing gallery entries were deliberately not rewired |
-| **The ingestion round-trip fix** | **No longer a blocker — it changed job on 2026-08-15.** ~7 rows/sec against a *measured* 300s ceiling was fatal while a full register had to fit one invocation. Under a hand-scoped run it is a **scope multiplier**: every row/second buys depth the operator can ask for. Multi-row `INSERT`/`UNNEST`, still before SP3 ships |
+| ~~**The ingestion round-trip fix**~~ | ✅ **DONE 2026-08-16 — `UNNEST`, and the gain was measured on both sides rather than divided into the old figure.** Like-for-like on one machine, one Neon test branch, ~500-byte realistic payloads: **12 rows/sec → 1,038 rows/sec, an 87× improvement**, statements per import N+1 → **1**. *(The old path measured 12 here, not the ~7 this row used to quote — a different day and a different network, which is exactly why both ends were re-run.)* **`UNNEST` rather than a multi-row `VALUES` list on purpose:** both collapse the round trips, only `UNNEST` collapses the bind parameters (7, whatever N is), and a seven-column `VALUES` list hits Postgres's 65535-parameter cap at **~9,362 sightings** — under every fixture, first seen on a real register. ⚠️ **This row's own framing was wrong:** the importer never ran under the 300s ceiling. Neither `routes/admin.ts` nor `scrape/cli.ts` calls `importArtifact` — import is its own CLI step, and the ceiling binds the *scrape* handler. Still a scope multiplier, just of operator wall-clock. Gate **162 / 33** |
+| 🟡 **NEW 2026-08-16 — `merge.ts` has the same shape, and it is not fixed.** `merge/merge.ts:113-134` loops over groups issuing 2–3 awaited statements each, so merge cost scales with distinct solicitations exactly as import used to scale with sightings. **Deliberately left alone:** each group is an insert-*or*-update plus a link, so batching means restructuring into set-based SQL with its own decisions — a bigger change than the importer's, and SP3.5 rather than the named item. **Unmeasured** — nobody has run it at volume | Matt's call whether it precedes the SP3 merge |
 
 ---
 
