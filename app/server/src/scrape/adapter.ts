@@ -23,6 +23,12 @@ export interface ListingPage {
   httpStatus: number;
   /** The response body exactly as received. Stored as a capture. */
   payload: string;
+  /* Spec §5.4: sources degrade rather than fail. A record with no usable
+   * date cannot be placed in the window and is excluded from `items`
+   * rather than poisoning the low-water resume marker with an empty
+   * string -- but it must not vanish silently. OPTIONAL so adapters that
+   * cannot produce this (or never encounter it) are unaffected. */
+  undatedSkipped?: number;
 }
 
 export interface Adapter {

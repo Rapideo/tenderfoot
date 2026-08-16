@@ -59,6 +59,75 @@ test("since is applied client-side against modifiedDate", async () => {
   expect(page.nextCursor).toBeNull();
 });
 
+/* FIX ROUND 1, Finding 1 (Critical): the window was bounded only below, by
+ * `since`. Because `fetchListing` is always called with `cursor = null` on
+ * a fresh process invocation, an unbounded-above filter would re-match and
+ * re-write every record from every page a PRIOR run already covered, on
+ * every resume, forever. Bounding by `until` too is what makes the
+ * already-covered prefix get skipped (not re-written) rather than merely
+ * re-walked. */
+test("until bounds the window from above, so already-covered records are not re-returned on resume", async () => {
+  const since = "2026-08-01T00:00:00.000Z";
+  const until = "2026-08-05T00:00:00.000Z"; // e.g. a resumed run's nextUntil
+  const stub = async () =>
+    new Response(
+      JSON.stringify({
+        _embedded: {
+          results: [
+            // Newer than `until` -- already covered by the run this one is
+            // resuming from. Must NOT reappear.
+            { _id: "too-new", modifiedDate: "2026-08-10T00:00:00.000Z" },
+            // Genuinely in the resumed window.
+            { _id: "in-window", modifiedDate: "2026-08-03T00:00:00.000Z" },
+            // Older than `since` -- outside the window on the other end,
+            // and it is the last item on the page, so it also drives
+            // exhaustion.
+            { _id: "too-old", modifiedDate: "2026-07-01T00:00:00.000Z" },
+          ],
+        },
+      }),
+      { status: 200 },
+    );
+
+  const page = await samAdapter(stub as unknown as typeof fetch).fetchListing(since, until, null);
+
+  expect(page.items.map((i) => i.externalId)).toEqual(["in-window"]);
+  expect(page.nextCursor).toBeNull();
+});
+
+/* FIX ROUND 1, Finding 2 (Important): `String(x.modifiedDate ?? "")`
+ * yields "" for a record with no modifiedDate. Untreated, that empty
+ * string sorts below every real date -- so if such a record lands last on
+ * a page, "" < since trips `exhausted` early and every remaining page is
+ * silently never fetched. Here the undated record IS last on the page and
+ * would be the one deciding exhaustion under the old, unguarded logic; the
+ * real dated record ahead of it is well inside the window, so a correct
+ * adapter must keep paging. */
+test("an undated record is skipped and counted, and never allowed to decide exhaustion", async () => {
+  const since = "2026-08-01T00:00:00.000Z";
+  const until = "2026-08-15T00:00:00.000Z";
+  const stub = async () =>
+    new Response(
+      JSON.stringify({
+        _embedded: {
+          results: [
+            { _id: "dated", modifiedDate: "2026-08-10T00:00:00.000Z" },
+            { _id: "undated" /* no modifiedDate at all */ },
+          ],
+        },
+      }),
+      { status: 200 },
+    );
+
+  const page = await samAdapter(stub as unknown as typeof fetch).fetchListing(since, until, null);
+
+  expect(page.items.map((i) => i.externalId)).toEqual(["dated"]);
+  expect(page.undatedSkipped).toBe(1);
+  /* Must NOT be null: an undated trailing record must never be read as
+   * "past the window" and silently truncate the rest of the scrape. */
+  expect(page.nextCursor).not.toBeNull();
+});
+
 test("stops paging when a page comes back empty", async () => {
   const stub = async () =>
     new Response(JSON.stringify({ _embedded: { results: [] } }), { status: 200 });
