@@ -233,3 +233,31 @@ That is the whole vocabulary. **The admin screen that composes it is T12–T15's
 | 7 | Documents **referenced, never embedded** | Embed at document depth |
 | 8 | Idempotency via the existing **`sighting`** model | A natural-key upsert — would have destroyed amendments |
 | 9 | Source config stays in the existing **`source`** table | A config file — a second home for configuration that already has one |
+
+---
+
+## 12. What execution changed — 2026-08-15
+
+**Status: BUILT.** Eleven tasks, branch `sp3-federal-ingestion`, gate green at 159 tests / 33 files. Implementation plan: [`plans/2026-08-15-b3-ingestion.md`](../plans/2026-08-15-b3-ingestion.md).
+
+**Five things in this design were wrong, and review caught them. They are corrected above; recorded here so the corrections are not mistaken for the original.**
+
+**1. The resume marker pointed at the wrong end of the window.** §5 originally emitted `next_since` = the *newest* record seen. Sources page newest-first, so that value is fixed on page one: resuming from it re-fetches the top forever and never reaches the older tail. **Resume lowers the ceiling** — the marker is now `next_until`, the *oldest* record written, and a resumed run passes the same `since` with `until = next_until`. Inclusive on purpose; the boundary duplicate is harmless because sightings are append-only.
+
+**2. The same defect existed one layer down.** The adapter accepted `until` and ignored it, which defeated the corrected loop entirely. **A resume mechanism is a property of two invocations in sequence**, and no per-layer test can express that — a two-invocation integration test now covers it.
+
+**3. A partial artifact must advance the mark NOT AT ALL.** §6.1 originally advanced `ingested_through` from `next_since ?? until`, which on a partial run would have recorded data nobody fetched — the silent gap this design exists to prevent, arriving disguised as success. Only a complete run advances the mark.
+
+**4. Nothing consulted `source.enabled`, and adapter keys never matched source names.** The registry keys sources `sam`/`usaspending`; the seeded rows are `SAM.gov`/`USASpending`, so no real scrape could ever be imported — the failure landed *after* a full run. The scrape now resolves the canonical source row **before fetching**, and refuses a disabled source. Every registry row ships `enabled = false`, so **nothing scrapes until an operator turns it on** — which is what makes the registry the control surface the SVRC says it is.
+
+**5. `POST /api/admin/scrape` was unauthenticated.** Deployed, that is an internet-facing 240-second outbound-fetch amplifier. It now requires a shared secret, and **an unset secret refuses with 503 rather than running open.**
+
+### Two residuals that are detected, not solved
+
+**Resume can livelock on timestamp ties.** SAM's `modifiedDate` is second-precision and bulk re-indexes tie it across many records. Because the marker is inclusive, a budget too small to clear a tie block re-fetches the same prefix forever. The build now **detects that the marker did not move and reports `noProgress`** instead of handing back a marker promising movement. A secondary tiebreak is the real fix and is undesigned.
+
+**Cross-source `external_id` collision.** The merge groups by `external_id` alone, assuming global uniqueness across sources. True for SAM and USASpending; **not true for the state portals**, which emit human-assigned numbers. A collision fuses two unrelated opportunities and reads as corroboration rather than corruption. Documented at the head of `merge/merge.ts` and recorded as a **blocking prerequisite for onboarding the first human-ID source**.
+
+### One honest caveat about the demo criterion
+
+SP3.5's headline — *the same solicitation seen by two sources resolves to one canonical row* — is currently exercised **only by a synthetic fixture**, because SAM and USASpending do not share an ID namespace. The mechanism is proven; cross-source dedup on real data is not.
