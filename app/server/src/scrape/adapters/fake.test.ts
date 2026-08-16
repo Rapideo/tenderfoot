@@ -17,7 +17,9 @@ test("pages through a fixed corpus and then reports no cursor", async () => {
 
 test("items carry a stable external id and a modifiedAt", async () => {
   const a = fakeAdapter(1, 10);
-  const [item] = (await a.fetchListing("2026-01-01", "2026-12-31", null)).items;
+  const items = (await a.fetchListing("2026-01-01", "2026-12-31", null)).items;
+  const item = items[0];
+  if (!item) throw new Error("Expected at least one item");
   expect(item.externalId).toBe("fake-0");
   expect(item.modifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}/);
 });
