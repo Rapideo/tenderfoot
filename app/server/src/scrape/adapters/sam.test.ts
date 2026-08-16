@@ -128,6 +128,49 @@ test("an undated record is skipped and counted, and never allowed to decide exha
   expect(page.nextCursor).not.toBeNull();
 });
 
+/* THE PARAMETER THAT DECIDES WHICH UNIVERSE V1 SEES, pinned because it was
+ * wrong once and nothing noticed.
+ *
+ * Characterised live 2026-08-16 by varying this one parameter and holding
+ * every other constant:
+ *
+ *   is_active=false   5,538,794 matches, 0 of 100 sampled active  -- THE ARCHIVE
+ *   is_active=true       49,225 matches, 100 of 100 active        -- open notices
+ *   omitted           5,588,019 matches (the sum: everything)
+ *
+ * It is a real filter honoured exactly as its name reads, NOT a "don't
+ * filter on active" switch. The adapter shipped with `false`, inherited
+ * wholesale from corpus/calibration/pull-naics.py -- correct there, because
+ * that script builds a HISTORICAL backtest corpus, and the precise inverse
+ * of what a live opportunity feed needs.
+ *
+ * The first real run returned 307 records: none active, 274 past their
+ * response deadline. It reported done, 307 rows, zero undated, no livelock.
+ * Nothing failed. That is why this is a test and not a comment -- the defect
+ * is invisible in every signal the run produces, and only the URL shows it.
+ *
+ * Already-awarded notices still arrive under `true` (corpus/manifest.md:193
+ * measured 3 of 15). That is NOT a second bug: V1 returns everything an
+ * active source returns and does not filter (spec §1.1). */
+test("requests OPEN notices -- is_active=true, not the 5.5M-record archive", async () => {
+  let requested = "";
+  const stub = async (url: string) => {
+    requested = String(url);
+    return new Response(JSON.stringify({ _embedded: { results: [] } }), { status: 200 });
+  };
+
+  await samAdapter(stub as unknown as typeof fetch).fetchListing(
+    "2026-08-01",
+    "2026-08-15",
+    null,
+  );
+
+  expect(requested).toContain("is_active=true");
+  /* Asserted separately: `toContain("is_active=true")` alone would pass on a
+   * URL that somehow carried both. */
+  expect(requested).not.toContain("is_active=false");
+});
+
 test("stops paging when a page comes back empty", async () => {
   const stub = async () =>
     new Response(JSON.stringify({ _embedded: { results: [] } }), { status: 200 });

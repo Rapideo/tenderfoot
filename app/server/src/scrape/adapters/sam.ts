@@ -7,6 +7,31 @@
  *   sort=-modifiedDate   VERIFIED to order results.
  *   sort=-publishDate    ACCEPTED AND SILENTLY IGNORED. Do not rely on it.
  *   page, size           VERIFIED to paginate.
+ *   is_active            VERIFIED 2026-08-16 to be a REAL filter, honoured
+ *                        exactly as its name reads -- see below.
+ *
+ * IS_ACTIVE IS THE PARAMETER THAT DECIDES WHICH UNIVERSE THIS PRODUCT SEES,
+ * and this adapter had it inverted until 2026-08-16. Varying it alone:
+ *
+ *   is_active=false   5,538,794 matches, none active   -- THE ARCHIVE
+ *   is_active=true       49,225 matches, all active    -- open notices
+ *   omitted           5,588,019 matches                -- the sum of both
+ *
+ * `false` does not mean "do not filter on active". It means INACTIVE ONLY.
+ * The URL was inherited wholesale from corpus/calibration/pull-naics.py,
+ * where it is CORRECT -- that script builds a historical backtest corpus --
+ * and is the exact inverse of what a live opportunity feed needs.
+ *
+ * The first live run scraped 307 notices: none active, 274 already past
+ * their response deadline, and it reported `done: true`, 307 rows, zero
+ * undated, no livelock. Nothing failed. A working scraper pointed at the
+ * wrong five and a half million records looks identical to a working
+ * scraper, which is why sam.test.ts pins this parameter rather than
+ * trusting this comment.
+ *
+ * Already-awarded notices still come back under `true` (corpus/manifest.md
+ * :193 measured 3 of 15). Left alone deliberately: V1 returns everything an
+ * active source returns and does not filter (spec §1.1).
  *
  * The consequence is load-bearing: `since` cannot be pushed to the server,
  * so it is applied CLIENT-SIDE against modifiedDate. Since modifiedDate >=
@@ -19,7 +44,7 @@
 import type { Adapter, ListingItem, ListingPage } from "../adapter.js";
 
 const BASE =
-  "https://sam.gov/api/prod/sgs/v1/search?index=opp&size=100&sort=-modifiedDate&is_active=false";
+  "https://sam.gov/api/prod/sgs/v1/search?index=opp&size=100&sort=-modifiedDate&is_active=true";
 
 export function parseSamPage(body: string): { items: ListingItem[]; count: number } {
   const d = JSON.parse(body);
