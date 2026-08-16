@@ -53,48 +53,71 @@ admin.post(
       return;
     }
 
-    const dir = mkdtempSync(join(tmpdir(), "tf-scrape-"));
-    const out = join(dir, `run-${request.source}.db`);
-    const result = await runScrape(request, make(), out);
-
-    res.setHeader("Content-Type", "application/vnd.sqlite3");
-    res.setHeader("Content-Disposition", `attachment; filename="${request.source}.db"`);
-    res.setHeader("X-Scrape-Done", String(result.done));
-    res.setHeader("X-Scrape-Rows", String(result.rows));
-    /* Resume lowers the ceiling: the caller re-invokes with the same
-     * `since` and this value as `until`. Corrected 2026-08-15 after review. */
-    if (result.nextUntil) res.setHeader("X-Scrape-Next-Until", result.nextUntil);
-
-    /* FIX (found during this task's own verification, not in the brief):
-     * `stream.pipe(res)` plus `stream.on("close", cleanup)` -- the brief's
-     * original shape -- does NOT clean up when the CLIENT disconnects
-     * mid-transfer. Verified directly: `.pipe()` does not propagate a
-     * destination failure back to the source by itself, so when `res`'s
-     * underlying socket dies, `res` emits `close` but the read stream sits
-     * there un-destroyed and never emits its own `close` -- the rmSync
-     * cleanup callback attached to it simply never runs, and both the fd
-     * and the temp directory leak for the life of the process. A dropped
-     * connection is not a corner case for a hand-invoked long streaming
-     * download; it is the second most likely way this request ends.
+    /* FIX ROUND 1 (2026-08-15, after review): the `try` below MUST start
+     * here, wrapping `mkdtempSync` AND `runScrape`, not just the streaming
+     * step further down -- that is the non-obvious part, and it is exactly
+     * what a future "tidy this up" pass could undo by narrowing the try
+     * back to only the pipeline call. `runScrape` is not inert setup: for
+     * the `sam` and `usaspending` adapters it makes real network calls via
+     * `adapter.fetchListing`, and any failure there -- a timeout, a 5xx, a
+     * parse error -- throws straight out of `runScrape` (its own `finally`
+     * only closes the SQLite artifact; it has no idea a temp directory
+     * exists, because it was never given one, only a file path inside it).
+     * A try that started after this line would let that throw reach
+     * `asyncHandler`'s `next(err)` with the temp directory still on disk.
+     * On a serverless filesystem those accumulate across every failed
+     * scrape, invisibly -- nothing surfaces it until disk pressure or a
+     * cold-start cleanup sweep, if either ever happens.
      *
-     * `stream.pipeline()` is the fix, not a defensive extra: it wires
-     * source and destination together so a failure or premature close on
-     * EITHER side destroys the other and reaches one completion point.
-     * Confirmed: an aborted client request makes the awaited pipeline
-     * reject with ERR_STREAM_PREMATURE_CLOSE, which the `finally` below
-     * turns into a guaranteed cleanup on every exit path -- success, a
-     * genuine stream error, and a dropped connection alike. */
-    const stream = createReadStream(out);
+     * What this block actually guarantees, now that the guard encloses
+     * directory creation: `rmSync` runs exactly once, on every exit path --
+     * a clean finish, a `runScrape` failure (network or adapter error), a
+     * genuine streaming failure, AND a dropped client connection (see the
+     * pipeline note below). `rmSync` keeps `force: true` so it cannot
+     * itself throw past this handler even if the directory was already
+     * gone or never fully populated. */
+    const dir = mkdtempSync(join(tmpdir(), "tf-scrape-"));
     try {
-      await pipeline(stream, res);
-    } catch (err) {
-      /* A dropped connection is expected traffic, not a server fault --
-       * there is no client left to answer, and the response object's
-       * socket is already gone, so routing this into asyncHandler's
-       * next(err) would have the global error handler try to write a 500
-       * onto a dead connection. Only a genuine failure (disk error, a bug)
-       * should still reach that handler and get logged. */
-      if ((err as NodeJS.ErrnoException)?.code !== "ERR_STREAM_PREMATURE_CLOSE") throw err;
+      const out = join(dir, `run-${request.source}.db`);
+      const result = await runScrape(request, make(), out);
+
+      res.setHeader("Content-Type", "application/vnd.sqlite3");
+      res.setHeader("Content-Disposition", `attachment; filename="${request.source}.db"`);
+      res.setHeader("X-Scrape-Done", String(result.done));
+      res.setHeader("X-Scrape-Rows", String(result.rows));
+      /* Resume lowers the ceiling: the caller re-invokes with the same
+       * `since` and this value as `until`. Corrected 2026-08-15 after review. */
+      if (result.nextUntil) res.setHeader("X-Scrape-Next-Until", result.nextUntil);
+
+      /* `stream.pipe(res)` plus a `close` listener on the source -- an
+       * earlier shape of this handler -- does NOT clean up when the CLIENT
+       * disconnects mid-transfer: `.pipe()` does not propagate a
+       * destination failure back to destroy the source, so when `res`'s
+       * underlying socket dies, `res` emits `close` but the read stream
+       * sits there un-destroyed and never emits its own `close` or `error`
+       * (verified directly against both a bare `http.createServer` and
+       * this route). A dropped connection is not a corner case for a
+       * hand-invoked, potentially large, streamed download; it's a normal
+       * way this request ends.
+       *
+       * `stream.pipeline()` is the fix: it wires source and destination
+       * together so a failure or premature close on EITHER side destroys
+       * the other and reaches one completion point. An aborted client
+       * request makes the awaited pipeline reject with
+       * `ERR_STREAM_PREMATURE_CLOSE`, which is caught immediately below and
+       * swallowed rather than re-thrown -- there is no client left to
+       * answer, so routing it into `asyncHandler`'s `next(err)` would just
+       * have the global error handler try to write a 500 onto a dead
+       * connection. It still reaches the outer `finally` above, which is
+       * what actually removes the directory. Any OTHER error (a genuine
+       * disk or stream fault) is re-thrown and reaches that handler and
+       * gets logged, same as before. */
+      const stream = createReadStream(out);
+      try {
+        await pipeline(stream, res);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code !== "ERR_STREAM_PREMATURE_CLOSE") throw err;
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
