@@ -95,3 +95,36 @@ test("an undated record is skipped and counted, and never allowed to decide exha
 test("the adapter is named for its source so the CLI can select it", () => {
   expect(usaSpendingAdapter().name).toBe("usaspending");
 });
+
+/* FIX ROUND 1, Finding (Important): "Last Modified Date" arrives with no
+ * timezone marker and is normalized assuming UTC -- unverified. A constant
+ * offset error there does not just wobble the boundary: because resume
+ * seeds the next run's `since` from the previous run's `until`, the band
+ * [since, since+offset) in true time would be excluded on EVERY run and
+ * never revisited by any later one -- a permanent, silent gap. The fix
+ * pads the LOWER bound only (`until` is untouched) by WINDOW_PAD_MS. This
+ * test pins that: a record 6h before `since` (inside the 24h pad) must
+ * survive, and a record 48h before `since` (outside the pad) must not --
+ * so a future "simplification" that removes the pad breaks this test. */
+test("the lower bound is padded so an unverified source timezone cannot open a silent gap", async () => {
+  const since = "2026-08-10T00:00:00.000Z";
+  const until = "2026-08-15T00:00:00.000Z";
+  const stub = async () =>
+    new Response(
+      JSON.stringify({
+        results: [
+          // 6h before `since` -- inside the pad. Must be returned.
+          { generated_internal_id: "just-inside-pad", "Last Modified Date": "2026-08-09 18:00:00" },
+          // 48h before `since` -- well outside the pad. Must not be
+          // returned, or the pad would have swallowed the window.
+          { generated_internal_id: "outside-pad", "Last Modified Date": "2026-08-08 00:00:00" },
+        ],
+        page_metadata: { hasNext: true },
+      }),
+      { status: 200 },
+    );
+
+  const page = await usaSpendingAdapter(stub as unknown as typeof fetch).fetchListing(since, until, null);
+
+  expect(page.items.map((i) => i.externalId)).toEqual(["just-inside-pad"]);
+});

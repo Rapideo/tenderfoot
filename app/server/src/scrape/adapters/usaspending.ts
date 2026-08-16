@@ -66,10 +66,44 @@
  * -- unverified, but it only needs to be SELF-consistent for string
  * comparison against `since`/`until` to order correctly, and it is: every
  * sampled row uses the identical un-marked format).
+ *
+ * FIX ROUND 1 (Important): the UTC assumption above is unverified, and a
+ * constant offset error in it is not a harmless boundary wobble. Resume
+ * seeds the NEXT run's `since` from THIS run's `until` (see run.ts), so if
+ * the true offset is, say, +5h, the band [since, since+5h) is excluded on
+ * every run and NO LATER run ever looks earlier than its own `since` --
+ * that band is gone forever, silently. That is exactly the failure this
+ * whole windowed-resume design exists to prevent, so it cannot be left to
+ * ride on an unverified assumption.
+ *
+ * The fix is not to resolve the unknown (there is no way to, from this
+ * response) but to make the adapter tolerant of it: `since` is padded
+ * EARLIER by WINDOW_PAD_MS before either the window filter or the
+ * exhaustion check consults it. `until` is left exactly as given -- only
+ * the lower bound needs protecting, because the asymmetry is real:
+ * over-fetching a day of already-seen records is harmless BY CONSTRUCTION
+ * (sightings are append-only; de-duplication happens at merge, per the
+ * sighting model), while under-fetching silently and permanently loses
+ * records. A 24h pad costs one day of overlapping re-ingestion per run and
+ * buys immunity to any timezone offset on Earth (max is UTC+14). Remove
+ * this pad if/when USASpending's actual timezone convention for "Last
+ * Modified Date" is confirmed against their documentation -- until then it
+ * is insurance, not superstition.
  */
 import type { Adapter, ListingItem, ListingPage } from "../adapter.js";
 
 const URL = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
+
+const WINDOW_PAD_MS = 24 * 60 * 60 * 1000;
+
+/* Shifts an ISO-8601 instant earlier by `ms`. Used only to compute the
+ * padded lower bound below -- never applied to `until`, and never applied
+ * to a stored `modifiedAt` (the caller's `since`/`until` and the returned
+ * items' dates are exactly what they'd be without this function; only the
+ * adapter's internal comparison threshold moves). */
+function shiftEarlier(iso: string, ms: number): string {
+  return new Date(new Date(iso).getTime() - ms).toISOString();
+}
 
 const FIELDS = [
   "Award ID",
@@ -155,12 +189,19 @@ export function usaSpendingAdapter(fetchImpl: typeof fetch = fetch): Adapter {
        * unbounded-above filter would re-match and re-write every record
        * from every page a PRIOR run already covered, on every resume,
        * forever. `until` is what makes that already-covered prefix get
-       * skipped rather than merely re-walked. */
-      const inWindow = dated.filter((i) => i.modifiedAt >= since && i.modifiedAt <= until);
+       * skipped rather than merely re-walked.
+       *
+       * The LOWER bound compares against `paddedSince`, not `since` --
+       * see the FIX ROUND 1 note in the header comment for why an
+       * unverified timezone assumption makes that padding load-bearing
+       * rather than optional. `until` is deliberately NOT padded: only
+       * the lower bound can open a permanent gap under resume. */
+      const paddedSince = shiftEarlier(since, WINDOW_PAD_MS);
+      const inWindow = dated.filter((i) => i.modifiedAt >= paddedSince && i.modifiedAt <= until);
 
       /* Stop when EITHER the source says there is no more (`hasNext`) OR
        * the oldest DATED item on the page has already fallen out of the
-       * window below `since`: results are ordered by "Last Modified Date"
+       * (padded) window: results are ordered by "Last Modified Date"
        * descending (verified above), so nothing later can come back in.
        * Deciding the second half from `dated` rather than `items` is what
        * keeps a trailing undated record from silently ending the scrape
@@ -170,7 +211,7 @@ export function usaSpendingAdapter(fetchImpl: typeof fetch = fetch): Adapter {
        * direction: it costs an extra fetch, never a silently dropped
        * page. */
       const last = dated[dated.length - 1];
-      const exhausted = !hasNext || items.length === 0 || (last !== undefined && last.modifiedAt < since);
+      const exhausted = !hasNext || items.length === 0 || (last !== undefined && last.modifiedAt < paddedSince);
 
       return {
         items: inWindow,
