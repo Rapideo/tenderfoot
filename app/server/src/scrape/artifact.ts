@@ -72,7 +72,14 @@ const SCHEMA = `
 CREATE TABLE run (
   source_name TEXT NOT NULL, since TEXT NOT NULL, until TEXT NOT NULL,
   depth TEXT NOT NULL, scraper_ver TEXT NOT NULL,
-  started_at TEXT NOT NULL, finished_at TEXT, outcome TEXT, next_since TEXT
+  started_at TEXT NOT NULL, finished_at TEXT, outcome TEXT,
+  -- The resume marker (scrape/run.ts). Real sources page descending, so
+  -- resuming an interrupted run means LOWERING THE CEILING (until), not
+  -- raising the floor (since). Inclusive on purpose: re-fetching the
+  -- boundary record is harmless (sightings are append-only, dedup happens
+  -- at merge), whereas an exclusive bound would silently skip records that
+  -- share the boundary timestamp.
+  next_until TEXT
 );
 CREATE TABLE capture (
   id INTEGER PRIMARY KEY AUTOINCREMENT, hop TEXT NOT NULL, url TEXT NOT NULL,
@@ -96,7 +103,11 @@ export interface ArtifactWriter {
   writeCapture(c: CaptureRow): number;
   writeSighting(s: SightingRow): void;
   writeDocumentRef(d: DocumentRefRow): void;
-  finish(outcome: string, nextSince: string | null): void;
+  /* `nextUntil` is the resume marker written by the scrape loop -- the
+   * MINIMUM modifiedAt among items actually written, not the maximum. See
+   * scrape/run.ts's module header for why descending-paged sources resume
+   * by lowering the ceiling rather than raising the floor. */
+  finish(outcome: string, nextUntil: string | null): void;
   close(): void;
 }
 
@@ -133,11 +144,11 @@ export function openArtifact(path: string, meta: RunMeta): ArtifactWriter {
          VALUES (?,?,?,?,?,?)`,
       ).run(d.captureId, d.url, d.filename, d.contentType, d.statedBytes, new Date().toISOString());
     },
-    finish(outcome, nextSince) {
-      db.prepare(`UPDATE run SET finished_at = ?, outcome = ?, next_since = ?`).run(
+    finish(outcome, nextUntil) {
+      db.prepare(`UPDATE run SET finished_at = ?, outcome = ?, next_until = ?`).run(
         new Date().toISOString(),
         outcome,
-        nextSince,
+        nextUntil,
       );
     },
     close() {

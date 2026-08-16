@@ -38,7 +38,7 @@ test("an artifact describes itself and round-trips its rows", () => {
   const out = readArtifact(p);
   expect(out.run.source_name).toBe("fake");
   expect(out.run.outcome).toBe("partial");
-  expect(out.run.next_since).toBe("2026-08-09T00:00:00.000Z");
+  expect(out.run.next_until).toBe("2026-08-09T00:00:00.000Z");
   expect(out.sightings).toHaveLength(1);
   expect(out.sightings[0].external_id).toBe("fake-0");
   expect(out.captures).toHaveLength(1);

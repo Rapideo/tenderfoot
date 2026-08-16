@@ -58,7 +58,7 @@ A single SQLite file per run, carrying **two layers**.
 ```sql
 run                    -- exactly one row; the file describes itself
   source_id, since, until, depth, scraper_ver
-  started_at, finished_at, outcome, next_since
+  started_at, finished_at, outcome, next_until
 
 capture                -- raw, replayable
   id, hop (listing|detail|document)
@@ -129,17 +129,19 @@ That is what keeps the decoupling real rather than nominal — a scraper that re
 
 **Ruled: checkpoint and resume.**
 
-The scraper runs against a **time budget**. When the budget is nearly spent it commits what it has, writes `next_since`, and returns:
+The scraper runs against a **time budget**. When the budget is nearly spent it commits what it has, writes `next_until`, and returns:
 
 ```json
-{ "done": false, "next_since": "2026-08-09T14:22Z", "rows": 1840 }
+{ "done": false, "next_until": "2026-08-09T14:22Z", "rows": 1840 }
 ```
 
-The operator re-invokes to continue. The CLI's budget is generous; the handler's sits below the 300 s ceiling.
+The operator re-invokes to continue, passing the same `since` and `until = next_until`. The CLI's budget is generous; the handler's sits below the 300 s ceiling.
+
+> **Corrected 2026-08-15, after review, before any real scrape ran.** This section originally named the marker `next_since` and described it as the maximum `modifiedAt` seen, to be resumed by raising `since`. That is backwards for a source that pages **descending** — newest first, as SAM.gov verifiably does (`corpus/calibration/pull-naics.py` sorts `-modifiedDate`). Under descending paging, the maximum reaches its final value on page 1 and never moves again, so a run cut short by budget would checkpoint the newest record's date and resuming would re-fetch the top of the window forever — the older tail would never be reached. The corrected mechanic **lowers the ceiling instead of raising the floor**: the marker is the *minimum* `modifiedAt` among items actually written, resumed as `until`, not `since`. It is inclusive on purpose — re-fetching the boundary record is harmless (sightings are append-only; dedup happens at merge, §6), while an exclusive bound would silently skip records sharing the boundary timestamp.
 
 > **This makes the ceiling a parameter rather than a special case.** Same code, different budget. The 8,000-record register becomes N invocations instead of impossible, and no partial run is ever lost. Measured basis: ~7 rows/sec, so ~2,100 rows per 300 s invocation.
 >
-> **It also collapses Proposal 3 into the same mechanism.** The resume marker and *`since` = last successful run* are the same idea, so the safety rail with a deadline attached — *"the ingestion window must exist, in code at minimum, before the first real scrape runs"* — falls out of the over-ask answer rather than needing its own design.
+> **It also collapses Proposal 3 into the same mechanism.** The resume marker and *`until` = last successful run* are the same idea, so the safety rail with a deadline attached — *"the ingestion window must exist, in code at minimum, before the first real scrape runs"* — falls out of the over-ask answer rather than needing its own design.
 
 **Fail closed.** A source with no window configured refuses to run. A missing configuration that silently means *everything* is how a first run pulls 24 months of Indiana.
 
