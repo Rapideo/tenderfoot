@@ -11,12 +11,27 @@ import type { Adapter } from "./adapter.js";
 
 export function parseArgv(argv: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (let i = 0; i < argv.length; i += 2) {
-    const k = argv[i];
-    if (!k?.startsWith("--")) continue;
-    const name = k.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (!token?.startsWith("--")) {
+      throw new Error(`Expected a flag starting with --, got: ${token}`);
+    }
+    const name = token.slice(2);
     const v = argv[i + 1];
-    out[name] = name === "budgetMs" ? Number(v) : v;
+    if (v === undefined || v.startsWith("--")) {
+      throw new Error(`Flag --${name} requires a value (not another flag)`);
+    }
+    i++; /* consume the value */
+
+    if (name === "budgetMs") {
+      const num = Number(v);
+      if (!Number.isFinite(num) || num <= 0) {
+        throw new Error(`--budgetMs must be a positive number, got: ${v}`);
+      }
+      out[name] = num;
+    } else {
+      out[name] = v;
+    }
   }
   return out;
 }

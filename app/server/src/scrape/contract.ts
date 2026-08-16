@@ -12,6 +12,16 @@ export type Depth = "listing" | "detail" | "documents";
 const DEPTHS: readonly string[] = ["listing", "detail", "documents"];
 const ALLOWED = new Set(["source", "since", "until", "depth", "budgetMs"]);
 
+/* Validates ISO-8601 date strings. Why both shape and parse checks: the
+ * character `-` (0x2D) sorts lexicographically below every digit, so a
+ * malformed window like since="-something" passes every filter and the
+ * exhaustion check never trips — the run fetches the entire source, bounded
+ * only by time budget. That defeats the fail-closed guarantee. */
+function isValidDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}(?:T.+)?$/.test(v)) return false;
+  return !Number.isNaN(Date.parse(v));
+}
+
 export const DEFAULT_BUDGET_MS = 15 * 60 * 1000;
 
 export interface RunRequest {
@@ -35,14 +45,22 @@ export function validateRun(input: unknown): RunRequest {
   if (typeof o.since !== "string" || !o.since) {
     throw new Error("since is required — a run with no window refuses to start");
   }
+  if (!isValidDate(o.since)) {
+    throw new Error(`since must be an ISO-8601 date (YYYY-MM-DD[T...]), got: ${o.since}`);
+  }
   if (typeof o.depth !== "string" || !DEPTHS.includes(o.depth)) {
     throw new Error(`depth must be one of ${DEPTHS.join(" | ")}`);
+  }
+
+  const until = typeof o.until === "string" && o.until ? o.until : new Date().toISOString();
+  if (!isValidDate(until)) {
+    throw new Error(`until must be an ISO-8601 date (YYYY-MM-DD[T...]), got: ${until}`);
   }
 
   return {
     source: o.source,
     since: o.since,
-    until: typeof o.until === "string" && o.until ? o.until : new Date().toISOString(),
+    until,
     depth: o.depth as Depth,
     budgetMs: typeof o.budgetMs === "number" && o.budgetMs > 0 ? o.budgetMs : DEFAULT_BUDGET_MS,
   };
