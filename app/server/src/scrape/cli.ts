@@ -6,10 +6,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { validateRun } from "./contract.js";
 import { runScrape } from "./run.js";
-import { fakeAdapter } from "./adapters/fake.js";
-import { samAdapter } from "./adapters/sam.js";
-import { usaSpendingAdapter } from "./adapters/usaspending.js";
-import type { Adapter } from "./adapter.js";
+import { ADAPTERS } from "./adapters/registry.js";
 
 export function parseArgv(argv: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -37,15 +34,6 @@ export function parseArgv(argv: string[]): Record<string, unknown> {
   }
   return out;
 }
-
-/* Registry of adapters the CLI can name. Real adapters are added in Tasks
- * 7 and 8; `fake` is here from the start so the whole path is runnable
- * before any network code exists. */
-const ADAPTERS: Record<string, () => Adapter> = {
-  fake: () => fakeAdapter(25, 10),
-  sam: () => samAdapter(),
-  usaspending: () => usaSpendingAdapter(),
-};
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const req = validateRun(parseArgv(argv));

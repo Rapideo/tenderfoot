@@ -7,6 +7,7 @@ import { all, run } from "./db/index.js";
 import { appliedMigrations, migrate } from "./db/migrate.js";
 import { asyncHandler } from "./lib/asyncHandler.js";
 import { api } from "./routes/index.js";
+import { admin } from "./routes/admin.js";
 
 const PORT = Number(process.env.PORT ?? 3003);
 
@@ -16,6 +17,11 @@ app.use(express.json());
 
 /* SP1: profile, source registry, solicitations. */
 app.use("/api", api);
+
+/* SP3 Task 9: the hand-invoked scrape trigger. Mounted beside /api rather
+ * than merged into it -- operator-scoped ingestion is a different surface
+ * from the read/edit API above, not another resource on it. */
+app.use("/api/admin", admin);
 
 async function readMeta(): Promise<Record<string, string>> {
   const rows = await all<{ key: string; value: string }>("SELECT key, value FROM app_meta");
