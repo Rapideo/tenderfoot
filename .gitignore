@@ -8,3 +8,4 @@ dist-types/
 *.tsbuildinfo
 .vercel
 .env*.local
+runs/

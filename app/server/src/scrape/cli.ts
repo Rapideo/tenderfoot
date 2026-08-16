@@ -1,0 +1,59 @@
+/* Thin CLI over scrape/run. Argument parsing and file naming only — no
+ * scrape logic lives here, so the HTTP handler in Task 9 is an equally thin
+ * wrapper over the same library rather than a second implementation. */
+import { pathToFileURL } from "node:url";
+import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { validateRun } from "./contract.js";
+import { runScrape } from "./run.js";
+import { fakeAdapter } from "./adapters/fake.js";
+import type { Adapter } from "./adapter.js";
+
+export function parseArgv(argv: string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (let i = 0; i < argv.length; i += 2) {
+    const k = argv[i];
+    if (!k?.startsWith("--")) continue;
+    const name = k.slice(2);
+    const v = argv[i + 1];
+    out[name] = name === "budgetMs" ? Number(v) : v;
+  }
+  return out;
+}
+
+/* Registry of adapters the CLI can name. Real adapters are added in Tasks
+ * 7 and 8; `fake` is here from the start so the whole path is runnable
+ * before any network code exists. */
+const ADAPTERS: Record<string, () => Adapter> = {
+  fake: () => fakeAdapter(25, 10),
+};
+
+export async function main(argv = process.argv.slice(2)): Promise<void> {
+  const req = validateRun(parseArgv(argv));
+  const make = ADAPTERS[req.source];
+  if (!make) throw new Error(`No adapter named ${req.source}. Known: ${Object.keys(ADAPTERS).join(", ")}`);
+
+  const dir = resolve(process.cwd(), "runs");
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
+  const out = join(dir, `run-${req.source}-${stamp}.db`);
+
+  const res = await runScrape(req, make(), out);
+  console.log(JSON.stringify(res, null, 2));
+  /* Resume LOWERS THE CEILING, it does not raise the floor. Sources page
+   * newest-first, so an interrupted run has covered the recent end of the
+   * window and the untouched work is older -- `since` stays put and `until`
+   * comes down to where we got to. Corrected 2026-08-15 after review. */
+  if (!res.done) {
+    console.log(`\nNot finished. Resume with:  --since ${req.since} --until ${res.nextUntil}`);
+  }
+}
+
+/* Only run when invoked directly, so importing this file in a test does not
+ * start a scrape. */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
+}
