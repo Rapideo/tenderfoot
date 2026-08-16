@@ -20,7 +20,8 @@
     "sync:tokens": "node scripts/sync-tokens.mjs",
     "tokens": "python prototype/tools/verify-tokens.py && python prototype/tools/verify-type.py && node scripts/sync-tokens.mjs --check",
     "check": "node --env-file-if-exists=.env scripts/check.mjs",
-    "scrape": "tsx --env-file-if-exists=.env app/server/src/scrape/cli.ts"
+    "scrape": "tsx --env-file-if-exists=.env app/server/src/scrape/cli.ts",
+    "import": "tsx --env-file-if-exists=.env app/server/src/ingest/import-cli.ts"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",

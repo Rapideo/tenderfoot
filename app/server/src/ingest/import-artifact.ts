@@ -22,19 +22,28 @@ export interface ImportResult {
 }
 
 export async function ingestedThrough(sourceId: number): Promise<string | null> {
+  /* Order by `ingested_through` itself, NOT by `imported_at`. `imported_at`
+   * is when the row was COMMITTED, and an operator is free to backfill an
+   * older window after a newer one has already landed -- the last-committed
+   * complete run is not necessarily the one that reached furthest. Sorting
+   * on commit time would let that backfill silently regress the authority
+   * backwards. (This failed safe -- a regressed mark only causes the next
+   * run to re-fetch data it already has, harmless because sightings are
+   * append-only -- but it was still the wrong answer.)
+   *
+   * `id DESC` is the second key, not `imported_at`: `imported_at` is
+   * `now()` at transaction start, not a monotonic sequence, so two rows can
+   * tie on it. `id` is assigned in commit order and never ties. */
   const row = await one<{ ingested_through: string | null }>(
     `SELECT ingested_through FROM ingest_run
       WHERE source_id = $1 AND ingested_through IS NOT NULL
-      ORDER BY imported_at DESC LIMIT 1`,
+      ORDER BY ingested_through DESC, id DESC LIMIT 1`,
     [sourceId],
   );
   return row?.ingested_through ?? null;
 }
 
-export async function importArtifact(
-  path: string,
-  opts: { force?: boolean } = {},
-): Promise<ImportResult> {
+export async function importArtifact(path: string): Promise<ImportResult> {
   const sha = createHash("sha256").update(readFileSync(path)).digest("hex");
   const art = readArtifact(path);
 
@@ -43,11 +52,17 @@ export async function importArtifact(
   ]);
   if (!src) throw new Error(`No source row named ${art.run.source_name}`);
 
-  if (!opts.force) {
-    const seen = await one(`SELECT id FROM ingest_run WHERE artifact_sha256 = $1`, [sha]);
-    if (seen) {
-      return { imported: 0, skipped: true, ingestedThrough: await ingestedThrough(src.id) };
-    }
+  /* No `force` option, on purpose. A forced re-import would have to decide
+   * what happens to the FIRST import's sightings -- leave them (a real
+   * duplicate, since sightings are append-only and nothing removes the
+   * earlier rows) or delete them (which needs a decision about what
+   * "replace" means for an immutable, merged-from ledger) -- and that is a
+   * design question nobody has asked yet. An operator who genuinely needs
+   * to re-import the same file deletes its `ingest_run` row by hand; the
+   * UNIQUE constraint on `artifact_sha256` then simply stops objecting. */
+  const seen = await one(`SELECT id FROM ingest_run WHERE artifact_sha256 = $1`, [sha]);
+  if (seen) {
+    return { imported: 0, skipped: true, ingestedThrough: await ingestedThrough(src.id) };
   }
 
   /* ONLY A COMPLETE RUN MOVES THE MARK.
