@@ -14,8 +14,24 @@
  * the one `scrape/cli.ts` already had -- two registries drift silently as
  * sources are added. Both now import the single map from
  * `scrape/adapters/registry.ts` (controller ruling 1, task-9).
+ *
+ * AUTH (FIX 3, Critical/security, final review 2026-08-15): this route was
+ * mounted at /api/admin with NO auth of any kind. Deployed, it is an
+ * internet-facing 240-second outbound-fetch amplifier that scrapes federal
+ * sources from the app's IP and streams a database file back to whoever
+ * asks. `requireAdminSecret` below gates every route this router exposes,
+ * fail-closed: an unset ADMIN_SCRAPE_SECRET refuses with 503 rather than
+ * running unauthenticated, and a set-but-mismatched (or absent) header
+ * refuses with 401.
+ *
+ * SOURCE RESOLUTION (FIX 1 / FIX 2, same review): the registry key in the
+ * request body ('sam') is a CLI ergonomic, not source.name in Postgres
+ * ('SAM.gov') -- resolveSource() below resolves it up front, before any
+ * fetching, and refuses a disabled source too. See scrape/resolve-source.ts
+ * for why this lives here rather than in scrape/run.ts.
  */
 import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import { mkdtempSync, createReadStream, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,11 +40,33 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { validateRun, type RunRequest } from "../scrape/contract.js";
 import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
+import { resolveSource } from "../scrape/resolve-source.js";
 
 /* Below Vercel's 300s ceiling with margin for the response to flush. */
 const HANDLER_BUDGET_MS = 240_000;
 
+/* FIX 3. Read fresh on every request (not cached at module load) so a test
+ * suite -- or an operator fixing a misconfigured deploy -- can flip
+ * ADMIN_SCRAPE_SECRET without restarting the process. FAILS CLOSED: no
+ * environment variable means no route, period -- this is deliberate, not
+ * an oversight, and must never be "fixed" into failing open. */
+function requireAdminSecret(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env.ADMIN_SCRAPE_SECRET;
+  if (!secret) {
+    res.status(503).json({
+      error: "ADMIN_SCRAPE_SECRET is not set. Refusing to run an unauthenticated scrape route.",
+    });
+    return;
+  }
+  if (req.header("X-Admin-Secret") !== secret) {
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+  next();
+}
+
 export const admin = express.Router();
+admin.use(requireAdminSecret);
 
 admin.post(
   "/scrape",
@@ -47,9 +85,21 @@ admin.post(
     }
     request.budgetMs = HANDLER_BUDGET_MS;
 
-    const make = ADAPTERS[request.source];
-    if (!make) {
+    const entry = ADAPTERS[request.source];
+    if (!entry) {
       res.status(400).json({ error: `No adapter named ${request.source}` });
+      return;
+    }
+
+    /* FIX 1 / FIX 2: resolve against the source registry -- and refuse a
+     * disabled source -- before any fetching. A 400 here is cheap; a 400
+     * after `runScrape` had already run to completion (the pre-fix
+     * behaviour, surfaced only at import time) is not. */
+    try {
+      const resolved = await resolveSource(request.source);
+      request.sourceName = resolved.sourceName;
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
       return;
     }
 
@@ -79,12 +129,17 @@ admin.post(
     const dir = mkdtempSync(join(tmpdir(), "tf-scrape-"));
     try {
       const out = join(dir, `run-${request.source}.db`);
-      const result = await runScrape(request, make(), out);
+      const result = await runScrape(request, entry.make(), out);
 
       res.setHeader("Content-Type", "application/vnd.sqlite3");
       res.setHeader("Content-Disposition", `attachment; filename="${request.source}.db"`);
       res.setHeader("X-Scrape-Done", String(result.done));
       res.setHeader("X-Scrape-Rows", String(result.rows));
+      /* FIX 4 (final review, 2026-08-15): the count adapter.ts promises is
+       * "visible rather than silent" (§5.4) -- always present, even at 0,
+       * so a caller does not have to guess whether its absence means zero
+       * or means nobody wired it up. */
+      res.setHeader("X-Scrape-Undated-Skipped", String(result.undatedSkipped));
       /* Resume lowers the ceiling: the caller re-invokes with the same
        * `since` and this value as `until`. Corrected 2026-08-15 after review. */
       if (result.nextUntil) res.setHeader("X-Scrape-Next-Until", result.nextUntil);

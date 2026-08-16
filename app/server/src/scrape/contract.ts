@@ -30,6 +30,22 @@ export interface RunRequest {
   until: string;
   depth: Depth;
   budgetMs: number;
+  /* FIX 1 (final review, 2026-08-15): the CANONICAL source.name row this
+   * run resolves to (e.g. 'SAM.gov' for the registry key 'sam'), as
+   * resolved by scrape/resolve-source.ts. Deliberately NOT part of the
+   * operator's contract (§7) and NEVER accepted from `validateRun`'s input
+   * -- `ALLOWED` above has no 'sourceName' key, so a request body that
+   * tried to set it directly would be rejected as an unknown option,
+   * exactly like any other attempted end-run around the contract. Only an
+   * entry point (cli.ts, routes/admin.ts) may set this, after calling
+   * resolveSource(), and only run.ts reads it -- to stamp the artifact's
+   * run.source_name with something import-artifact.ts can actually
+   * resolve, instead of the short CLI key the importer has never heard of.
+   * Left undefined, run.ts falls back to `source` itself, which is exactly
+   * right for `fake` (no registry row to resolve against) and for every
+   * existing caller that builds a RunRequest directly, bypassing the entry
+   * points (e.g. this file's own tests, run.test.ts). */
+  sourceName?: string;
 }
 
 export function validateRun(input: unknown): RunRequest {

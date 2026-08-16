@@ -79,7 +79,16 @@ CREATE TABLE run (
   -- boundary record is harmless (sightings are append-only, dedup happens
   -- at merge), whereas an exclusive bound would silently skip records that
   -- share the boundary timestamp.
-  next_until TEXT
+  next_until TEXT,
+  -- FIX 4 (final review, 2026-08-15): adapter.ts promises an undated record
+  -- is "visible rather than silent" (spec s5.4) -- it was counted by the
+  -- adapter and then dropped on the floor by scrape/run.ts, reaching
+  -- neither this artifact, RunResult, the CLI output, nor the response
+  -- headers. A fresh artifact format, so a new column rather than a
+  -- migration. Defaults to 0 because it is written at INSERT time (the
+  -- true count is only known once the whole run finishes); finish()
+  -- below sets the real total.
+  undated_skipped INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE capture (
   id INTEGER PRIMARY KEY AUTOINCREMENT, hop TEXT NOT NULL, url TEXT NOT NULL,
@@ -106,8 +115,13 @@ export interface ArtifactWriter {
   /* `nextUntil` is the resume marker written by the scrape loop -- the
    * MINIMUM modifiedAt among items actually written, not the maximum. See
    * scrape/run.ts's module header for why descending-paged sources resume
-   * by lowering the ceiling rather than raising the floor. */
-  finish(outcome: string, nextUntil: string | null): void;
+   * by lowering the ceiling rather than raising the floor.
+   *
+   * `undatedSkipped` (FIX 4) defaults to 0 so every pre-existing caller --
+   * this module's own tests included -- keeps compiling and behaving
+   * exactly as before; scrape/run.ts is the one real caller that always
+   * passes the actual accumulated total. */
+  finish(outcome: string, nextUntil: string | null, undatedSkipped?: number): void;
   close(): void;
 }
 
@@ -144,12 +158,10 @@ export function openArtifact(path: string, meta: RunMeta): ArtifactWriter {
          VALUES (?,?,?,?,?,?)`,
       ).run(d.captureId, d.url, d.filename, d.contentType, d.statedBytes, new Date().toISOString());
     },
-    finish(outcome, nextUntil) {
-      db.prepare(`UPDATE run SET finished_at = ?, outcome = ?, next_until = ?`).run(
-        new Date().toISOString(),
-        outcome,
-        nextUntil,
-      );
+    finish(outcome, nextUntil, undatedSkipped = 0) {
+      db.prepare(
+        `UPDATE run SET finished_at = ?, outcome = ?, next_until = ?, undated_skipped = ?`,
+      ).run(new Date().toISOString(), outcome, nextUntil, undatedSkipped);
     },
     close() {
       db.close();

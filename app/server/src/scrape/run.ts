@@ -33,6 +33,30 @@
  * a real gap, not a redundant fetch. Inclusive costs a duplicate row;
  * exclusive costs data.
  *
+ * CORRECTED 2026-08-15, final review (FIX 5): "inclusive costs a duplicate
+ * row" UNDERSTATES the real cost -- it is true only when the tied block is
+ * small. SAM's modifiedDate is second-precision, and a bulk re-index can
+ * tie MANY records to the exact same timestamp -- the captured fixture has
+ * 3 of 5 sharing one value. Because the boundary is inclusive, the NEXT
+ * invocation's `until` re-admits the ENTIRE tie block, not just one
+ * boundary record. If a single invocation's budget cannot walk past that
+ * whole block, `lowWater` computes to the SAME value again -- this run's
+ * own `nextUntil` never lands strictly below the `until` it was handed --
+ * and every subsequent invocation re-fetches and RE-WRITES the identical
+ * prefix forever, reporting `done: false` with an unchanged marker. That is
+ * a SILENT LIVELOCK, not a slow-but-working resume, and it looks exactly
+ * like ordinary checkpoint-and-resume progress to a caller that only checks
+ * `done`. Inclusive can cost NON-TERMINATION, not merely a duplicate row.
+ *
+ * This fix does not attempt a secondary tiebreak (e.g. an `id`-based
+ * cursor within the tied second) -- that is design work, not a fix-wave
+ * patch, and the spec (§5, over-ask) never specified one. What this DOES
+ * do is refuse to let the symptom pass as success: `noProgress` below is
+ * true exactly when a partial run's own `nextUntil` failed to move
+ * strictly below the `until` it was given, so the caller (cli.ts,
+ * routes/admin.ts) can say so loudly instead of quietly recommending a
+ * resume that will not resume anything.
+ *
  * This module opens no database connection. It receives a resolved request
  * and an adapter, and returns a file path.
  */
@@ -47,6 +71,20 @@ export interface RunResult {
   nextUntil: string | null;
   rows: number;
   artifactPath: string;
+  /* FIX 4 (final review, 2026-08-15): the sum of `page.undatedSkipped`
+   * across every page fetched this run. adapter.ts promises this count is
+   * "visible rather than silent" (§5.4); before this fix it was read from
+   * no page at all -- counted by the adapter, then dropped on the floor. */
+  undatedSkipped: number;
+  /* FIX 5 (Critical, final review 2026-08-15): true when this run made NO
+   * forward progress -- i.e. `done` is false and `nextUntil` did not land
+   * strictly below the `until` this run was given. See the corrected
+   * inclusive-boundary note in the module header above for the mechanism
+   * (a tie block wider than one invocation's budget). Re-invoking with
+   * `until: nextUntil` when this is true will re-fetch and re-write the
+   * exact same records rather than advancing -- the caller must widen the
+   * window or raise the budget instead of blindly resuming. */
+  noProgress: boolean;
 }
 
 export async function runScrape(
@@ -57,7 +95,12 @@ export async function runScrape(
 ): Promise<RunResult> {
   const started = now();
   const art = openArtifact(outPath, {
-    sourceName: req.source,
+    /* FIX 1: the CANONICAL name, not the CLI's short key -- see the
+     * `sourceName` field comment on RunRequest (contract.ts). Falling back
+     * to `req.source` covers `fake` (no registry row to resolve) and any
+     * caller that builds a RunRequest directly, bypassing the entry
+     * points' resolveSource() call (e.g. this module's own tests). */
+    sourceName: req.sourceName ?? req.source,
     since: req.since,
     until: req.until,
     depth: req.depth,
@@ -68,10 +111,16 @@ export async function runScrape(
   let rows = 0;
   let lowWater: string | null = null;
   let done = false;
+  /* FIX 4: accumulated across every page. `page.undatedSkipped` is
+   * OPTIONAL on ListingPage (adapter.ts) -- most adapters never produce it
+   * -- so each page's contribution defaults to 0 rather than poisoning the
+   * running total with `undefined + number`. */
+  let undatedSkippedTotal = 0;
 
   try {
     for (;;) {
       const page = await adapter.fetchListing(req.since, req.until, cursor);
+      undatedSkippedTotal += page.undatedSkipped ?? 0;
       const capId = art.writeCapture({
         hop: "listing",
         url: page.requestUrl,
@@ -108,9 +157,25 @@ export async function runScrape(
       if (now() - started >= req.budgetMs) break;
     }
   } finally {
-    art.finish(done ? "complete" : "partial", done ? null : lowWater);
+    art.finish(done ? "complete" : "partial", done ? null : lowWater, undatedSkippedTotal);
     art.close();
   }
 
-  return { done, nextUntil: done ? null : lowWater, rows, artifactPath: outPath };
+  const nextUntil = done ? null : lowWater;
+  /* FIX 5: see the corrected inclusive-boundary note in the module header.
+   * Only meaningful for a partial run with a real marker -- a `done` run
+   * has no `nextUntil` to fail to advance, and a partial run that wrote
+   * NOTHING at all (lowWater still null) is a different, pre-existing edge
+   * case (an adapter returning only empty or fully out-of-window pages),
+   * not the tie-block livelock this fix targets. */
+  const noProgress = !done && nextUntil !== null && !(nextUntil < req.until);
+
+  return {
+    done,
+    nextUntil,
+    rows,
+    artifactPath: outPath,
+    undatedSkipped: undatedSkippedTotal,
+    noProgress,
+  };
 }
