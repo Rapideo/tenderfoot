@@ -8,6 +8,7 @@ import { validateRun } from "./contract.js";
 import { runScrape } from "./run.js";
 import { fakeAdapter } from "./adapters/fake.js";
 import { samAdapter } from "./adapters/sam.js";
+import { usaSpendingAdapter } from "./adapters/usaspending.js";
 import type { Adapter } from "./adapter.js";
 
 export function parseArgv(argv: string[]): Record<string, unknown> {
@@ -43,6 +44,7 @@ export function parseArgv(argv: string[]): Record<string, unknown> {
 const ADAPTERS: Record<string, () => Adapter> = {
   fake: () => fakeAdapter(25, 10),
   sam: () => samAdapter(),
+  usaspending: () => usaSpendingAdapter(),
 };
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
