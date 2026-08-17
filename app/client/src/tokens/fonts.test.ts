@@ -162,3 +162,86 @@ test("no font-family declaration form goes unscanned", () => {
   }
   expect(strays, "standalone font-family found; extend the scanner in fonts.test.ts").toEqual([]);
 });
+
+/* ---------------------------------------------------------------------------
+ * The BASE font -- a second, quieter instance of the same defect.
+ *
+ * Found 2026-08-17 by looking at /dev/gallery after the faces were fixed. The
+ * primitives rendered in correct IBM Plex; the prose around them rendered in
+ * TIMES. Computed style on both <html> and <body> was "Times New Roman".
+ *
+ * Cause: the client had no `body` rule at all, anywhere. Every primitive sets
+ * its own `font:` shorthand, so all of them are fine and Admin.css styles
+ * every element it owns -- which is exactly why this hid. Only text with NO
+ * explicit font shows it, and until the gallery there was none in view.
+ *
+ * The bundle does set one. So this is a fidelity gap, not a judgement call,
+ * and the tests below settle it against the bundle rather than against an
+ * opinion: one proves a base exists, the other proves it is the bundle's.
+ * ------------------------------------------------------------------------ */
+
+const BUNDLE = resolve(
+  SRC,
+  "../../../prototype/PROTOTYPE/Tenderfoot UI Mockups V1.2.html",
+);
+
+/** The `font-family` the frozen bundle sets on `body`. */
+function bundleBaseFont(): string {
+  /* The bundle's CSS is embedded in a JSON blob, so quotes and newlines
+   * arrive escaped. Unescape before matching, exactly as a reader would see
+   * it. Reading prototype/ from a TEST is fine and already the house pattern
+   * -- verify-tokens.py and sync-tokens.mjs --check both do it. The rule
+   * workflow spec §2 sets is that nothing points back into prototype/ at
+   * RUNTIME; a gate-time check is the opposite of that risk. */
+  const html = readFileSync(BUNDLE, "utf8")
+    .replaceAll(String.raw`\"`, '"')
+    .replaceAll(String.raw`\n`, "\n");
+  const declared = [...html.matchAll(/body\s*\{([^}]*)\}/g)]
+    .map((m) => (m[1] ?? "").match(/font-family\s*:\s*([^;}]+)/)?.[1]?.trim())
+    .filter((v): v is string => Boolean(v));
+  /* Three body rules exist in the bundle; exactly one names a font. If a
+   * re-extraction ever makes that ambiguous, fail loudly rather than pick. */
+  expect(
+    new Set(declared).size,
+    `expected exactly one body font-family in the bundle, found: ${declared.join(" | ")}`,
+  ).toBe(1);
+  const [only] = declared;
+  /* Not reachable while the assertion above holds -- it is here because the
+   * return type is `string`, and narrowing it with a cast would be the one
+   * place in this file where a claim went unchecked. */
+  if (!only) throw new Error(`no body font-family found in ${BUNDLE}`);
+  return only;
+}
+
+/** The `font-family` fonts.css sets on `body`. */
+function clientBaseFont(): string | undefined {
+  const css = stripComments(readFileSync(FONTS_CSS, "utf8"));
+  return css
+    .match(/(^|[\s},])body\s*\{([^}]*)\}/)?.[2]
+    ?.match(/font-family\s*:\s*([^;}]+)/)?.[1]
+    ?.trim();
+}
+
+const normalise = (f: string) => f.replace(/["']/g, "").replace(/\s*,\s*/g, ", ").trim();
+
+test("unstyled text inherits a declared base font, not the browser's default", () => {
+  expect(
+    clientBaseFont(),
+    "No `body { font-family: ... }` anywhere in fonts.css. Without it, any " +
+      "element that does not set its own font falls back to the browser " +
+      "default -- Times in Chrome. Every primitive sets its own `font:` " +
+      "shorthand, so this stays invisible until a screen renders plain text.",
+  ).toBeDefined();
+});
+
+test("the base font is the bundle's, not one invented here", () => {
+  /* Deliberately NOT 'IBM Plex Sans'. The bundle bases on the system stack
+   * and overrides with IBM Plex on every element that matters; copying its
+   * base is fidelity, choosing a nicer one is a deviation nobody ruled.
+   *
+   * Only font-family is copied. The same bundle rule also carries
+   * `display:flex; align-items:center; justify-content:center; min-height:100vh`
+   * -- that is the MOCKUP's page frame, centring one screen on a canvas, and
+   * copying it would break the app's layout outright. */
+  expect(normalise(clientBaseFont() ?? "")).toBe(normalise(bundleBaseFont()));
+});

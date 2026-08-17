@@ -115,3 +115,30 @@
   font-display: swap;
   src: url("./fonts/IBMPlexMono-600.woff2") format("woff2");
 }
+
+/* ---- The base, for text that sets no font of its own --------------------- *
+ * Copied from the bundle's own `body` rule. Found 2026-08-17, after the faces
+ * above were already working: /dev/gallery rendered its prose in TIMES while
+ * the primitives beside it rendered in correct IBM Plex. Computed style on
+ * both <html> and <body> was "Times New Roman", because the client had no
+ * `body` rule anywhere and the browser default took over.
+ *
+ * It hid for the same reason the missing faces hid. Every primitive sets its
+ * own `font:` shorthand and Admin.css styles every element it owns, so only
+ * text with NO explicit font reveals it -- and until the gallery there was
+ * none in view. /admin was, and still is, unaffected.
+ *
+ * NOT 'IBM Plex Sans', deliberately. The bundle bases on the system stack and
+ * overrides with IBM Plex on every element that matters. Copying its base is
+ * fidelity; substituting a nicer one is a deviation nobody ruled. fonts.test.ts
+ * asserts this equals the bundle's value rather than any literal written here,
+ * so a re-extraction that changed it would fail the gate rather than drift.
+ *
+ * ONLY font-family is copied. The same bundle rule carries `display:flex;
+ * align-items:center; justify-content:center; min-height:100vh` -- that is the
+ * MOCKUP's page frame, centring one screen on a canvas, and copying it would
+ * break the app's layout outright. Its `background:#eaeef0` is the app canvas
+ * colour, a separate question from type, and is left alone here. */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
