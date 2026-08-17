@@ -1,0 +1,117 @@
+/* ============================================================================
+ * Tenderfoot font faces
+ * ============================================================================
+ * HAND-WRITTEN. This file is NOT generated and NOT under the sync-tokens
+ * drift guard, unlike its two neighbours. tokens.css and type.css are copies
+ * of prototype/PROTOTYPE/src/*.css and `npm run tokens` fails the build if
+ * either drifts -- so neither of them could carry this block. type.css NAMES
+ * the families; this file FETCHES them. Editing type.css to add @font-face
+ * would fail the drift check on the next gate.
+ *
+ * WHY THIS EXISTS -- the defect it closes.
+ * Until 2026-08-17 nothing in app/client fetched a font. index.html had no
+ * <link> and no stylesheet under src/ had an @font-face, while every type
+ * token in type.css names 'IBM Plex Sans' or 'IBM Plex Mono' and Admin.css
+ * names them again in fifteen more places. So every screen this project has
+ * rendered -- including /dev/gallery at the SP2 sign-off gate -- displayed
+ * in whatever the viewer happened to have installed. /admin rendered in
+ * Times on a machine without IBM Plex.
+ *
+ * That does not invalidate the SP2 sign-off: geometry, colour and spacing are
+ * unaffected by which face resolves. It does mean "matched against the
+ * bundle" meant "matched GIVEN the right fonts are installed", and nothing in
+ * the repo guaranteed that. It does now. fonts.test.ts is the guard.
+ *
+ * SELF-HOSTED, ruled by Matt 2026-08-16: commit the woff2 files and an
+ * @font-face block rather than link Google Fonts. No third-party request, no
+ * runtime dependency, and the faces cannot change underneath a signed-off
+ * screen.
+ *
+ * PROVENANCE. The four files in ./fonts/ are copied from docs/explainer/
+ * fonts/, which docs/explainer/README.md records as "the IBM Plex faces
+ * extracted from the bundle's own manifest" for the explainer PDF. They are
+ * the Google "latin" subsets the frozen V1.2 bundle itself loaded -- so this
+ * is the same metal the prototype rendered with, not an approximation of it,
+ * and no new download was needed to close the gap.
+ *
+ * FOUR FILES, NOT SEVEN. docs/explainer/fonts/ holds seven, but four of them
+ * -- IBMPlexSans-400/500/600/700 -- are byte-identical (md5 b2c9031d...). They
+ * are one VARIABLE font copied four times under four static-sounding names.
+ * The explainer gets away with it by declaring the same file four times at
+ * four single weights, which pins the wght axis each time; that works, so the
+ * explainer is left alone. Here it is declared ONCE over its real axis range,
+ * which is the same result in one request instead of four.
+ *
+ * The three Mono files ARE genuinely distinct static faces (usWeightClass
+ * 400 / 500 / 600, three different md5s), so they get three declarations.
+ *
+ * WEIGHTS ACTUALLY USED, counted across app/client/src/**.css:
+ *   Sans  400 x31   500 x13   600 x23     -> inside the 100..700 axis
+ *   Mono  400 x9    500 x21   600 x13     -> one static face apiece
+ * No 700 is used anywhere, and no italic exists in any file, so none is
+ * declared. Adding a face nothing asks for is a request nothing needs.
+ *
+ * font-display: swap MATCHES THE BUNDLE, which set it on all 30-odd of its
+ * own @font-face rules. Not a design ruling of Matt's -- Google's generator
+ * chose it -- but it is what the reference did, and it is the option that can
+ * never render invisible text. Same-origin and ~91KB total, so the swap
+ * window is short.
+ *
+ * ONE HONEST LIMIT: these are the "latin" subsets, ~230 glyphs. Three
+ * characters the UI actually renders are outside them and will still resolve
+ * from a system font, per-glyph:
+ *
+ *   U+25B8  ▸   GatedDrawer.tsx:30, in the bundle's own "▸ n GATED ITEMS"
+ *   U+2192  →   Gallery.tsx:79 ("Open full detail →"), Health.tsx:24
+ *   U+25B7  ▷   not yet rendered; StatusBar.tsx:22 records "▷ GUIDED TOUR"
+ *               waiting in the bundle for whenever the tour is built
+ *
+ * This is not a regression introduced here -- the bundle loaded these same
+ * subsets, so the prototype fell back on exactly these glyphs too. Matching
+ * the bundle includes matching what the bundle could not draw. Recorded
+ * rather than fixed: widening the subset needs the full upstream faces, which
+ * are not in this repo, and would trade a guaranteed-identical face for a
+ * differently-sourced one.
+ * ==========================================================================*/
+
+/* ---- IBM Plex Sans -- one variable file, wght 100..700 ------------------- */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  /* A RANGE, not a value. This is the one declaration that covers 400, 500
+   * and 600, because the file behind it carries a wght axis (fvar, min 100,
+   * default 400, max 700) rather than a fixed weight. Written as a single
+   * value it would pin the axis and every other weight would be synthesised. */
+  font-weight: 100 700;
+  font-display: swap;
+  /* Plain woff2, not the legacy `woff2-variations` hint. That format string
+   * dates from before variable fonts were settled and is now discouraged; a
+   * variable woff2 declared as woff2 with a weight range is what every
+   * current engine expects, and it keeps this to one src entry. */
+  src: url("./fonts/IBMPlexSans-variable.woff2") format("woff2");
+}
+
+/* ---- IBM Plex Mono -- three static faces --------------------------------- */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/IBMPlexMono-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/IBMPlexMono-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/IBMPlexMono-600.woff2") format("woff2");
+}
