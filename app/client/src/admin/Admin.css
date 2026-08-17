@@ -1,0 +1,229 @@
+/* View 6.1 + 6.2 -- matched against the V1.2 bundle's ADMIN section.
+ *
+ * Every value below is reproduced from the bundle, not chosen. The bundle's
+ * generated variable names (--surface, --brd, --text7 …) are NOT used: those
+ * are the temporary aliases at the foot of tokens.css, marked "delete when
+ * nothing references a generated name", so a new consumer written against
+ * them would extend the life of a layer meant to die. Semantic names only.
+ *
+ * ⚠️ THE CARD IS FLAT HERE, AND THAT IS THE FINDING SP2 WAS WAITING FOR.
+ * The admin cards read:
+ *   background:var(--surface);border:1px solid var(--brd);
+ *   border-radius:10px;overflow:hidden
+ * -- no box-shadow. The `Card` primitive is the ELEVATED triage card and
+ * carries one unconditionally, with no variant prop; its own CSS header
+ * records that a second, flatter card pattern exists in the bundle and that
+ * "this interface cannot express both".
+ *
+ * So `Card` is deliberately NOT used here, and this is the second consumer
+ * that the SP2 sign-off gate said to wait for before extracting a shadow
+ * layer: "extract when a composed screen shows which values are
+ * systematic … Card's shadow still has one consumer." There is now a
+ * composed screen, and it wants the same surface WITHOUT the shadow. D4.
+ */
+
+.admin {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.admin-card {
+  background: var(--ground-surface);
+  border: 1px solid var(--line-card);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+}
+
+.admin-card__head {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.admin-card__head h2 {
+  margin: 0 0 5px;
+  font: 600 17px/1.2 "IBM Plex Sans";
+}
+
+.admin-card__head p {
+  margin: 0;
+  font: 400 12px/1.5 "IBM Plex Sans";
+  color: var(--text-muted);
+}
+
+/* ---- Firm Profile ------------------------------------------------------ */
+
+.admin-profile {
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-field {
+  display: block;
+}
+
+.admin-field__label {
+  display: block;
+  font: 500 9.5px/1 "IBM Plex Mono";
+  letter-spacing: 0.12em;
+  color: var(--text-label);
+  margin-bottom: 7px;
+}
+
+/* D3. The bundle renders a display div here. T14 requires an editable form,
+ * so it is a textarea carrying the bundle's exact border, radius, padding
+ * and type -- the control changed, the surface did not. */
+.admin-field__input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-control-2);
+  border-radius: 7px;
+  padding: 11px 13px;
+  font: 400 13px/1.55 "IBM Plex Sans";
+  color: var(--text-primary);
+  background: var(--ground-surface);
+  resize: vertical;
+}
+
+/* The bundle greys the empty PAST PERFORMANCE row (color:var(--text7);
+ * background:var(--surface2)) and captions why. Applied to any empty field
+ * rather than hard-coded to that one. */
+.admin-field__input--empty {
+  color: var(--text-label);
+  background: var(--ground-recess-2);
+}
+
+.admin-empty {
+  margin: 0;
+  padding: 18px 22px;
+  font: 400 13px/1.55 "IBM Plex Sans";
+  color: var(--text-muted);
+}
+
+/* ---- Source Registry --------------------------------------------------- */
+
+/* Bundle grid: minmax(200px,1fr) 120px 84px 112px 112px.
+ * D1 appends a sixth track for the ENABLED control, which the bundle has
+ * no column for. The five bundle tracks are unchanged. */
+.admin-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 120px 84px 112px 112px 92px;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 22px;
+  border-bottom: 1px solid var(--line-row);
+}
+
+.admin-row--head {
+  padding: 10px 22px;
+  background: var(--ground-recess-2);
+  border-bottom: 1px solid var(--line-soft-alt);
+  font: 500 9.5px/1 "IBM Plex Mono";
+  letter-spacing: 0.1em;
+  color: var(--text-label);
+}
+
+.admin-source__name {
+  font: 500 12.5px/1.35 "IBM Plex Sans";
+}
+
+.admin-source__archive {
+  font: 400 10.5px/1.4 "IBM Plex Mono";
+  color: var(--text-label);
+  margin-top: 2px;
+}
+
+.admin-source__platform {
+  font: 400 11.5px/1.3 "IBM Plex Sans";
+  color: var(--text-tertiary);
+}
+
+.admin-source__tier {
+  font: 500 11px/1 "IBM Plex Mono";
+  color: var(--text-tertiary);
+}
+
+.admin-source__health {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 400 11.5px/1 "IBM Plex Sans";
+  color: var(--text-tertiary);
+}
+
+/* D2. The bundle's legal cell is a static pill:
+ *   font:500 10px/1 'IBM Plex Mono';color:{{legalColor}};
+ *   background:{{legalBg}};padding:5px 6px;border-radius:4px;
+ *   justify-self:start
+ * T15 requires it editable, so it is a <select> wearing that pill. The three
+ * tones are the bundle's own; `Chip` cannot express them -- it carries
+ * `neutral` and `accent` only, matched to the two chip declarations SP2
+ * found -- and adding tones to a signed-off primitive from one consumer is
+ * what the 3x recurrence bar exists to prevent. Local until a second
+ * consumer appears. */
+.admin-pill {
+  font: 500 10px/1 "IBM Plex Mono";
+  padding: 5px 6px;
+  border-radius: 4px;
+  justify-self: start;
+  border: none;
+  appearance: none;
+}
+
+.admin-pill--ok {
+  color: var(--signal-pos);
+  background: var(--signal-pos-wash);
+}
+
+.admin-pill--warn {
+  color: var(--signal-caution);
+  background: var(--signal-caution-wash);
+}
+
+.admin-pill--bad {
+  color: var(--signal-neg);
+  background: var(--signal-neg-wash);
+}
+
+/* D1. No bundle evidence at all -- the on/off lever the SVRC calls the only
+ * one there is has no rendered form in V1.2. Deliberately plain: a native
+ * checkbox with a text label, so nothing here pretends to be a designed
+ * affordance when it is a placeholder for one. */
+.admin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 400 11px/1 "IBM Plex Mono";
+  color: var(--text-tertiary);
+}
+
+/* A fail-closed refusal is the most useful thing this screen can say. The
+ * server rejects a posture change with no evidence note, and an enable with
+ * no ingestion window; both are 400s worth reading. */
+.admin-error {
+  margin: 0;
+  padding: 10px 22px;
+  font: 400 12px/1.55 "IBM Plex Sans";
+  color: var(--signal-neg);
+  background: var(--signal-neg-wash);
+  border-bottom: 1px solid var(--line-row);
+}
+
+/* D6. The unmeasured-health dot. Same 7px geometry as StatusDot so the
+ * column does not jump between measured and unmeasured rows, but decorative
+ * (aria-hidden) and carrying no state name -- the visible word does that.
+ * Uses the label grey, the same value StatusDot's `off` state uses, because
+ * "no signal" is genuinely what both mean; it is the NAME that differs. */
+.admin-dot-unmeasured {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-label);
+  flex: none;
+}
