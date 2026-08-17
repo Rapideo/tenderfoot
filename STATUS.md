@@ -23,12 +23,16 @@
 > **All three Neon console changes are done** — test-branch password, compute default `0.25 → 8`, and the project rename. **Nothing infrastructural is pinned for Matt; ~~two design items are~~ one is** — **§6.4 A3**. *(Briefly untrue on 08-15, when per-preview branching turned out to need a Git connection; ruled and executed the same day. The scaffolding brainstorm, the other of the two, was done the same day as well.)*
 >
 > Behind it: ~~SP1 T12–T15 still outstanding~~ ✅ **T12–T15 BUILT 2026-08-16** — the re-extraction, the schema reconciliation, and the first composed screen.
+>
+> **Also done 2026-08-17: the app fetches a font.** Until `d891bbb` it never had — every screen ever rendered, `/dev/gallery` at the SP2 sign-off included, used whatever the viewer had installed. Self-hosted woff2, verified in a browser. **The sign-off stands** (geometry, colour and spacing don't depend on the face), but *"matched against the bundle"* meant *"matched given the right fonts are installed"* until today.
 
 ---
 
 ## 🔖 RESUME HERE — updated 2026-08-17
 
-**You are on `main`, everything is merged and pushed, and the working tree is clean.** Gate green at **174 tests / 34 files**, `npm run check` exit 0. CI green on `main`.
+**You are on `main` and the working tree is clean.** Gate green at **180 tests / 35 files**, `npm run check` exit 0. ⚠️ **`main` is AHEAD of `origin` — the fonts (`d891bbb`) and this rewrite have not been pushed, so CI has never seen either.** `git log origin/main..main` is the authority on how many.
+
+⚠️ **The gate is not reliably green, and the reason is not what this file used to say.** `corpus.test.ts` failed twice and passed three times on 2026-08-17 with no code change between runs — see item 1 below, which has been rewritten because its old diagnosis was wrong.
 
 ⚠️ **Five merged slice branches still exist and have never been deleted** — `sp0-infrastructure`, `sp1-entity-graph`, `sp1.5-postgres-port`, `sp2-design-system`, `sp3-federal-ingestion` (the last two also on `origin`). Only `sp1-admin-ui` and `sp3.5-org-resolution` were cleaned up. **Deleting `sp3-federal-ingestion` is the cheap way to settle the Neon preview-branch question below**, since it is the one with a live `preview/` branch attached.
 
@@ -40,21 +44,34 @@
 >
 > **`/admin` is the first composed screen** and it is live — Firm Profile and Source Registry, matched to the frozen V1.2 bundle with five numbered deviations in `docs/admin-deviations.md`.
 
-### ⏭ START HERE TOMORROW — the fonts, and it is a decided job, not an open one
+### ✅ DONE 2026-08-17 — the fonts, and the app finally fetches one
 
-**Matt ruled 2026-08-16: self-host the woff2 files.** Not started; the session ran out of time.
+**`d891bbb`.** Self-hosted per Matt's 2026-08-16 ruling: four woff2 files (100 KB) in `app/client/src/tokens/fonts/`, an `@font-face` block in `fonts.css`, imported by `main.tsx`. **Not in `type.css`** — that file and `tokens.css` are byte-locked to `prototype/PROTOTYPE/src/` and `npm run tokens` fails the gate on drift, so neither could carry the block. `type.css` **names** the families; `fonts.css` **fetches** them.
 
-**Why it matters more than it sounds.** `app/client/index.html` has **no font `<link>` and no `@font-face`**, and neither does any CSS under `app/client/src`. Every type token in `type.css` names `'IBM Plex Sans'` or `'IBM Plex Mono'` and **nothing ever fetches them.** So every screen this project has ever rendered — **including `/dev/gallery` at the SP2 sign-off gate** — has displayed in whatever the viewer happened to have installed. `/admin` renders in Times on a machine without IBM Plex.
+**Four files, not seven, and this is the part worth remembering.** `docs/explainer/fonts/` holds seven, but `IBMPlexSans-400/500/600/700` are **byte-identical** (md5 `b2c9031d`) — **one VARIABLE font copied four times** under four static-sounding names. Confirmed against the `fvar` table: `wght 100..700`, default 400. So Sans is declared **once over its real axis range** instead of four times at pinned weights. The three Mono files *are* genuinely distinct (`usWeightClass` 400/500/600, three md5s). All four are md5-identical to `docs/explainer/fonts/` — **the same metal the prototype rendered with**, so no new download was needed.
 
-**The sign-off is not invalidated** — geometry, colour and spacing are unaffected — but *"matched against the bundle"* currently means *matched given the right fonts are installed*, and nothing in the repo guarantees that. **The ruled fix is to commit the woff2 files and an `@font-face` block**, not a Google Fonts link, so there is no third-party request and no runtime dependency.
+**Verified in a browser, not just asserted.** All four fetched with byte counts matching source exactly; `document.fonts.check()` true for Sans and Mono at 400/500/600; canvas metrics differ from fallback (Sans 156.86 vs serif 148.07, Mono 187.20 vs monospace 171.54) — real Plex glyphs, not a substitute.
+
+> ⚠️ **The guard test caught its own scanner, and that is the transferable lesson.** `fonts.test.ts`'s first regex anchored on `font\s*:`, which matched `Admin.css` and the primitives and **missed all 88 tokens in `type.css`** — the file the whole defect started in. It found 14 usages and **every coverage test went green.** Only the counting guard (`fail under 50`) exposed it. It now matches the shorthand *value* wherever it appears and finds 110. **A coverage test is worth exactly what its scanner sees, and nothing tells you the scanner went blind except a test that counts.**
+
+**One honest limit, recorded not fixed.** These are the "latin" subsets (~230 glyphs). An audit of every non-ASCII codepoint the client renders found six: `§ · — …` are covered; **`→` (`Health.tsx`, `Gallery.tsx`) and `▸` (`GatedDrawer.tsx`) are not** and still fall back per-glyph. Not a regression — the bundle loaded these same subsets, so the prototype fell back on exactly these glyphs too.
+
+### ⏭ START HERE — source health, and it is the one with a screen already waiting
+
+**A3 was ruled 2026-08-16: health moves in front of the GO gate.** `Plan-of-Action.md` §6.4 carries the ruling with the position **deliberately left open**, because no dependency forces one. **Do it now**: `View 6.2` already renders a HEALTH column that reads `unknown` on all thirteen rows, because nothing writes `source.health`. The screen and the empty column are both sitting there, and `ea798e9` already ruled that `unknown` must not be collapsed into "Not ingested" — *"nobody measured"* and *"measured, nothing there"* are different facts.
 
 ### Then, in rough priority
 
-1. **The source-health slice needs a number.** A3 was ruled 2026-08-16 — health moves in front of the GO gate — and `Plan-of-Action.md` §6.4 now carries the ruling with the position **deliberately left open**, because no dependency forces one. **Claude recommends doing it immediately**: `View 6.2` already renders a HEALTH column that reads `unknown` on all thirteen rows, because nothing writes `source.health`. The screen and the empty column are both sitting there.
+1. **`corpus.test.ts` — REWRITTEN 2026-08-17, the old diagnosis here was wrong.** ⚠️ **It is not a parallel-load flake.** This entry used to say it "tips over vitest's 5s default under parallel load"; anyone acting on that would have raised a timeout and fixed nothing.
+   - **It fails in isolation too** — 8 of 8 tests failed on a solo run, twice.
+   - **It is pre-existing, proven by stash.** Ran at clean `HEAD` with the font work stashed: identical failure. Nothing in `d891bbb` touches it.
+   - **It is intermittent, not deterministic** — two failures and three passes on 2026-08-17 with no code change between.
+   - **The 5s timeout is a downstream symptom, not the cause.** `loading twice does not duplicate` calls `loadCorpus` again — a ~73s operation — inside vitest's 5s default. It only ever passed because the second load is a **no-op when the first succeeded**. When the first load fails, that test does the full work and blows the timeout. The visible error is the last domino.
+   - **The actual fragility, measured.** `loadCorpus` holds **ONE transaction open for ~73s**, row-at-a-time: ~200 rows × ~4 awaited round trips to a remote Neon branch. On the failing run `resetSchema`'s `DROP SCHEMA … CASCADE` also took **48.3s in collection** (vs **0.9s** on a passing run) because it was dropping a *populated* schema. One probe died outright mid-transaction with `Connection terminated unexpectedly`.
+   - **The fix shape is one this repo has already applied twice.** `import` went **12 → 1,038 rows/sec** with a single `UNNEST`; `merge` went **3m36s → 4.07s** set-based. **`loadCorpus` is the last row-at-a-time loader standing.**
 2. **D5 — §9.6's scrape trigger is still unhoused.** The screen ruled to be its home does not offer it; running a scrape is still `npm run scrape` or `POST /api/admin/scrape` with a secret.
 3. **Auth in V1.** `/admin` is a real product route and unauthenticated. The endpoints already were, so it adds no exposure — but it makes it clickable, and production is gated only by Vercel Deployment Protection.
-4. **`corpus.test.ts` takes ~84s alone** and tips over vitest's 5s default under parallel load. It failed a gate on 2026-08-17 that had passed minutes earlier. **It will flake again.** ⚠️ Do not assume the schema leak was the cause — it was dropped and the gate got no faster (94.5s → 87.7s, noise).
-5. **SP4** — extraction runtime and blob provider, both still Matt's to rule.
+4. **SP4** — extraction runtime and blob provider, both still Matt's to rule.
 
 ### Two decisions still on Matt
 
