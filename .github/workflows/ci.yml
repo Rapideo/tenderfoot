@@ -70,3 +70,22 @@ jobs:
         run: python --version
       - run: npm ci
       - run: npm run check
+      # Drop THIS run's schemas. testdb.ts creates one per test file, named
+      # <logical>_<GITHUB_RUN_ID>, and resetSchema() only ever recreates the
+      # current run's -- nothing dropped a finished run's, so every push left
+      # ~10 behind permanently. By 2026-08-16 the test branch held 106, back
+      # through early August, and the suite had slowed enough that
+      # corpus.test.ts tipped over vitest's 5s default under parallel load
+      # and failed a gate that had passed minutes earlier.
+      #
+      # `if: always()` because a FAILED run leaks exactly as much as a passing
+      # one, and the failing case is the one someone re-runs repeatedly.
+      #
+      # Default mode drops only this run's schemas, never another's -- which
+      # is precisely the guarantee Ruling 3's run suffix buys. Do NOT add
+      # --stale here: it drops every OTHER run's schemas and would delete a
+      # concurrent run's tables mid-suite. That mode is for clearing a
+      # backlog by hand when nothing else is running.
+      - name: Drop this run's test schemas
+        if: always()
+        run: npm run test:clean

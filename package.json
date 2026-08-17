@@ -20,6 +20,7 @@
     "sync:tokens": "node scripts/sync-tokens.mjs",
     "tokens": "python prototype/tools/verify-tokens.py && python prototype/tools/verify-type.py && node scripts/sync-tokens.mjs --check",
     "check": "node --env-file-if-exists=.env scripts/check.mjs",
+    "test:clean": "node --env-file-if-exists=.env --import tsx scripts/clean-test-schemas.mjs",
     "scrape": "tsx --env-file-if-exists=.env app/server/src/scrape/cli.ts",
     "import": "tsx --env-file-if-exists=.env app/server/src/ingest/import-cli.ts",
     "merge": "tsx --env-file-if-exists=.env app/server/src/merge/merge-cli.ts"

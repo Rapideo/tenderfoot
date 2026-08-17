@@ -23,7 +23,7 @@ import pg from "pg";
  * closes the remaining, run-level gap by folding in something unique to the
  * RUN the schema name doesn't otherwise carry. Callers are unaffected: they
  * keep passing the plain logical name, and the suffixing happens here. */
-function runSuffix(): string {
+export function runSuffix(): string {
   const raw = process.env.GITHUB_RUN_ID ?? "local";
   // Interpolated directly into DDL below (CREATE/DROP SCHEMA takes no
   // parameters), so anything outside [a-z0-9_] is replaced rather than
