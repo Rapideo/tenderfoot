@@ -317,6 +317,24 @@ Workflow spec §8 recorded a six-step dashboard procedure for per-preview databa
 
 **Why not promoted.** One instance, though a rich one, and it overlaps three existing lessons without being any of them — §2.15 (a single observation in either direction), §2.16 (verifying the wrong thing), §2.17 (a documented hazard is not a mitigated one). **The distinct claim here is about the shelf-life of a *prediction* embedded in a procedure**, which none of those three make. Worth a second instance before promoting; the natural one would be any other spec step written ahead of its execution.
 
+### 2.20 A task-scoped review is blind to seams, by construction
+
+**Observed 2026-08-15, three times inside a single slice.** Eleven tasks were executed with a fresh implementer per task and a reviewer after each, every one checked against its own brief. Every task passed. The branch still could not complete a single end-to-end lifecycle, and the whole-branch review found why in minutes.
+
+**First — the identity seam.** The adapter registry keys sources `sam` and `usaspending`; the seeded database rows are named `SAM.gov` and `USASpending`. The importer resolves by name and throws. **No real scrape could ever be imported.** Task 7 was correct: it registered its adapter as its brief said. Task 6 was correct: it resolved by name as its brief said. The defect lived in the agreement between them, which was nobody's brief — and it was concealed because the import test seeds a source literally named `fake`, matching the fake adapter, so the one path with a test was the one path that worked.
+
+**Second — the resume seam, found twice in two layers.** The scrape loop emitted the wrong end of the window; that was caught and fixed. The adapter then ignored `until` entirely, defeating the same mechanism one layer down. Each layer's tests exercised only `since`, in isolation. **Resume is a property of two invocations in sequence, and no per-layer unit test can express it** — the two-invocation integration test that finally caught it had to span the loop, the adapter, and the artifact at once.
+
+**Third — the promise seam.** One layer counted records it skipped, so the omission would be "visible rather than silent." The next layer never read the field. Counted, then dropped. The promise was made at a boundary and consumed by nobody, and every test on both sides passed.
+
+**Proposed generalisation.** Reviewing N components against N briefs provides **zero coverage of the N-1 contracts between them**. This is not a matter of reviewer diligence and cannot be fixed by better task reviews: the unit of review is smaller than the unit of correctness, so the defect class is outside the frame by construction. It is also *systematically* invisible, because a seam belongs to neither side — each implementer is correct, each reviewer confirms it, and the artifact is broken.
+
+> **The tell is that the fixture and the failure never meet.** All three instances had passing tests either side of the seam. The identity mismatch was masked by a test fixture that named its source to match; the resume defect by fixtures whose dates were uncorrelated with paging order; the dropped count by tests that asserted the producing side and the consuming side separately. **A fixture chosen to make one component's test pass is exactly a fixture that cannot exercise that component's contract with its neighbour.**
+
+**The check that catches it.** For any work decomposed into more than one reviewed unit, add **one test whose subject is the lifecycle, not a component** — and write it against the real registry, the real names, and the real sequence rather than fixtures chosen for convenience. Then ask, once, of the assembled whole: *what does each piece assume about the piece next to it, and did anyone check?* That question is cheap, it is asked once rather than N times, and today it would have found all three.
+
+**Why not promoted.** Three instances but one project and one slice, so the sample is narrow. **It is also close kin to §2.17/§2.18's "auditing the wrong surface" merge candidate** — a brief is a surface, and the seam is the surface nobody enumerated — but it makes a sharper structural claim than those do: not that the wrong surface was chosen, but that *the correct surface for each unit still leaves a class of defect with no owner*. Worth watching whether it recurs on a differently-shaped decomposition before promoting, or whether it should merge into that candidate as its strongest instance.
+
 ---
 
 ## 3. Watch items — open questions about the method itself

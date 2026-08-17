@@ -26,11 +26,63 @@
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-15
+## 🔖 RESUME HERE — updated 2026-08-16
 
-**Working tree is clean.** On `main`, **SP2 merged** (`ebbcf7c`), **gate green locally at 97 tests / 21 files**, every token check passing. ⚠️ **Two commits are unpushed** — `36ee8ed` (the per-preview-branching result) and `ad034f9` (the `Section` primitive). **CI's last recorded run is 92/20**, which predates `Section`; the next push is what re-proves it at 97/21.
+**You are on branch `sp3-federal-ingestion`, not `main`.** 26 commits, **gate green at 164 tests / 33 files**, `npm run check` exit 0. **Not merged.** ⚠️ **This line read *"not pushed"* for a day and was wrong** — `origin/sp3-federal-ingestion` has tracked it since 2026-08-15, tip identical to local. Corrected 2026-08-16.
 
-> **First thing to know on resume, 2026-08-15.** ✅ **Per-preview branching is DONE and PROVEN.** It took two changes, not one: the dialog toggle **and** `vercel git connect` — the toggle alone was inert. `Rapideo/tenderfoot` is now connected, and a real Git preview deployment left production's `last_ping` untouched while writing to its own Neon branch. **The same test three hours earlier, on a CLI deploy, moved production.** Full trace in workflow spec §8, including two of §8's six steps that were wrong.
+> ## 🚨 SP3 HAS NOW RUN AGAINST A LIVE SOURCE — and the first run was scraping the wrong 5.5 million records
+>
+> **2026-08-16. `sam.ts` carried `is_active=false`, which does not mean *"do not filter on active"*. It means INACTIVE ONLY.** Varying that one parameter and holding every other constant:
+>
+> | `is_active` | total matching | active in sample |
+> |---|---|---|
+> | `false` | **5,538,794** | 0 / 100 |
+> | `true` | **49,225** | 100 / 100 |
+> | omitted | 5,588,019 | 99 / 100 |
+>
+> **The first live run returned 307 notices: none active, 274 already past their response deadline.** It reported `done: true`, 307 rows, zero undated, no livelock. **Nothing failed.** A working scraper pointed at the archive is indistinguishable from a working scraper, and every signal the run produces says success.
+>
+> **Root cause is inheritance, not a typo.** The URL was taken wholesale from `corpus/calibration/pull-naics.py`, where `is_active=false` is **correct** — that script builds a *historical backtest corpus*. The right parameter for the opposite job. `is_active` was never in the registry's `verified_facets` either: it was carried across, never characterised.
+>
+> **Fixed to `is_active=true` and pinned by a test**, because the defect is invisible in every signal except the URL itself. Same window re-run: **530 notices, 530 active, 519 with future deadlines, 3 past, 8 absent.** The inversion is the proof. `verified_facets` on the `SAM.gov` row now records the finding.
+>
+> ⚠️ **Already-awarded notices still arrive under `true`** — `corpus/manifest.md:193` measured 3 of 15. **Not a second bug:** V1 returns everything an active source returns and does not filter (spec §1.1).
+>
+> ### Production holds real federal data now
+>
+> **788 solicitations, 788 sightings, zero unlinked, zero duplicate external_ids** — up from 201/201 corpus rows. Two `SAM.gov` ingest runs: **530 rows** (2026-08-16, one day) and **57 rows** (2026-08-15, the day before). **`SAM.gov` is `enabled = true` in production**; the other twelve rows are still off.
+>
+> ⚠️ **Daily volume is not steady: 530 one day, 57 the next.** Two observations, so the pattern is unestablished — but any capacity or Interested-per-hundred figure taken from a single day's window is standing on one number.
+>
+> **Nothing from the bad run reached production.** The 307-row artifact was discarded on Matt's ruling before any import.
+
+> ## 🚨 SECOND THING TO KNOW ON RESUME — SP3 AND SP3.5 ARE BUILT
+>
+> **The whole ingestion pipeline exists and runs end to end:** scrape → SQLite transport artifact → import as sightings → merge into canonical solicitations → per-source yield. Eleven tasks, executed with a fresh implementer and reviewer per task.
+>
+> **Four operator commands, all working:**
+> ```
+> npm run scrape -- --source sam --since 2026-08-01 --depth listing
+> npm run import -- runs/<artifact>.db
+> npm run merge
+> POST /api/admin/scrape          (requires X-Admin-Secret)
+> ```
+>
+> ⚠️ **A source must be enabled before it will scrape** — the scraper refuses a disabled source *before* fetching, which is the fail-closed posture the spec always demanded and nothing had implemented. **`SAM.gov` was flipped on in production 2026-08-16 and stays on; the other twelve rows are still `enabled = false`.**
+>
+> ⚠️ **`ADMIN_SCRAPE_SECRET` must be set** or `/api/admin/scrape` returns 503. Unset fails closed by design.
+>
+> **Import is no longer the slow step — 2026-08-16.** `npm run import` batches its sightings into one `UNNEST` statement: **1,038 rows/sec measured**, up from 12. Proven on the first real artifact: **530 rows imported in 5.7s end to end**, where the old path would have spent ~44s on inserts alone.
+>
+> ✅ **`npm run merge` was the slow step and is not any more — fixed 2026-08-16, hours after it was measured.** It was **3m36s for 530 solicitations (~2.4/sec)**; the same command now runs in **4.07s**. Three set-based statements in one transaction, where there had been a transaction per group.
+>
+> **The waste was worse than "one trip per group."** The grouping query returns *every external_id ever seen*, and the old loop opened a transaction for each — including fully-merged groups whose link UPDATE then matched nothing. **Cost tracked the whole corpus on every run, not the new batch**, so a merge got slower forever even on a quiet day. Proven by the 57-row window that followed: the old shape would have spent ~4 minutes on 788 groups to do 57 rows of work; the new one spent 4 seconds.
+>
+> **Two things the reviews caught that would otherwise have shipped:** the branch could not complete a single real lifecycle (adapter keys `sam`/`usaspending` never matched the seeded names `SAM.gov`/`USASpending`), and resume could livelock forever on SAM's second-precision timestamp ties. Both fixed; the second is *detected and reported*, not solved — see below.
+>
+> **Design:** `specs/2026-08-15-ingestion-scaffolding-design.md`. **Plan:** `plans/2026-08-15-b3-ingestion.md`.
+
+> **Also done 2026-08-15.** ✅ **Per-preview branching is DONE and PROVEN.** It took two changes, not one: the dialog toggle **and** `vercel git connect` — the toggle alone was inert. `Rapideo/tenderfoot` is now connected, and a real Git preview deployment left production's `last_ping` untouched while writing to its own Neon branch. **The same test three hours earlier, on a CLI deploy, moved production.** Full trace in workflow spec §8, including two of §8's six steps that were wrong.
 >
 > ⚠️ **The one edge that is still live: `vercel deploy` from a laptop.** No Git branch to key on means no database branch, so a CLI preview still writes to production. **The fast path is the unsafe one** — push a branch instead.
 >
@@ -64,7 +116,9 @@
 
 ### Claude — next session, in this order
 
-1. **B3 for SP3 — FULLY UNGATED as of 2026-08-15.** Both gates cleared: §9.6 ruled, and the scaffolding brainstorm is done and specced (`specs/2026-08-15-ingestion-scaffolding-design.md`, nine decisions). The two things the ruling handed it are answered — over-ask is **checkpoint-and-resume**, and the trigger lives on **T12–T15's admin UI**. **The plan must now cover SP3.5 as well**, and the spec's remaining open items (`last_run_at` vs `ingested_through`, and whether the scraper must consult `verified_facets` before trusting `since`) belong *in* the plan rather than before it.
+1. ~~**B3 for SP3**~~ ✅ **WRITTEN AND EXECUTED 2026-08-15.** `plans/2026-08-15-b3-ingestion.md`, 11 tasks across SP3 and SP3.5, all built and reviewed. Both spec open items were resolved inside it: `ingested_through` **joins** `last_run_at` rather than redefining it, and adapters **must not trust a parameter they did not verify** — which mattered immediately, since `corpus/calibration/pull-naics.py` already records SAM silently ignoring a sort parameter.
+
+**NEXT: `SP1 T12–T15` — the admin UI, and it is fidelity work, not design work.** `View 6.2 : Source Registry` is one of only two `Pri 5` nodes in the whole product (the other is `View 1.1`, the triage queue); the SVRC calls it *"V1's entire control surface — switching a source on or off is the only lever there is"*; and **the frozen V1.2 prototype already renders it**, including GovWin as `EXCLUDED` with legal posture as a column. `StatusDot` was corrected at the SP2 gate to carry that screen's exact four-state vocabulary. So it is matched against the bundle the way SP2's primitives were, with an audit at the end — **not brainstormed**. It is also where §9.6 ruled the scrape trigger lives, and it would be the **first composed screen**, which is what makes the two remaining SP6 preconditions decidable at all.
 2. ~~⏸ **Per-preview DB branching**~~ ✅ **DONE AND PROVEN 2026-08-15.** Took two changes, not one — the dialog toggle was inert until `vercel git connect` linked `Rapideo/tenderfoot`. A real Git preview deployment then left production's `last_ping` untouched while writing to its own branch; the identical test on a CLI deploy hours earlier had moved production. **Residual: CLI deploys are still branchless and still hit production.** Workflow spec §8 carries the trace and two corrections to its own steps.
 3. ~~**§6 slice-order reconciliation**~~ ✅ **DONE 2026-08-15 — Plan of Action §6.4.** **No slice moved.** Both named inputs applied: shell-first is now a **stated hard dependency** rather than an inherited score, and parked nodes are excluded **by marker, not number** (`Screen 7` and `View 2.2` both rule `Pri 4` and would otherwise jump ahead of shipping work). §4's list of hard ordering constraints **was incomplete and gained a third** — containment. §6.0's flag closed; the radar stays in SP8. **One finding went to Matt — see A3 below.**
 4. **SP1 T12–T15** — re-extraction, minimal admin. **Coupled to item 1 now**, since the manual scrape needs somewhere to live.
@@ -108,9 +162,9 @@
 | **SP0** | Infrastructure — client → API → DB, check gate green | ✅ **merged to `main`** 2026-08-12. *Deploy path now half-satisfied — see SP1.5* |
 | **SP1** | Entity graph — real solicitations into the real schema | ◐ **T1–T11 done, merged.** T12–T15 outstanding |
 | **SP1.5** | **Postgres port + first deploy** — Neon, Vercel | ✅ **merged to `main`** 2026-08-13. 23 commits, 37/37 tests, gate 5/5 green. **Preview live serving 201 solicitations.** Task 15 (per-preview DB branching) ✅ **CLOSED 2026-08-15** — needed the dialog toggle *and* a Git connection; proven with a real Git preview deployment. Workflow spec §8 |
-| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ✅ **SIGNED OFF 2026-08-14.** Branch `sp2-design-system`, **sixteen primitives** on `/dev/gallery`, gate green (**92 tests / 20 files**) after the three sign-off fixes. **Clear to merge — not yet merged** |
-| **SP3** | Federal ingestion — SAM.gov + USASpending, landing **sightings** | ◐ **B3 unblocked 2026-08-15 — design done.** §9.6 ruled, scaffolding designed (`specs/2026-08-15-ingestion-scaffolding-design.md`). Hand-invoked, operator-scoped. **Criterion narrowed 2026-08-15:** *"dedup works; per-source yield visible"* moved out to SP3.5 |
-| **SP3.5** | **Merge — sightings into canonical records** *(added 2026-08-15)* | 🆕 **NEW SLICE.** Ruled by Matt out of the scaffolding design's open item 2. Demo: the same solicitation seen by two sources resolves to **one** row, amendments read as changes not duplicates. `2G` splits — the schema shipped in SP1, the merge logic is this. Plan §6.5 |
+| **SP2** | Design system — every primitive on a dev route. **Sign-off gate** | ✅ **SIGNED OFF 2026-08-14.** Branch `sp2-design-system`, **sixteen primitives** on `/dev/gallery`, gate green (**92 tests / 20 files**) after the three sign-off fixes. ✅ **MERGED to `main`** — corrected 2026-08-15: this row read *"clear to merge — not yet merged"* for a day after the merge had actually happened. `git branch --merged main` lists `sp2-design-system` with nothing outstanding. **Seventeen primitives now**, not sixteen — `Section` was added 2026-08-15 |
+| **SP3** | Federal ingestion — SAM.gov + USASpending, landing **sightings** | ◐ **BUILT 2026-08-15, branch `sp3-federal-ingestion`, not merged.** Tasks 1–9: run contract, adapter framework, SQLite transport artifact, checkpointing scrape loop, CLI, migration 005 + importer + import CLI, SAM.gov adapter, USASpending adapter, `POST /api/admin/scrape`. **Both adapters characterised against live APIs, not written from memory** — ⚠️ **and that was still not enough:** the characterisation covered the parameters somebody thought to vary, and `is_active` was inherited unexamined from a corpus script, aiming the whole adapter at the archive. Caught 2026-08-16 by the **first live end-to-end run**, not by review or tests. Hand-invoked and operator-scoped per §9.6. ✅ **RUN LIVE AGAINST SAM.gov 2026-08-16** — 530 open notices scraped, imported and merged into production |
+| **SP3.5** | **Merge — sightings into canonical records** *(added 2026-08-15)* | ◐ **BUILT 2026-08-15, same branch.** Tasks 10–11: `mergeSightings()` and honest `perSourceYield()`, plus `npm run merge`. `2G` split — schema shipped in SP1, merge logic is this. **Demo criterion met, but see the caveat:** cross-source dedup is exercised only by a synthetic fixture, because SAM and USASpending do not share an ID namespace. Plan §6.5 |
 | **SP4** | Fetch + extraction — documents parsed, fields cited | — |
 | ~~SP5~~ | ~~Matching engine~~ | **Removed 2026-08-11** |
 | **SP6** | Triage + record. **← GO / NO-GO** | — |
@@ -189,7 +243,9 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 | SP1 T12–T15 | Re-extraction + minimal admin |
 | **B3 for SP3** | **Next, and now fully UNGATED as of 2026-08-15** — §9.6 ruled *and* the scaffolding brainstorm specced. Both questions the ruling handed the plan are answered: over-ask is **checkpoint-and-resume**, and the trigger lives on **T12–T15's admin UI**. What still lands *in* the plan: the round-trip fix, **SP3.5**, and the spec's two remaining open items |
 | ~~**A "recessed section" primitive**~~ | ✅ **BUILT 2026-08-15 as `Section`** — the one known SP2 gap, now closed as far as a primitive can close it. **Landed under a different name on purpose:** only one of D6's two section instances is recessed (the other sits on `--ground-surface` and is distinguished by a right-hand divider), so the shared property is the padding and `recessed` is one of two independent modifiers. Naming the container after a treatment half its evidence lacks is D5's `--line-dashed` error repeated. **The composition half stays open for SP6** — the existing gallery entries were deliberately not rewired |
-| **The ingestion round-trip fix** | **No longer a blocker — it changed job on 2026-08-15.** ~7 rows/sec against a *measured* 300s ceiling was fatal while a full register had to fit one invocation. Under a hand-scoped run it is a **scope multiplier**: every row/second buys depth the operator can ask for. Multi-row `INSERT`/`UNNEST`, still before SP3 ships |
+| ~~**The ingestion round-trip fix**~~ | ✅ **DONE 2026-08-16 — `UNNEST`, and the gain was measured on both sides rather than divided into the old figure.** Like-for-like on one machine, one Neon test branch, ~500-byte realistic payloads: **12 rows/sec → 1,038 rows/sec, an 87× improvement**, statements per import N+1 → **1**. *(The old path measured 12 here, not the ~7 this row used to quote — a different day and a different network, which is exactly why both ends were re-run.)* **`UNNEST` rather than a multi-row `VALUES` list on purpose:** both collapse the round trips, only `UNNEST` collapses the bind parameters (7, whatever N is), and a seven-column `VALUES` list hits Postgres's 65535-parameter cap at **~9,362 sightings** — under every fixture, first seen on a real register. ⚠️ **This row's own framing was wrong:** the importer never ran under the 300s ceiling. Neither `routes/admin.ts` nor `scrape/cli.ts` calls `importArtifact` — import is its own CLI step, and the ceiling binds the *scrape* handler. Still a scope multiplier, just of operator wall-clock. Gate **162 / 33** |
+| ~~🔴 **`merge.ts` has the same round-trip shape**~~ | ✅ **MEASURED AND FIXED 2026-08-16, within hours of each other.** **3m36s for 530 solicitations (~2.4/sec) → 4.07s.** Three set-based statements in one transaction, replacing a transaction per group. **The diagnosis changed once it was measured:** the cost was not "one trip per group" but *one transaction per group in the whole corpus*, because the grouping query returns every external_id ever seen and the loop opened a transaction for each — fully-merged groups included, whose link UPDATE matched nothing. **A merge therefore got slower forever, even on a day with nothing to do.** Verified on real data: a 57-row window that would have cost ~4 minutes against 788 groups took 4 seconds. ⚠️ **One deliberate behaviour change:** the whole merge is now ONE transaction, so a partial failure rolls everything back rather than leaving some groups committed — right for a re-runnable batch step, but not what the old shape did. **Test asserts CONSTANCY, not smallness** — 5 groups and 25 groups must issue the same statement count, which no per-group implementation can satisfy |
+| 🟡 **NEW 2026-08-16 — every merged solicitation has `org_id = NULL`.** 530 of 731 production rows. `merge/merge.ts` contains **no reference to `organization` at all**, and Task 10's stated interface never mentioned one, so this is a **gap in the plan rather than a regression**. It matters because SP1 T10–T11 went to real trouble on org aliasing — the NY-OGS-listed-on-Indiana lesson — and the federal rows are now orphaned from that graph, so anything that groups by agency shows nothing for them. **The data is present and unused:** `organizationHierarchy[0].name` reads `DEPT OF DEFENSE` straight out of the raw payload | **Matt — a scope question:** does merge resolve organisations, or is that SP4 extraction? |
 
 ---
 
@@ -212,12 +268,14 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 
 - ~~**Deployment expires at SP7.** A closed laptop does not scrape~~ **RETIRED 2026-08-13** — Vercel Cron answers it. Arrived four slices early, with the answer attached
 - ~~**A second reader means a second copy**~~ **RETIRED 2026-08-13** — managed Postgres answers it
-- **NEW — long ingestion may not fit one function invocation.** §5.3 fetches in three hops and was written assuming a process that could run for minutes. **Blocks SP3**
+- ~~**NEW — long ingestion may not fit one function invocation.**~~ **RETIRED 2026-08-15** — the scrape loop runs against a *time budget*, commits what it has, and returns a resume marker, so the ceiling became a parameter rather than a limit. The CLI passes a generous budget, the HTTP handler one below 300s, and the same code serves both
+- 🔴 **NEW 2026-08-15 — resume can livelock on timestamp ties, and it is DETECTED but NOT SOLVED.** SAM's `modifiedDate` is second-precision and bulk re-indexes tie it across many records — 3 of 5 in the captured fixture share one timestamp. Because the resume marker is inclusive, a budget too small to clear a tie block re-fetches the same prefix forever. **The build now notices this and reports `noProgress` instead of handing back a marker that promises movement it cannot deliver.** The real fix is a secondary tiebreak, which is design work. **Widen the window or raise the budget if you see the warning**
+- 🟡 **NEW 2026-08-15 — cross-source `external_id` collision.** The merge groups by `external_id` alone, which assumes global uniqueness across sources. Safe for SAM's opaque `_id` and USASpending's `generated_internal_id`. **Not safe for the state portals, which emit human-assigned numbers like `"RFP-2024-001"`** — two states colliding would silently fuse unrelated opportunities, and it reads as *"2 sightings, 1 solicitation"*, i.e. corroboration rather than corruption. Documented at the top of `merge/merge.ts`. **A blocking prerequisite for onboarding the first human-ID source, not a someday item**
 - **NEW — documents need a blob provider and a bill.** `document.path` now means a blob key; there is no filesystem. Thousands of bundles to 21 MB. **Blocks SP4**
 - **NEW — we are on a serverless database that suspends when idle.** This is the IMPACT failure's exact shape, not an analogy. Plan limits get **measured and dated** into workflow spec §10.1, never recalled
 - **Extraction is the only thing V1 can be right or wrong about**, and Node is weak at `.docx`/`.xlsx`. **The Python-sidecar option got more expensive** — on Vercel it is a second deployment target, not just a second runtime
-- **Four silent-failure instances across three source platforms.** Every new adapter runs the vary-one-parameter check
-- **Volume is unmeasured.** If the sources are loud, V1 feels like the portals it replaces
+- **FIVE silent-failure instances across three source platforms — the fifth found 2026-08-16, and it was ours.** `is_active=false` sent SAM's adapter at the 5.5M-record archive; the run reported complete, 307 rows, no errors. **The vary-one-parameter check is what caught it, run against the live API rather than the fixture** — and it caught it only because the *first live run* was treated as evidence rather than a formality. Every new adapter runs that check; **this one had, and still missed `is_active`, because the check was run on the parameters somebody thought to vary.** The registry's `verified_facets` is now the place a parameter's status is recorded, not the adapter's comment header
+- 🟡 **Volume has a first measurement, and it is DLA — 2026-08-16.** One day of open SAM notices = **530**, of which **507 are Department of Defense**, titles overwhelmingly part-number micro-purchases (`53--RETAINER,SEAL`, `59--SWITCH,FLOW`). That is **~3,700/week from one source**, mostly parts orders a professional-services firm cannot bid. **The old risk was "volume is unmeasured"; it is measured now and it is loud.** Directly relevant to SP6's Interested-per-hundred: a queue that is 95% DLA parts will read as noise whatever the triage UI does. **Not a filter decision — spec §1.1 still parks qualification as undesigned** — but it is the strongest evidence yet that the GO gate needs the number before it can mean anything
 
 ---
 

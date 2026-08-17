@@ -303,6 +303,8 @@ git commit -m "Add the adapter interface and a deterministic fake"
 
 ### Task 3: The artifact writer
 
+> ⚠️ **SUPERSEDED IN PART, 2026-08-15.** The code below writes the artifact's `run` column as `next_since` and names `finish()`'s parameter `nextSince`. **Both were renamed to `next_until` / `nextUntil`** when review found the resume marker pointed at the wrong end of the window (see the note on Task 4). The shipped code and the spec carry the corrected names; this task text is left as originally written rather than rewritten, because a mechanical rename here would not convey the semantic change. Read Task 4's note before reusing any of this.
+
 **Files:**
 - Create: `app/server/src/scrape/artifact.ts`
 - Test: `app/server/src/scrape/artifact.test.ts`
@@ -555,6 +557,16 @@ git commit -m "Add the SQLite transport artifact -- node:sqlite, no native dep"
 
 ### Task 4: The scrape loop — budget and checkpoint
 
+> 🛑 **THE CODE BELOW CONTAINS A CRITICAL DEFECT. It was implemented as written, caught in review, and corrected in commit `1717827`. Do not reuse it as-is.**
+>
+> **The defect:** it tracks `highWater` = MAX(`modifiedAt`) and emits it as `nextSince`. Real sources page **descending — newest first** (a verified SAM.gov fact recorded in `corpus/calibration/pull-naics.py`), so `highWater` reaches its final value on page 1 and never moves. Resuming with `since = highWater` re-fetches the top of the window forever and **never reaches the older tail** — the run makes no forward progress across restarts.
+>
+> **The correction:** with descending paging you resume by **lowering the ceiling**, not raising the floor. Track `lowWater` = MIN(`modifiedAt`) among items actually written and emit it as **`nextUntil`**; resume means the same `since` with `until = nextUntil`. Inclusive on purpose — re-fetching the boundary record is harmless because sightings are append-only and dedup happens at merge, whereas exclusive would skip ties.
+>
+> **It reached further than this task.** The original Task 6 importer advanced `ingested_through` from a partial artifact, which would have recorded data nobody fetched — the exact silent gap the design exists to prevent. Task 6 below has been corrected: **a partial artifact advances the mark not at all.**
+>
+> This task's text is left as originally written rather than rewritten, because a mechanical rename would leave the `>` comparison intact and produce plausible-but-wrong code. The shipped implementation and the spec are the authority.
+
 **Files:**
 - Create: `app/server/src/scrape/run.ts`
 - Test: `app/server/src/scrape/run.test.ts`
@@ -802,8 +814,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
   const res = await runScrape(req, make(), out);
   console.log(JSON.stringify(res, null, 2));
+  /* Resume LOWERS THE CEILING, it does not raise the floor. Sources page
+   * newest-first, so an interrupted run has covered the recent end of the
+   * window and the untouched work is older -- `since` stays put and `until`
+   * comes down to where we got to. Corrected 2026-08-15 after review. */
   if (!res.done) {
-    console.log(`\nNot finished. Resume with:  --since ${res.nextSince}`);
+    console.log(`\nNot finished. Resume with:  --since ${req.since} --until ${res.nextUntil}`);
   }
 }
 
@@ -872,7 +888,7 @@ const { one, run, close } = await import("../db/index.js");
 const { importArtifact, ingestedThrough } = await import("./import-artifact.js");
 const { openArtifact } = await import("../scrape/artifact.js");
 
-function makeArtifact(externalIds: string[], nextSince: string | null) {
+function makeArtifact(externalIds: string[], nextUntil: string | null) {
   const p = join(mkdtempSync(join(tmpdir(), "tf-imp-")), "run.db");
   const a = openArtifact(p, {
     sourceName: "fake",
@@ -892,7 +908,7 @@ function makeArtifact(externalIds: string[], nextSince: string | null) {
       mode: "mechanical",
     });
   }
-  a.finish(nextSince ? "partial" : "complete", nextSince);
+  a.finish(nextUntil ? "partial" : "complete", nextUntil);
   a.close();
   return p;
 }
@@ -906,8 +922,8 @@ afterAll(async () => {
   await close();
 });
 
-test("importing an artifact appends sightings and advances ingested_through", async () => {
-  const p = makeArtifact(["a", "b"], "2026-08-09T00:00:00.000Z");
+test("a COMPLETE artifact advances ingested_through to the window's end", async () => {
+  const p = makeArtifact(["a", "b"], null); // null nextUntil => outcome "complete"
   const res = await importArtifact(p);
 
   expect(res.imported).toBe(2);
@@ -915,7 +931,32 @@ test("importing an artifact appends sightings and advances ingested_through", as
   expect((await one(`SELECT count(*) n FROM sighting`)).n).toBe(2);
 
   const src = await one(`SELECT id FROM source WHERE name = 'fake'`);
-  expect(await ingestedThrough(src.id)).toBe("2026-08-09T00:00:00.000Z");
+  expect(await ingestedThrough(src.id)).toBe("2026-08-15");
+});
+
+/* THE ANTI-GAP PROPERTY, and the reason this test exists at all.
+ *
+ * A partial run covered the RECENT end of its window and never reached the
+ * older tail. Advancing the mark on it would declare we hold data we never
+ * fetched -- the silent gap this whole design exists to prevent, arriving
+ * through the back door and looking like success. So a partial artifact
+ * advances the mark NOT AT ALL: its sightings land, and the window stays
+ * open until some later run completes it.
+ *
+ * Ruled 2026-08-15 after review found the original plan advanced the mark
+ * on partial artifacts. */
+test("a PARTIAL artifact lands its sightings but advances nothing", async () => {
+  const src = await one(`SELECT id FROM source WHERE name = 'fake'`);
+  const before = await ingestedThrough(src.id);
+
+  const p = makeArtifact(["p1", "p2"], "2026-08-09T00:00:00.000Z");
+  const res = await importArtifact(p);
+
+  expect(res.imported).toBe(2);
+  expect(res.ingestedThrough).toBeNull();
+  expect((await one(`SELECT count(*) n FROM sighting WHERE external_id = 'p1'`)).n).toBe(1);
+  /* The authority is unmoved by a partial run. */
+  expect(await ingestedThrough(src.id)).toBe(before);
 });
 
 /* The one real duplicate risk the sighting model does not already handle. */
@@ -1033,11 +1074,25 @@ export async function importArtifact(
     }
   }
 
+  /* ONLY A COMPLETE RUN MOVES THE MARK.
+   *
+   * A partial artifact covered the recent end of its window and never
+   * reached the older tail -- the scrape stopped on a time budget, not on
+   * exhausting the window. Advancing `ingested_through` on it would record
+   * that we hold data nobody ever fetched, which is the silent gap this
+   * design exists to prevent, arriving disguised as success.
+   *
+   * So: complete -> the window's `until`; partial -> NULL, and the window
+   * stays open until a later run finishes it. `ingestedThrough()` above
+   * ignores NULL rows, so a partial import simply leaves the authority
+   * where it was. Ruled 2026-08-15 after review. */
+  const advanceTo = art.run.outcome === "complete" ? art.run.until : null;
+
   return tx(async (q) => {
     const runId = await q.insert(
       `INSERT INTO ingest_run (source_id, ingested_through, artifact_sha256, rows_imported)
        VALUES ($1,$2,$3,$4) RETURNING id`,
-      [src.id, art.run.next_since ?? art.run.until, sha, art.sightings.length],
+      [src.id, advanceTo, sha, art.sightings.length],
     );
 
     for (const s of art.sightings) {
@@ -1051,7 +1106,7 @@ export async function importArtifact(
     return {
       imported: art.sightings.length,
       skipped: false,
-      ingestedThrough: art.run.next_since ?? art.run.until,
+      ingestedThrough: advanceTo,
     };
   });
 }
@@ -1462,7 +1517,9 @@ admin.post(
     res.setHeader("Content-Disposition", `attachment; filename="${request.source}.db"`);
     res.setHeader("X-Scrape-Done", String(result.done));
     res.setHeader("X-Scrape-Rows", String(result.rows));
-    if (result.nextSince) res.setHeader("X-Scrape-Next-Since", result.nextSince);
+    /* Resume lowers the ceiling: the caller re-invokes with the same
+     * `since` and this value as `until`. Corrected 2026-08-15 after review. */
+    if (result.nextUntil) res.setHeader("X-Scrape-Next-Until", result.nextUntil);
 
     const stream = createReadStream(out);
     stream.pipe(res);
