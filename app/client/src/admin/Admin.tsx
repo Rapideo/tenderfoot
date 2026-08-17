@@ -30,6 +30,15 @@ import "./Admin.css";
  * open question on Matt's list and this screen is now a reason to answer it.
  */
 
+/* The bundle's four states. `unknown` -- the schema default, and the value
+ * every production row actually carries -- is deliberately ABSENT: it falls
+ * through to the grey dot below and keeps its own word.
+ *
+ * Collapsing it into "Not ingested" would be a lie with a live counterexample:
+ * SAM.gov has been ingested twice and still reads `unknown`, because nothing
+ * writes this column yet. "Nobody measured" and "measured, nothing there" are
+ * different facts, and a registry that blurs them is telling the operator a
+ * source is dead when it is merely unobserved. See app/shared. */
 const HEALTH_TO_DOT: Record<string, StatusDotState> = {
   Healthy: "ok",
   "Rot suspected": "rot",
@@ -207,8 +216,20 @@ export function Admin() {
                 ))}
               </select>
               <span className="admin-source__health">
-                <StatusDot state={HEALTH_TO_DOT[s.health ?? "Not ingested"] ?? "off"} />
-                {s.health ?? "Not ingested"}
+                {/* D6. StatusDot hard-codes an accessible name per state, and
+                    `off` speaks "Not ingested" -- so routing `unknown`
+                    through it would put the same falsehood in the
+                    accessibility layer that the visible label avoids. An
+                    unmeasured source therefore gets a decorative grey dot
+                    (aria-hidden) and lets the adjacent word carry the
+                    meaning, rather than a fifth StatusDot state invented
+                    from one consumer. */}
+                {HEALTH_TO_DOT[s.health] ? (
+                  <StatusDot state={HEALTH_TO_DOT[s.health]!} />
+                ) : (
+                  <span className="admin-dot-unmeasured" aria-hidden="true" />
+                )}
+                {s.health}
               </span>
               <label className="admin-toggle">
                 <input

@@ -214,3 +214,16 @@
   background: var(--signal-neg-wash);
   border-bottom: 1px solid var(--line-row);
 }
+
+/* D6. The unmeasured-health dot. Same 7px geometry as StatusDot so the
+ * column does not jump between measured and unmeasured rows, but decorative
+ * (aria-hidden) and carrying no state name -- the visible word does that.
+ * Uses the label grey, the same value StatusDot's `off` state uses, because
+ * "no signal" is genuinely what both mean; it is the NAME that differs. */
+.admin-dot-unmeasured {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-label);
+  flex: none;
+}

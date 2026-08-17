@@ -77,7 +77,31 @@ export type LegalPosture = "in" | "manual-only" | "out";
  * green / yellow / red / grey in plain ascending severity, and the apparent
  * inversion that prompted the review ("rot" yellow, "failing" red) is
  * correct -- a suspicion warns, a confirmation errors. */
-export type SourceHealth = "Healthy" | "Rot suspected" | "Failing" | "Not ingested";
+export type SourceHealth = "Healthy" | "Rot suspected" | "Failing" | "Not ingested" | "unknown";
+
+/* ⚠️ `unknown` IS THE FIFTH VALUE, AND IT IS THE ONLY ONE IN PRODUCTION.
+ *
+ * Found 2026-08-16 by rendering the screen against real data rather than a
+ * fixture -- every one of the 13 rows reads "unknown". The column is
+ * `health text NOT NULL DEFAULT 'unknown'` with NO CHECK constraint, so the
+ * schema's vocabulary and the bundle's four states were never the same set,
+ * and nothing anywhere writes this column.
+ *
+ * A SECOND VOCABULARY MISMATCH OF THE SAME SHAPE AS legal_posture, and the
+ * tests could not have caught it: they supplied the bundle's words as
+ * fixtures, so they asserted the mapping worked on values production does
+ * not contain.
+ *
+ * DO NOT COLLAPSE `unknown` INTO `Not ingested`. They are different facts
+ * and the difference is live right now: SAM.gov has been ingested twice
+ * (530 rows and 57 rows on 2026-08-16), so rendering it "Not ingested"
+ * would be false. `unknown` means nobody has measured; "Not ingested" means
+ * measured and empty.
+ *
+ * WHAT FILLS IT: nothing yet, and that is precisely the work §6.4 A3 moved
+ * in front of the GO gate on 2026-08-16 -- a read-only liveness surface.
+ * This column is its output. Until then the honest render is a grey dot and
+ * the literal word. */
 
 export interface SourceRow {
   id: number;
@@ -102,7 +126,14 @@ export interface SourceRow {
   verified_facets: unknown;
   since_default: string | null;
   last_run_at: string | null;
-  health: SourceHealth | null;
+  /* Typed `string`, not `SourceHealth`, and that is deliberate. The column is
+   * NOT NULL so it is never absent -- but it has NO CHECK constraint, so
+   * `SourceHealth` documents the vocabulary anyone SHOULD write while the
+   * type admits what the database can actually hand back. Narrowing this to
+   * the union would be a claim the schema does not enforce, and a consumer
+   * that exhaustively switched on it would be wrong the first time a typo
+   * landed. Render unrecognised values; do not assume them away. */
+  health: string;
   enabled: boolean;
   source_note: string | null;
 }

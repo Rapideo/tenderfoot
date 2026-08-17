@@ -184,3 +184,34 @@ test("the profile renders the bundle's five fields, empty ones marked", async ()
   expect(past.value).toBe("");
   expect(past.className).toContain("admin-field__input--empty");
 });
+
+/* FOUND BY RUNNING THE SCREEN, NOT BY A TEST.
+ *
+ * Every one of the 13 production rows carries health 'unknown' -- the schema
+ * default, on a column with no CHECK constraint and nothing that writes it.
+ * The fixtures above used the bundle's four words, so the suite asserted a
+ * mapping over values production does not contain.
+ *
+ * `unknown` must keep its own word AND must not borrow StatusDot's `off`
+ * state, whose accessible name is "Not ingested". SAM.gov has been ingested
+ * twice and still reads `unknown`; calling it "Not ingested" in either the
+ * visible label or the accessibility tree is false. */
+test("an unmeasured source keeps the word 'unknown' and claims no StatusDot state", async () => {
+  vi.stubGlobal(
+    "fetch",
+    mockFetch((url) =>
+      String(url).includes("/api/sources")
+        ? [{ ...SOURCES[0], health: "unknown" }]
+        : PROFILE,
+    ),
+  );
+
+  render(<Admin />);
+  await waitFor(() => expect(screen.getByText("SAM.gov")).toBeTruthy());
+
+  expect(screen.getByText("unknown")).toBeTruthy();
+  /* No StatusDot rendered at all: role="img" is how it announces itself, and
+   * every one of its four names would be a claim nobody has measured. */
+  expect(screen.queryAllByRole("img")).toHaveLength(0);
+  expect(screen.queryByText("Not ingested")).toBeNull();
+});

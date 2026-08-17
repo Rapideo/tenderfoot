@@ -24,8 +24,12 @@ UI Mockups V1.2.html`.
 > as matched-to-the-bundle.
 
 Everything **not** listed below is reproduced from the bundle: grid tracks,
-padding, type, borders, colours, copy, column order, and the four-state health
-vocabulary.
+padding, type, borders, colours, copy and column order.
+
+⚠️ This paragraph originally ended "…and the four-state health vocabulary."
+**D6 falsified that** — the schema has a fifth value, `unknown`, and it is the
+only one in production. The claim is corrected rather than deleted, because it
+is a good example of what a fidelity write-up asserts before anyone runs it.
 
 ---
 
@@ -127,3 +131,68 @@ control surface.
 no exposure that did not exist — but it makes the exposure clickable, and
 production is gated only by Vercel Deployment Protection. **"Auth in V1" is an
 open question on Matt's list, and this screen is a reason to answer it.**
+
+---
+
+# Found by running it — 2026-08-16
+
+The screen passed six unit tests and a green gate before it was ever
+rendered. Both of the following survived that and were visible within
+seconds of loading `/admin` against the real 13-row registry.
+
+## D6 — `health` reads `unknown`, and it is the only value in production
+
+**All 13 rows carry `health = 'unknown'`.** The column is
+`health text NOT NULL DEFAULT 'unknown'` with **no CHECK constraint**, so the
+schema's vocabulary and the bundle's four states (`Healthy` / `Rot suspected` /
+`Failing` / `Not ingested`) were never the same set — and **nothing anywhere
+writes it.**
+
+This is the same shape of defect as D2's legal mismatch, and **the tests could
+not have caught it**: the fixtures supplied the bundle's four words, so the
+suite asserted a mapping over values production does not contain. Only real
+data showed it.
+
+**`unknown` is not collapsed into `Not ingested`**, and the difference is live:
+SAM.gov has been ingested twice (530 and 57 rows on 2026-08-16) and still reads
+`unknown`. *Nobody measured* and *measured, nothing there* are different facts,
+and a registry that blurs them tells the operator a working source is dead.
+
+It also does not borrow `StatusDot`'s `off` state, because that state's
+**accessible name is hard-coded to "Not ingested"** — routing `unknown` through
+it would put the falsehood into the accessibility tree while the visible label
+avoided it. An unmeasured source gets a decorative grey dot and lets the word
+carry the meaning, rather than a fifth `StatusDot` state invented from one
+consumer.
+
+**What fills this column: nothing yet — and that is exactly the work §6.4 A3
+moved in front of the GO gate on the same day.** This column is the liveness
+surface's output.
+
+## The app has never loaded its own fonts
+
+**Not a deviation and not caused by T14/T15 — a product-wide finding.**
+
+`app/client/index.html` contains **no `<link>` to a font provider and no
+`@font-face` rule**, and neither does any CSS in `app/client/src`. Every type
+token in `type.css` names `'IBM Plex Sans'` or `'IBM Plex Mono'`; **nothing
+ever fetches them.** The V1.2 bundle, by contrast, loads both from Google Fonts
+with `preconnect` and a full `@font-face` block.
+
+So every screen this project has ever rendered — including `/dev/gallery` at
+the **SP2 sign-off gate** — has displayed in whatever the viewer happened to
+have installed locally. On a machine with IBM Plex installed it looks correct;
+on one without it, it falls back to a serif and looks nothing like the bundle.
+`/admin` renders in Times here.
+
+**Consequence for the record:** the SP2 visual sign-off was performed under an
+unrecorded condition. It is not invalidated — the primitives' geometry, colour
+and spacing are all unaffected — but "matched against the bundle" currently
+means *matched given the right fonts are installed*, and nothing in the repo
+guarantees that.
+
+**Not fixed here, deliberately.** The fix is one line in `index.html`, but the
+choice behind it is not mine: a Google Fonts `<link>` adds a third-party
+request on every page load, and the alternative is self-hosting the woff2 files
+in the repo. That is a privacy and dependency decision, and it belongs to
+whoever owns the fidelity mandate.
