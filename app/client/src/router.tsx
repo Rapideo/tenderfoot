@@ -6,6 +6,7 @@ import {
   createRoutesFromElements,
 } from "react-router-dom";
 import { Health } from "./Health";
+import { Admin } from "./admin/Admin";
 
 /* The gallery is a DEV-ONLY route. It exists so every primitive can be seen
  * and signed off before any feature is built on it (plan of action §6, SP2's
@@ -56,6 +57,23 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       <Route path="/" element={<Health />} />
+      {/* NOT dev-only, unlike the gallery above, and that is a departure
+        * from SP1's plan text ("a dev-only route ...").
+        *
+        * That wording was written on 2026-08-12, when the reason was
+        * explicit: "SP2 owns the design system and carries the sign-off
+        * gate; styling here would pre-empt it." SP2 has since shipped and
+        * signed off, so the reason has expired. What remains is the SVRC,
+        * which scores View 6.2 one of only two `Pri 5` nodes and calls it
+        * V1's entire control surface, and §9.6, which put the scrape
+        * trigger on this screen. A control surface behind
+        * `import.meta.env.DEV` is not a control surface.
+        *
+        * ⚠️ It is unauthenticated. The endpoints behind it already were,
+        * so this adds no exposure that did not exist -- but it makes it
+        * clickable, and production is gated only by Vercel Deployment
+        * Protection. "Auth in V1" is open on Matt's list. */}
+      <Route path="/admin" element={<Admin />} />
       {import.meta.env.DEV && Gallery && (
         <Route
           path="/dev/gallery"
