@@ -39,18 +39,24 @@
  * up a state portal against this grouping key unchanged.
  */
 import { all, tx } from "../db/index.js";
+import { orgChain } from "./org-chain.js";
 
 export interface MergeResult {
   created: number;
   updated: number;
   linked: number;
+  /** Solicitations that gained an `org_id` on this run, including ones
+   * merged earlier while nothing read the organisation out of the payload. */
+  orgsAttached: number;
 }
 
 interface Group {
   external_id: string;
   latest_raw: any;
+  latest_source_id: number;
   solicitation_id: number | null;
   unlinked: number;
+  org_id: number | null;
 }
 
 export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
@@ -90,21 +96,39 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * external_id, from any source, not just the ones that passed g's WHERE
    * clause. */
   const groups = await all<Group>(
-    `SELECT g.external_id,
-            (SELECT raw FROM sighting s2
-              WHERE s2.external_id = g.external_id
-              ORDER BY s2.seen_at DESC, s2.id DESC LIMIT 1) AS latest_raw,
-            (SELECT s3.solicitation_id FROM sighting s3
-              WHERE s3.external_id = g.external_id AND s3.solicitation_id IS NOT NULL
-              LIMIT 1) AS solicitation_id,
-            (SELECT count(*) FROM sighting s4
-              WHERE s4.external_id = g.external_id AND s4.solicitation_id IS NULL) AS unlinked
-       FROM sighting g
-      WHERE g.external_id IS NOT NULL
-        AND ($1::int IS NULL OR g.source_id = $1)
-      GROUP BY g.external_id`,
+    `SELECT t.*, (SELECT sol.org_id FROM solicitation sol WHERE sol.id = t.solicitation_id) AS org_id
+       FROM (
+        SELECT g.external_id,
+               (SELECT raw FROM sighting s2
+                 WHERE s2.external_id = g.external_id
+                 ORDER BY s2.seen_at DESC, s2.id DESC LIMIT 1) AS latest_raw,
+               /* The source of that same latest sighting, so the org chain is
+                * read with the reader that matches the payload in hand. Same
+                * ORDER BY as latest_raw, deliberately -- reading level names
+                * out of one source's payload with another's paths yields
+                * nothing, silently. */
+               (SELECT s5.source_id FROM sighting s5
+                 WHERE s5.external_id = g.external_id
+                 ORDER BY s5.seen_at DESC, s5.id DESC LIMIT 1) AS latest_source_id,
+               (SELECT s3.solicitation_id FROM sighting s3
+                 WHERE s3.external_id = g.external_id AND s3.solicitation_id IS NOT NULL
+                 LIMIT 1) AS solicitation_id,
+               (SELECT count(*) FROM sighting s4
+                 WHERE s4.external_id = g.external_id AND s4.solicitation_id IS NULL) AS unlinked
+          FROM sighting g
+         WHERE g.external_id IS NOT NULL
+           AND ($1::int IS NULL OR g.source_id = $1)
+         GROUP BY g.external_id
+       ) t`,
     [sourceId ?? null],
   );
+
+  /* Source id -> name, one round trip, so org-chain reading stays keyed by
+   * the canonical registry name rather than an adapter's short CLI key. */
+  const sources = await all<{ id: number; name: string; jurisdiction: string | null }>(
+    `SELECT id, name, jurisdiction FROM source`,
+  );
+  const sourceById = new Map(sources.map((s) => [s.id, s]));
 
   /* THE WORK IS SORTED IN MEMORY FIRST, THEN APPLIED IN THREE STATEMENTS.
    *
@@ -133,21 +157,48 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * "last wins" into "whichever the planner reached first". */
   const titleUpdates = new Map<number, string>();
   const links: { external_id: string; solId: number }[] = [];
+  /* external_id -> the chain for it. Collected for new groups and for any
+   * existing solicitation still missing an organisation, so a re-run repairs
+   * rows merged before anything read the agency out of the payload. */
+  const chains = new Map<string, string[]>();
+  /* Organisation name -> the jurisdiction of the source that produced it.
+   * Recorded PER NAME as chains are collected, not read off some arbitrary
+   * group later: SP1's execution record, defect 4, is a hard-coded
+   * jurisdiction default that tagged 62 federal agencies 'IN' with nothing
+   * downstream to contradict it. First writer wins, so a name already
+   * carrying a jurisdiction is not reassigned by a later source. */
+  const jurisdictionByName = new Map<string, string | null>();
+  /* Existing solicitations needing only an organisation, by id. */
+  const orgOnly: { solId: number; external_id: string }[] = [];
 
   for (const g of groups) {
     const raw = typeof g.latest_raw === "string" ? JSON.parse(g.latest_raw) : g.latest_raw;
     const title = String(raw?.title ?? "").trim() || "(untitled)";
+    const src = sourceById.get(g.latest_source_id);
+    const chain = orgChain(src?.name ?? "", raw);
+    for (const name of chain) {
+      if (!jurisdictionByName.has(name)) jurisdictionByName.set(name, src?.jurisdiction ?? null);
+    }
 
     if (g.solicitation_id === null) {
       inserts.push({ external_id: g.external_id, title });
+      if (chain.length) chains.set(g.external_id, chain);
     } else if (Number(g.unlinked) > 0) {
       titleUpdates.set(g.solicitation_id, title);
       links.push({ external_id: g.external_id, solId: g.solicitation_id });
+      if (chain.length && g.org_id === null) chains.set(g.external_id, chain);
+    } else if (g.org_id === null && chain.length) {
+      /* MISSING AN ORGANISATION IS ITS OWN REASON TO DO WORK. Every other
+       * branch keys off unlinked sightings, and these rows have none -- they
+       * were merged before this code existed and would otherwise stay
+       * orphaned forever, because nothing would ever look at them again. */
+      chains.set(g.external_id, chain);
+      orgOnly.push({ solId: g.solicitation_id, external_id: g.external_id });
     }
-    /* An existing group with nothing unlinked is skipped entirely. The old
-     * loop still opened a transaction and ran a link UPDATE that matched
-     * nothing -- that is the O(corpus) cost above, and dropping it changes
-     * no observable result. */
+    /* An existing group with nothing unlinked AND an organisation already
+     * attached is skipped entirely. The old loop still opened a transaction
+     * and ran a link UPDATE that matched nothing -- that is the O(corpus)
+     * cost above, and dropping it changes no observable result. */
   }
 
   /* ONE transaction for the whole merge, where there used to be one per
@@ -191,6 +242,81 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       );
     }
 
-    return { created: inserted.length, updated, linked };
+    /* ORGANISATIONS, RESOLVED BY DEPTH RATHER THAN BY ROW.
+     *
+     * Identity is the NAME ALONE, matching ingest/corpus.ts's upsertOrg --
+     * two sources spelling an agency identically mean one row, which is the
+     * whole point of the organisation table. Depth drives the loop only
+     * because a child cannot be inserted before its parent has an id.
+     *
+     * Cost is O(depth), not O(rows): at most five iterations for SAM's
+     * five-level hierarchy, whatever the batch size. That is what keeps the
+     * constancy test honest. */
+    let orgsAttached = 0;
+    if (chains.size) {
+      const byName = new Map<string, number>();
+      const distinct = [...new Set([...chains.values()].flat())];
+
+      const existing = await q.all<{ id: number; name: string }>(
+        `SELECT id, name FROM organization WHERE name = ANY($1::text[])`,
+        [distinct],
+      );
+      for (const o of existing) byName.set(o.name, o.id);
+
+      const maxDepth = Math.max(...[...chains.values()].map((c) => c.length));
+      for (let depth = 0; depth < maxDepth; depth++) {
+        const pending = new Map<string, string | null>(); // name -> parent name
+        for (const chain of chains.values()) {
+          const name = chain[depth];
+          if (name === undefined || byName.has(name)) continue;
+          pending.set(name, chain[depth - 1] ?? null);
+        }
+        if (!pending.size) continue;
+
+        const names = [...pending.keys()];
+        const parents = names.map((n) => {
+          const p = pending.get(n);
+          return p === null || p === undefined ? null : (byName.get(p) ?? null);
+        });
+        /* Jurisdiction comes from the registry entry of the source that
+         * actually produced THIS name -- see jurisdictionByName above. */
+        const jurisdictions = names.map((n) => jurisdictionByName.get(n) ?? null);
+
+        const made = await q.all<{ id: number; name: string }>(
+          `INSERT INTO organization (name, parent_id, jurisdiction, source_note)
+           SELECT u.name, u.parent_id, u.jurisdiction, 'Resolved from a sighting payload by the merge.'
+             FROM unnest($1::text[], $2::int[], $3::text[]) AS u(name, parent_id, jurisdiction)
+           RETURNING id, name`,
+          [names, parents, jurisdictions],
+        );
+        for (const o of made) byName.set(o.name, o.id);
+      }
+
+      /* Deepest node wins: the buying office, not the department. */
+      const targets: { solId: number; orgId: number }[] = [];
+      for (const row of [...inserted, ...orgOnly.map((o) => ({ id: o.solId, external_id: o.external_id }))]) {
+        const chain = chains.get(row.external_id);
+        if (!chain?.length) continue;
+        const orgId = byName.get(chain[chain.length - 1]!);
+        if (orgId !== undefined) targets.push({ solId: row.id, orgId });
+      }
+      for (const l of links) {
+        const chain = chains.get(l.external_id);
+        if (!chain?.length) continue;
+        const orgId = byName.get(chain[chain.length - 1]!);
+        if (orgId !== undefined) targets.push({ solId: l.solId, orgId });
+      }
+
+      if (targets.length) {
+        orgsAttached = await q.run(
+          `UPDATE solicitation s SET org_id = u.org_id
+             FROM unnest($1::int[], $2::int[]) AS u(sol_id, org_id)
+            WHERE s.id = u.sol_id AND s.org_id IS DISTINCT FROM u.org_id`,
+          [targets.map((t) => t.solId), targets.map((t) => t.orgId)],
+        );
+      }
+    }
+
+    return { created: inserted.length, updated, linked, orgsAttached };
   });
 }

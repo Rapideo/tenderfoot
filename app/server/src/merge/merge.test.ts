@@ -5,7 +5,7 @@ useTestSchema("test_merge");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { one, run, close, pool } = await import("../db/index.js");
+const { all, one, run, close, pool } = await import("../db/index.js");
 const { mergeSightings } = await import("./merge.js");
 
 /* Counts every statement that reaches Postgres, by wrapping each client the
@@ -26,12 +26,17 @@ pool.on("connect", (client) => {
 
 let sourceA: number;
 let sourceB: number;
+/* The real registry name, seeded by migration 003 -- org-chain.ts is keyed
+ * by it, so a test using a made-up source name would exercise the fallback
+ * (empty chain) and prove nothing about the mapping. */
+let sourceSam: number;
 
 beforeAll(async () => {
   await migrate(false);
   await run(`INSERT INTO source (name, enabled) VALUES ('src-a', true), ('src-b', true)`);
   sourceA = (await one(`SELECT id FROM source WHERE name = 'src-a'`)).id;
   sourceB = (await one(`SELECT id FROM source WHERE name = 'src-b'`)).id;
+  sourceSam = (await one(`SELECT id FROM source WHERE name = 'SAM.gov'`)).id;
 }, 120000);
 afterAll(async () => {
   await close();
@@ -164,3 +169,121 @@ test("merge cost is CONSTANT in the number of groups, not proportional", async (
    * vitest's 5s default for 30 groups, and a timeout is a weaker, vaguer
    * failure than the statement-count assertion this test exists to make. */
 }, 120000);
+
+async function sightRaw(sourceId: number, externalId: string, raw: unknown, seenAt: string) {
+  await run(
+    `INSERT INTO sighting (source_id, external_id, seen_at, raw, mode)
+     VALUES ($1,$2,$3,$4,'mechanical')`,
+    [sourceId, externalId, seenAt, JSON.stringify(raw)],
+  );
+}
+
+/* WHO IS BUYING THIS. Every merged solicitation carried org_id NULL until
+ * 2026-08-16 -- 530 of 788 production rows orphaned from the organisation
+ * graph SP1 T10-T11 built, while the agency sat unread in the payload.
+ *
+ * The anchor is the DEEPEST node, not the department. Level 1 is
+ * "DEPT OF DEFENSE", which 96% of a day's federal notices share and which
+ * therefore tells a triage queue nothing; the chain is preserved through
+ * parent_id, so a screen can always roll up. Losing the office is
+ * irreversible, rolling up is not. */
+test("a merged solicitation is attached to the organisation that issued it", async () => {
+  await sightRaw(
+    sourceSam,
+    "ORG-1",
+    {
+      title: "Dredging services",
+      organizationHierarchy: [
+        { level: 1, name: "DEPT OF DEFENSE" },
+        { level: 2, name: "DEPT OF THE NAVY" },
+        { level: 3, name: "NAVSEA" },
+      ],
+    },
+    "2026-08-16T00:00:00Z",
+  );
+  await mergeSightings();
+
+  const row = await one<{ name: string }>(
+    `SELECT o.name FROM solicitation s JOIN organization o ON o.id = s.org_id
+      WHERE s.external_id = 'ORG-1'`,
+  );
+  expect(row?.name).toBe("NAVSEA");
+});
+
+/* The hierarchy is the reason organization.parent_id exists -- its own
+ * schema comment reads "State -> FSSA -> Division". SAM hands us that shape
+ * ready-made and it was being thrown away. */
+test("the organisation hierarchy is preserved as a parent chain", async () => {
+  const chain = await all<{ name: string; parent: string | null }>(
+    `WITH RECURSIVE up AS (
+       SELECT o.id, o.name, o.parent_id FROM solicitation s
+         JOIN organization o ON o.id = s.org_id WHERE s.external_id = 'ORG-1'
+       UNION ALL
+       SELECT p.id, p.name, p.parent_id FROM organization p JOIN up ON p.id = up.parent_id
+     )
+     SELECT up.name, (SELECT name FROM organization WHERE id = up.parent_id) AS parent FROM up`,
+  );
+  expect(chain.map((c) => c.name)).toEqual(["NAVSEA", "DEPT OF THE NAVY", "DEPT OF DEFENSE"]);
+  expect(chain[chain.length - 1]?.parent).toBeNull();
+});
+
+/* A REAL QUIRK IN REAL DATA, found in production on the first live run:
+ * one DLA record repeats a name at two levels --
+ * [DEPT OF DEFENSE, DEFENSE LOGISTICS AGENCY, DLA AVIATION, DLA AV RICHMOND,
+ * DLA AVIATION]. Identity is name-only, matching upsertOrg, so a naive walk
+ * makes that row its own grandparent: a cycle, and the recursive query above
+ * would never terminate. */
+test("a repeated name in the hierarchy does not become its own ancestor", async () => {
+  await sightRaw(
+    sourceSam,
+    "ORG-2",
+    {
+      title: "Aviation parts",
+      organizationHierarchy: [
+        { level: 1, name: "DEPT OF DEFENSE" },
+        { level: 2, name: "DEFENSE LOGISTICS AGENCY" },
+        { level: 3, name: "DLA AVIATION" },
+        { level: 4, name: "DLA AV RICHMOND" },
+        { level: 5, name: "DLA AVIATION" },
+      ],
+    },
+    "2026-08-16T00:00:00Z",
+  );
+  await mergeSightings();
+
+  const self = await one<{ n: number }>(
+    `SELECT count(*) n FROM organization WHERE parent_id = id`,
+  );
+  expect(self?.n).toBe(0);
+
+  const row = await one<{ name: string }>(
+    `SELECT o.name FROM solicitation s JOIN organization o ON o.id = s.org_id
+      WHERE s.external_id = 'ORG-2'`,
+  );
+  /* The repeat is dropped, so the deepest DISTINCT node anchors it. */
+  expect(row?.name).toBe("DLA AV RICHMOND");
+});
+
+/* The 530 production rows already merged with org_id NULL must be repaired
+ * by a re-run, not left behind. Their sightings are fully linked, so the
+ * "is there unlinked work" test that drives the rest of the merge says no --
+ * a solicitation missing its organisation is its own reason to do work. */
+test("an already-merged solicitation with no organisation gets one on the next merge", async () => {
+  await sightRaw(
+    sourceSam,
+    "ORG-3",
+    { title: "Legacy row", organizationHierarchy: [{ level: 1, name: "DEPT OF STATE" }] },
+    "2026-08-16T00:00:00Z",
+  );
+  await mergeSightings();
+  await run(`UPDATE solicitation SET org_id = NULL WHERE external_id = 'ORG-3'`);
+
+  const res = await mergeSightings();
+  expect(res.orgsAttached).toBe(1);
+
+  const row = await one<{ name: string }>(
+    `SELECT o.name FROM solicitation s JOIN organization o ON o.id = s.org_id
+      WHERE s.external_id = 'ORG-3'`,
+  );
+  expect(row?.name).toBe("DEPT OF STATE");
+});
