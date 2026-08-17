@@ -5,8 +5,24 @@ useTestSchema("test_merge");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { one, run, close } = await import("../db/index.js");
+const { one, run, close, pool } = await import("../db/index.js");
 const { mergeSightings } = await import("./merge.js");
+
+/* Counts every statement that reaches Postgres, by wrapping each client the
+ * pool opens. A spy, not a stub: the real query still runs. Attached at
+ * module level because `pool.on("connect")` fires at client CREATION and
+ * beforeAll's migrate() creates the first one -- a listener registered
+ * inside a test would observe nothing and count zero, which is
+ * indistinguishable from a passing fix. */
+const statements: string[] = [];
+pool.on("connect", (client) => {
+  const c = client as unknown as { query: (...a: any[]) => any };
+  const orig = c.query.bind(c);
+  c.query = (...a: any[]) => {
+    statements.push(typeof a[0] === "string" ? a[0] : (a[0]?.text ?? ""));
+    return orig(...a);
+  };
+});
 
 let sourceA: number;
 let sourceB: number;
@@ -107,3 +123,44 @@ test("a scoped merge still catches a later cross-source amendment (Finding 1 reg
     ).n,
   ).toBe(1);
 });
+
+/* MERGE COST MUST NOT SCALE WITH THE NUMBER OF GROUPS.
+ *
+ * Measured on the first live run, 2026-08-16: 530 solicitations took 3m36s,
+ * about 2.4/sec. The old shape opened a TRANSACTION PER GROUP -- BEGIN, one
+ * or two writes, COMMIT -- and did so for every group the grouping query
+ * returned, including groups already fully merged that needed no work at
+ * all. So the cost tracked the size of the whole corpus on every run, not
+ * the size of the new batch.
+ *
+ * The assertion is CONSTANCY, not smallness. A bound like `<= 10` passes for
+ * any implementation whose constant happens to fit, and would keep passing
+ * if cost quietly became proportional again with a small multiplier.
+ * Merging 5 groups and then 25 must issue the SAME number of statements;
+ * only a set-based implementation can do that. */
+test("merge cost is CONSTANT in the number of groups, not proportional", async () => {
+  for (let i = 0; i < 5; i++) {
+    await sight(sourceA, `BULK1-${i}`, `Bulk one ${i}`, "2026-08-15T00:00:00Z");
+  }
+  statements.length = 0;
+  const small = await mergeSightings();
+  const smallStatements = statements.length;
+
+  for (let i = 0; i < 25; i++) {
+    await sight(sourceA, `BULK2-${i}`, `Bulk two ${i}`, "2026-08-15T00:00:00Z");
+  }
+  statements.length = 0;
+  const large = await mergeSightings();
+  const largeStatements = statements.length;
+
+  /* The merge must actually have DONE the work -- five times as many groups
+   * in the second batch. A no-op merge would issue a constant number of
+   * statements too, and would be worthless. */
+  expect(small.created).toBe(5);
+  expect(large.created).toBe(25);
+
+  expect(largeStatements).toBe(smallStatements);
+  /* Generous timeout on purpose: the per-group version needs well over
+   * vitest's 5s default for 30 groups, and a timeout is a weaker, vaguer
+   * failure than the statement-count assertion this test exists to make. */
+}, 120000);

@@ -106,38 +106,91 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     [sourceId ?? null],
   );
 
-  let created = 0;
-  let updated = 0;
-  let linked = 0;
+  /* THE WORK IS SORTED IN MEMORY FIRST, THEN APPLIED IN THREE STATEMENTS.
+   *
+   * This used to be a loop with a TRANSACTION PER GROUP -- BEGIN, one or two
+   * writes, COMMIT -- run for every group the query above returned. Measured
+   * on the first live run (2026-08-16): 530 solicitations in 3m36s, ~2.4/sec,
+   * roughly four round trips per group.
+   *
+   * The waste was worse than "one trip per group". `groups` returns every
+   * external_id ever seen, not just the ones needing work, and the old loop
+   * opened a transaction for each of them -- including fully-merged groups
+   * whose link UPDATE then matched zero rows. Cost tracked the size of the
+   * WHOLE CORPUS on every run rather than the size of the new batch, so a
+   * merge got slower forever, even on a quiet day with nothing to do.
+   *
+   * Titles are still computed in JS rather than as `raw->>'title'` in SQL.
+   * That is deliberate: the two are not equivalent for a non-string title
+   * (`->>` renders an object as JSON text where String() gives
+   * "[object Object]"), and this rewrite is about round trips, not about
+   * quietly changing what a title is. */
+  const inserts: { external_id: string; title: string }[] = [];
+  /* Keyed by solicitation id so a later group wins, exactly as sequential
+   * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
+   * -- a sighting linked via a different external_id -- and `UPDATE ... FROM
+   * unnest` would otherwise pick among duplicate keys arbitrarily, turning
+   * "last wins" into "whichever the planner reached first". */
+  const titleUpdates = new Map<number, string>();
+  const links: { external_id: string; solId: number }[] = [];
 
   for (const g of groups) {
     const raw = typeof g.latest_raw === "string" ? JSON.parse(g.latest_raw) : g.latest_raw;
     const title = String(raw?.title ?? "").trim() || "(untitled)";
 
-    await tx(async (q) => {
-      let solId = g.solicitation_id;
-
-      if (solId === null) {
-        solId = await q.insert(
-          `INSERT INTO solicitation (external_id, title) VALUES ($1,$2) RETURNING id`,
-          [g.external_id, title],
-        );
-        created++;
-      } else if (Number(g.unlinked) > 0) {
-        const n = await q.run(`UPDATE solicitation SET title = $2 WHERE id = $1 AND title <> $2`, [
-          solId,
-          title,
-        ]);
-        if (n > 0) updated++;
-      }
-
-      linked += await q.run(
-        `UPDATE sighting SET solicitation_id = $1
-          WHERE external_id = $2 AND solicitation_id IS NULL`,
-        [solId, g.external_id],
-      );
-    });
+    if (g.solicitation_id === null) {
+      inserts.push({ external_id: g.external_id, title });
+    } else if (Number(g.unlinked) > 0) {
+      titleUpdates.set(g.solicitation_id, title);
+      links.push({ external_id: g.external_id, solId: g.solicitation_id });
+    }
+    /* An existing group with nothing unlinked is skipped entirely. The old
+     * loop still opened a transaction and ran a link UPDATE that matched
+     * nothing -- that is the O(corpus) cost above, and dropping it changes
+     * no observable result. */
   }
 
-  return { created, updated, linked };
+  /* ONE transaction for the whole merge, where there used to be one per
+   * group. A partial failure now rolls the entire merge back instead of
+   * leaving some groups committed and others not, which is the behaviour a
+   * re-runnable batch step should have had from the start -- but it IS a
+   * change: the old shape could leave a half-merged database behind and
+   * this one cannot. */
+  return tx(async (q) => {
+    let linked = 0;
+
+    /* Insert first: linking the new groups needs the ids this produces, and
+     * `external_id` comes back with them so the mapping does not depend on
+     * unnest preserving row order. */
+    const inserted = inserts.length
+      ? await q.all<{ id: number; external_id: string }>(
+          `INSERT INTO solicitation (external_id, title)
+           SELECT u.external_id, u.title
+             FROM unnest($1::text[], $2::text[]) AS u(external_id, title)
+           RETURNING id, external_id`,
+          [inserts.map((i) => i.external_id), inserts.map((i) => i.title)],
+        )
+      : [];
+    for (const row of inserted) links.push({ external_id: row.external_id, solId: row.id });
+
+    const updated = titleUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET title = u.title
+             FROM unnest($1::int[], $2::text[]) AS u(id, title)
+            WHERE s.id = u.id AND s.title <> u.title`,
+          [[...titleUpdates.keys()], [...titleUpdates.values()]],
+        )
+      : 0;
+
+    if (links.length) {
+      linked = await q.run(
+        `UPDATE sighting s SET solicitation_id = u.sol_id
+           FROM unnest($1::text[], $2::int[]) AS u(external_id, sol_id)
+          WHERE s.external_id = u.external_id AND s.solicitation_id IS NULL`,
+        [links.map((l) => l.external_id), links.map((l) => l.solId)],
+      );
+    }
+
+    return { created: inserted.length, updated, linked };
+  });
 }
