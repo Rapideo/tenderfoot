@@ -1,6 +1,6 @@
 # Tenderfoot — status
 
-**Updated 2026-08-15.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-08-17.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
 > **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
 >
@@ -26,11 +26,39 @@
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-16
+## 🔖 RESUME HERE — updated 2026-08-17
 
-**You are on `main`, and SP3 + SP3.5 are MERGED — 2026-08-16, `6a8cf67`.** Twenty-six commits, `--no-ff` per the slice convention. **Gate re-run green on the merge commit itself at 164 tests / 33 files**, exit 0 — not inherited from the branch. **CI green on `main`**, and the **production deployment reports `success`** for this sha. Working tree clean, `main` and `origin/main` in sync. The branch `sp3-federal-ingestion` still exists and has not been deleted.
+**You are on `main`, everything is merged and pushed, and the working tree is clean.** Gate green at **174 tests / 34 files**, `npm run check` exit 0. CI green on `main`.
 
-⚠️ **Watch-item update — preview Neon branches are per GIT BRANCH, not per deployment.** Three preview deployments of `sp3-federal-ingestion` produced **one** branch, `preview/sp3-federal-ingestion`, created 2026-08-16T04:06Z and merely *updated* on each later deploy. **That shrinks the leak concern considerably** — the worst case is one stray database branch per PR, not one per push. Still unestablished whether it cleans itself up: the git branch has not been deleted, so nothing has been asked of it yet.
+⚠️ **Five merged slice branches still exist and have never been deleted** — `sp0-infrastructure`, `sp1-entity-graph`, `sp1.5-postgres-port`, `sp2-design-system`, `sp3-federal-ingestion` (the last two also on `origin`). Only `sp1-admin-ui` and `sp3.5-org-resolution` were cleaned up. **Deleting `sp3-federal-ingestion` is the cheap way to settle the Neon preview-branch question below**, since it is the one with a live `preview/` branch attached.
+
+> ## 🚨 FIRST THING TO KNOW ON RESUME — SIX SLICES ARE SHIPPED, AND THE PRODUCT HOLDS REAL FEDERAL DATA
+>
+> **SP0 · SP1 · SP1.5 · SP2 · SP3 · SP3.5 are all merged to `main`.** SP1 closed on 2026-08-16 (`a512ad0`) when T12–T15 landed; SP3 + SP3.5 closed the same day (`6a8cf67`).
+>
+> **Production: 788 solicitations, 788 sightings, zero unlinked, zero duplicate external_ids, every row carrying an organisation.** Two `SAM.gov` ingest runs. `SAM.gov` is the only enabled source; the other twelve stay off, fail-closed.
+>
+> **`/admin` is the first composed screen** and it is live — Firm Profile and Source Registry, matched to the frozen V1.2 bundle with five numbered deviations in `docs/admin-deviations.md`.
+
+### ⏭ START HERE TOMORROW — the fonts, and it is a decided job, not an open one
+
+**Matt ruled 2026-08-16: self-host the woff2 files.** Not started; the session ran out of time.
+
+**Why it matters more than it sounds.** `app/client/index.html` has **no font `<link>` and no `@font-face`**, and neither does any CSS under `app/client/src`. Every type token in `type.css` names `'IBM Plex Sans'` or `'IBM Plex Mono'` and **nothing ever fetches them.** So every screen this project has ever rendered — **including `/dev/gallery` at the SP2 sign-off gate** — has displayed in whatever the viewer happened to have installed. `/admin` renders in Times on a machine without IBM Plex.
+
+**The sign-off is not invalidated** — geometry, colour and spacing are unaffected — but *"matched against the bundle"* currently means *matched given the right fonts are installed*, and nothing in the repo guarantees that. **The ruled fix is to commit the woff2 files and an `@font-face` block**, not a Google Fonts link, so there is no third-party request and no runtime dependency.
+
+### Then, in rough priority
+
+1. **The source-health slice needs a number.** A3 was ruled 2026-08-16 — health moves in front of the GO gate — and `Plan-of-Action.md` §6.4 now carries the ruling with the position **deliberately left open**, because no dependency forces one. **Claude recommends doing it immediately**: `View 6.2` already renders a HEALTH column that reads `unknown` on all thirteen rows, because nothing writes `source.health`. The screen and the empty column are both sitting there.
+2. **D5 — §9.6's scrape trigger is still unhoused.** The screen ruled to be its home does not offer it; running a scrape is still `npm run scrape` or `POST /api/admin/scrape` with a secret.
+3. **Auth in V1.** `/admin` is a real product route and unauthenticated. The endpoints already were, so it adds no exposure — but it makes it clickable, and production is gated only by Vercel Deployment Protection.
+4. **`corpus.test.ts` takes ~84s alone** and tips over vitest's 5s default under parallel load. It failed a gate on 2026-08-17 that had passed minutes earlier. **It will flake again.** ⚠️ Do not assume the schema leak was the cause — it was dropped and the gate got no faster (94.5s → 87.7s, noise).
+5. **SP4** — extraction runtime and blob provider, both still Matt's to rule.
+
+### Two decisions still on Matt
+
+**Extraction runtime** (Node / Python sidecar / smart mode — the largest open question in the stack) and **the blob provider**. Both gate SP4. `THOUGHTS.md`'s two live ideas are also still unfiled.
 
 > ## 🚨 SP3 HAS NOW RUN AGAINST A LIVE SOURCE — and the first run was scraping the wrong 5.5 million records
 >
@@ -90,7 +118,9 @@
 >
 > ✅ **Production is healthy again, and it fixed itself.** It had sat in `● Error` for two days (3s, `/api/health` 404). The first Git-triggered production deploy replaced it: `● Ready` in 23s, serving `{"ok":true}` with migrations 001–004. **Never diagnosed** — connecting Git resolved it as a side effect, so if it recurs there is no root cause on file. Note it answers **302** publicly: Deployment Protection is on for production as well as previews, so it is reachable through `vercel curl`, not a browser.
 >
-> ⚠️ **NEW watch item — preview Neon branches do not appear to clean themselves up.** `preview/verify-preview-branching` **still existed roughly ten minutes after its Git branch was deleted**, and was removed by hand. Whether cleanup is merely delayed, or tied to deleting the *deployment* rather than the branch, is **not established** — one observation, ten minutes, one branch. **If it never fires, every PR leaves a database branch behind**, which is a slow storage-and-compute leak rather than a visible failure. Worth watching on the next real PR.
+> ⚠️ **NEW watch item — preview Neon branches do not appear to clean themselves up.** `preview/verify-preview-branching` **still existed roughly ten minutes after its Git branch was deleted**, and was removed by hand. Whether cleanup is merely delayed, or tied to deleting the *deployment* rather than the branch, is **not established** — one observation, ten minutes, one branch. **If it never fires, every PR leaves a database branch behind**, which is a slow storage-and-compute leak rather than a visible failure.
+
+> **REFINED 2026-08-16, and the news is good.** Preview branches are **per GIT BRANCH, not per deployment**: three preview deployments of `sp3-federal-ingestion` produced **one** branch, `preview/sp3-federal-ingestion`, created at the first push and merely *updated* on each later one. **Worst case is therefore one stray database branch per PR, not one per push.** Whether it self-cleans is still unestablished — `sp3-federal-ingestion` has not been deleted, so nothing has been asked of it. **Delete that branch and watch: that is the whole experiment.**
 
 **🟢 The repo is public and pushed — 2026-08-15.** `Rapideo/tenderfoot` created, `main` and `sp2-design-system` both pushed, `origin` tracking. **`gh repo create` was not blocked after all** — the earlier classifier refusal did not recur, and `gh` was already authenticated as `Rapideo`. Verified before pushing: `.env` and `.env.local` are gitignored and were never tracked, only `.env.example` ships. **Matt chose to publish the live infra identifiers and the credential-incident write-up as-is**, having been asked specifically about both.
 
