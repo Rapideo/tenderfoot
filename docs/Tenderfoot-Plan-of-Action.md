@@ -341,7 +341,9 @@ This is why 5A and 3I get built as infrastructure in SP5–SP6 rather than as fe
 
 **The rule being applied**, from §4: where Matt's ranking disagrees with the dependency graph, **the dependency graph wins only on hard ordering constraints; everything else defers to his priority.**
 
-**Result: no slice moves.** The sequence SP0 → SP1 → SP1.5 → SP2 → SP3 → SP4 → SP6 → SP7 → SP8 stands as written. Two amendments are applied to *how §6 justifies itself*, one finding is proposed for Matt's ruling, and one tension is recorded so it is not rediscovered.
+~~**Result: no slice moves.**~~ **AMENDED 2026-08-16 — one does.** As written on 08-15 the result was no movement, two amendments to how §6 justifies itself, one finding proposed for Matt, and one tension recorded. **Matt ruled the proposed finding YES on 2026-08-16 (A3 below), so source health moves in front of the GO gate** and the sequence gains a slice.
+
+**Sequence as it now stands:** SP0 → SP1 → SP1.5 → SP2 → SP3 → SP3.5 → **source health** → SP4 → SP6 → SP7 → SP8. Everything else is unchanged.
 
 #### A1 — "Build the shell first" is now a stated dependency, not an inherited score. **Applied.**
 
@@ -359,7 +361,7 @@ Two parked nodes now carry **`Pri 4`** — `Screen 7 : Pipeline Board` (raised f
 
 > `Screen 7` is the clean case: **its number went up and its schedule did not move.** That is the whole purpose of separating the marker from the score, and it is worth noting the two parked nodes were parked for *different causes* — `View 2.2` by the V1 scoring decision (spec §1.1), `Screen 7` by a phase deferral (§9). The marker handled both without amendment.
 
-#### A3 — Source health may need to precede the gate, not follow it. **Proposed — Matt's ruling.**
+#### A3 — Source health precedes the gate. ✅ **RULED YES by Matt, 2026-08-16.**
 
 `Region A.2 : Status Bar` rules **`Pri 4`** — **higher than the shell that contains it and higher than the main header.** Its two children are the Source Health Indicator and Last Run. §6 currently places health alarms in **SP7**, which is *after* SP6's GO / NO-GO.
 
@@ -369,7 +371,22 @@ Two parked nodes now carry **`Pri 4`** — `Screen 7 : Pipeline Board` (raised f
 |---|---|
 | **What is proposed** | A minimal source-health surface — is each source up, when did it last run — lands **before SP6**, not in SP7. Not alarms, not alerting: the read-only indicator `Region A.2` already describes |
 | **Why it is not just moved** | It is a slice-boundary change and therefore Matt's, not Claude's. `View 5.2 : Source Yield` (`Pri 4`) is already in SP3's demo criterion, so part of the surface may exist by then and the increment could be small |
-| **If declined** | SP6's gate stays valid only if source liveness is verified some other way during the measurement window, and that method should be named at SP6 rather than assumed |
+| ~~**If declined**~~ | Not declined. *(For the record, the declined branch would have required SP6 to name how liveness was verified during the measurement window rather than assume it.)* |
+
+##### What the ruling settles, and what it does not — 2026-08-16
+
+**Settled: it lands before SP6, and it is read-only.** Is each source up, when did it last run. **Not alarms, not alerting** — the indicator `Region A.2` already describes, and nothing more.
+
+**The argument got stronger between proposal and ruling, by measurement rather than debate.** The proposal rested on *four* silent-failure instances across three platforms. Since then: a **fifth**, and the first one that was ours — `is_active=false` aimed SAM's adapter at a 5.5-million-record archive and **reported success**, 307 rows, no errors. And the first two live windows returned **530 notices one day and 57 the next**. A GO/NO-GO taken across those two days would differ by an order of magnitude, and **nothing in the sequence could have told that apart from a source that had quietly died.** That is the tension this row describes, observed rather than predicted.
+
+**Not settled: the slice number, and it is deliberately left open.** No dependency forces a position between SP3.5 and SP6 — health needs sightings to exist (SP3, done) and nothing else. Two honest options:
+
+- **Immediately, before SP4.** The cheapest moment: `View 6.2` shipped on 2026-08-16 and **already renders a HEALTH column**, which currently reads `unknown` on all thirteen rows because nothing writes `source.health`. The screen and the empty column are both sitting there.
+- **As SP4.5, after extraction.** Defers it behind the larger slice, which risks the same "we will measure it later" the A3 tension is about.
+
+**Claude recommends the first**, and notes the increment is genuinely small: the column, `last_run_at`, and a rule for setting them. `View 5.2 : Source Yield` already exists as of SP3.5, so part of the surface is built.
+
+⚠️ **`Region A.2 : Status Bar` itself may not be buildable yet.** It is a *shell* region — the bundle renders it as the footer, `4 SOURCES · 1 DEGRADED · 1 ROT SUSPECTED · LAST RUN …`, deep-linking into the registry — and A1 above makes the shell a hard dependency of the views it contains. **The registry column can carry health before the status bar does.**
 
 #### A4 — An `Imp 5` node sits behind the gate. **Recorded, no change proposed.**
 
