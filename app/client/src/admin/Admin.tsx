@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FirmProfile, LegalPosture, SourceRow } from "@tenderfoot/shared";
+import type { FirmProfile, LegalPosture, SourceRow as SourceRowBase } from "@tenderfoot/shared";
 import { StatusDot, type StatusDotState } from "../primitives/StatusDot";
+import { adminHeaders, clearAdminSecret, getAdminSecret } from "./adminSecret";
 import "./Admin.css";
+
+/* SP3.6 T11. app/shared's SourceRow predates migration 006 -- it has no
+ * health_checked_at/health_method/health_note, because no earlier task in
+ * this slice's plan touches app/shared/src/index.ts (see
+ * docs/superpowers/plans/2026-08-18-sp3.6-source-health.md's per-task File
+ * Structure table) and this task's own Files: list names only
+ * Admin.tsx/Admin.css/Admin.test.tsx. Extended locally rather than editing a
+ * package another task owns. `probe_url` is left off -- nothing here reads
+ * it. */
+type SourceRow = SourceRowBase & {
+  health_checked_at: string | null;
+  health_method: string | null;
+  health_note: string | null;
+};
 
 /* View 6.1 + View 6.2 -- Firm Profile and Source Registry.
  *
@@ -30,21 +45,69 @@ import "./Admin.css";
  * open question on Matt's list and this screen is now a reason to answer it.
  */
 
-/* The bundle's four states. `unknown` -- the schema default, and the value
- * every production row actually carries -- is deliberately ABSENT: it falls
- * through to the grey dot below and keeps its own word.
+/* ⚠️ DEFECT FIXED HERE (SP3.6 T11). This map's keys used to be the bundle's
+ * DISPLAY strings ("Healthy", "Rot suspected", ...), but `s.health` is
+ * always the DATABASE enum -- `/api/sources` does `SELECT *`, so the row
+ * carries whatever migration 006's CHECK constraint allows:
+ * ok|failing|rot|excluded|unknown. `HEALTH_TO_DOT[s.health]` was therefore
+ * `undefined` for every row, always, and every source silently rendered the
+ * decorative grey dot regardless of its real health -- masked in production
+ * only because every row happened to read `unknown`, which legitimately
+ * gets that dot too. The moment a probe wrote `ok`/`failing`/`rot`, the
+ * column would have kept showing the decorative dot beside the real word,
+ * defeating "colour is never the only signal" for exactly the rows where it
+ * would have mattered most. Fixed by keying on the enum the column can
+ * actually hold.
  *
- * Collapsing it into "Not ingested" would be a lie with a live counterexample:
- * SAM.gov has been ingested twice and still reads `unknown`, because nothing
- * writes this column yet. "Nobody measured" and "measured, nothing there" are
- * different facts, and a registry that blurs them is telling the operator a
- * source is dead when it is merely unobserved. See app/shared. */
+ * `excluded` and `unknown` are deliberately ABSENT: both fall through to the
+ * decorative grey dot below and keep their own word. `off` is retired from
+ * this map entirely (design spec §12, H1) -- StatusDot's `off` state hard-
+ * codes the accessible name "Not ingested", an ingestion fact that has no
+ * meaning under "health = is it up" (a disabled source can be perfectly
+ * reachable; that fact lives in ENABLED and last_run_at instead). `excluded`
+ * inherits `ea798e9`'s reasoning for `unknown`: nothing measured either
+ * value, so routing them through StatusDot would put "Not ingested" into
+ * the accessibility tree while the visible word avoided the same lie.
+ * StatusDot itself keeps all four states (`StatusDot.tsx`) -- this is only
+ * about which values the HEALTH column maps. */
 const HEALTH_TO_DOT: Record<string, StatusDotState> = {
-  Healthy: "ok",
-  "Rot suspected": "rot",
-  Failing: "failing",
-  "Not ingested": "off",
+  ok: "ok",
+  failing: "failing",
+  rot: "rot",
 };
+
+/* A row may be Checked exactly when the server's own eligibility rule
+ * (health/eligibility.ts) would actually probe it -- mirrored here so a
+ * click never reaches the server just to be silently ignored, which would
+ * look like a broken button rather than an absent one. */
+function isProbeable(s: SourceRow): boolean {
+  return s.legal_posture === "in" && s.platform !== "Manual import";
+}
+
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 31536000],
+  ["month", 2592000],
+  ["week", 604800],
+  ["day", 86400],
+  ["hour", 3600],
+  ["minute", 60],
+];
+const RELATIVE_TIME = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/* A verdict with no timestamp is the stale-green trap (design spec §3):
+ * health is only measured when an operator asks, so a value can be
+ * arbitrarily old and a green dot from three weeks ago would read as
+ * current. This turns `health_checked_at` into words a human can judge at a
+ * glance instead of an ISO string they have to do arithmetic on. */
+function checkedLabel(iso: string): string {
+  const deltaSec = (new Date(iso).getTime() - Date.now()) / 1000;
+  for (const [unit, secondsInUnit] of RELATIVE_UNITS) {
+    if (Math.abs(deltaSec) >= secondsInUnit) {
+      return `checked ${RELATIVE_TIME.format(Math.round(deltaSec / secondsInUnit), unit)}`;
+    }
+  }
+  return `checked ${RELATIVE_TIME.format(Math.round(deltaSec), "second")}`;
+}
 
 /* D2. The bundle's LEGAL column reads "ToS OK" / "Rate-limited" /
  * "EXCLUDED"; the schema stores 'in' / 'manual-only' / 'out'. Those are
@@ -132,6 +195,24 @@ export function Admin() {
     await patchSource(s.id, { legal_posture: next, legal_note: note });
   }
 
+  /* Task 10's secret handling, reused rather than re-invented: prompt once,
+   * hold in sessionStorage, clear on a 401 so a wrong secret does not
+   * silently break every later click. `busy` is shared with the ENABLED
+   * toggle's own use of it -- one row does not want two controls firing at
+   * once. */
+  async function checkHealth(s: SourceRow) {
+    const secret = getAdminSecret();
+    if (!secret) return;
+    setBusy((b) => ({ ...b, [s.id]: true }));
+    const r = await fetch(`/api/admin/health?source=${encodeURIComponent(s.name)}`, {
+      method: "POST",
+      headers: adminHeaders(secret),
+    });
+    if (r.status === 401) clearAdminSecret();
+    setBusy((b) => ({ ...b, [s.id]: false }));
+    await load();
+  }
+
   if (!sources) return <main className="admin">Loading…</main>;
 
   return (
@@ -216,20 +297,40 @@ export function Admin() {
                 ))}
               </select>
               <span className="admin-source__health">
-                {/* D6. StatusDot hard-codes an accessible name per state, and
-                    `off` speaks "Not ingested" -- so routing `unknown`
-                    through it would put the same falsehood in the
-                    accessibility layer that the visible label avoids. An
-                    unmeasured source therefore gets a decorative grey dot
-                    (aria-hidden) and lets the adjacent word carry the
-                    meaning, rather than a fifth StatusDot state invented
-                    from one consumer. */}
-                {HEALTH_TO_DOT[s.health] ? (
-                  <StatusDot state={HEALTH_TO_DOT[s.health]!} />
-                ) : (
-                  <span className="admin-dot-unmeasured" aria-hidden="true" />
-                )}
-                {s.health}
+                <span className="admin-source__health-state">
+                  {/* D6/H1/H2. StatusDot hard-codes an accessible name per
+                      state, and `off` speaks "Not ingested" -- so routing
+                      `excluded` or `unknown` through it would put that
+                      falsehood in the accessibility layer that the visible
+                      label avoids. Both get a decorative grey dot
+                      (aria-hidden) and let the adjacent word carry the
+                      meaning, rather than a fifth StatusDot state invented
+                      from one consumer. */}
+                  {HEALTH_TO_DOT[s.health] ? (
+                    <StatusDot state={HEALTH_TO_DOT[s.health]!} />
+                  ) : (
+                    <span className="admin-dot-unmeasured" aria-hidden="true" />
+                  )}
+                  {s.health}
+                </span>
+                {/* H3. Non-null only -- an unmeasured row shows no timestamp
+                    at all rather than a misleading "never" or a blank. */}
+                {s.health_checked_at !== null ? (
+                  <span className="admin-source__checked">
+                    {checkedLabel(s.health_checked_at)}
+                  </span>
+                ) : null}
+                {isProbeable(s) ? (
+                  <button
+                    type="button"
+                    className="admin-check-btn"
+                    disabled={!!busy[s.id]}
+                    aria-label={`Check ${s.name}`}
+                    onClick={() => checkHealth(s)}
+                  >
+                    Check
+                  </button>
+                ) : null}
               </span>
               <label className="admin-toggle">
                 <input
