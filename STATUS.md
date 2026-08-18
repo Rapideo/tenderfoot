@@ -32,9 +32,11 @@
 
 ## 🔖 RESUME HERE — updated 2026-08-18
 
-**You are on `sp3.6-source-health`, not `main`, and the working tree is clean.** Thirteen tasks implemented — migration 006, the probe subsystem, eligibility rules, the Check and Run controls on `/admin`, and the paperwork (this file, `docs/admin-deviations.md`, the `app/shared` type reconciliation) — twelve reviewed at the time of writing, with the paperwork task under review as this line was written. Gate green at **263 tests / 42 files**, `npm run check` exit 0. **NOT YET MERGED to `main`, and the design spec §10 demo criterion has NOT been run end to end** — that is the next thing to do, before deciding whether to merge. See "START HERE" just below.
+**You are on `main`, SP3.6 IS MERGED, and the working tree is clean.** Merge commit `a110e93` (`--no-ff`, matching this repo's convention), branch `sp3.6-source-health` deleted after merging. Gate green **on the merged result**: **266 tests / 42 files**, `npm run check` exit 0. Thirteen tasks, each implemented and reviewed by a fresh agent; nineteen controller rulings, each recorded with what it costs if wrong; a whole-branch review that returned **Ready to merge** after a five-finding fix wave (`9be2280`).
 
-*(The paragraph this replaced described `main`'s own state on 2026-08-17, before this branch existed — 193 tests / 36 files, gate 94s. That history is accurate for `main` as of that date and is preserved further down this section; it is superseded here only because you are now on a different branch, ahead of it.)*
+⚠️ **The one thing still owed: nobody has clicked the buttons.** The demo criterion's server half passed (see the banner above) but the browser click-through never happened — the Chrome extension was unavailable. See START HERE.
+
+*(The paragraph this replaced described `main`'s state on 2026-08-17, before SP3.6 existed — 193 tests / 36 files, gate 94s. Accurate for that date, preserved further down this section, and superseded here because SP3.6 has since merged into it.)*
 
 ✅ **The local gate's fragility is mostly gone — `corpus.test.ts` went 81.7s → 3.44s (`2cac516`).** ⚠️ **Mostly, not entirely**: the ~73s transaction that caused it is fixed, the 48.3s `DROP SCHEMA` is not. See item 1.
 
@@ -60,15 +62,19 @@
 
 **One honest limit, recorded not fixed.** These are the "latin" subsets (~230 glyphs). An audit of every non-ASCII codepoint the client renders found six: `§ · — …` are covered; **`→` (`Health.tsx`, `Gallery.tsx`) and `▸` (`GatedDrawer.tsx`) are not** and still fall back per-glyph. Not a regression — the bundle loaded these same subsets, so the prototype fell back on exactly these glyphs too.
 
-### ⏭ START HERE — click through /admin once, then decide on merge
+### ⏭ START HERE — click through /admin once; it is the only thing SP3.6 still owes
 
-**SP3.6 is built, reviewed, gate-green, and its endpoints are demo-verified — but nobody has clicked the buttons yet.** The whole-branch review returned **Ready to merge** after a five-finding fix wave (`9be2280`), and the demo criterion's server half passed (see the banner above). What remains is the screen itself: start `npm run dev`, open `/admin`, enter the admin secret once, and confirm the rendered Check and Run controls behave as their tests say they do. Design spec §10 is specific: open `/admin`, enter the admin secret once, click **Check**, confirm the seven eligible rows show real health with a timestamp and the six excluded rows (four posture-excluded, two `Manual import`) read `excluded` — then click **Run** on SAM.gov and watch `last_run_at` move and its counts change. **That has not happened. Do it first, on this branch, before merging to `main`.** If it passes, this is a normal `finishing-a-development-branch` merge; if it surfaces a defect, fix it here rather than carrying it into `main`.
+**SP3.6 is merged and green, but the Check and Run BUTTONS have never been clicked.** Only the endpoints beneath them were exercised, directly, and they passed. Task 11 and 12's tests cover the controls' render and click behaviour against a stubbed fetch — but the assembled screen has not been driven by anything.
+
+Design spec §10 is specific. Run `npm run dev`, open `/admin`, enter the admin secret once (set `ADMIN_SCRAPE_SECRET` first, or the route fails closed with a 503), click **Check**, and confirm the eligible rows show real health with a timestamp while the six excluded rows read `excluded`. Then click **Run** on SAM.gov and watch `last_run_at` move.
+
+⚠️ **Point the dev server at the TEST branch, not production.** Production has NOT had migration 006 applied — it is still 13 rows, all `unknown`, with no `health_checked_at` column — so `/admin` against it would fail on the missing columns. An exported `DATABASE_URL` overrides Node's `--env-file` (verified), so `export DATABASE_URL="$DATABASE_URL_TEST"` before `npm run dev` is the safe way in.
 
 **A3's ruling (2026-08-16: health moves in front of the GO gate) is now built, not just decided.** The CHECK constraint and probe subsystem exist, and once migration 006 is applied to the database `/admin` reads, `View 6.2` stops reading `unknown` on all thirteen rows by default — the screen offers a way to fill the column instead of only rendering it empty. **Not yet true of production**, which this branch has not touched: checked directly, production is still 13 rows, all `unknown`.
 
 ### Then, in rough priority
 
-1. **Merge `sp3.6-source-health` to `main`**, once the demo criterion above has actually been run. Nothing currently blocks it except that step.
+1. **Push `main`** — ✅ done 2026-08-18, see the header. Then decide on the five old slice branches: `sp0-infrastructure`, `sp1-entity-graph`, `sp1.5-postgres-port`, `sp2-design-system`, `sp3-federal-ingestion` are all merged and never deleted, and deleting `sp3-federal-ingestion` also settles the Neon preview-branch cleanup question open since 08-15.
 2. **`corpus.test.ts` — ✅ MOSTLY FIXED 2026-08-17 (`2cac516`), and read the caveat before closing it.**
    - **What was actually wrong** (this entry twice said something false before landing here): not a parallel-load flake, and not vitest's 5s default. `loadCorpus` held **ONE transaction open for ~73s** doing 201 rows × ~4 awaited round trips to a remote Neon branch — and **~400 of those ~800 trips were organisation lookups for 79 distinct organisations**, the same buyer re-resolved on every row that named it.
    - **Fixed by batching**, the third instance of this exact fix here: `import` 12 → 1,038 rows/sec, `merge` 3m36s → 4.07s, and now **`loadCorpus` ~73s → 1.17s (~62×)**. `corpus.test.ts` **81.7s → 3.44s**; the whole gate **~154s → 94s**.
