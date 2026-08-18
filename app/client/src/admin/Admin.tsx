@@ -1,22 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FirmProfile, LegalPosture, SourceRow as SourceRowBase } from "@tenderfoot/shared";
+import type { FirmProfile, LegalPosture, SourceRow } from "@tenderfoot/shared";
 import { StatusDot, type StatusDotState } from "../primitives/StatusDot";
 import { adminHeaders, clearAdminSecret, getAdminSecret } from "./adminSecret";
 import "./Admin.css";
-
-/* SP3.6 T11. app/shared's SourceRow predates migration 006 -- it has no
- * health_checked_at/health_method/health_note, because no earlier task in
- * this slice's plan touches app/shared/src/index.ts (see
- * docs/superpowers/plans/2026-08-18-sp3.6-source-health.md's per-task File
- * Structure table) and this task's own Files: list names only
- * Admin.tsx/Admin.css/Admin.test.tsx. Extended locally rather than editing a
- * package another task owns. `probe_url` is left off -- nothing here reads
- * it. */
-type SourceRow = SourceRowBase & {
-  health_checked_at: string | null;
-  health_method: string | null;
-  health_note: string | null;
-};
 
 /* View 6.1 + View 6.2 -- Firm Profile and Source Registry.
  *

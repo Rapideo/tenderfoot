@@ -70,38 +70,40 @@ export interface PingResponse {
  */
 export type LegalPosture = "in" | "manual-only" | "out";
 
-/* The four-state health vocabulary, corrected at the SP2 sign-off gate on
- * 2026-08-14. There are FOUR states, not three, and "degraded" was never one
- * of them: the bundle reads Healthy / Rot suspected / Failing / Not
- * ingested, and `StatusDot` was renamed to carry these exactly. They run
- * green / yellow / red / grey in plain ascending severity, and the apparent
- * inversion that prompted the review ("rot" yellow, "failing" red) is
- * correct -- a suspicion warns, a confirmation errors. */
-export type SourceHealth = "Healthy" | "Rot suspected" | "Failing" | "Not ingested" | "unknown";
-
-/* ⚠️ `unknown` IS THE FIFTH VALUE, AND IT IS THE ONLY ONE IN PRODUCTION.
+/* StatusDot's FOUR display states were corrected at the SP2 sign-off gate on
+ * 2026-08-14 -- Healthy / Rot suspected / Failing / Not ingested, running
+ * green / yellow / red / grey in plain ascending severity ("rot" warns
+ * yellow because it is a suspicion, "failing" errors red because it is a
+ * confirmation). `StatusDot` still carries exactly these four words today
+ * (see `StatusDot.tsx`) -- nothing here changes that.
  *
- * Found 2026-08-16 by rendering the screen against real data rather than a
- * fixture -- every one of the 13 rows reads "unknown". The column is
- * `health text NOT NULL DEFAULT 'unknown'` with NO CHECK constraint, so the
- * schema's vocabulary and the bundle's four states were never the same set,
- * and nothing anywhere writes this column.
+ * `SourceHealth` USED TO BE that same vocabulary, and that was the defect.
+ * D6/T13 found 2026-08-16, by rendering the screen against real data rather
+ * than a fixture, that `source.health` never held any of those four words:
+ * the column was `health text NOT NULL DEFAULT 'unknown'` and, at the time,
+ * had NO CHECK constraint, so the schema's real vocabulary and the bundle's
+ * display words had never been the same set. Every one of the 13 production
+ * rows read `unknown` -- the tests could not have caught this, because they
+ * supplied the bundle's words as fixtures and so asserted a mapping over
+ * values production does not contain. The same shape of mismatch as
+ * `legal_posture` (see D2 in `docs/admin-deviations.md`).
  *
- * A SECOND VOCABULARY MISMATCH OF THE SAME SHAPE AS legal_posture, and the
- * tests could not have caught it: they supplied the bundle's words as
- * fixtures, so they asserted the mapping worked on values production does
- * not contain.
+ * `unknown` was never collapsed into `Not ingested`, on purpose: "nobody has
+ * measured" and "measured, and it's empty" are different facts, and the
+ * difference was live at the time -- SAM.gov had been ingested twice (530
+ * rows, 57 rows, both 2026-08-16) and still read `unknown`.
  *
- * DO NOT COLLAPSE `unknown` INTO `Not ingested`. They are different facts
- * and the difference is live right now: SAM.gov has been ingested twice
- * (530 rows and 57 rows on 2026-08-16), so rendering it "Not ingested"
- * would be false. `unknown` means nobody has measured; "Not ingested" means
- * measured and empty.
- *
- * WHAT FILLS IT: nothing yet, and that is precisely the work §6.4 A3 moved
- * in front of the GO gate on 2026-08-16 -- a read-only liveness surface.
- * This column is its output. Until then the honest render is a grey dot and
- * the literal word. */
+ * RESOLVED by migration 006 (SP3.6, 2026-08-17): `source_health_valid` now
+ * CHECKs `health` against exactly these five values, and an operator-invoked
+ * probe subsystem writes them --
+ * `docs/superpowers/specs/2026-08-17-source-health-design.md`. `off` /
+ * "Not ingested" is deliberately NOT one of the five (design spec §12, H1):
+ * under "health = is it up", a disabled-but-reachable source has no
+ * ingestion fact to carry here -- that already lives in `enabled` and
+ * `last_run_at`. `StatusDot`'s four states are unchanged by any of this;
+ * this is only about which values the HEALTH COLUMN may hold, which is now
+ * a different, smaller set than what the primitive can render. */
+export type SourceHealth = "ok" | "failing" | "rot" | "excluded" | "unknown";
 
 export interface SourceRow {
   id: number;
@@ -126,14 +128,41 @@ export interface SourceRow {
   verified_facets: unknown;
   since_default: string | null;
   last_run_at: string | null;
-  /* Typed `string`, not `SourceHealth`, and that is deliberate. The column is
-   * NOT NULL so it is never absent -- but it has NO CHECK constraint, so
-   * `SourceHealth` documents the vocabulary anyone SHOULD write while the
-   * type admits what the database can actually hand back. Narrowing this to
-   * the union would be a claim the schema does not enforce, and a consumer
-   * that exhaustively switched on it would be wrong the first time a typo
-   * landed. Render unrecognised values; do not assume them away. */
-  health: string;
+  /* Typed `string`, not `SourceHealth`, was deliberate through 2026-08-17.
+   * The column was NOT NULL so it was never absent -- but it had NO CHECK
+   * constraint, so `SourceHealth` documented the vocabulary anyone SHOULD
+   * write while the type admitted what the database could actually hand
+   * back. Narrowing it would have been a claim the schema did not enforce,
+   * and a consumer that exhaustively switched on it would have been wrong
+   * the first time a typo landed.
+   *
+   * Migration 006 (SP3.6) made that premise false: `source_health_valid` now
+   * CHECKs this column against exactly `SourceHealth`'s five values, so the
+   * union is no longer a claim the schema declines to enforce -- it IS what
+   * the schema enforces. Narrowed accordingly. */
+  health: SourceHealth;
+  /* Migration 006 (SP3.6). A verdict with no timestamp is the stale-green
+   * trap: health is only measured when an operator asks, so a value can be
+   * arbitrarily old and a green dot from three weeks ago would read as
+   * current. NULL on every row nothing has measured (`excluded`, `unknown`)
+   * -- a timestamp on an unprobed row would be the same lie this column
+   * exists to prevent. */
+  health_checked_at: string | null;
+  /* Migration 006 (SP3.6). WHICH probe ran -- `generic-url` and a
+   * platform-specific probe (e.g. `sam`) are different strengths of claim,
+   * and only the latter can ever produce `rot`. NULL wherever
+   * `health_checked_at` is NULL, for the same reason. */
+  health_method: string | null;
+  /* Migration 006 (SP3.6). WHY -- `connect ETIMEDOUT`, `HTTP 503`, `query
+   * returned 0 rows` for a real probe result; the exclusion rule (e.g.
+   * `legal_posture=out`) for an excluded row, so the reason survives even a
+   * read that drops the neighbouring columns. Without it `failing` is a red
+   * dot with no lead. */
+  health_note: string | null;
+  /* Migration 006 (SP3.6). The generic probe's target URL. NULL where a
+   * platform-specific probe exists instead (SAM, USASpending today) -- see
+   * `app/server/src/health/probes/registry.ts`. */
+  probe_url: string | null;
   enabled: boolean;
   source_note: string | null;
 }
@@ -150,7 +179,10 @@ export interface SourceRow {
  *   archive   -> source.archive_depth  "archive: 24mo"
  *   platform  -> source.platform       "Periscope"
  *   tier      -> source.adapter_tier   "T1 API"
- *   health    -> source.health         the four states above
+ *   health    -> source.health         the vocabulary above at the time --
+ *                                       superseded 2026-08-17 by migration
+ *                                       006's five-value DB enum; see
+ *                                       `SourceHealth`
  *
  * ONE MISMATCH, AND IT IS A VOCABULARY MISMATCH, NOT A MISSING COLUMN.
  * The prototype's LEGAL column reads "ToS OK" / "Rate-limited" / "EXCLUDED".
