@@ -17,6 +17,10 @@ const REAL_USASPENDING = readFileSync(
 const respond = (body: string, status = 200) =>
   (async () => new Response(body, { status })) as unknown as typeof fetch;
 
+const unreachable = (async () => {
+  throw new Error("connect ECONNREFUSED");
+}) as unknown as typeof fetch;
+
 test("a real listing payload makes SAM ok", async () => {
   const r = await samProbe({ probeUrl: null, fetchImpl: respond(REAL) });
   expect(r.state).toBe("ok");
@@ -42,6 +46,15 @@ test("a non-2xx is failing", async () => {
 test("an unparseable body is failing rather than a crash", async () => {
   const r = await samProbe({ probeUrl: null, fetchImpl: respond("<html>down</html>") });
   expect(r.state).toBe("failing");
+});
+
+/* The third failure mode named in the global constraints, alongside a
+ * non-2xx and an unparseable body: an unreachable host must not throw out
+ * of the probe. */
+test("an unreachable host is failing, not a thrown exception", async () => {
+  const r = await samProbe({ probeUrl: null, fetchImpl: unreachable });
+  expect(r.state).toBe("failing");
+  expect(r.note).toMatch(/ECONNREFUSED/);
 });
 
 test("both adapter platforms are registered by name", () => {
@@ -73,4 +86,10 @@ test("a non-2xx is failing for USASpending", async () => {
 test("an unparseable body is failing rather than a crash for USASpending", async () => {
   const r = await usaSpendingProbe({ probeUrl: null, fetchImpl: respond("<html>down</html>") });
   expect(r.state).toBe("failing");
+});
+
+test("an unreachable host is failing for USASpending too", async () => {
+  const r = await usaSpendingProbe({ probeUrl: null, fetchImpl: unreachable });
+  expect(r.state).toBe("failing");
+  expect(r.note).toMatch(/ECONNREFUSED/);
 });
