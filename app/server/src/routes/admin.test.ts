@@ -227,28 +227,49 @@ test("an unknown source name is a 404, not an empty success", async () => {
 
 /* Task 6's own review left this open: checkSources({ sourceName: 'GovWin
  * IQ' }) was never tested anywhere, and this route's `?source=` is exactly
- * the shape that reaches it with one name. GovWin IQ's terms forbid contact
- * outright (health/eligibility.ts), and checkSources() refuses it before a
- * request is even constructed -- before any fetch, adapter-backed or
- * otherwise.
+ * the shape that reaches it with one name.
  *
- * WHAT THIS ASSERTS, AND WHY NOT MORE: the production route takes no
- * fetchImpl parameter -- a test-only seam on a live admin route is not a
- * feature the brief asked for, and inventing one to make "no fetch call
- * happened" directly observable would be adding exactly that. So this
- * proves the exclusion via its OBSERVABLE effects instead: an empty
- * `checked` array, and the row's health/health_checked_at exactly as
- * migration 006 left it. That second half carries the real weight -- if a
- * probe HAD run (even a failing one; check.ts's UPDATE fires regardless of
- * outcome), health_checked_at would no longer be null. An unchanged
- * timestamp is therefore evidence the row was never probed, not merely an
- * inference from the response shape.
+ * CORRECTION (review, 2026-08-18): an earlier version of this comment
+ * claimed the assertions below prove "the four-excluded-sources guard Task
+ * 6 built is reachable, unbroken, from the HTTP surface this task adds."
+ * They cannot, and no rearrangement of this test fixes that. GovWin IQ is
+ * dropped by TWO independent filters in check.ts: the legal_posture guard
+ * (the `eligible` filter) and, separately, the generic-url-with-no-
+ * probe_url guard (the `probeable` filter) -- its platform has no adapter
+ * probe, and migration 007 deliberately leaves its probe_url NULL. Delete
+ * the legal_posture filter and this test still passes unchanged: the
+ * second filter drops the row anyway, for an unrelated reason. The two
+ * guards are confounded here; this test cannot tell an intact
+ * legal_posture guard from a deleted one.
  *
- * WHAT THIS DOES NOT PROVE: that no TCP connection was ever opened. That is
- * exactly what health/check.test.ts's fetch-spy test already covers, at the
- * orchestrator level Task 6 owns. This test's job is narrower and
- * different: proving Task 6's guard is actually reachable, unbroken, from
- * the HTTP surface this task adds -- not re-deriving Task 6's own proof. */
+ * The fix health/check.test.ts uses for the identical confound -- seed a
+ * probe_url on the excluded row so a deleted guard would actually fetch it
+ * -- is not available here. That works there because that suite injects a
+ * fetch SPY: a broken guard fetches a fake URL that never leaves the
+ * process. This route calls checkSources() with the real, uninjected
+ * global fetch. Seeding a real probe_url on GovWin IQ here would mean a
+ * broken legal_posture guard fires a genuine outbound request to a source
+ * whose own terms forbid contact -- the test would misbehave in exactly
+ * the way the guard exists to prevent, and only on the failure path. Not
+ * an acceptable trade for any amount of discriminating power, so this
+ * stays undiscriminated at the route level.
+ *
+ * WHAT THIS TEST ACTUALLY PROVES: the route is wired to checkSources(),
+ * honours `?source=`, and does not probe or stamp this row under the
+ * current, intact configuration. It would catch a regression where the
+ * route dropped the sourceName filter entirely (checked would come back
+ * non-empty, carrying other sources' rows).
+ *
+ * WHAT IT DOES NOT PROVE: that the legal_posture exclusion itself is
+ * intact -- confounded by the null-probe_url second lock above.
+ *
+ * WHERE THE REAL PROOF LIVES: health/check.test.ts:82-89, "no request is
+ * constructed for any of the four excluded sources" -- seeds probe_url on
+ * all four excluded rows specifically so a deleted legal_posture guard
+ * would fetch them, and checks that against an injected fetch spy, never a
+ * real network call. That is the orchestrator-level proof Task 6 owns;
+ * this test's narrower job is proving the HTTP surface reaches
+ * checkSources() correctly, not re-deriving Task 6's own guarantee. */
 test("a check for an excluded source performs no probe, and reports it", async () => {
   const before = await one<{ health: string; health_checked_at: string | null }>(
     `SELECT health, health_checked_at FROM source WHERE name = 'GovWin IQ'`,
