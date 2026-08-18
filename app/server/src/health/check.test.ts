@@ -133,11 +133,28 @@ test("the five checkable rows are checked, disabled ones included", async () => 
 /* Companion to Finding 2 of the 2026-08-18 review round: a NULL probe_url
  * must land the row on 'unknown' (never measured), not 'failing' (measured
  * and dead) -- those read identically to an operator and only one of them
- * is true. Proving the state alone would not be enough, because genericUrlProbe
- * itself would ALSO produce 'failing' if it were ever called with a null
- * probeUrl -- the state assertion can't tell "we decided not to probe" apart
- * from "we probed and the probe declined to fire". The fetch-spy half is
- * what tells those apart. */
+ * is true.
+ *
+ * CORRECTION (2026-08-18 re-review): the two halves below do NOT carry equal
+ * weight, and an earlier version of this comment overclaimed the second one.
+ *
+ * The DB-state assertions (not.toContain, health === 'unknown',
+ * health_checked_at === null) are what actually discriminate the fix from
+ * the bug: delete check.ts's `probeable` filter and these rows flow back
+ * into genericUrlProbe, which writes 'failing' with a real timestamp --
+ * this half fails immediately.
+ *
+ * The fetch-spy assertions below CANNOT do the same job, and no
+ * rearrangement of this test makes them able to: the skip filter only
+ * fires when probe_url is null, and a null probe_url is exactly the
+ * condition under which genericUrlProbe already returns 'failing' before
+ * ever calling fetchImpl (generic-url.ts's null check runs first). So the
+ * fetch-spy assertions pass identically whether the filter exists or was
+ * deleted outright -- they are not evidence for THIS fix. What they do
+ * guard is a different, real regression: a future change to
+ * genericUrlProbe that moved the fetch call ahead of its null check would
+ * break them. Kept for that reason, not for discriminating power over the
+ * filter above. */
 test("a generic-probe source with no probe_url is left unknown, and is never fetched", async () => {
   const { calls, impl } = spyFetch();
   const checked = await checkSources({ fetchImpl: impl });
