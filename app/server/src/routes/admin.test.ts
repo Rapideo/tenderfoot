@@ -8,12 +8,23 @@ useTestSchema("test_admin");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { close, one } = await import("../db/index.js");
+const { close, one, run } = await import("../db/index.js");
 const { app } = await import("../index.js");
 
 beforeAll(async () => {
   await migrate(false);
 }, 120000);
+/* TASK 9: importArtifact() requires a `source` row matching the artifact's
+ * run.source_name (import-artifact.ts:53 -- "No source row named ..."). The
+ * `fake` adapter deliberately has NO seeded row: registry.ts forbids adding
+ * one to 003_seed_source_registry.sql, and that prohibition is about the
+ * SHIPPED seed, not a test fixture. This suite adds one, in the test schema
+ * only, so POST /run's import phase has a row to resolve against when it
+ * exercises the fake adapter -- the only adapter this suite can run without
+ * a real network call. */
+beforeAll(async () => {
+  await run(`INSERT INTO source (name) VALUES ('fake')`);
+});
 afterAll(async () => {
   await close();
 });
@@ -286,4 +297,115 @@ test("a check for an excluded source performs no probe, and reports it", async (
     `SELECT health, health_checked_at FROM source WHERE name = 'GovWin IQ'`,
   );
   expect(after).toEqual(before);
+});
+
+/* ---- TASK 9: POST /api/admin/run ----------------------------------------
+ * D5, finally housed. Scrape, import and merge in one request, so a click
+ * on "Run" does not hand the operator a SQLite file to import by hand.
+ * Inherits requireAdminSecret from `admin.use`, same as /scrape and
+ * /health -- covered once here, not per-route again. */
+
+test("POST /api/admin/run requires the secret", async () => {
+  const res = await post({}, {}, "/api/admin/run?source=fake&since=2026-08-01");
+  expect(res.status).toBe(401);
+});
+
+/* Global constraint: an unknown adapter key is a 400 naming the known keys,
+ * not a 500 -- the same shape /scrape already gives an unknown body.source,
+ * asserted here at the route this task adds. */
+test("an unknown adapter key is refused with 400, naming the known keys", async () => {
+  const res = await post({}, undefined, "/api/admin/run?source=nope&since=2026-08-01");
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as { error: string };
+  expect(body.error).toMatch(/nope/);
+  expect(body.error).toMatch(/fake/);
+});
+
+/* CONTROLLER RULING (overrides the task brief): the brief's own version of
+ * this test queried `source WHERE name = 'SAM.gov'` while running the
+ * `fake` adapter -- two unrelated rows. That would still "pass" (the
+ * response's freshly stamped `last_run_at` is never equal to SAM.gov's
+ * NULL one), but it would pass for the wrong reason: it proves nothing
+ * about whether the row this run actually touches got written. `fake`'s
+ * registry entry carries `sourceName: null` on purpose (registry.ts), and
+ * the route stamps `entry.sourceName ?? key` -- so the row that must move
+ * is 'fake', not 'SAM.gov'. Querying the real target row is what makes this
+ * test capable of catching a `WHERE name = NULL` regression (matches zero
+ * rows, stamp silently no-ops) instead of passing vacuously either way. */
+test("a run scrapes, imports, merges and stamps last_run_at on the resolved row", async () => {
+  const before = await one<{ last_run_at: string | null }>(
+    `SELECT last_run_at FROM source WHERE name = 'fake'`,
+  );
+
+  const res = await post({}, undefined, "/api/admin/run?source=fake&since=2026-08-01");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as {
+    rows: number;
+    imported: number;
+    merged: number;
+    last_run_at: string;
+  };
+  expect(body.rows).toBeGreaterThan(0);
+  expect(body.imported).toBeGreaterThan(0);
+  expect(body.last_run_at).not.toBe(before?.last_run_at ?? null);
+
+  /* The proof that matters: re-read the row from the database, independent
+   * of whatever the handler chose to put in the response body. */
+  const after = await one<{ last_run_at: string | null }>(
+    `SELECT last_run_at FROM source WHERE name = 'fake'`,
+  );
+  expect(after?.last_run_at).toBe(body.last_run_at);
+  expect(after?.last_run_at).not.toBe(before?.last_run_at ?? null);
+});
+
+/* The artifact is ephemeral by design -- that is what keeps SP4's blob
+ * decision parked. If it leaks, the temp directory grows forever. Split
+ * into a success case and a failure case (global constraint: cleanup on
+ * EVERY path, not just the happy one) rather than one combined test, so a
+ * regression that breaks cleanup on only one of the two paths still fails
+ * loudly instead of being averaged away by the other passing.
+ *
+ * `existsSync` gates the leak check rather than a bare `readdirSync` diff,
+ * matching the pre-stream-failure test above (line ~166): verified
+ * directly, repeatedly, on this exact suite on Windows that `readdirSync`
+ * on the OS temp dir is not immediately consistent with a directory removed
+ * moments earlier in the same process. A stat-confirmed survivor is a real
+ * leak; a listing-only "new" entry that no longer exists on disk is not. */
+test("the temp artifact directory is removed after a successful run", async () => {
+  const before = new Set(readdirSync(tmpdir()).filter((n) => n.startsWith("tf-run-")));
+  const res = await post({}, undefined, "/api/admin/run?source=fake&since=2026-08-01");
+  expect(res.status).toBe(200);
+  await res.json(); // drain the response body
+
+  const after = readdirSync(tmpdir()).filter((n) => n.startsWith("tf-run-") && !before.has(n));
+  const leaked = after.filter((n) => existsSync(join(tmpdir(), n)));
+  expect(leaked).toEqual([]);
+});
+
+test("the temp artifact directory is removed even when the scrape throws", async () => {
+  const { ADAPTERS } = await import("../scrape/adapters/registry.js");
+  /* A throwaway adapter, same pattern as the pre-stream-failure test above
+   * -- registered directly on the shared ADAPTERS map and removed in
+   * `finally`. `sourceName: null` exempts it from resolve-source.ts's DB
+   * lookup, same as `fake`, so this run reaches runScrape() (and fails
+   * there) rather than being turned away earlier by source resolution. */
+  ADAPTERS["run-breaks"] = {
+    sourceName: null,
+    make: () => ({
+      name: "run-breaks",
+      fetchListing: () => Promise.reject(new Error("simulated adapter network failure")),
+    }),
+  };
+
+  const before = new Set(readdirSync(tmpdir()).filter((n) => n.startsWith("tf-run-")));
+  try {
+    const res = await post({}, undefined, "/api/admin/run?source=run-breaks&since=2026-08-01");
+    expect(res.status).toBe(500);
+
+    const after = readdirSync(tmpdir()).filter((n) => n.startsWith("tf-run-") && !before.has(n));
+    const leaked = after.filter((n) => existsSync(join(tmpdir(), n)));
+    expect(leaked).toEqual([]);
+  } finally {
+    delete ADAPTERS["run-breaks"];
+  }
 });

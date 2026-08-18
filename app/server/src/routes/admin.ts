@@ -42,7 +42,9 @@ import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
 import { resolveSource } from "../scrape/resolve-source.js";
 import { checkSources } from "../health/check.js";
-import { one } from "../db/index.js";
+import { one, run as dbRun } from "../db/index.js";
+import { importArtifact } from "../ingest/import-artifact.js";
+import { mergeSightings } from "../merge/merge.js";
 
 /* Below Vercel's 300s ceiling with margin for the response to flush. */
 const HANDLER_BUDGET_MS = 240_000;
@@ -214,5 +216,119 @@ admin.post(
       }
     }
     res.json({ checked: await checkSources({ sourceName }) });
+  }),
+);
+
+/* SP3.6 T9. D5, FINALLY HOUSED: §9.6 ruled the manual scrape trigger lives
+ * on the Source Registry screen, and it was never built. POST /scrape
+ * above streams the .db back -- deliberately, to defer the blob-storage
+ * decision to SP4 -- and that shape is right for a terminal operator and
+ * wrong for a button: clicking "Run" and receiving a SQLite download is
+ * not "run a scrape" to a person, they would still have to `npm run
+ * import` and `npm run merge` by hand. This route does scrape, import and
+ * merge as one action.
+ *
+ * WHY THIS STILL NEEDS NO BLOB DECISION: the artifact only has to survive
+ * WITHIN THIS REQUEST -- runScrape() writes it, importArtifact() reads it,
+ * both inside the one `try` below -- so a temp file removed in `finally`
+ * is the whole storage story. SP4's blob-provider decision stays exactly
+ * as parked as it was for /scrape. Nothing persists past the response.
+ *
+ * Inherits requireAdminSecret from `admin.use` above, same as /scrape and
+ * /health -- no auth of its own.
+ *
+ * SOURCE RESOLUTION mirrors /scrape's FIX 1 / FIX 2 exactly, for the same
+ * reason: resolveSource() turns the CLI ergonomic ('sam') into the
+ * canonical source.name row ('SAM.gov') up front, before any fetching, and
+ * refuses a disabled source. `request.sourceName` is set from the result
+ * so runScrape() stamps the ARTIFACT with the name import-artifact.ts can
+ * actually resolve, not the short key it has never heard of. */
+admin.post(
+  "/run",
+  asyncHandler(async (req, res) => {
+    const key = String(req.query.source ?? "");
+    const entry = ADAPTERS[key];
+    if (!entry) {
+      res.status(400).json({
+        error: `No adapter named '${key}'. Known: ${Object.keys(ADAPTERS).join(", ")}.`,
+      });
+      return;
+    }
+
+    let request: RunRequest;
+    try {
+      request = validateRun({
+        source: key,
+        since: String(req.query.since ?? ""),
+        depth: "listing",
+      });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+      return;
+    }
+    /* Same ceiling as /scrape, same reason (below Vercel's 300s function
+     * limit, with margin for the response to flush) -- and this route does
+     * strictly MORE work per request than /scrape (scrape, then import,
+     * then merge), so the margin matters at least as much here. */
+    request.budgetMs = HANDLER_BUDGET_MS;
+
+    try {
+      const resolved = await resolveSource(key);
+      request.sourceName = resolved.sourceName;
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+      return;
+    }
+
+    /* Same shape as /scrape's own try/finally (see its FIX ROUND 1 comment
+     * above for the full argument): the try starts here, wrapping
+     * `runScrape` AND the mkdtempSync directory it writes into, so a
+     * network failure, an import failure or a merge failure all still
+     * reach the `finally` below and the directory never survives the
+     * request. */
+    const dir = mkdtempSync(join(tmpdir(), "tf-run-"));
+    try {
+      const out = join(dir, `run-${key}.db`);
+      const result = await runScrape(request, entry.make(), out);
+      const imported = await importArtifact(out);
+      const merged = await mergeSightings();
+
+      /* CONTROLLER RULING: `entry.sourceName ?? key`, not
+       * `resolved.sourceName` and not bare `entry.sourceName`. `fake`
+       * carries `sourceName: null` in the registry on purpose (registry.ts)
+       * -- it is the one adapter this route can be exercised against
+       * without a network, and it has no source row of its own. Stamping
+       * against bare `entry.sourceName` would run `WHERE name = NULL`,
+       * match zero rows, and silently do nothing -- exactly the kind of
+       * failure a test could pass against vacuously, since NULL is also
+       * not equal to a fresh timestamp. Falling back to the registry key
+       * makes the write real for `fake` and leaves every resolved source
+       * (SAM.gov, USASpending) keyed exactly as it already was. */
+      const stamped = new Date().toISOString();
+      await dbRun(`UPDATE source SET last_run_at = $1 WHERE name = $2`, [
+        stamped,
+        entry.sourceName ?? key,
+      ]);
+
+      /* Field names are the real ones, not the brief's guesses: ImportResult
+       * is { imported, skipped, ingestedThrough } (import-artifact.ts) and
+       * MergeResult is { created, updated, linked, orgsAttached }
+       * (merge/merge.ts). `merged` in the response body is `created` --
+       * new canonical solicitations -- because that is the count an
+       * operator watching "Run" actually wants to see move; `updated` and
+       * `linked` ride along for anyone who wants the fuller picture. */
+      res.json({
+        rows: result.rows,
+        imported: imported.imported,
+        skipped: imported.skipped,
+        ingestedThrough: imported.ingestedThrough,
+        merged: merged.created,
+        updated: merged.updated,
+        linked: merged.linked,
+        last_run_at: stamped,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }),
 );
