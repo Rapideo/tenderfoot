@@ -41,6 +41,8 @@ import { validateRun, type RunRequest } from "../scrape/contract.js";
 import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
 import { resolveSource } from "../scrape/resolve-source.js";
+import { checkSources } from "../health/check.js";
+import { one } from "../db/index.js";
 
 /* Below Vercel's 300s ceiling with margin for the response to flush. */
 const HANDLER_BUDGET_MS = 240_000;
@@ -176,5 +178,41 @@ admin.post(
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  }),
+);
+
+/* SP3.6 T8. Operator-invoked only -- there is deliberately no schedule (a
+ * timed health check is exactly the unattended ingestion §9.6 defers to
+ * SP7). Inherits requireAdminSecret from `admin.use` above; no auth of its
+ * own.
+ *
+ * The actual eligibility/probe logic all lives in checkSources() (Task 6):
+ * this route's only job is turning a query string into its arguments and an
+ * unknown source name into a 404 rather than a quiet, empty 200.
+ *
+ * `?source=` names a `source.name` row (e.g. 'SAM.gov'), not a registry key
+ * -- there is no adapter-key indirection to resolve here the way
+ * resolveSource() does for /scrape, because checkSources() already takes a
+ * bare source name and does its own lookup.
+ *
+ * WHY THE 404: a missing name returning `{ checked: [] }` would be
+ * indistinguishable from "checked it, found nothing to report" -- exactly
+ * the ambiguous-empty-response shape this project keeps getting bitten by.
+ * The existence check below is a second SELECT beyond the one checkSources()
+ * runs internally, which is a deliberately cheap price for that
+ * distinction: it runs before any probe is even considered, on the
+ * unresolved name, and is a no-op (never fires) on the no-source path. */
+admin.post(
+  "/health",
+  asyncHandler(async (req, res) => {
+    const sourceName = typeof req.query.source === "string" ? req.query.source : undefined;
+    if (sourceName) {
+      const row = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [sourceName]);
+      if (!row) {
+        res.status(404).json({ error: `No source named '${sourceName}'.` });
+        return;
+      }
+    }
+    res.json({ checked: await checkSources({ sourceName }) });
   }),
 );

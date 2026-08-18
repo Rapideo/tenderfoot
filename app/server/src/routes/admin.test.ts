@@ -8,7 +8,7 @@ useTestSchema("test_admin");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { close } = await import("../db/index.js");
+const { close, one } = await import("../db/index.js");
 const { app } = await import("../index.js");
 
 beforeAll(async () => {
@@ -37,11 +37,15 @@ beforeEach(() => {
  * `.error` on it fails typecheck while vitest passes -- the same split
  * routes.test.ts already documents and fixes. Cast at the call site rather
  * than typing the whole response; nothing else here needs the shape. */
-async function post(body: unknown, headers: Record<string, string> = { "X-Admin-Secret": ADMIN_SECRET }) {
+async function post(
+  body: unknown,
+  headers: Record<string, string> = { "X-Admin-Secret": ADMIN_SECRET },
+  path = "/api/admin/scrape",
+) {
   const server = app.listen(0);
   const port = (server.address() as any).port;
   try {
-    return await fetch(`http://127.0.0.1:${port}/api/admin/scrape`, {
+    return await fetch(`http://127.0.0.1:${port}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
@@ -182,4 +186,83 @@ test("a pre-stream failure (adapter throws) does not leak the temp directory", a
   } finally {
     delete ADAPTERS.breaks;
   }
+});
+
+/* ---- TASK 8: POST /api/admin/health -------------------------------------
+ * Inherits requireAdminSecret from `admin.use` above, same as /scrape --
+ * covered once here, not per-route again, since the gate itself is already
+ * fully exercised by the three tests near the top of this file. */
+
+test("POST /api/admin/health requires the secret", async () => {
+  const res = await post({}, {}, "/api/admin/health");
+  expect(res.status).toBe(401);
+});
+
+/* DEVIATION from the task brief's own example, which queried `source=
+ * SAM.gov`: migration 007 gave SAM.gov (and every other 'in'-posture,
+ * probeable source) a REAL probe_url, so calling checkSources() for it here
+ * would make a genuine outbound HTTP request from this test -- forbidden.
+ * checkSources() is exercised against a fetch spy already, at the
+ * orchestrator level, by health/check.test.ts; this route's own job is
+ * turning `?source=` into an argument and a missing row into a 404, not
+ * re-proving the orchestrator's network behaviour.
+ *
+ * Kentucky eMARS VSS is the one real source name this suite can query with
+ * zero network risk: it is 'in'-posture (so this is NOT the same code path
+ * as the exclusion test below), but its platform ('CGI Advantage VSS') has
+ * no adapter probe and 007 deliberately leaves its probe_url NULL (see that
+ * migration's own comment) -- so check.ts's `probeable` filter drops it
+ * before any fetch, and the row comes back in an empty `checked` array. */
+test("POST /api/admin/health returns the rows it checked", async () => {
+  const res = await post({}, undefined, "/api/admin/health?source=Kentucky%20eMARS%20VSS");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { checked: unknown[] };
+  expect(Array.isArray(body.checked)).toBe(true);
+});
+
+test("an unknown source name is a 404, not an empty success", async () => {
+  const res = await post({}, undefined, "/api/admin/health?source=Nope");
+  expect(res.status).toBe(404);
+});
+
+/* Task 6's own review left this open: checkSources({ sourceName: 'GovWin
+ * IQ' }) was never tested anywhere, and this route's `?source=` is exactly
+ * the shape that reaches it with one name. GovWin IQ's terms forbid contact
+ * outright (health/eligibility.ts), and checkSources() refuses it before a
+ * request is even constructed -- before any fetch, adapter-backed or
+ * otherwise.
+ *
+ * WHAT THIS ASSERTS, AND WHY NOT MORE: the production route takes no
+ * fetchImpl parameter -- a test-only seam on a live admin route is not a
+ * feature the brief asked for, and inventing one to make "no fetch call
+ * happened" directly observable would be adding exactly that. So this
+ * proves the exclusion via its OBSERVABLE effects instead: an empty
+ * `checked` array, and the row's health/health_checked_at exactly as
+ * migration 006 left it. That second half carries the real weight -- if a
+ * probe HAD run (even a failing one; check.ts's UPDATE fires regardless of
+ * outcome), health_checked_at would no longer be null. An unchanged
+ * timestamp is therefore evidence the row was never probed, not merely an
+ * inference from the response shape.
+ *
+ * WHAT THIS DOES NOT PROVE: that no TCP connection was ever opened. That is
+ * exactly what health/check.test.ts's fetch-spy test already covers, at the
+ * orchestrator level Task 6 owns. This test's job is narrower and
+ * different: proving Task 6's guard is actually reachable, unbroken, from
+ * the HTTP surface this task adds -- not re-deriving Task 6's own proof. */
+test("a check for an excluded source performs no probe, and reports it", async () => {
+  const before = await one<{ health: string; health_checked_at: string | null }>(
+    `SELECT health, health_checked_at FROM source WHERE name = 'GovWin IQ'`,
+  );
+  expect(before?.health, "fixture assumption: excluded rows start unstamped").toBe("excluded");
+  expect(before?.health_checked_at ?? null).toBeNull();
+
+  const res = await post({}, undefined, "/api/admin/health?source=GovWin%20IQ");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { checked: unknown[] };
+  expect(body.checked).toEqual([]);
+
+  const after = await one<{ health: string; health_checked_at: string | null }>(
+    `SELECT health, health_checked_at FROM source WHERE name = 'GovWin IQ'`,
+  );
+  expect(after).toEqual(before);
 });
