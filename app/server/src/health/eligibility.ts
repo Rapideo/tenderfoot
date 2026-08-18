@@ -19,7 +19,8 @@ export interface EligibilitySubject {
   platform: string | null;
 }
 
-export type Eligibility = { probeable: true } | { probeable: false; reason: string };
+export type Exclusion = { probeable: false; reason: string };
+export type Eligibility = { probeable: true } | Exclusion;
 
 export function probeEligibility(s: EligibilitySubject): Eligibility {
   /* GovWin IQ, BidNet Direct, BidPrime ('out') and Ohio OhioBuys
