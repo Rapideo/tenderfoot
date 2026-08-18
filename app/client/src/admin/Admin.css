@@ -199,6 +199,25 @@
   cursor: default;
 }
 
+/* T12/D5. Same "plain, undesigned" posture as the Check button above --
+ * kept as its own class, not shared with `.admin-check-btn`, because the
+ * two controls carry different weight (Run scrapes/imports/merges; Check
+ * only probes) and a future design pass may want to tell them apart. */
+.admin-run-btn {
+  font: 500 10px/1 "IBM Plex Mono";
+  color: var(--text-tertiary);
+  background: var(--ground-recess-2);
+  border: 1px solid var(--line-control-2);
+  border-radius: 4px;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.admin-run-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* D2. The bundle's legal cell is a static pill:
  *   font:500 10px/1 'IBM Plex Mono';color:{{legalColor}};
  *   background:{{legalBg}};padding:5px 6px;border-radius:4px;
@@ -231,6 +250,17 @@
 .admin-pill--bad {
   color: var(--signal-neg);
   background: var(--signal-neg-wash);
+}
+
+/* T12. Was a bare <label>; now a column, same reason HEALTH became one in
+ * T11 -- this cell can carry the toggle AND, on an `in`-posture row, the
+ * Run control, and stacking is the smallest change that fits without
+ * touching the row's shared grid-template-columns. */
+.admin-source__enabled {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 /* D1. No bundle evidence at all -- the on/off lever the SVRC calls the only

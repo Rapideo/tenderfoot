@@ -265,17 +265,41 @@ admin.post(
  * already correct. */
 const RUN_HANDLER_BUDGET_MS = 180_000;
 
+/* CONTROLLER RULING (task-12, closing a gap the brief left open). This route
+ * takes the CLI adapter key ('sam', 'usaspending') -- but the /admin screen
+ * only has `source.name` ("SAM.gov"), never the short key, and the client
+ * must NOT hold a name->key map: this module's own header explains why
+ * ("two registries drift -- add a source to one and the other silently
+ * falls behind"). A map on the client would be exactly that second registry.
+ *
+ * So the resolution happens here instead, server-side, against the one
+ * ADAPTERS map that already exists: `?source=` may be either spelling.
+ * A key match is tried FIRST and, if found, is authoritative -- this is
+ * what keeps the CLI and every existing key-spelling test byte-for-byte
+ * unaffected. Only when no key matches does this fall back to a
+ * `sourceName` match, so a caller sending the canonical name gets exactly
+ * the same downstream behaviour (resolveSource, runScrape, the stamp) as
+ * one sending the key. If NEITHER matches, this keeps the existing 400
+ * naming the known keys -- there is nothing else useful to fall back to. */
+function resolveAdapterKey(source: string): string | undefined {
+  if (ADAPTERS[source]) return source;
+  const bySourceName = Object.entries(ADAPTERS).find(([, e]) => e.sourceName === source);
+  return bySourceName?.[0];
+}
+
 admin.post(
   "/run",
   asyncHandler(async (req, res) => {
-    const key = String(req.query.source ?? "");
-    const entry = ADAPTERS[key];
-    if (!entry) {
+    const requested = String(req.query.source ?? "");
+    const key = resolveAdapterKey(requested);
+    if (key === undefined) {
       res.status(400).json({
-        error: `No adapter named '${key}'. Known: ${Object.keys(ADAPTERS).join(", ")}.`,
+        error: `No adapter named '${requested}'. Known: ${Object.keys(ADAPTERS).join(", ")}.`,
       });
       return;
     }
+    // resolveAdapterKey only ever returns a key that is present in ADAPTERS.
+    const entry = ADAPTERS[key]!;
 
     let request: RunRequest;
     try {

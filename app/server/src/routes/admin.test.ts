@@ -3,6 +3,7 @@ import { readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useTestSchema, resetSchema } from "../db/testdb.js";
+import { fakeAdapter } from "../scrape/adapters/fake.js";
 
 useTestSchema("test_admin");
 await resetSchema();
@@ -356,6 +357,60 @@ test("a run scrapes, imports, merges and stamps last_run_at on the resolved row"
   );
   expect(after?.last_run_at).toBe(body.last_run_at);
   expect(after?.last_run_at).not.toBe(before?.last_run_at ?? null);
+});
+
+/* TASK 12 GAP: the brief has the client call `?source=<key>` (the CLI
+ * ergonomic, 'sam'), but the /admin screen only ever has `source.name`
+ * ("SAM.gov") -- and per registry.ts's own header, the client must not hold
+ * a name->key map ("two registries drift"). CONTROLLER RULING: the route
+ * resolves a canonical source.name to its ADAPTERS key itself. This proves
+ * that resolution reaches the exact same machinery (scrape, import, merge,
+ * the stamp) as the key spelling -- registered directly on the shared
+ * ADAPTERS map, same pattern as the 'run-breaks' fixture below, so this
+ * needs no real network call. `entry.sourceName` is non-null here (unlike
+ * `fake`), so resolveSource() DOES query the `source` table for it -- the
+ * inserted row must exist and be enabled for that check to pass. */
+test("a run resolves a canonical source name (not just the adapter key) to its adapter", async () => {
+  const { ADAPTERS } = await import("../scrape/adapters/registry.js");
+  const NAME = "Name Fixture Source";
+  ADAPTERS["name-fixture"] = { sourceName: NAME, make: () => fakeAdapter(5, 3) };
+  await run(`INSERT INTO source (name, enabled) VALUES ($1, true)`, [NAME]);
+
+  try {
+    const before = await one<{ last_run_at: string | null }>(
+      `SELECT last_run_at FROM source WHERE name = $1`,
+      [NAME],
+    );
+
+    const res = await post(
+      {},
+      undefined,
+      `/api/admin/run?source=${encodeURIComponent(NAME)}&since=2026-08-01`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { last_run_at: string };
+
+    /* The proof that matters: the ROW NAMED BY THE QUERY, re-read from the
+     * database independent of the response body -- this is what a route
+     * that still only accepted the short key ('name-fixture' is not a key
+     * ADAPTERS has, so it would 400 instead) cannot pass. */
+    const after = await one<{ last_run_at: string | null }>(
+      `SELECT last_run_at FROM source WHERE name = $1`,
+      [NAME],
+    );
+    expect(after?.last_run_at).toBe(body.last_run_at);
+    expect(after?.last_run_at).not.toBe(before?.last_run_at ?? null);
+  } finally {
+    delete ADAPTERS["name-fixture"];
+    /* The inserted `source` row is deliberately NOT deleted here, same as
+     * the shared 'fake' row seeded in beforeAll: importArtifact() just
+     * attributed real sighting rows to it (sighting.source_id), so a
+     * DELETE would fail on sighting_source_id_fkey (verified directly --
+     * removing it makes this test fail with exactly that FK error). Every
+     * other test in this file scopes its own SELECTs to a specific name
+     * (grep FROM source above), so this row surviving the rest of the
+     * suite is harmless, same as 'fake' surviving it already. */
+  }
 });
 
 /* The artifact is ephemeral by design -- that is what keeps SP4's blob

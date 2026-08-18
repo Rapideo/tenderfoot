@@ -416,3 +416,97 @@ test("a 401 from Check clears the stored admin secret", async () => {
 
   await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
 });
+
+/* ---- TASK 12: the Run control -------------------------------------------
+ *
+ * D5, finally housed on the screen: POST /api/admin/run (Task 9) already
+ * does scrape+import+merge in one request. This is the client-side lever.
+ */
+
+test("a source with an adapter offers a Run control", async () => {
+  renderAdminWith([{ ...baseSource, name: "SAM.gov", platform: "SAM", enabled: true }]);
+  expect(await screen.findByRole("button", { name: /run sam\.gov/i })).toBeTruthy();
+});
+
+/* Disabled with a stated reason, never hidden -- an absent control is a
+ * mystery, a disabled one is an explanation. Only SAM and USASpending have
+ * adapters today (scrape/adapters/registry.ts). */
+test("a source with no adapter shows Run disabled with a reason", async () => {
+  renderAdminWith([{ ...baseSource, name: "Illinois BidBuy", platform: "Periscope S2G" }]);
+  const btn = await screen.findByRole("button", { name: /run illinois bidbuy/i });
+  expect(btn).toHaveProperty("disabled", true);
+  expect(btn.getAttribute("title")).toMatch(/no adapter/i);
+});
+
+test("an excluded source offers no Run control at all", async () => {
+  renderAdminWith([{ ...baseSource, name: "GovWin IQ", legal_posture: "out" }]);
+  await screen.findByText(/GovWin/);
+  expect(screen.queryByRole("button", { name: /run govwin/i })).toBeNull();
+});
+
+/* The control's actual job: POST the right URL (source name, not a key --
+ * the route resolves that server-side per the task-12 ruling) with the
+ * ingestion window and the admin secret, and refresh the row when the run
+ * completes so last_run_at and the counts move. A test that only checked
+ * the button existed would pass even if the click did nothing. */
+test("Run POSTs to /api/admin/run with the source name, window and secret, and reloads when it completes", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  const posts: { url: string; headers: Record<string, string> }[] = [];
+  let sourcesLoaded = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts.push({ url: String(url), headers: (init.headers ?? {}) as Record<string, string> });
+        return { ok: true, status: 200, json: async () => ({ last_run_at: "2026-08-18T12:00:00.000Z" }) };
+      }
+      if (String(url).includes("/api/sources")) sourcesLoaded++;
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources")
+            ? [{ ...baseSource, name: "SAM.gov", platform: "SAM", since_default: "P7D" }]
+            : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /run sam\.gov/i });
+  btn.click();
+
+  await waitFor(() => expect(posts.length).toBe(1));
+  expect(posts[0]!.url).toBe("/api/admin/run?source=SAM.gov&since=P7D");
+  expect(posts[0]!.headers["X-Admin-Secret"]).toBe("s3cret");
+  /* The mount's own load, plus the reload Run triggers on completion. */
+  await waitFor(() => expect(sourcesLoaded).toBe(2));
+});
+
+/* clearAdminSecret() on 401 -- same rule as Check, adminSecret.ts's own:
+ * a wrong secret must not silently break every later click. */
+test("a 401 from Run clears the stored admin secret", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "wrong-secret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return { ok: false, status: 401, json: async () => ({ error: "bad secret" }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources")
+            ? [{ ...baseSource, name: "SAM.gov", platform: "SAM" }]
+            : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /run sam\.gov/i });
+  btn.click();
+
+  await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
+});
