@@ -111,11 +111,52 @@ test("a probed source gets a state, a method, and a checked-at", async () => {
   expect(row!.health_checked_at).not.toBeNull();
 });
 
-/* Coverage is the reason health is a probe and not a derivation. */
-test("all seven probeable rows are checked, disabled ones included", async () => {
+/* Coverage is the reason health is a probe and not a derivation. Asserting
+ * the NAMES, not just a count, is deliberate (reviewer finding,
+ * 2026-08-18): a bare toHaveLength(7) would pass just as happily if a
+ * different set of seven rows got probed. Five, not seven: Kentucky eMARS
+ * VSS and Michigan SIGMA VSS both fall back to genericUrlProbe with no
+ * probe_url (007 leaves them NULL on purpose -- see that migration's
+ * comment) and are skipped rather than probed -- see the next test. */
+test("the five checkable rows are checked, disabled ones included", async () => {
   const { impl } = spyFetch();
   const checked = await checkSources({ fetchImpl: impl });
-  expect(checked).toHaveLength(7);
+  expect(checked.map((c) => c.name).sort()).toEqual([
+    "Illinois BidBuy",
+    "Indiana EDS contract register",
+    "Indiana IDOA solicitations",
+    "SAM.gov",
+    "USASpending",
+  ]);
+});
+
+/* Companion to Finding 2 of the 2026-08-18 review round: a NULL probe_url
+ * must land the row on 'unknown' (never measured), not 'failing' (measured
+ * and dead) -- those read identically to an operator and only one of them
+ * is true. Proving the state alone would not be enough, because genericUrlProbe
+ * itself would ALSO produce 'failing' if it were ever called with a null
+ * probeUrl -- the state assertion can't tell "we decided not to probe" apart
+ * from "we probed and the probe declined to fire". The fetch-spy half is
+ * what tells those apart. */
+test("a generic-probe source with no probe_url is left unknown, and is never fetched", async () => {
+  const { calls, impl } = spyFetch();
+  const checked = await checkSources({ fetchImpl: impl });
+
+  expect(checked.map((c) => c.name)).not.toContain("Kentucky eMARS VSS");
+  expect(checked.map((c) => c.name)).not.toContain("Michigan SIGMA VSS");
+
+  const rows = await all<{ name: string; health: string; health_checked_at: string | null }>(
+    `SELECT name, health, health_checked_at FROM source
+      WHERE name IN ('Kentucky eMARS VSS', 'Michigan SIGMA VSS')`,
+  );
+  for (const r of rows) {
+    expect(r.health, r.name).toBe("unknown");
+    expect(r.health_checked_at, `${r.name} was stamped`).toBeNull();
+  }
+
+  for (const f of ["ky.gov", "michigan.gov"]) {
+    expect(calls.filter((c) => c.toLowerCase().includes(f)), `probed ${f}`).toEqual([]);
+  }
 });
 
 test("one failing source does not prevent the others being written", async () => {

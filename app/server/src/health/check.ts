@@ -41,8 +41,28 @@ export async function checkSources(
    * touched by the UPDATE below, so that stays true by construction. */
   const eligible = rows.filter((r) => probeEligibility(r).probeable);
 
+  /* A row that falls back to genericUrlProbe but carries no probe_url has
+   * never been given anything to check. genericUrlProbe itself would report
+   * that as 'failing' (health/probes/generic-url.ts) -- visually and
+   * semantically identical to a genuinely dead source, which is a false
+   * alarm in the one product whose job is telling those apart. `unknown`
+   * already means "never checked", which is exactly true here, and the row
+   * already starts as `unknown` (migration 006) -- so the fix is to skip it
+   * entirely: no fetch, no UPDATE, no entry in the returned array. That is
+   * different from WRITING 'unknown': it leaves whatever is already there
+   * (health, health_checked_at, health_method, health_note) untouched,
+   * which is the honest record of "we decided not to probe" rather than
+   * "we probed and got nothing". `probeFor(...).method` (not a hardcoded
+   * platform list) decides this, so the day a CGI Advantage VSS probe
+   * exists, Kentucky and Michigan become probeable again with no change to
+   * this file. */
+  const probeable = eligible.filter((r) => {
+    const { method } = probeFor(r.platform);
+    return method !== "generic-url" || !!r.probe_url;
+  });
+
   const results = await Promise.allSettled(
-    eligible.map(async (row) => {
+    probeable.map(async (row) => {
       const { probe, method } = probeFor(row.platform);
       const result = await withTimeout(
         probe({ probeUrl: row.probe_url, fetchImpl }),

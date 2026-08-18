@@ -33,6 +33,15 @@ UPDATE source SET probe_url = 'https://www.bidbuy.illinois.gov/bso/view/search/e
 -- under api/, so this is real routing, not a catch-all) -- the live
 -- contract-data endpoint itself, not the app shell. Checked 2026-08-18,
 -- HTTP 200.
+--
+-- NOTE: a bare GET returns `{}`, not contract rows -- the real search is a
+-- POST (confirmed by hand: POSTing an empty JSON body to this same URL
+-- returns the real `{results, pagination}` shape). This probe verifies the
+-- route responds, not that the search is serving results. That is the
+-- documented limit of every `generic-url` probe (it structurally cannot
+-- return 'rot' -- see probe.ts / generic-url.ts), and `health_method`
+-- records which kind ran, so a reader of `ok` here knows exactly how much
+-- that claim is worth.
 UPDATE source SET probe_url = 'https://secure.in.gov/apps/idoa/contractsearch/api/contracts/search'
  WHERE name = 'Indiana EDS contract register';
 
