@@ -7,9 +7,19 @@ import { parseSamPage } from "../../scrape/adapters/sam.js";
  * only kind that knows what a good answer looks like. `is_active=true` is
  * not incidental: with `false` this endpoint cheerfully returns millions of
  * archived notices and would report perfect health while the adapter was
- * pointed at the wrong five million records. */
+ * pointed at the wrong five million records.
+ *
+ * MUST be the same door the adapter walks through (scrape/adapters/sam.ts's
+ * `BASE`), not SAM's public v2 API -- the two return different shapes
+ * (`_embedded.results` here vs. `opportunitiesData` there), and this probe
+ * hands the body straight to `parseSamPage`, which only understands the
+ * former. Pointing at the wrong endpoint doesn't fail loudly: it returns
+ * 200 with a body `parseSamPage` silently reads as empty, so a healthy SAM
+ * would report `rot` forever -- the exact failure mode this probe exists to
+ * catch, self-inflicted. size=1 keeps the request itself as small as the
+ * adapter's size=100 pages allow. */
 const PROBE_URL =
-  "https://api.sam.gov/opportunities/v2/search?limit=1&is_active=true";
+  "https://sam.gov/api/prod/sgs/v1/search?index=opp&size=1&sort=-modifiedDate&is_active=true";
 
 export const samProbe: Probe = async ({ fetchImpl }): Promise<ProbeResult> => {
   const method = "sam";

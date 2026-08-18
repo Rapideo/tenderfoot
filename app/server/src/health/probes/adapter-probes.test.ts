@@ -29,10 +29,34 @@ test("a real listing payload makes SAM ok", async () => {
 
 /* THE STATE THAT EARNS THIS SLICE. A source that answers 200 and serves
  * nothing is the is_active=false failure: every signal said success. Only an
- * adapter probe can tell this apart from health. */
-test("200 with zero records is rot, not ok", async () => {
-  const empty = JSON.stringify({ totalRecords: 0, opportunitiesData: [] });
+ * adapter probe can tell this apart from health.
+ *
+ * The body is real-shaped -- `_embedded.results: []` -- because that is what
+ * the actual sam.gov search endpoint returns for a genuinely empty result
+ * set. A body missing `_embedded` entirely (e.g. a different SAM API's
+ * shape) is a DIFFERENT case, covered separately below, precisely because
+ * `parseSamPage`'s `?? []` fallback would make the two indistinguishable if
+ * only one fixture ever stood in for both. */
+test("a real-shaped 200 with zero results is rot, not ok", async () => {
+  const empty = JSON.stringify({ _embedded: { results: [] } });
   const r = await samProbe({ probeUrl: null, fetchImpl: respond(empty) });
+  expect(r.state).toBe("rot");
+  expect(r.note).toMatch(/0 rows|zero/i);
+});
+
+/* DISTINCT from the case above on purpose. This body is shaped like SAM's
+ * public v2 API (`opportunitiesData`), not the sgs/v1 endpoint this probe
+ * calls and `parseSamPage` understands (`_embedded.results`). It has no
+ * `_embedded` key at all, so `parseSamPage`'s `d?._embedded?.results ?? []`
+ * fallback reads it as zero rows too -- currently indistinguishable from a
+ * genuine empty result set, and that IS today's behaviour. Named and
+ * asserted separately so a future change to that fallback (e.g. to detect a
+ * shape mismatch and return 'failing' instead) breaks this test on its own,
+ * without silently making the genuine-empty-results test above meaningless
+ * as a stand-in for it. */
+test("a 200 shaped like a different SAM API also reads as rot today", async () => {
+  const wrongShape = JSON.stringify({ totalRecords: 0, opportunitiesData: [] });
+  const r = await samProbe({ probeUrl: null, fetchImpl: respond(wrongShape) });
   expect(r.state).toBe("rot");
   expect(r.note).toMatch(/0 rows|zero/i);
 });
