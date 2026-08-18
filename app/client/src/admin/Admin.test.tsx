@@ -417,6 +417,39 @@ test("a 401 from Check clears the stored admin secret", async () => {
   await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
 });
 
+/* FINAL REVIEW FINDING 1. Neither checkHealth nor runSource read the
+ * response body or called setErrors on a non-2xx -- unlike patchSource,
+ * which already honours the file's own rule ("a 400 from the fail-closed
+ * guards is the most useful thing this screen can show -- swallowing it
+ * would turn a deliberate refusal into a control that silently does
+ * nothing"). This is reachable today: a mid-probe crash answers 500 with
+ * `{ error: "Internal server error." }` (index.ts's generic handler), and
+ * the operator would see the busy spinner clear and nothing else. */
+test("a non-2xx from Check surfaces the server's error in that row, not swallowed", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return { ok: false, status: 500, json: async () => ({ error: "Internal server error." }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources") ? [{ ...baseSource, name: "SAM.gov" }] : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /check sam\.gov/i });
+  btn.click();
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Internal server error.");
+});
+
 /* ---- TASK 12: the Run control -------------------------------------------
  *
  * D5, finally housed on the screen: POST /api/admin/run (Task 9) already
@@ -442,6 +475,24 @@ test("an excluded source offers no Run control at all", async () => {
   renderAdminWith([{ ...baseSource, name: "GovWin IQ", legal_posture: "out" }]);
   await screen.findByText(/GovWin/);
   expect(screen.queryByRole("button", { name: /run govwin/i })).toBeNull();
+});
+
+/* FINAL REVIEW FINDING 3. Before this fix, Run's gate was only
+ * `legal_posture === "in"` -- looser than isProbeable, which also excludes
+ * `platform === "Manual import"`. The two corpus rows (ingest/corpus.ts,
+ * migration 006's own backfill) carry `legal_posture: 'in'` but are fixed
+ * snapshots with no endpoint, so Run rendered DISABLED reading "No adapter
+ * for this platform yet" -- true, but "yet" implies one is coming, and a
+ * snapshot never gets one. CHOSE (a): gate Run on isProbeable(s) too, so a
+ * Manual-import row offers no Run control at all, matching Check exactly
+ * and reusing the already-hardened predicate rather than growing a second
+ * disabled-reason branch that says the same thing a different way. */
+test("a Manual import row offers no Run control at all", async () => {
+  renderAdminWith([
+    { ...baseSource, name: "Corpus import", legal_posture: "in", platform: "Manual import" },
+  ]);
+  await screen.findByText("Corpus import");
+  expect(screen.queryByRole("button", { name: /run corpus import/i })).toBeNull();
 });
 
 /* The control's actual job: POST the right URL (source name, not a key --
@@ -509,4 +560,43 @@ test("a 401 from Run clears the stored admin secret", async () => {
   btn.click();
 
   await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
+});
+
+/* FINAL REVIEW FINDING 1, Run's half. This is not hypothetical: USASpending
+ * has `legal_posture: 'in'` and an adapter, so its Run button renders
+ * ENABLED -- but migration 003 seeds it `enabled: false`, so a click hits
+ * resolveSource()'s disabled-source refusal (resolve-source.ts:82), a 400
+ * with a clear message. Before this fix the operator saw the spinner clear
+ * and nothing else. */
+test("a non-2xx from Run surfaces the server's error in that row, not swallowed", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({
+            error: "Source 'USASpending' is disabled (source.enabled = false).",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources")
+            ? [{ ...baseSource, name: "USASpending", platform: "USASpending", enabled: false }]
+            : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /run usaspending/i });
+  btn.click();
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("disabled");
 });

@@ -5,6 +5,20 @@ import type { Probe, ProbeResult } from "../probe.js";
  * in it is not health. */
 const PROBE_URL = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
 
+/* FINAL REVIEW FINDING 2 (Minor). A deferred note suggested this probe reuse
+ * `scrape/adapters/usaspending.ts`'s `parseUsaSpendingPage` instead of the
+ * hand-rolled `json.results?.length` below, "same class as F7" (the parser
+ * shared with the adapter would have caught the shape drift F7 was about).
+ * CHECKED, AND IT IS WRONG: `parseUsaSpendingPage` filters rows on
+ * `x?.generated_internal_id`, a field this probe's own minimal request body
+ * never asks for -- it sends `fields: ["Award ID"]` only, nothing else.
+ * Reusing the adapter's parser here would make `items` come back empty on
+ * every real response and report `rot` on a healthy USASpending -- i.e.
+ * recreate F7 by "fixing" the one thing that only superficially resembles
+ * it. DO NOT change this to call `parseUsaSpendingPage`. If USASpending's
+ * response shape ever needs a real parser here, it needs its own, built
+ * against THIS probe's request body, not borrowed from a different one. */
+
 export const usaSpendingProbe: Probe = async ({ fetchImpl }): Promise<ProbeResult> => {
   const method = "usaspending";
   let res: Response;

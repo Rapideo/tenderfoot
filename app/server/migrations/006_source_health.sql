@@ -21,6 +21,16 @@ ALTER TABLE source ADD COLUMN probe_url text;
 -- Overdue. legal_posture has had a CHECK since 002; health never did, and
 -- PATCH /api/sources/:id writes this field unvalidated, so any string at all
 -- could be stored.
+--
+-- FINAL REVIEW FINDING 4 (Minor). This CHECK lands BEFORE the excluded-row
+-- backfill below, and Postgres validates every existing row at ADD
+-- CONSTRAINT time (no NOT VALID) -- so if any environment had ever picked up
+-- a stray invalid `health` string through the previously-unvalidated PATCH,
+-- this migration would fail outright rather than degrade. Harmless today,
+-- verified directly: production and every test schema hold only 'unknown'
+-- at migration time, which trivially satisfies this CHECK. Left in this
+-- order rather than reordered -- this migration has already run against the
+-- test branch, and a migration that has already run must not change shape.
 ALTER TABLE source ADD CONSTRAINT source_health_valid
   CHECK (health IN ('ok', 'failing', 'rot', 'excluded', 'unknown'));
 

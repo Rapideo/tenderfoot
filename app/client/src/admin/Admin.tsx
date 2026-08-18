@@ -245,14 +245,27 @@ function SourceRegistryRow({
             />
             <span>{s.enabled ? "on" : "off"}</span>
           </label>
-          {/* Rendered only for legal_posture 'in' -- the four
-              excluded/manual-only sources never offer Run at all,
-              matching D2's own posture: a source this project has
-              no permission to contact gets no button, not a disabled
-              one. Disabled WITH A REASON when the platform has no
-              adapter, though -- never hidden. An absent control is a
-              mystery; a disabled one is an explanation. */}
-          {s.legal_posture === "in" ? (
+          {/* REVIEW FIX (Minor, final review finding 3). Gated on
+              `s.legal_posture === "in"` alone until this fix -- looser
+              than isProbeable, which also excludes `platform ===
+              "Manual import"`. The two corpus rows carry legal_posture
+              'in' but are fixed snapshots with no endpoint, so Run used
+              to render disabled reading "No adapter for this platform
+              yet": technically true, but "yet" implies one is coming,
+              and a snapshot never gets one. Gated on isProbeable(s)
+              instead -- the same predicate Check already uses -- so a
+              Manual-import row offers no Run control at all, matching
+              Check exactly rather than growing a second disabled-reason
+              branch that says the same thing a different way. Every
+              other 'in'-posture row (a real feed, adapter or not) is
+              unaffected: isProbeable and legal_posture === 'in' agree on
+              all of them. The excluded/manual-only sources still never
+              offer Run at all, matching D2's own posture: a source this
+              project has no permission to contact gets no button, not a
+              disabled one. Disabled WITH A REASON when a probeable
+              platform has no adapter, though -- never hidden. An absent
+              control is a mystery; a disabled one is an explanation. */}
+          {isProbeable(s) ? (
             <button
               type="button"
               className="admin-run-btn"
@@ -343,12 +356,27 @@ export function Admin() {
     const secret = getAdminSecret();
     if (!secret) return;
     setBusy((b) => ({ ...b, [s.id]: true }));
+    setErrors((e) => ({ ...e, [s.id]: "" }));
     const r = await fetch(`/api/admin/health?source=${encodeURIComponent(s.name)}`, {
       method: "POST",
       headers: adminHeaders(secret),
     });
     if (r.status === 401) clearAdminSecret();
+    const data = await r.json().catch(() => ({}));
     setBusy((b) => ({ ...b, [s.id]: false }));
+    /* REVIEW FIX (Important, final review finding 1). This used to ignore
+     * the response body entirely, contradicting the file's own rule two
+     * screens up ("a 400 from the fail-closed guards is the most useful
+     * thing this screen can show -- swallowing it would turn a deliberate
+     * refusal into a control that silently does nothing"). patchSource
+     * already honoured that rule; Check and Run did not. Mirrored here:
+     * read the body, surface data.error on !r.ok, and let a fixed problem
+     * clear itself the same way patchSource's own leading setErrors(...,
+     * "") does on the next click. */
+    if (!r.ok) {
+      setErrors((e) => ({ ...e, [s.id]: data.error ?? `Request failed (${r.status})` }));
+      return;
+    }
     await load();
   }
 
@@ -364,12 +392,24 @@ export function Admin() {
     const secret = getAdminSecret();
     if (!secret) return;
     setBusy((b) => ({ ...b, [s.id]: true }));
+    setErrors((e) => ({ ...e, [s.id]: "" }));
     const r = await fetch(
       `/api/admin/run?source=${encodeURIComponent(s.name)}&since=${encodeURIComponent(s.since_default ?? "")}`,
       { method: "POST", headers: adminHeaders(secret) },
     );
     if (r.status === 401) clearAdminSecret();
+    const data = await r.json().catch(() => ({}));
     setBusy((b) => ({ ...b, [s.id]: false }));
+    /* REVIEW FIX (Important, final review finding 1). Same swallow as
+     * checkHealth above, and reachable today: USASpending has an adapter
+     * and legal_posture 'in', so its Run button renders enabled -- but it
+     * is seeded `enabled: false` (migration 003), so a click hits
+     * resolveSource()'s disabled-source refusal, a 400 with a clear
+     * message the operator used to never see. Same fix as checkHealth. */
+    if (!r.ok) {
+      setErrors((e) => ({ ...e, [s.id]: data.error ?? `Request failed (${r.status})` }));
+      return;
+    }
     await load();
   }
 

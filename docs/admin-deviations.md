@@ -4,6 +4,12 @@
 `View 6.2 : Source Registry`, matched against `prototype/PROTOTYPE/Tenderfoot
 UI Mockups V1.2.html`.
 
+**Scope note, final review, 2026-08-18:** this opening line describes only
+the file's origin. The file itself has grown past it -- it now also houses
+D6 (found running SP1's own build), and SP3.6's rewritten D5 plus the new
+H1-H3 -- so "SP1 T14/T15" above should be read as when this file started,
+not as what it currently scopes.
+
 > **Why this file exists.** The frozen V1.2 bundle renders **both admin
 > screens completely read-only.** Verified across the whole 700 KB: no
 > `<select>`, no `<textarea>`, no checkbox, two `<input>`s (neither on these
