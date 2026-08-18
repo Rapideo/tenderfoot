@@ -31,6 +31,16 @@ padding, type, borders, colours, copy and column order.
 only one in production. The claim is corrected rather than deleted, because it
 is a good example of what a fidelity write-up asserts before anyone runs it.
 
+⚠️ **A second correction, same shape, added at Task 13 review 2026-08-18:**
+"the only one in production" above is **still literally true today** — SP3.6
+(D6's own resolution note, and H1–H3 further down) adds a `source_health_valid`
+CHECK and a real second value, `excluded`, but only on `sp3.6-source-health`,
+not on `main`. Production, checked directly at review time, is **13 rows, all
+`unknown`**. Left as written rather than edited, for the same reason the first
+correction stayed rather than being silently fixed: it is accurate for right
+now, and the moment it stops being accurate is the moment this branch merges
+— see D6's own note for what changes then.
+
 ---
 
 ## D1 — the `ENABLED` column
@@ -106,14 +116,18 @@ So `Card` is deliberately not used, and a local flat surface is.
 > a `Card` variant rather than a shadow token — the difference is elevation,
 > not a scale.
 
-## D5 — the scrape trigger, finally housed (rewritten 2026-08-17, SP3.6)
+## D5 — the scrape trigger, finally housed (rewritten 2026-08-18, SP3.6)
 
 **§9.6 ruled that the manual scrape trigger lives on this screen. It is now
 built here.** A **Run** button appears only on `in`-posture rows — the four
-excluded/manual-only sources get no button at all, matching D2's own posture
-rule — and, on those rows, is **disabled with a stated reason** where no
-adapter exists yet rather than hidden: an absent control is a mystery, a
-disabled one is an explanation. Clicking it calls
+excluded/manual-only sources get no button at all, per design spec §4's rule
+that `legal_posture` governs CONTACT (the same rule `Admin.tsx`'s
+`isProbeable` implements for the Check control; D2 is a secondary nod, since
+it is the deviation that first made posture a gate on this screen, though its
+own text is about the LEGAL column's vocabulary, not about probing) — and, on
+those rows, is **disabled with a stated reason** where no adapter exists yet
+rather than hidden: an absent control is a mystery, a disabled one is an
+explanation. Clicking it calls
 `POST /api/admin/run?source=<name>&since=<window>`, gated by
 `requireAdminSecret` the same way the pre-existing `/api/admin/scrape` and
 the new `/api/admin/health` (the Check control's endpoint) are.
@@ -203,14 +217,18 @@ consumer.
 moved in front of the GO gate on the same day.** This column is the liveness
 surface's output.
 
-**RESOLVED 2026-08-17, SP3.6.** Migration 006 adds a `source_health_valid`
+**RESOLVED 2026-08-18, SP3.6.** Migration 006 adds a `source_health_valid`
 CHECK constraint pinning `health` to `ok` / `failing` / `rot` / `excluded` /
 `unknown`, and an operator-invoked probe subsystem writes it via the screen's
 new Check control. `Healthy` / `Rot suspected` / `Failing` / `Not ingested`
 never become database values — see H1 and H2 below for what replaced them,
 and why they are a different set from `StatusDot`'s own vocabulary rather
-than the same one. `unknown` remains a live, distinct value for a row nobody
-has checked yet; it is no longer the *only* one in production.
+than the same one. **Once 006 is applied, the six rows its own backfill
+excludes give the column a second value** (`excluded`, alongside `unknown`)
+— but this branch is not merged, and production, checked directly, still
+reads **13 rows, all `unknown`**, exactly as this section originally
+described. "Resolved" above is a claim about the code and the migration, not
+yet a claim about what production shows.
 
 ## The app has never loaded its own fonts
 

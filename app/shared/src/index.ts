@@ -93,7 +93,7 @@ export type LegalPosture = "in" | "manual-only" | "out";
  * difference was live at the time -- SAM.gov had been ingested twice (530
  * rows, 57 rows, both 2026-08-16) and still read `unknown`.
  *
- * RESOLVED by migration 006 (SP3.6, 2026-08-17): `source_health_valid` now
+ * RESOLVED by migration 006 (SP3.6, 2026-08-18): `source_health_valid` now
  * CHECKs `health` against exactly these five values, and an operator-invoked
  * probe subsystem writes them --
  * `docs/superpowers/specs/2026-08-17-source-health-design.md`. `off` /
@@ -128,7 +128,7 @@ export interface SourceRow {
   verified_facets: unknown;
   since_default: string | null;
   last_run_at: string | null;
-  /* Typed `string`, not `SourceHealth`, was deliberate through 2026-08-17.
+  /* Typed `string`, not `SourceHealth`, was deliberate through 2026-08-18.
    * The column was NOT NULL so it was never absent -- but it had NO CHECK
    * constraint, so `SourceHealth` documented the vocabulary anyone SHOULD
    * write while the type admitted what the database could actually hand
@@ -180,7 +180,7 @@ export interface SourceRow {
  *   platform  -> source.platform       "Periscope"
  *   tier      -> source.adapter_tier   "T1 API"
  *   health    -> source.health         the vocabulary above at the time --
- *                                       superseded 2026-08-17 by migration
+ *                                       superseded 2026-08-18 by migration
  *                                       006's five-value DB enum; see
  *                                       `SourceHealth`
  *
