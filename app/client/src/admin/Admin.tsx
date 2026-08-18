@@ -79,9 +79,16 @@ const HEALTH_TO_DOT: Record<string, StatusDotState> = {
 /* A row may be Checked exactly when the server's own eligibility rule
  * (health/eligibility.ts) would actually probe it -- mirrored here so a
  * click never reaches the server just to be silently ignored, which would
- * look like a broken button rather than an absent one. */
+ * look like a broken button rather than an absent one. All three of
+ * eligibility.ts's conditions are reproduced, including the null-platform
+ * refusal (its own comment: "an unknown platform is not evidence that
+ * contact is permitted") -- `platform !== "Manual import"` alone lets
+ * `null` through, since `null !== "Manual import"` is true, which would
+ * show a Check button for a row `checkSources` silently drops (200,
+ * `{ checked: [] }`) -- the exact broken-looking button this function
+ * exists to prevent. */
 function isProbeable(s: SourceRow): boolean {
-  return s.legal_posture === "in" && s.platform !== "Manual import";
+  return s.legal_posture === "in" && s.platform !== null && s.platform !== "Manual import";
 }
 
 const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

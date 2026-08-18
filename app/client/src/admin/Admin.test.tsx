@@ -315,6 +315,39 @@ test("an excluded row offers no Check control", async () => {
   expect(screen.queryByRole("button", { name: /check govwin/i })).toBeNull();
 });
 
+/* Review finding 1 (Task 11): the test above only varies legal_posture, so
+ * isProbeable's `platform !== "Manual import"` clause had no regression
+ * protection -- deleting it left the whole suite green. corpus.ts:216-218
+ * seeds real Manual import rows with legal_posture: 'in', which is exactly
+ * this shape: the posture clause alone would wrongly allow a Check button. */
+test("a Manual import row offers no Check control, even with legal_posture 'in'", async () => {
+  renderAdminWith([
+    {
+      ...baseSource,
+      name: "Corpus import",
+      health: "excluded",
+      legal_posture: "in",
+      platform: "Manual import",
+    },
+  ]);
+  await screen.findByText("excluded");
+  expect(screen.queryByRole("button", { name: /check corpus/i })).toBeNull();
+});
+
+/* Review finding 2 (Task 11): eligibility.ts also refuses a null platform
+ * ("an unknown platform is not evidence that contact is permitted"), and
+ * `platform !== "Manual import"` alone lets `null` through (`null !==
+ * "Manual import"` is true). Without the explicit null check, a null-
+ * platform 'in' row would show a Check button that silently no-ops --
+ * checkSources filters it out and the route answers 200 with
+ * `{ checked: [] }`, the exact broken-looking button isProbeable exists to
+ * prevent. */
+test("a null-platform row offers no Check control, even with legal_posture 'in'", async () => {
+  renderAdminWith([{ ...baseSource, name: "Mystery Source", legal_posture: "in", platform: null }]);
+  await screen.findByText("Mystery Source");
+  expect(screen.queryByRole("button", { name: /check mystery/i })).toBeNull();
+});
+
 /* A probeable row DOES offer the control -- the mirror image of the test
  * above, and load-bearing: without it, "no Check control" could pass by
  * accident if the button were never rendered for anyone. */
