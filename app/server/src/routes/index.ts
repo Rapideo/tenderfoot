@@ -76,6 +76,10 @@ api.patch(
 
 const POSTURES = new Set(["in", "manual-only", "out"]);
 
+/* Mirrors the CHECK in migrations/006_source_health.sql. Both exist on
+ * purpose: the constraint is the guarantee, this is the error message. */
+export const HEALTH_VALUES = new Set(["ok", "failing", "rot", "excluded", "unknown"]);
+
 api.get(
   "/sources",
   asyncHandler(async (_req, res) => {
@@ -151,6 +155,13 @@ api.patch(
           current_note: current.legal_note,
         });
       }
+    }
+
+    if (health !== undefined && !HEALTH_VALUES.has(health)) {
+      return res.status(400).json({
+        error:
+          `Invalid health '${health}'. Must be one of: ${[...HEALTH_VALUES].join(", ")}.`,
+      });
     }
 
     /* Enabling a source with no ingestion window would let a first run pull

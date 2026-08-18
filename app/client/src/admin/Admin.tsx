@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FirmProfile, LegalPosture, SourceRow } from "@tenderfoot/shared";
 import { StatusDot, type StatusDotState } from "../primitives/StatusDot";
+import { adminHeaders, clearAdminSecret, getAdminSecret } from "./adminSecret";
 import "./Admin.css";
 
 /* View 6.1 + View 6.2 -- Firm Profile and Source Registry.
@@ -30,21 +31,76 @@ import "./Admin.css";
  * open question on Matt's list and this screen is now a reason to answer it.
  */
 
-/* The bundle's four states. `unknown` -- the schema default, and the value
- * every production row actually carries -- is deliberately ABSENT: it falls
- * through to the grey dot below and keeps its own word.
+/* ⚠️ DEFECT FIXED HERE (SP3.6 T11). This map's keys used to be the bundle's
+ * DISPLAY strings ("Healthy", "Rot suspected", ...), but `s.health` is
+ * always the DATABASE enum -- `/api/sources` does `SELECT *`, so the row
+ * carries whatever migration 006's CHECK constraint allows:
+ * ok|failing|rot|excluded|unknown. `HEALTH_TO_DOT[s.health]` was therefore
+ * `undefined` for every row, always, and every source silently rendered the
+ * decorative grey dot regardless of its real health -- masked in production
+ * only because every row happened to read `unknown`, which legitimately
+ * gets that dot too. The moment a probe wrote `ok`/`failing`/`rot`, the
+ * column would have kept showing the decorative dot beside the real word,
+ * defeating "colour is never the only signal" for exactly the rows where it
+ * would have mattered most. Fixed by keying on the enum the column can
+ * actually hold.
  *
- * Collapsing it into "Not ingested" would be a lie with a live counterexample:
- * SAM.gov has been ingested twice and still reads `unknown`, because nothing
- * writes this column yet. "Nobody measured" and "measured, nothing there" are
- * different facts, and a registry that blurs them is telling the operator a
- * source is dead when it is merely unobserved. See app/shared. */
+ * `excluded` and `unknown` are deliberately ABSENT: both fall through to the
+ * decorative grey dot below and keep their own word. `off` is retired from
+ * this map entirely (design spec §12, H1) -- StatusDot's `off` state hard-
+ * codes the accessible name "Not ingested", an ingestion fact that has no
+ * meaning under "health = is it up" (a disabled source can be perfectly
+ * reachable; that fact lives in ENABLED and last_run_at instead). `excluded`
+ * inherits `ea798e9`'s reasoning for `unknown`: nothing measured either
+ * value, so routing them through StatusDot would put "Not ingested" into
+ * the accessibility tree while the visible word avoided the same lie.
+ * StatusDot itself keeps all four states (`StatusDot.tsx`) -- this is only
+ * about which values the HEALTH column maps. */
 const HEALTH_TO_DOT: Record<string, StatusDotState> = {
-  Healthy: "ok",
-  "Rot suspected": "rot",
-  Failing: "failing",
-  "Not ingested": "off",
+  ok: "ok",
+  failing: "failing",
+  rot: "rot",
 };
+
+/* A row may be Checked exactly when the server's own eligibility rule
+ * (health/eligibility.ts) would actually probe it -- mirrored here so a
+ * click never reaches the server just to be silently ignored, which would
+ * look like a broken button rather than an absent one. All three of
+ * eligibility.ts's conditions are reproduced, including the null-platform
+ * refusal (its own comment: "an unknown platform is not evidence that
+ * contact is permitted") -- `platform !== "Manual import"` alone lets
+ * `null` through, since `null !== "Manual import"` is true, which would
+ * show a Check button for a row `checkSources` silently drops (200,
+ * `{ checked: [] }`) -- the exact broken-looking button this function
+ * exists to prevent. */
+function isProbeable(s: SourceRow): boolean {
+  return s.legal_posture === "in" && s.platform !== null && s.platform !== "Manual import";
+}
+
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 31536000],
+  ["month", 2592000],
+  ["week", 604800],
+  ["day", 86400],
+  ["hour", 3600],
+  ["minute", 60],
+];
+const RELATIVE_TIME = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/* A verdict with no timestamp is the stale-green trap (design spec §3):
+ * health is only measured when an operator asks, so a value can be
+ * arbitrarily old and a green dot from three weeks ago would read as
+ * current. This turns `health_checked_at` into words a human can judge at a
+ * glance instead of an ISO string they have to do arithmetic on. */
+function checkedLabel(iso: string): string {
+  const deltaSec = (new Date(iso).getTime() - Date.now()) / 1000;
+  for (const [unit, secondsInUnit] of RELATIVE_UNITS) {
+    if (Math.abs(deltaSec) >= secondsInUnit) {
+      return `checked ${RELATIVE_TIME.format(Math.round(deltaSec / secondsInUnit), unit)}`;
+    }
+  }
+  return `checked ${RELATIVE_TIME.format(Math.round(deltaSec), "second")}`;
+}
 
 /* D2. The bundle's LEGAL column reads "ToS OK" / "Rate-limited" /
  * "EXCLUDED"; the schema stores 'in' / 'manual-only' / 'out'. Those are
@@ -59,6 +115,18 @@ const POSTURE_TONE: Record<LegalPosture, string> = {
 };
 
 const POSTURES: LegalPosture[] = ["in", "manual-only", "out"];
+
+/* SP3.6 T12. Only these two platforms have a working adapter
+ * (scrape/adapters/registry.ts's `ADAPTERS` map) -- everything else would
+ * hit POST /run's own 400 ("No adapter named ..."). This is NOT the
+ * name->key map registry.ts's header forbids: that ban is about resolving
+ * an identity (a request would silently target the wrong row if it drifted
+ * from the server's map); this is only which platforms get the Run button
+ * enabled versus disabled-with-a-reason. If this set drifts stale, the
+ * worst case is a wrong disabled/enabled hint -- the server remains the
+ * only place identity is resolved (task-12 ruling, POST /run below), and it
+ * still refuses with the same 400 either way. */
+const ADAPTER_PLATFORMS = new Set(["SAM", "USASpending"]);
 
 /* The five profile fields the bundle renders, in its order, with its exact
  * labels -- including the capitalised guard on the fourth, which is a rule
@@ -75,6 +143,153 @@ const PROFILE_FIELDS: { key: keyof FirmProfile; label: string }[] = [
 function asText(v: unknown): string {
   if (v === null || v === undefined) return "";
   return typeof v === "string" ? v : JSON.stringify(v);
+}
+
+/* SP3.6 T12. Extracted once the per-row block picked up a FOURTH conditional
+ * piece -- name / platform / tier / legal-select / health (itself three:
+ * the dot, H3's timestamp, Check) / enabled, and now Run. Task 11's own
+ * review named exactly this trigger ("extract when your Run control adds a
+ * fourth conditional piece"), and it now has.
+ *
+ * A STRAIGHT MOVE, no behaviour change: every line of JSX below is what
+ * `sources.map((s) => ...)` rendered inline before this task, unmoved
+ * except that its closures over `s`, `busy[s.id]` and `errors[s.id]` became
+ * props -- `Admin()` still owns all the state and every handler; this
+ * component owns only how one row's data is laid out. */
+function SourceRegistryRow({
+  s,
+  busy,
+  error,
+  onChangePosture,
+  onPatch,
+  onCheckHealth,
+  onRunSource,
+}: {
+  s: SourceRow;
+  busy: boolean;
+  error: string | undefined;
+  onChangePosture: (s: SourceRow, next: LegalPosture) => void;
+  onPatch: (id: number, body: Record<string, unknown>) => void;
+  onCheckHealth: (s: SourceRow) => void;
+  onRunSource: (s: SourceRow) => void;
+}) {
+  return (
+    <div className="admin-source">
+      <div className="admin-row" role="row" data-source={s.name}>
+        <div className="admin-source__name">
+          <div>{s.name}</div>
+          <div className="admin-source__archive">{s.archive_depth ?? "archive: —"}</div>
+        </div>
+        <span className="admin-source__platform">{s.platform ?? "—"}</span>
+        <span className="admin-source__tier">{s.adapter_tier ?? "—"}</span>
+        <select
+          className={`admin-pill admin-pill--${POSTURE_TONE[s.legal_posture]}`}
+          value={s.legal_posture}
+          aria-label={`Legal posture for ${s.name}`}
+          onChange={(e) => onChangePosture(s, e.target.value as LegalPosture)}
+        >
+          {POSTURES.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+        <span className="admin-source__health">
+          <span className="admin-source__health-state">
+            {/* D6/H1/H2. StatusDot hard-codes an accessible name per
+                state, and `off` speaks "Not ingested" -- so routing
+                `excluded` or `unknown` through it would put that
+                falsehood in the accessibility layer that the visible
+                label avoids. Both get a decorative grey dot
+                (aria-hidden) and let the adjacent word carry the
+                meaning, rather than a fifth StatusDot state invented
+                from one consumer. */}
+            {HEALTH_TO_DOT[s.health] ? (
+              <StatusDot state={HEALTH_TO_DOT[s.health]!} />
+            ) : (
+              <span className="admin-dot-unmeasured" aria-hidden="true" />
+            )}
+            {s.health}
+          </span>
+          {/* H3. Non-null only -- an unmeasured row shows no timestamp
+              at all rather than a misleading "never" or a blank. */}
+          {s.health_checked_at !== null ? (
+            <span className="admin-source__checked">{checkedLabel(s.health_checked_at)}</span>
+          ) : null}
+          {isProbeable(s) ? (
+            <button
+              type="button"
+              className="admin-check-btn"
+              disabled={busy}
+              aria-label={`Check ${s.name}`}
+              onClick={() => onCheckHealth(s)}
+            >
+              Check
+            </button>
+          ) : null}
+        </span>
+        {/* T12/D5. Stacked the same way HEALTH became a column in
+            T11 -- this cell can now carry the toggle AND, on an
+            `in`-posture row, the Run control, and neither is the
+            bundle's own grid, so stacking is the smallest change
+            that fits without touching the row's shared
+            grid-template-columns. */}
+        <span className="admin-source__enabled">
+          <label className="admin-toggle">
+            <input
+              type="checkbox"
+              checked={s.enabled}
+              disabled={busy}
+              aria-label={`Enable ${s.name}`}
+              onChange={(e) => onPatch(s.id, { enabled: e.target.checked })}
+            />
+            <span>{s.enabled ? "on" : "off"}</span>
+          </label>
+          {/* REVIEW FIX (Minor, final review finding 3). Gated on
+              `s.legal_posture === "in"` alone until this fix -- looser
+              than isProbeable, which also excludes `platform ===
+              "Manual import"`. The two corpus rows carry legal_posture
+              'in' but are fixed snapshots with no endpoint, so Run used
+              to render disabled reading "No adapter for this platform
+              yet": technically true, but "yet" implies one is coming,
+              and a snapshot never gets one. Gated on isProbeable(s)
+              instead -- the same predicate Check already uses -- so a
+              Manual-import row offers no Run control at all, matching
+              Check exactly rather than growing a second disabled-reason
+              branch that says the same thing a different way. Every
+              other 'in'-posture row (a real feed, adapter or not) is
+              unaffected: isProbeable and legal_posture === 'in' agree on
+              all of them. The excluded/manual-only sources still never
+              offer Run at all, matching D2's own posture: a source this
+              project has no permission to contact gets no button, not a
+              disabled one. Disabled WITH A REASON when a probeable
+              platform has no adapter, though -- never hidden. An absent
+              control is a mystery; a disabled one is an explanation. */}
+          {isProbeable(s) ? (
+            <button
+              type="button"
+              className="admin-run-btn"
+              disabled={busy || !ADAPTER_PLATFORMS.has(s.platform ?? "")}
+              title={
+                ADAPTER_PLATFORMS.has(s.platform ?? "")
+                  ? undefined
+                  : "No adapter for this platform yet"
+              }
+              aria-label={`Run ${s.name}`}
+              onClick={() => onRunSource(s)}
+            >
+              Run
+            </button>
+          ) : null}
+        </span>
+      </div>
+      {error ? (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function Admin() {
@@ -130,6 +345,72 @@ export function Admin() {
     );
     if (note === null) return;
     await patchSource(s.id, { legal_posture: next, legal_note: note });
+  }
+
+  /* Task 10's secret handling, reused rather than re-invented: prompt once,
+   * hold in sessionStorage, clear on a 401 so a wrong secret does not
+   * silently break every later click. `busy` is shared with the ENABLED
+   * toggle's own use of it -- one row does not want two controls firing at
+   * once. */
+  async function checkHealth(s: SourceRow) {
+    const secret = getAdminSecret();
+    if (!secret) return;
+    setBusy((b) => ({ ...b, [s.id]: true }));
+    setErrors((e) => ({ ...e, [s.id]: "" }));
+    const r = await fetch(`/api/admin/health?source=${encodeURIComponent(s.name)}`, {
+      method: "POST",
+      headers: adminHeaders(secret),
+    });
+    if (r.status === 401) clearAdminSecret();
+    const data = await r.json().catch(() => ({}));
+    setBusy((b) => ({ ...b, [s.id]: false }));
+    /* REVIEW FIX (Important, final review finding 1). This used to ignore
+     * the response body entirely, contradicting the file's own rule two
+     * screens up ("a 400 from the fail-closed guards is the most useful
+     * thing this screen can show -- swallowing it would turn a deliberate
+     * refusal into a control that silently does nothing"). patchSource
+     * already honoured that rule; Check and Run did not. Mirrored here:
+     * read the body, surface data.error on !r.ok, and let a fixed problem
+     * clear itself the same way patchSource's own leading setErrors(...,
+     * "") does on the next click. */
+    if (!r.ok) {
+      setErrors((e) => ({ ...e, [s.id]: data.error ?? `Request failed (${r.status})` }));
+      return;
+    }
+    await load();
+  }
+
+  /* D5, finally housed. Same shape as checkHealth above -- prompt-once
+   * secret, shared busy flag, clear-on-401, reload on completion so
+   * last_run_at and the counts move. `?source=` carries `s.name` (the
+   * canonical row, "SAM.gov"), never the CLI's short key: the task-12
+   * ruling puts that resolution on the server (routes/admin.ts's
+   * `resolveAdapterKey`), specifically so this client never needs a
+   * name->key map of its own (registry.ts's own header: "two registries
+   * drift"). */
+  async function runSource(s: SourceRow) {
+    const secret = getAdminSecret();
+    if (!secret) return;
+    setBusy((b) => ({ ...b, [s.id]: true }));
+    setErrors((e) => ({ ...e, [s.id]: "" }));
+    const r = await fetch(
+      `/api/admin/run?source=${encodeURIComponent(s.name)}&since=${encodeURIComponent(s.since_default ?? "")}`,
+      { method: "POST", headers: adminHeaders(secret) },
+    );
+    if (r.status === 401) clearAdminSecret();
+    const data = await r.json().catch(() => ({}));
+    setBusy((b) => ({ ...b, [s.id]: false }));
+    /* REVIEW FIX (Important, final review finding 1). Same swallow as
+     * checkHealth above, and reachable today: USASpending has an adapter
+     * and legal_posture 'in', so its Run button renders enabled -- but it
+     * is seeded `enabled: false` (migration 003), so a click hits
+     * resolveSource()'s disabled-source refusal, a 400 with a clear
+     * message the operator used to never see. Same fix as checkHealth. */
+    if (!r.ok) {
+      setErrors((e) => ({ ...e, [s.id]: data.error ?? `Request failed (${r.status})` }));
+      return;
+    }
+    await load();
   }
 
   if (!sources) return <main className="admin">Loading…</main>;
@@ -195,59 +476,16 @@ export function Admin() {
         </div>
 
         {sources.map((s) => (
-          <div className="admin-source" key={s.id}>
-            <div className="admin-row" role="row" data-source={s.name}>
-              <div className="admin-source__name">
-                <div>{s.name}</div>
-                <div className="admin-source__archive">{s.archive_depth ?? "archive: —"}</div>
-              </div>
-              <span className="admin-source__platform">{s.platform ?? "—"}</span>
-              <span className="admin-source__tier">{s.adapter_tier ?? "—"}</span>
-              <select
-                className={`admin-pill admin-pill--${POSTURE_TONE[s.legal_posture]}`}
-                value={s.legal_posture}
-                aria-label={`Legal posture for ${s.name}`}
-                onChange={(e) => changePosture(s, e.target.value as LegalPosture)}
-              >
-                {POSTURES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <span className="admin-source__health">
-                {/* D6. StatusDot hard-codes an accessible name per state, and
-                    `off` speaks "Not ingested" -- so routing `unknown`
-                    through it would put the same falsehood in the
-                    accessibility layer that the visible label avoids. An
-                    unmeasured source therefore gets a decorative grey dot
-                    (aria-hidden) and lets the adjacent word carry the
-                    meaning, rather than a fifth StatusDot state invented
-                    from one consumer. */}
-                {HEALTH_TO_DOT[s.health] ? (
-                  <StatusDot state={HEALTH_TO_DOT[s.health]!} />
-                ) : (
-                  <span className="admin-dot-unmeasured" aria-hidden="true" />
-                )}
-                {s.health}
-              </span>
-              <label className="admin-toggle">
-                <input
-                  type="checkbox"
-                  checked={s.enabled}
-                  disabled={busy[s.id]}
-                  aria-label={`Enable ${s.name}`}
-                  onChange={(e) => patchSource(s.id, { enabled: e.target.checked })}
-                />
-                <span>{s.enabled ? "on" : "off"}</span>
-              </label>
-            </div>
-            {errors[s.id] ? (
-              <p className="admin-error" role="alert">
-                {errors[s.id]}
-              </p>
-            ) : null}
-          </div>
+          <SourceRegistryRow
+            key={s.id}
+            s={s}
+            busy={!!busy[s.id]}
+            error={errors[s.id]}
+            onChangePosture={changePosture}
+            onPatch={patchSource}
+            onCheckHealth={checkHealth}
+            onRunSource={runSource}
+          />
         ))}
       </section>
     </main>

@@ -214,13 +214,14 @@ async function sourceId(name: string): Promise<number> {
   if (row) return row.id;
   return insert(
     `INSERT INTO source (name, jurisdiction, platform, adapter_tier, legal_posture,
-                         legal_note, archive_depth, enabled, source_note)
-     VALUES ($1, 'US', 'Manual import', '4 manual', 'in', $2, $3, false, $4) RETURNING id`,
+                         legal_note, archive_depth, enabled, source_note, health, health_note)
+     VALUES ($1, 'US', 'Manual import', '4 manual', 'in', $2, $3, false, $4, 'excluded', $5) RETURNING id`,
     [
       name,
       "Material already collected and read during research. No live access involved.",
       "Fixed -- a snapshot, not a feed.",
       "Not an adapter. SP1 uses it so the sighting path is exercised by the first data in the system.",
+      "no endpoint -- fixed snapshot, not a feed",
     ],
   );
 }

@@ -9,3 +9,7 @@ dist-types/
 .vercel
 .env*.local
 runs/
+
+# Subagent-driven-development scratch: ledgers, briefs, review packages.
+# Git-ignored on purpose -- the commits are the record, not this directory.
+.superpowers/

@@ -173,3 +173,19 @@ test("solicitations list returns everything, in a stated order", async () => {
   expect(body).toHaveProperty("count");
   expect(body.order).toBe("closes_at ASC");
 });
+
+test("PATCH refuses an invalid health value with 400, not a 500 from the database", async () => {
+  const [, sources] = await get("/sources");
+  const ohio = sources.find((s: any) => s.name === "Ohio OhioBuys");
+  const [status, body] = await patch(`/sources/${ohio.id}`, { health: "banana" });
+  expect(status).toBe(400);
+  expect(body.error).toMatch(/health/i);
+});
+
+test("PATCH still accepts a valid health value", async () => {
+  const [, sources] = await get("/sources");
+  const ohio = sources.find((s: any) => s.name === "Ohio OhioBuys");
+  const [status, body] = await patch(`/sources/${ohio.id}`, { health: "ok" });
+  expect(status).toBe(200);
+  expect(body.source.health).toBe("ok");
+});

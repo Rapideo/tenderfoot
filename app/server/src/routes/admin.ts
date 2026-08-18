@@ -41,6 +41,10 @@ import { validateRun, type RunRequest } from "../scrape/contract.js";
 import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
 import { resolveSource } from "../scrape/resolve-source.js";
+import { checkSources } from "../health/check.js";
+import { one, run as dbRun } from "../db/index.js";
+import { importArtifact } from "../ingest/import-artifact.js";
+import { mergeSightings } from "../merge/merge.js";
 
 /* Below Vercel's 300s ceiling with margin for the response to flush. */
 const HANDLER_BUDGET_MS = 240_000;
@@ -173,6 +177,219 @@ admin.post(
       } catch (err) {
         if ((err as NodeJS.ErrnoException)?.code !== "ERR_STREAM_PREMATURE_CLOSE") throw err;
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }),
+);
+
+/* SP3.6 T8. Operator-invoked only -- there is deliberately no schedule (a
+ * timed health check is exactly the unattended ingestion §9.6 defers to
+ * SP7). Inherits requireAdminSecret from `admin.use` above; no auth of its
+ * own.
+ *
+ * The actual eligibility/probe logic all lives in checkSources() (Task 6):
+ * this route's only job is turning a query string into its arguments and an
+ * unknown source name into a 404 rather than a quiet, empty 200.
+ *
+ * `?source=` names a `source.name` row (e.g. 'SAM.gov'), not a registry key
+ * -- there is no adapter-key indirection to resolve here the way
+ * resolveSource() does for /scrape, because checkSources() already takes a
+ * bare source name and does its own lookup.
+ *
+ * WHY THE 404: a missing name returning `{ checked: [] }` would be
+ * indistinguishable from "checked it, found nothing to report" -- exactly
+ * the ambiguous-empty-response shape this project keeps getting bitten by.
+ * The existence check below is a second SELECT beyond the one checkSources()
+ * runs internally, which is a deliberately cheap price for that
+ * distinction: it runs before any probe is even considered, on the
+ * unresolved name, and is a no-op (never fires) on the no-source path. */
+admin.post(
+  "/health",
+  asyncHandler(async (req, res) => {
+    const sourceName = typeof req.query.source === "string" ? req.query.source : undefined;
+    if (sourceName) {
+      const row = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [sourceName]);
+      if (!row) {
+        res.status(404).json({ error: `No source named '${sourceName}'.` });
+        return;
+      }
+    }
+    res.json({ checked: await checkSources({ sourceName }) });
+  }),
+);
+
+/* SP3.6 T9. D5, FINALLY HOUSED: §9.6 ruled the manual scrape trigger lives
+ * on the Source Registry screen, and it was never built. POST /scrape
+ * above streams the .db back -- deliberately, to defer the blob-storage
+ * decision to SP4 -- and that shape is right for a terminal operator and
+ * wrong for a button: clicking "Run" and receiving a SQLite download is
+ * not "run a scrape" to a person, they would still have to `npm run
+ * import` and `npm run merge` by hand. This route does scrape, import and
+ * merge as one action.
+ *
+ * WHY THIS STILL NEEDS NO BLOB DECISION: the artifact only has to survive
+ * WITHIN THIS REQUEST -- runScrape() writes it, importArtifact() reads it,
+ * both inside the one `try` below -- so a temp file removed in `finally`
+ * is the whole storage story. SP4's blob-provider decision stays exactly
+ * as parked as it was for /scrape. Nothing persists past the response.
+ *
+ * Inherits requireAdminSecret from `admin.use` above, same as /scrape and
+ * /health -- no auth of its own.
+ *
+ * SOURCE RESOLUTION mirrors /scrape's FIX 1 / FIX 2 exactly, for the same
+ * reason: resolveSource() turns the CLI ergonomic ('sam') into the
+ * canonical source.name row ('SAM.gov') up front, before any fetching, and
+ * refuses a disabled source. `request.sourceName` is set from the result
+ * so runScrape() stamps the ARTIFACT with the name import-artifact.ts can
+ * actually resolve, not the short key it has never heard of. */
+
+/* REVIEW FIX (Important, finding 2): /run does strictly more than /scrape --
+ * import and merge run AFTER the scrape loop, inside the SAME request, and
+ * `HANDLER_BUDGET_MS` only bounds the scrape loop itself (scrape/run.ts's
+ * budget check). Reusing that constant here left the platform's ~300s
+ * ceiling with ZERO explicit headroom for the two added phases: a scrape
+ * that spent its whole 240s budget would leave ~60s for import and merge
+ * combined, undocumented and unbudgeted.
+ *
+ * The scrape phase gets a smaller slice here on purpose, and the remainder
+ * is that headroom -- sized from measured figures already in this repo, not
+ * guessed: `npm run import` runs at ~1,038 rows/sec on one UNNEST statement,
+ * and `npm run merge` is set-based at 4.07s for 530 solicitations (both
+ * cited in ingest/corpus.ts's own comment; merge.ts:137 records the 3m36s
+ * row-at-a-time figure that set-based rewrite replaced). A run at that
+ * scale spends well under 10s on import+merge combined, so 120s of headroom
+ * below the 300s ceiling is a wide margin -- but it is now an EXPLICIT one,
+ * which the shared ceiling was not. `HANDLER_BUDGET_MS` and /scrape are
+ * unchanged: /scrape genuinely does only the one phase and its ceiling was
+ * already correct. */
+const RUN_HANDLER_BUDGET_MS = 180_000;
+
+/* CONTROLLER RULING (task-12, closing a gap the brief left open). This route
+ * takes the CLI adapter key ('sam', 'usaspending') -- but the /admin screen
+ * only has `source.name` ("SAM.gov"), never the short key, and the client
+ * must NOT hold a name->key map: this module's own header explains why
+ * ("two registries drift -- add a source to one and the other silently
+ * falls behind"). A map on the client would be exactly that second registry.
+ *
+ * So the resolution happens here instead, server-side, against the one
+ * ADAPTERS map that already exists: `?source=` may be either spelling.
+ * A key match is tried FIRST and, if found, is authoritative -- this is
+ * what keeps the CLI and every existing key-spelling test byte-for-byte
+ * unaffected. Only when no key matches does this fall back to a
+ * `sourceName` match, so a caller sending the canonical name gets exactly
+ * the same downstream behaviour (resolveSource, runScrape, the stamp) as
+ * one sending the key. If NEITHER matches, this keeps the existing 400
+ * naming the known keys -- there is nothing else useful to fall back to. */
+function resolveAdapterKey(source: string): string | undefined {
+  if (ADAPTERS[source]) return source;
+  const bySourceName = Object.entries(ADAPTERS).find(([, e]) => e.sourceName === source);
+  return bySourceName?.[0];
+}
+
+admin.post(
+  "/run",
+  asyncHandler(async (req, res) => {
+    const requested = String(req.query.source ?? "");
+    const key = resolveAdapterKey(requested);
+    if (key === undefined) {
+      res.status(400).json({
+        error: `No adapter named '${requested}'. Known: ${Object.keys(ADAPTERS).join(", ")}.`,
+      });
+      return;
+    }
+    // resolveAdapterKey only ever returns a key that is present in ADAPTERS.
+    const entry = ADAPTERS[key]!;
+
+    let request: RunRequest;
+    try {
+      request = validateRun({
+        source: key,
+        since: String(req.query.since ?? ""),
+        depth: "listing",
+      });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+      return;
+    }
+    /* A SMALLER budget than /scrape's, on purpose -- see RUN_HANDLER_BUDGET_MS
+     * above for the reasoning and the measured figures behind the number. */
+    request.budgetMs = RUN_HANDLER_BUDGET_MS;
+
+    try {
+      const resolved = await resolveSource(key);
+      request.sourceName = resolved.sourceName;
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+      return;
+    }
+
+    /* Same shape as /scrape's own try/finally (see its FIX ROUND 1 comment
+     * above for the full argument): the try starts here, wrapping
+     * `runScrape` AND the mkdtempSync directory it writes into, so a
+     * network failure, an import failure or a merge failure all still
+     * reach the `finally` below and the directory never survives the
+     * request. */
+    const dir = mkdtempSync(join(tmpdir(), "tf-run-"));
+    try {
+      const out = join(dir, `run-${key}.db`);
+      const result = await runScrape(request, entry.make(), out);
+      const imported = await importArtifact(out);
+      const merged = await mergeSightings();
+
+      /* CONTROLLER RULING: `entry.sourceName ?? key`, not
+       * `resolved.sourceName` and not bare `entry.sourceName`. `fake`
+       * carries `sourceName: null` in the registry on purpose (registry.ts)
+       * -- it is the one adapter this route can be exercised against
+       * without a network, and it has no source row of its own. Stamping
+       * against bare `entry.sourceName` would run `WHERE name = NULL`,
+       * match zero rows, and silently do nothing -- exactly the kind of
+       * failure a test could pass against vacuously, since NULL is also
+       * not equal to a fresh timestamp. Falling back to the registry key
+       * makes the write real for `fake` and leaves every resolved source
+       * (SAM.gov, USASpending) keyed exactly as it already was. */
+      const stamped = new Date().toISOString();
+      const stampTarget = entry.sourceName ?? key;
+      /* REVIEW FIX (Important, finding 1): dbRun()'s return value -- the
+       * affected-row count (db/index.ts's `run()`) -- used to be discarded.
+       * If the targeting above ever regresses (the exact failure the
+       * `?? key` ruling exists to prevent), the route would still answer
+       * 200 with a freshly-minted `last_run_at` in the BODY while the
+       * database silently kept the stale value -- no signal anywhere except
+       * this one test. `source.name` is UNIQUE (002_entity_graph.sql), so
+       * exactly one row can ever match a real name; asserting `=== 1`
+       * catches both a name with no row (0) and, defensively, an
+       * impossible multi-match. Same fail-loud posture db/index.ts's own
+       * `insert()` already takes ("a silent undefined here becomes a null
+       * foreign key three lines later") -- applied to an UPDATE instead of
+       * an INSERT. */
+      const affected = await dbRun(`UPDATE source SET last_run_at = $1 WHERE name = $2`, [
+        stamped,
+        stampTarget,
+      ]);
+      if (affected !== 1) {
+        throw new Error(
+          `run: expected to stamp exactly one source row for '${stampTarget}', updated ${affected}`,
+        );
+      }
+
+      /* Field names are the real ones, not the brief's guesses: ImportResult
+       * is { imported, skipped, ingestedThrough } (import-artifact.ts) and
+       * MergeResult is { created, updated, linked, orgsAttached }
+       * (merge/merge.ts). `merged` in the response body is `created` --
+       * new canonical solicitations -- because that is the count an
+       * operator watching "Run" actually wants to see move; `updated` and
+       * `linked` ride along for anyone who wants the fuller picture. */
+      res.json({
+        rows: result.rows,
+        imported: imported.imported,
+        skipped: imported.skipped,
+        ingestedThrough: imported.ingestedThrough,
+        merged: merged.created,
+        updated: merged.updated,
+        linked: merged.linked,
+        last_run_at: stamped,
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
