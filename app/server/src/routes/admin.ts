@@ -243,6 +243,28 @@ admin.post(
  * refuses a disabled source. `request.sourceName` is set from the result
  * so runScrape() stamps the ARTIFACT with the name import-artifact.ts can
  * actually resolve, not the short key it has never heard of. */
+
+/* REVIEW FIX (Important, finding 2): /run does strictly more than /scrape --
+ * import and merge run AFTER the scrape loop, inside the SAME request, and
+ * `HANDLER_BUDGET_MS` only bounds the scrape loop itself (scrape/run.ts's
+ * budget check). Reusing that constant here left the platform's ~300s
+ * ceiling with ZERO explicit headroom for the two added phases: a scrape
+ * that spent its whole 240s budget would leave ~60s for import and merge
+ * combined, undocumented and unbudgeted.
+ *
+ * The scrape phase gets a smaller slice here on purpose, and the remainder
+ * is that headroom -- sized from measured figures already in this repo, not
+ * guessed: `npm run import` runs at ~1,038 rows/sec on one UNNEST statement,
+ * and `npm run merge` is set-based at 4.07s for 530 solicitations (both
+ * cited in ingest/corpus.ts's own comment; merge.ts:137 records the 3m36s
+ * row-at-a-time figure that set-based rewrite replaced). A run at that
+ * scale spends well under 10s on import+merge combined, so 120s of headroom
+ * below the 300s ceiling is a wide margin -- but it is now an EXPLICIT one,
+ * which the shared ceiling was not. `HANDLER_BUDGET_MS` and /scrape are
+ * unchanged: /scrape genuinely does only the one phase and its ceiling was
+ * already correct. */
+const RUN_HANDLER_BUDGET_MS = 180_000;
+
 admin.post(
   "/run",
   asyncHandler(async (req, res) => {
@@ -266,11 +288,9 @@ admin.post(
       res.status(400).json({ error: (e as Error).message });
       return;
     }
-    /* Same ceiling as /scrape, same reason (below Vercel's 300s function
-     * limit, with margin for the response to flush) -- and this route does
-     * strictly MORE work per request than /scrape (scrape, then import,
-     * then merge), so the margin matters at least as much here. */
-    request.budgetMs = HANDLER_BUDGET_MS;
+    /* A SMALLER budget than /scrape's, on purpose -- see RUN_HANDLER_BUDGET_MS
+     * above for the reasoning and the measured figures behind the number. */
+    request.budgetMs = RUN_HANDLER_BUDGET_MS;
 
     try {
       const resolved = await resolveSource(key);
@@ -305,10 +325,29 @@ admin.post(
        * makes the write real for `fake` and leaves every resolved source
        * (SAM.gov, USASpending) keyed exactly as it already was. */
       const stamped = new Date().toISOString();
-      await dbRun(`UPDATE source SET last_run_at = $1 WHERE name = $2`, [
+      const stampTarget = entry.sourceName ?? key;
+      /* REVIEW FIX (Important, finding 1): dbRun()'s return value -- the
+       * affected-row count (db/index.ts's `run()`) -- used to be discarded.
+       * If the targeting above ever regresses (the exact failure the
+       * `?? key` ruling exists to prevent), the route would still answer
+       * 200 with a freshly-minted `last_run_at` in the BODY while the
+       * database silently kept the stale value -- no signal anywhere except
+       * this one test. `source.name` is UNIQUE (002_entity_graph.sql), so
+       * exactly one row can ever match a real name; asserting `=== 1`
+       * catches both a name with no row (0) and, defensively, an
+       * impossible multi-match. Same fail-loud posture db/index.ts's own
+       * `insert()` already takes ("a silent undefined here becomes a null
+       * foreign key three lines later") -- applied to an UPDATE instead of
+       * an INSERT. */
+      const affected = await dbRun(`UPDATE source SET last_run_at = $1 WHERE name = $2`, [
         stamped,
-        entry.sourceName ?? key,
+        stampTarget,
       ]);
+      if (affected !== 1) {
+        throw new Error(
+          `run: expected to stamp exactly one source row for '${stampTarget}', updated ${affected}`,
+        );
+      }
 
       /* Field names are the real ones, not the brief's guesses: ImportResult
        * is { imported, skipped, ingestedThrough } (import-artifact.ts) and
