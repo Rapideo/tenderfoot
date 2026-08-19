@@ -30,6 +30,58 @@
 
 ---
 
+## 📌 PINNED 2026-08-19 (late) — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
+
+**Working tree clean, everything pushed, gate 299 tests / 43 files.** Two production deploys went out tonight and **production's admin writes are currently DEAD on purpose** — fail-closed, exactly as designed. Nothing is half-finished in the code; what is outstanding is three environment actions and one click.
+
+### ⛔ 1. ROTATE `ADMIN_SECRET` — do this before anything else
+
+**The secret is partially exposed. 19 of its 40 characters were printed into a session transcript by Claude**, while inspecting the `.env` line's bytes with `od -c` after a redaction that silently did not apply to that command's output. Not a full compromise; **rotate rather than reason about whether half is enough.**
+
+The rotation and the fix are the same action, which is convenient:
+
+1. Generate a new 40-char value **in Matt's own terminal** (not through Claude):
+   `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})`
+2. **DELETE** the existing `ADMIN_SECRET` entry in Vercel, then **Add New** with the new value and **tick Production AND Preview before saving.**
+3. Replace the `ADMIN_SECRET=` line in local `.env` (line 26, last line).
+4. **Redeploy**, then verify.
+
+> ⚠️ **Two Vercel behaviours cost an hour tonight and will cost it again.**
+>
+> **Editing an existing variable's environment scope SILENTLY DOES NOT SAVE.** It was set to Production, then "moved" to Preview, and four separate attempts to also tick Production left the listing reading `Preview` only every time. **Creating a fresh entry with every box ticked at creation works** — that is how the Neon vars hold three scopes in one entry. **Delete and recreate; never edit the scope.**
+>
+> **Env vars are baked into a deployment at build time.** Changing one does nothing until the next deploy — which is why production kept working after the variable moved, and then died the moment Matt redeployed.
+
+**Verification is one non-mutating request, and the status code is the whole answer:**
+`curl https://tenderfoot-tau.vercel.app/api/admin/health`
+**`503` = the variable did not reach the runtime. `401` = it did, and the gate is live.** Right now it answers 503.
+
+### ⛔ 2. THE DEMO CRITERION IS STILL OWED, AND NOW IT IS ACTUALLY POSSIBLE
+
+**`https://tenderfoot-tau.vercel.app/admin` works for the first time ever.** Open it in a real browser, enter the secret when prompted, **click Check on SAM.gov.** All seven eligible production rows read `unknown` with no timestamp — nothing has ever probed production — so a real result is unmistakable.
+
+⚠️ **Do NOT click Run first.** Production's `SAM.gov` has `last_run_at = NULL` and `since_default = 'P7D'`, so the first Run derives a **seven-day** window. Twelve hours returned 1,724 rows in 43s on the test branch. It checkpoints rather than dies — but it is a large ingest, not a list refresh. Ask Claude to set a recent `last_run_at` first if a small first click is wanted.
+
+### ✅ 3. WHAT GOT FIXED TONIGHT, AND ONE CORRECTION THAT MATTERS
+
+**`/admin` 404'd in production and always had.** `vercel.json` rewrote only `/api/:path*`, so **every client-side route was a genuine Vercel 404 on a direct request.** Navigating from `/` worked and rendered all 13 rows — which is exactly why nobody noticed, and **the real reason nobody had ever clicked those buttons in production: the URL for doing it did not resolve.** Standard SPA fallback added (`5e518df`); **verified live — `/admin` 200, `/api/health` 200, assets 200.**
+
+> ⚠️ **CORRECTION, AND IT CHANGES A SECURITY CLAIM THIS FILE HAS MADE SINCE 08-15: production had NO Deployment Protection.** Plain `curl` with **no credentials at all** got `200` on `/` and on `/api/sources` — which returned the full source registry including legal notes — and on `/api/profile`, which returned the firm profile. STATUS has said for days that production "answers 302 publicly" and is protected. **It was not.**
+>
+> **This retroactively upgrades tonight's auth work from tidiness to a real fix.** Claude described the ungated `PATCH` routes earlier as *"missing defence-in-depth, not an open door"* — **that was wrong**: with no protection in front, anyone on the internet could have flipped sources on or rewritten the firm profile. Verified with plain `curl`, no credentials: **`PATCH /api/sources/1` now returns 401.**
+>
+> **Still open for Matt: is production SUPPOSED to be public?** Reads are open *by design* — but that design assumed protection in front of it, and the assumption was false. `/api/sources` and `/api/profile` are readable by anyone today.
+
+⚠️ **Vercel Attack Challenge Mode was tripped, almost certainly by Claude's own probing** — repeated `curl`/`vercel curl` plus two headless Chrome sessions against production in a few minutes. Everything, including static assets, answered `403` with a "Vercel Security Checkpoint" page for several minutes, then cleared on its own. **Back off rather than retry harder**; the control is at `https://vercel.com/koehler-partners/tenderfoot/firewall`.
+
+### ✅ 4. ALSO DONE TONIGHT — extraction spike, part two
+
+**Structure survives.** `.docx` tables: 244/244 tables and 758/758 rows preserved by `mammoth.convertToHtml` (the 64-cell gap is vertical-merge continuations, i.e. correct `rowspan`, not loss). `.xlsx` has two traps and **neither is about Node**: declared `!ref` dimensions are fiction (89–99% phantom rows), and **SheetJS replays Excel's cached formula values rather than evaluating** — so a workbook saved without recalculation yields a stale total with no signal. `.pdf` has no table structure at all; geometry is present, reconstruction is not provided. Full write-up: `docs/2026-08-18-extraction-spike.md`.
+
+**One ruling still with Matt on SP4:** the spreadsheet dependency — pin SheetJS from `cdn.sheetjs.com`, accept a package with unfixable advisories, or send spreadsheets to a Python sidecar.
+
+---
+
 ## 🔖 RESUME HERE — updated 2026-08-18
 
 **You are on `main`, SP3.6 IS MERGED, and the working tree is clean.** Merge commit `a110e93` (`--no-ff`, matching this repo's convention), branch `sp3.6-source-health` deleted after merging. Gate green **on the merged result**: **266 tests / 42 files**, `npm run check` exit 0. Thirteen tasks, each implemented and reviewed by a fresh agent; nineteen controller rulings, each recorded with what it costs if wrong; a whole-branch review that returned **Ready to merge** after a five-finding fix wave (`9be2280`).
