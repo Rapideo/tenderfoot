@@ -126,6 +126,25 @@
 
 ⚠️ **TWO SCANNER BUGS, BOTH IN THE SPIKE'S OWN CODE, AND THIS IS THE THIRD TIME TODAY.** A `/message/` test matched the literal string `"no messages"` and reported *105/105 files produced warnings* when the truth is **1 of 52**. A `<w:t[^>]*>` regex also matches `<w:tbl>`, so it captured raw XML markup as document text and reported **a 95% silent data loss that does not exist** — 10,161 of its 10,675 "characters of text" were angle-bracket markup. **Settled by a third independent method**, which agreed with the strict scanner exactly: mammoth had extracted everything, and the file is 3.7 MB because it embeds 6.9 MB of fonts. **The size heuristic was discarded rather than tuned** — all three of its flags were false alarms, and a 100 KB file with the same real loss would have graded clean. Same lesson as `fonts.test.ts` on 08-17: **a scanner is worth exactly what it actually matches.**
 
+### ✅ UNBLOCKED AND DEPLOYED 2026-08-19 — `ADMIN_SECRET` is live in production
+
+**Matt set `ADMIN_SECRET` in Vercel (Production) and in local `.env`; `146c943..2b94ac0` pushed; production deploy ● Ready in 17s; CI green in 50s.**
+
+**Verified, not inferred** — the distinction that got the 400-vs-503 wrong yesterday. `GET /api/admin/health` on the production deployment answers **`401 Unauthorized`**, carrying `Access-Control-Allow-Origin: *` and `X-Powered-By: Express`, so it is our app replying. **401 rather than 503 is the whole proof**: 503 is what `requireAdminSecret` returns when the variable is absent, so a 401 means the variable reached the function runtime and the gate is live under its new name.
+
+⚠️ **PREVIEW STILL HAS NO `ADMIN_SECRET`.** Confirmed against the preview scope directly (`vercel env ls preview` lists nothing). Production is correct; **preview deployments will answer 503 on every admin write**, where before this deploy they answered 200 because the PATCH routes were ungated. That is a real regression **on preview only**, and one command closes it:
+
+```powershell
+$s = (Get-Content .env | Where-Object { $_ -like 'ADMIN_SECRET=*' }) -replace '^ADMIN_SECRET=',''
+$s | vercel env add ADMIN_SECRET preview
+```
+
+⚠️ **NON-GET REQUESTS TO PRODUCTION COULD NOT BE VERIFIED FROM HERE, and a false alarm was raised and withdrawn.** `vercel curl -X POST/PATCH` returned `404 X-Vercel-Error: NOT_FOUND` and then, on a re-run of the identical request, `400` — flapping between two answers, and **carrying neither the Express nor the CORS headers that every genuine response from this app carries.** They are not coming from the application. *This was briefly written up as "Vercel is not routing non-GET methods", which would have been a serious production defect; it was not evidence of anything and is retracted.* **What is true is narrower: the write path on production is UNVERIFIED, not broken** — and asserting either way without a measurement is the exact mistake this file recorded yesterday.
+
+> **The honest way to close it is the demo criterion itself, and it needs Matt's browser.** Production sits behind Deployment Protection, so a fresh automated Chrome hits the protection page rather than the app; Matt's browser already holds the session. **Open `https://tenderfoot-tau.vercel.app/admin`, enter the secret once when prompted, click Check on SAM.gov.** All seven eligible production rows currently read `unknown` with no timestamp — nothing has ever probed production — so a successful Check is unmistakable.
+>
+> ⚠️ **Do not click Run first.** Production's `SAM.gov` has `last_run_at = NULL` and `since_default = 'P7D'`, so the first Run derives a **seven-day** window. Twelve hours returned 1,724 rows in 43s on the test branch. It is designed to checkpoint rather than die, but it is a large ingest, not a list refresh.
+
 ### ⛔ BLOCKED ON MATT — one environment variable, and nothing deploys until it exists
 
 **`146c943` and the rename that follows it are COMMITTED AND NOT PUSHED, deliberately.** Pushing deploys, and deploying this before the variable exists would take the Enable toggle and the Firm Profile editor on production **from working to 503**.
