@@ -102,9 +102,17 @@
 
 ⚠️ **1,724 rows from a twelve-hour window is a third volume data point, and it does not match the other two** — 530 in a day (08-16), 57 the next, now ~1,724 in twelve hours. **Three observations, no pattern.** Any capacity or Interested-per-hundred figure taken from a single window is still standing on one number.
 
-### ⏭ START HERE — commit the fix, then decide what SP3.6 owes production
+### ✅ DEPLOYED TO PRODUCTION 2026-08-18 — and the buttons work there now
 
-**The two fixes above are in the working tree and NOT committed.** Gate is green on them: **292 tests / 43 files**, `npm run check` exit 0. Files touched: `app/server/src/scrape/window.ts` + `window.test.ts` (both new), `app/server/src/health/check.ts` + `check.test.ts`, `app/server/src/routes/admin.ts` + `admin.test.ts`, `app/client/src/admin/Admin.tsx` + `Admin.test.tsx`.
+**Pushed `61de4cf..53f8e8a`; the Git-connected production deploy went ● Ready in 16s.** CI green in 37s. **Verified in the deployed bundle rather than assumed:** the live `assets/index-D0Rrx6HH.js` builds `api/admin/run?source=${encodeURIComponent(...)}` with **zero occurrences of `since=` anywhere in the file**, and carries the Check fix's `Not checked — ${reason}`. `/api/health` reports all seven migrations.
+
+⚠️ **The first click of Run on production will be a SEVEN-DAY SAM.gov scrape, and nobody should be surprised by it.** Production's `SAM.gov` is `enabled = true` with **`last_run_at = NULL`** and `since_default = 'P7D'`, so `resolveSince` takes the fallback branch: now minus seven days. For scale, a **twelve-hour** window on the test branch returned **1,724 rows in 43 seconds**. Seven days will very likely exceed `RUN_HANDLER_BUDGET_MS` (180s), which is **designed behaviour, not failure** — the loop checkpoints and reports a resume marker rather than dying mid-write — but the honest description is *"the first click starts a large ingest that probably needs a second click to finish"*, not *"the first click refreshes the list"*.
+
+> **Two ways to make that first click small, neither of them taken** — recorded rather than chosen, because production data is Matt's call: set `last_run_at` on the production row to something recent so the primary branch of the rule applies, or pass an explicit `?since=` (the override is still honoured, §9.6). **Nothing was changed on production beyond the deploy.**
+
+### ⏭ START HERE — the extraction spike (SP4's ruling made it the next real work)
+
+~~**The two fixes above are in the working tree and NOT committed.**~~ ✅ **Committed and pushed 2026-08-18** (`bbd051b`, `b04684e`, `53f8e8a`), CI green, production deployed — see above. **The next work is the extraction spike ruled below: parse all 110 `corpus/` files with Node libraries and report what breaks.** Original note follows for the file list. Gate is green on them: **292 tests / 43 files**, `npm run check` exit 0. Files touched: `app/server/src/scrape/window.ts` + `window.test.ts` (both new), `app/server/src/health/check.ts` + `check.test.ts`, `app/server/src/routes/admin.ts` + `admin.test.ts`, `app/client/src/admin/Admin.tsx` + `Admin.test.tsx`.
 
 **⚠️ CORRECTED 2026-08-18: production DOES have 006 and 007, and this entry said the opposite for several hours.** Checked directly against production rather than inherited from the previous entry: both columns exist, the backfill has run (**7 `unknown` / 6 `excluded`**), and `schema_migrations` stamps both at **2026-08-18 20:18:19 UTC** — applied by the production deploy that followed pushing `main` after the SP3.6 merge, since `npm run build` runs `migrate:deploy`. *The claim was true when first written, on 08-17, and was carried forward twice without being re-checked. A fact about production has to be re-read from production, not from the last thing that said it.*
 
