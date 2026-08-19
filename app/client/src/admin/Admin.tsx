@@ -23,12 +23,23 @@ import "./Admin.css";
  * record every invented affordance as a numbered deviation instead of
  * smuggling it in. They are D1-D5 in `docs/admin-deviations.md`.
  *
- * ⚠️ NO AUTHENTICATION. Neither this screen nor the endpoints behind it
- * check anything -- `PATCH /api/sources/:id` was already open before this
- * screen existed, so the UI adds no exposure it did not have, but it does
- * make the exposure reachable by clicking. Production is gated only by
- * Vercel Deployment Protection (it answers 302 publicly). "Auth in V1" is an
- * open question on Matt's list and this screen is now a reason to answer it.
+ * ⚠️ STILL NO AUTHENTICATION -- but every WRITE is now gated (2026-08-18).
+ * This block used to read "neither this screen nor the endpoints behind it
+ * check anything", and that was true: `PATCH /api/sources/:id` and
+ * `PATCH /api/profile` were open while `/api/admin/*` was not. The
+ * asymmetry was the wrong way round, because the ungated toggle is what
+ * decides whether a source may be scraped at all -- `resolveSource` refuses
+ * a disabled source, so the fail-closed posture the ingestion path leans on
+ * was itself switchable by anyone who could reach the API. Both writes now
+ * sit behind `requireAdminSecret` (`lib/adminSecret.ts`); READS stay open,
+ * so this screen still loads without demanding anything.
+ *
+ * That is consistency, NOT authentication. Design spec §7 calls the secret
+ * "a shared bearer secret typed into a browser tab" -- one string every
+ * operator shares, with no identity, no sessions, no revocation and no
+ * audit. Production is still additionally gated by Vercel Deployment
+ * Protection (it answers 302 publicly). **"Auth in V1" remains open on
+ * Matt's list**, and this screen is still the reason to answer it.
  */
 
 /* ⚠️ DEFECT FIXED HERE (SP3.6 T11). This map's keys used to be the bundle's
@@ -300,6 +311,9 @@ export function Admin() {
    * deliberate refusal into a control that silently does nothing. */
   const [errors, setErrors] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
+  /* The profile card had no error slot at all -- it was the one write on
+   * this screen that could fail with nothing shown. */
+  const [profileError, setProfileError] = useState("");
 
   const load = useCallback(async () => {
     const [s, p] = await Promise.all([
@@ -314,14 +328,23 @@ export function Admin() {
     void load();
   }, [load]);
 
+  /* GATED 2026-08-18. This route used to need no secret at all, which made
+   * the Enable toggle the one control that could switch a source on without
+   * proving anything -- and `resolveSource` refuses a disabled source, so
+   * that toggle IS the lock the whole ingestion path leans on. Same
+   * prompt-once / clear-on-401 handling as checkHealth and runSource; the
+   * secret is spread AFTER Content-Type so neither header is lost. */
   async function patchSource(id: number, body: Record<string, unknown>) {
+    const secret = getAdminSecret();
+    if (!secret) return false;
     setBusy((b) => ({ ...b, [id]: true }));
     setErrors((e) => ({ ...e, [id]: "" }));
     const r = await fetch(`/api/sources/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...adminHeaders(secret) },
       body: JSON.stringify(body),
     });
+    if (r.status === 401) clearAdminSecret();
     const data = await r.json().catch(() => ({}));
     setBusy((b) => ({ ...b, [id]: false }));
     if (!r.ok) {
@@ -462,6 +485,11 @@ export function Admin() {
           <h2 id="profile-h">Firm Profile</h2>
           <p>No fact about the firm appears in code. A second customer is a second row, not a fork.</p>
         </header>
+        {profileError ? (
+          <p className="admin-error" role="alert">
+            {profileError}
+          </p>
+        ) : null}
         <div className="admin-profile">
           {profile ? (
             PROFILE_FIELDS.map(({ key, label }) => {
@@ -480,13 +508,23 @@ export function Admin() {
                     className={`admin-field__input${value ? "" : " admin-field__input--empty"}`}
                     defaultValue={value}
                     rows={2}
+                    /* GATED 2026-08-18, same as the source PATCH above.
+                       Silence on failure would be worse here than anywhere
+                       else on the screen: a textarea that blurs and quietly
+                       discards the edit looks exactly like one that saved. */
                     onBlur={async (e) => {
                       if (e.target.value === value) return;
-                      await fetch("/api/profile", {
+                      const secret = getAdminSecret();
+                      if (!secret) return;
+                      const r = await fetch("/api/profile", {
                         method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
+                        headers: { "Content-Type": "application/json", ...adminHeaders(secret) },
                         body: JSON.stringify({ [key]: e.target.value }),
                       });
+                      if (r.status === 401) clearAdminSecret();
+                      setProfileError(
+                        r.ok ? "" : ((await r.json().catch(() => ({}))).error ?? `Save failed (${r.status})`),
+                      );
                       await load();
                     }}
                   />

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { all, one, run, tx } from "../db/index.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
+import { requireAdminSecret } from "../lib/adminSecret.js";
 
 /* SP1 T5-T8. The API surface is deliberately small: read and edit the two
  * configuration objects, and read what has been collected. No scoring, no
@@ -46,8 +47,22 @@ api.get(
   }),
 );
 
+/* GATED 2026-08-18. Per-route, NOT `api.use(...)`, and that distinction is
+ * the whole design: the GET routes on this router stay open, because
+ * /admin fetches /sources and /profile on mount and demanding the secret
+ * merely to LOOK at the screen would turn a shared bearer token into a
+ * login -- which design spec §7 explicitly says it is not. Writes are
+ * gated; reads are not.
+ *
+ * Why it was worth doing at all, given the secret is not authentication:
+ * `/api/admin/*` has been gated since SP3.6's final review, but THIS route
+ * with `{enabled: true}` is what makes a source scrapeable, and
+ * `resolveSource` refuses a disabled source. The fail-closed posture the
+ * whole ingestion path depends on was itself switchable by anyone who
+ * could reach the API. */
 api.patch(
   "/profile",
+  requireAdminSecret,
   asyncHandler(async (req, res) => {
     const updates = Object.entries(req.body ?? {}).filter(([k]) =>
       (PROFILE_FIELDS as readonly string[]).includes(k),
@@ -89,6 +104,7 @@ api.get(
 
 api.patch(
   "/sources/:id",
+  requireAdminSecret,
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const current = await one("SELECT * FROM source WHERE id = $1", [id]);

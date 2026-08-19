@@ -41,10 +41,17 @@ type Res = [status: number, body: any];
 const get = (p: string): Promise<Res> =>
   fetch(base + p).then(async (r) => [r.status, await r.json()] as Res);
 
+/* Both PATCH routes are gated as of 2026-08-18 (see the block at the foot of
+ * this file). Set once here so the pre-existing tests -- which are about
+ * behaviour unrelated to auth -- do not each have to care; the tests that
+ * exercise the gate itself override it locally, exactly where it matters. */
+const ADMIN_SECRET = "test-routes-secret-do-not-use-in-prod";
+process.env.ADMIN_SCRAPE_SECRET = ADMIN_SECRET;
+
 const patch = (p: string, body: unknown): Promise<Res> =>
   fetch(base + p, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "X-Admin-Secret": ADMIN_SECRET },
     body: JSON.stringify(body),
   }).then(async (r) => [r.status, await r.json()] as Res);
 
@@ -188,4 +195,90 @@ test("PATCH still accepts a valid health value", async () => {
   const [status, body] = await patch(`/sources/${ohio.id}`, { health: "ok" });
   expect(status).toBe(200);
   expect(body.source.health).toBe("ok");
+});
+
+/* ---- 2026-08-18: the ungated write surface -------------------------------
+ *
+ * THE ASYMMETRY THIS CLOSES. `/api/admin/*` (scrape, health, run) has been
+ * behind `requireAdminSecret` since the SP3.6 final review, on the grounds
+ * that an internet-facing outbound-fetch amplifier must not be open. But the
+ * two PATCH routes on THIS router were never gated at all -- and
+ * `PATCH /sources/:id` with `{enabled: true}` is precisely what decides
+ * whether a source may be scraped. `resolveSource` refuses a disabled
+ * source, which is the fail-closed posture the whole ingestion path leans
+ * on; leaving the switch that controls it unauthenticated meant the lock on
+ * the scraper had no lock of its own.
+ *
+ * READS STAY OPEN, deliberately. `/admin` fetches `/sources` and `/profile`
+ * on mount, and gating those would demand the secret merely to LOOK at the
+ * screen -- turning a shared bearer secret into a login, which is exactly
+ * what design spec §7 says it is not. Writes are gated; reads are not.
+ *
+ * NOT AUTHENTICATION, and this does not close "auth in V1". §7 calls the
+ * secret "a shared bearer secret typed into a browser tab". This makes the
+ * gate CONSISTENT across every write; it does not make it a login. */
+
+const patchNoSecret = (p: string, body: unknown): Promise<Res> =>
+  fetch(base + p, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (r) => [r.status, await r.json()] as Res);
+
+test("PATCH /sources/:id refuses without the admin secret", async () => {
+  const [, sources] = await get("/sources");
+  const sam = sources.find((s: any) => s.name === "SAM.gov");
+  const [status] = await patchNoSecret(`/sources/${sam.id}`, { enabled: true });
+  expect(status).toBe(401);
+});
+
+test("PATCH /profile refuses without the admin secret", async () => {
+  const [status] = await patchNoSecret("/profile", { capabilities: "should not land" });
+  expect(status).toBe(401);
+});
+
+/* The refusal must be real, not cosmetic: a 401 that still wrote the row
+ * would pass the status assertion above and change the database anyway. */
+/* ⚠️ THIS TEST PASSED VACUOUSLY on its first (red) run and was rewritten.
+ * It compared /profile before and after the refused write -- but an earlier
+ * test in this file had already written the same string, so before === after
+ * whether the write was refused OR performed. It asserted nothing.
+ *
+ * Fixed by writing a KNOWN-GOOD value with the secret first, then attempting
+ * a DIFFERENT value without it: now the assertion can only hold if the
+ * second write was actually refused. Exactly the "test that passes for the
+ * wrong reason" this project keeps meeting -- and it is the reason the
+ * red run must be read, not just seen to be red. */
+test("a refused PATCH does not write", async () => {
+  const sentinel = "capabilities set with the secret";
+  await patch("/profile", { capabilities: sentinel });
+
+  const [status] = await patchNoSecret("/profile", { capabilities: "written without a secret" });
+  expect(status).toBe(401);
+
+  const [, after] = await get("/profile");
+  expect(after.capabilities).toBe(sentinel);
+});
+
+/* Fail closed, matching /api/admin exactly: no secret configured means no
+ * admin writes at all, rather than writes that are open because nobody set
+ * a variable. */
+test("an unset ADMIN_SCRAPE_SECRET refuses the write with 503, not 200", async () => {
+  const held = process.env.ADMIN_SCRAPE_SECRET;
+  delete process.env.ADMIN_SCRAPE_SECRET;
+  try {
+    const [status] = await patch("/profile", { capabilities: "should not land" });
+    expect(status).toBe(503);
+  } finally {
+    process.env.ADMIN_SCRAPE_SECRET = held;
+  }
+});
+
+/* Reads stay open -- asserted, so a later "tighten everything" pass has to
+ * argue with a test rather than quietly break the screen's initial load. */
+test("reads remain open: /sources and /profile need no secret", async () => {
+  const [sStatus] = await fetch(base + "/sources").then(async (r) => [r.status] as const);
+  const [pStatus] = await fetch(base + "/profile").then(async (r) => [r.status] as const);
+  expect(sStatus).toBe(200);
+  expect(pStatus).toBe(200);
 });

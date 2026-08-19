@@ -164,6 +164,11 @@ test("a real 'rot' enum value renders StatusDot's rot state; 'excluded' renders 
 /* D1 -- the lever the SVRC calls the only one there is. It does not exist in
  * the V1.2 bundle, so this test is the only specification of it. */
 test("the enabled toggle PATCHes the source", async () => {
+  /* Needs the secret since 2026-08-18: PATCH /api/sources/:id is gated, so
+     patchSource() now bails before fetching if none is held. Set here rather
+     than in a global beforeEach so the two tests that deliberately exercise
+     the MISSING-secret path stay honest. */
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
   const calls: { url: string; body: unknown }[] = [];
   vi.stubGlobal(
     "fetch",
@@ -193,6 +198,11 @@ test("the enabled toggle PATCHes the source", async () => {
  * do nothing -- which is worse than an error, because the operator concludes
  * the button is broken rather than that the system said no. */
 test("a fail-closed 400 is shown to the operator, not swallowed", async () => {
+  /* Needs the secret since 2026-08-18: PATCH /api/sources/:id is gated, so
+     patchSource() now bails before fetching if none is held. Set here rather
+     than in a global beforeEach so the two tests that deliberately exercise
+     the MISSING-secret path stay honest. */
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -696,4 +706,66 @@ test("a Check that did run reports no skip reason", async () => {
   (await screen.findByRole("button", { name: /check sam\.gov/i })).click();
 
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+});
+
+/* ---- 2026-08-18: the writes are gated now, so the screen must send it ----
+ *
+ * `PATCH /api/sources/:id` and `PATCH /api/profile` moved behind
+ * `requireAdminSecret` server-side. This screen is their only caller, so if
+ * it does not send the header the Enable toggle and the profile editor both
+ * simply stop working -- a 401 the operator would experience as "the
+ * checkbox does nothing", which is the same broken-looking-control failure
+ * this file has now met twice in one day. */
+test("the enabled toggle sends the admin secret", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  const patches: { url: string; headers: Record<string, string> }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        patches.push({ url: String(url), headers: (init.headers ?? {}) as Record<string, string> });
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources") ? [{ ...baseSource, name: "SAM.gov" }] : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  (await screen.findByRole("checkbox", { name: /enable sam\.gov/i })).click();
+
+  await waitFor(() => expect(patches.length).toBe(1));
+  expect(patches[0]!.headers["X-Admin-Secret"]).toBe("s3cret");
+  /* The body still has to arrive intact -- a header added by clobbering the
+   * headers object would send the secret and lose Content-Type. */
+  expect(patches[0]!.headers["Content-Type"]).toBe("application/json");
+});
+
+/* Same rule adminSecret.ts states for Check and Run: a wrong secret must not
+ * silently break every later click. */
+test("a 401 from the enabled toggle clears the stored admin secret", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "wrong-secret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return { ok: false, status: 401, json: async () => ({ error: "Unauthorized." }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources") ? [{ ...baseSource, name: "SAM.gov" }] : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  (await screen.findByRole("checkbox", { name: /enable sam\.gov/i })).click();
+
+  await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
 });

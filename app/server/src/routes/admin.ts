@@ -31,12 +31,12 @@
  * for why this lives here rather than in scrape/run.ts.
  */
 import express from "express";
-import type { NextFunction, Request, Response } from "express";
 import { mkdtempSync, createReadStream, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { asyncHandler } from "../lib/asyncHandler.js";
+import { requireAdminSecret } from "../lib/adminSecret.js";
 import { validateRun, type RunRequest } from "../scrape/contract.js";
 import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
@@ -50,25 +50,11 @@ import { mergeSightings } from "../merge/merge.js";
 /* Below Vercel's 300s ceiling with margin for the response to flush. */
 const HANDLER_BUDGET_MS = 240_000;
 
-/* FIX 3. Read fresh on every request (not cached at module load) so a test
- * suite -- or an operator fixing a misconfigured deploy -- can flip
- * ADMIN_SCRAPE_SECRET without restarting the process. FAILS CLOSED: no
- * environment variable means no route, period -- this is deliberate, not
- * an oversight, and must never be "fixed" into failing open. */
-function requireAdminSecret(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.ADMIN_SCRAPE_SECRET;
-  if (!secret) {
-    res.status(503).json({
-      error: "ADMIN_SCRAPE_SECRET is not set. Refusing to run an unauthenticated scrape route.",
-    });
-    return;
-  }
-  if (req.header("X-Admin-Secret") !== secret) {
-    res.status(401).json({ error: "Unauthorized." });
-    return;
-  }
-  next();
-}
+/* FIX 3's gate now lives in lib/adminSecret.ts, because a SECOND router
+ * needed it (2026-08-18): the two PATCH routes on routes/index.ts were
+ * ungated, and PATCH /sources/:id is what decides whether a source may be
+ * scraped at all. Copying the function there would have been a duplicated
+ * refusal -- see that module's header. Behaviour here is unchanged. */
 
 export const admin = express.Router();
 admin.use(requireAdminSecret);
