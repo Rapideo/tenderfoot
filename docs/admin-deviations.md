@@ -134,9 +134,24 @@ own text is about the LEGAL column's vocabulary, not about probing) — and, on
 those rows, is **disabled with a stated reason** where no adapter exists yet
 rather than hidden: an absent control is a mystery, a disabled one is an
 explanation. Clicking it calls
-`POST /api/admin/run?source=<name>&since=<window>`, gated by
+`POST /api/admin/run?source=<name>`, gated by
 `requireAdminSecret` the same way the pre-existing `/api/admin/scrape` and
 the new `/api/admin/health` (the Check control's endpoint) are.
+
+**CORRECTED 2026-08-18: there is no `&since=` on that URL, and the version
+of this paragraph that said there was described a control that could never
+work.** The client used to append `&since=${s.since_default}` -- and
+`since_default` is an ISO-8601 DURATION (`P7D`), where the route's
+`validateRun` requires a DATE, so every click of Run answered `400 since
+must be an ISO-8601 date (YYYY-MM-DD[T...]), got: P7D` and `last_run_at`
+never moved. Found by clicking the button, which had never been done. The
+window is now derived server-side from the row
+(`app/server/src/scrape/window.ts`), following the rule
+`003_seed_source_registry.sql` already stated: `since = last successful
+run`, with `since_default` as the seed for a source that has never run. An
+explicit `?since=` is still honoured -- §9.6 rules that the operator sets
+the scope of each run -- it is only its ABSENCE that now means "derive"
+rather than "refuse".
 
 **What it does: scrape, import and merge, as one action.** `/run` runs
 `runScrape` -> `importArtifact` -> `mergeSightings` inside a single request

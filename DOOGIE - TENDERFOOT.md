@@ -551,3 +551,32 @@ August 15, 2026:
 233. The bit of the merge I'd have missed on my own is the asymmetry. Nobody re-runs a red. A pass invites suspicion and a failure doesn't, so the sample-of-one problem is actually worse in the direction we weren't watching. And a refusal gets written down as a property rather than an event, which is what makes it expensive — "X is blocked for the agent" names a human as the workaround, so a bad record doesn't just sit there being wrong, it moves work onto me and then looks like a constraint when I go to question it.
 
 234. Still not promoted, and the reason is honest: what's missing is a refusal that recurs on retry. Without one we can say "check" but not "how to tell." Retry-before-you-hand-off goes in the moment we have it — it's the cheapest rule in the file.
+August 18, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand. This covers the evening session only; Aug 16 and Aug 17 have no entries and were deliberately not backfilled.]*
+
+235. Told Claude to resume. SP3.6 was merged and green and owed exactly one thing — nobody had ever clicked the Check and Run buttons. Only the endpoints under them had been exercised.
+
+236. Browser extension was unavailable again, second session running. It didn't hand that back to me. Drove Chrome directly over the DevTools Protocol instead — headless Chrome with a debugging port, spoken to with the WebSocket that's already in Node 24. No package installed; Playwright would have been ~300MB in a repo whose dependency list is deliberately short. Same shape as 218: the blocker was real, but the response to a blocked path is to find another path, not to move the work onto me.
+
+237. Both buttons were broken. Run had never worked once, in any browser, for any source, since the day it was written.
+
+238. Mechanism: the screen sent `since=P7D` straight off the row. `since_default` is a duration; the route wants a date. 400 every time, and `last_run_at` never moved.
+
+239. The part I want kept is the test. The client's own test asserted `"...&since=P7D"` as the EXPECTED url, against a stubbed fetch that answered ok to any POST. So it couldn't have found this — it never spoke to a server. It wrote the wrong string down and then defended it. A test that pins a wrong constant is worse than no test, because the next person reads it as deliberate.
+
+240. And the rule was already written down. Migration 003 says it in as many words: since_default is only a seed, the rule is `since = last successful run`. Nothing had ever implemented it. Every server test passed a real date by hand, so the only caller that touched the actual column was the button — and the button had never been pressed.
+
+241. That's the generalisation and it's a new one for this file: a value that only a human's click puts into the system is untested by construction. Not under-tested — untested. Two suites can both be green and neither one ever meets the other. Same family as 2.15/2.19 (one observation isn't a property) but a different failure: here nobody was even observing.
+
+242. Second defect, smaller. Check on Kentucky and Michigan did nothing at all — 200, empty, no error, no change. The skip was correct (no probe target, so leaving it `unknown` beats writing a false `failing`); it was just never reported, so "probed it" and "chose not to" looked identical. Server now says which, and why.
+
+243. Trap worth writing down. Six orphaned vite dev servers from earlier sessions were squatting 5175-5180, so `npm run dev` quietly landed on 5181 — and the first curl to 5175 answered 200 from a stale bundle. A dev server that silently moves port will happily let you verify the wrong build. Read the banner, don't assume the port.
+
+244. Said out loud rather than left to be discovered: the proving run left real state on the test branch. SAM.gov enabled, last_run_at set, and `public` now holds 1,925 rows instead of the 201-row corpus. No test reads that schema and production was never touched, but someone will open it expecting the corpus.
+
+245. Third volume number and it doesn't match the other two — 530 in a day, then 57, now ~1,724 in twelve hours. Three observations, no pattern. Still nothing to hang a capacity figure on.
+
+246. Promotion to the playbook left for me again rather than done off the back of the incident. Right call, same as 211.
+
+247. Asked where we actually are: still mechanics, no analysis built. Nothing in the system forms an opinion about a solicitation. SP5 stays parked where it was put on 08-11.
