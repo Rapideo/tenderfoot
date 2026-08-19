@@ -18,28 +18,35 @@ import type { NextFunction, Request, Response } from "express";
  * it; what this closes is the far smaller gap of some writes being gated
  * and others not.
  *
- * ⚠️ THE NAME IS NOW NARROWER THAN THE JOB. `ADMIN_SCRAPE_SECRET` was named
- * when it gated one scrape route; it now gates every admin write, scraping
- * or not. Deliberately NOT renamed here: the variable is set in Vercel's
- * project settings for production and preview, and renaming it in code
- * without changing it there would fail closed on the next deploy -- every
- * admin write answering 503 until someone noticed. The rename is a
- * deployment task, not a code edit, and it is recorded in STATUS rather than
- * half-done here.
+ * RENAMED TO `ADMIN_SECRET` 2026-08-19, and the timing is the whole point.
+ * It was `ADMIN_SCRAPE_SECRET`, named when it gated one scrape route, and it
+ * now gates every admin write. The rename normally costs a broken deploy
+ * window -- code reading a new name while the environment still holds the
+ * old one fails closed, every admin write answering 503 until someone
+ * notices. It cost nothing here because `vercel env ls` showed the variable
+ * had **never been set in any environment**, so there was no value to
+ * migrate and no deploy to break. A week of it being set would have made
+ * this a migration; today it was a find-and-replace.
+ *
+ * NO FALLBACK to the old name, deliberately (Matt's ruling). A
+ * `ADMIN_SECRET ?? ADMIN_SCRAPE_SECRET` shim would make the push safe in any
+ * order, and would then be a second name nobody removes -- the compatibility
+ * layer that quietly becomes permanent. The ordering constraint is real
+ * instead: **the variable must exist in Vercel before this code deploys.**
  */
 
 /* Read fresh on every request rather than cached at module load, so a test
  * suite -- or an operator fixing a misconfigured deploy -- can change it
  * without restarting the process. */
 export function requireAdminSecret(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.ADMIN_SCRAPE_SECRET;
+  const secret = process.env.ADMIN_SECRET;
   /* FAILS CLOSED: no environment variable means no admin write, period.
    * This is deliberate and must never be "fixed" into failing open --
    * an unset variable is indistinguishable from a misconfigured deploy,
    * and the safe reading of that ambiguity is refusal. */
   if (!secret) {
     res.status(503).json({
-      error: "ADMIN_SCRAPE_SECRET is not set. Refusing to serve an unauthenticated admin write.",
+      error: "ADMIN_SECRET is not set. Refusing to serve an unauthenticated admin write.",
     });
     return;
   }

@@ -42,7 +42,7 @@ afterAll(async () => {
  * matters. */
 const ADMIN_SECRET = "test-shared-secret-do-not-use-in-prod";
 beforeEach(() => {
-  process.env.ADMIN_SCRAPE_SECRET = ADMIN_SECRET;
+  process.env.ADMIN_SECRET = ADMIN_SECRET;
 });
 
 /* `Response.json()` resolves to `unknown` under these lib types, so
@@ -70,8 +70,8 @@ async function post(
 /* FAIL CLOSED, not merely unauthenticated-by-default: an environment that
  * simply forgot to set the secret must refuse outright, never silently run
  * as if auth were satisfied. */
-test("ADMIN_SCRAPE_SECRET unset refuses every request with 503", async () => {
-  delete process.env.ADMIN_SCRAPE_SECRET;
+test("ADMIN_SECRET unset refuses every request with 503", async () => {
+  delete process.env.ADMIN_SECRET;
   const res = await post({ source: "fake", since: "2026-08-01", depth: "listing" }, {});
   expect(res.status).toBe(503);
 });

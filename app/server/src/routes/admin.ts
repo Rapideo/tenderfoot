@@ -20,7 +20,7 @@
  * internet-facing 240-second outbound-fetch amplifier that scrapes federal
  * sources from the app's IP and streams a database file back to whoever
  * asks. `requireAdminSecret` below gates every route this router exposes,
- * fail-closed: an unset ADMIN_SCRAPE_SECRET refuses with 503 rather than
+ * fail-closed: an unset ADMIN_SECRET refuses with 503 rather than
  * running unauthenticated, and a set-but-mismatched (or absent) header
  * refuses with 401.
  *

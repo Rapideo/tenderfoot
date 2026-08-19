@@ -126,6 +126,25 @@
 
 ⚠️ **TWO SCANNER BUGS, BOTH IN THE SPIKE'S OWN CODE, AND THIS IS THE THIRD TIME TODAY.** A `/message/` test matched the literal string `"no messages"` and reported *105/105 files produced warnings* when the truth is **1 of 52**. A `<w:t[^>]*>` regex also matches `<w:tbl>`, so it captured raw XML markup as document text and reported **a 95% silent data loss that does not exist** — 10,161 of its 10,675 "characters of text" were angle-bracket markup. **Settled by a third independent method**, which agreed with the strict scanner exactly: mammoth had extracted everything, and the file is 3.7 MB because it embeds 6.9 MB of fonts. **The size heuristic was discarded rather than tuned** — all three of its flags were false alarms, and a 100 KB file with the same real loss would have graded clean. Same lesson as `fonts.test.ts` on 08-17: **a scanner is worth exactly what it actually matches.**
 
+### ⛔ BLOCKED ON MATT — one environment variable, and nothing deploys until it exists
+
+**`146c943` and the rename that follows it are COMMITTED AND NOT PUSHED, deliberately.** Pushing deploys, and deploying this before the variable exists would take the Enable toggle and the Firm Profile editor on production **from working to 503**.
+
+**`vercel env ls` shows the secret has NEVER been set in ANY Vercel environment** — not production, not preview, not development. Two things follow, and the first corrects the record:
+
+1. **Every `/api/admin/*` route has answered 503 on production since the day it shipped.** Check and Run have never worked there, and the `since=P7D` defect was never even reached — `requireAdminSecret` refuses before the handler runs. *STATUS asserted a 400 for several hours; that 400 was measured on a laptop and asserted about production.*
+2. **The two PATCH routes are the only admin writes that DO work in production today** — precisely because they are the ungated ones. Gating them without the variable in place turns a working control into a 503.
+
+**✅ RULED 2026-08-19: rename to `ADMIN_SECRET`, no fallback.** The variable now gates every admin write, not just scraping, and renaming cost nothing *today* because there was no value in any environment to migrate — a week of it being set would have made this a migration instead of a find-and-replace. **A `??` fallback was declined on purpose:** it would make the push order-independent and then be a second name nobody removes.
+
+> ### What Matt does, and it is three lines
+>
+> **1.** Set **`ADMIN_SECRET`** in Vercel for **Production** and **Preview** — dashboard (*Settings → Environment Variables*) or `vercel env add ADMIN_SECRET production`. Any long random string. **Keep a copy**: it is what gets typed into the browser tab when Check or Run is clicked.
+> **2.** Add the same line to local `.env`, so `npm run dev` stops needing a hand-exported variable.
+> **3.** Tell Claude, who pushes — and then **verifies by calling `/api/admin/health` with the header rather than inferring from the bundle**, which is the mistake that produced the wrong 400 above.
+>
+> ⚠️ **Order is load-bearing, because there is no fallback: variable first, push second.** Reversed, every admin write answers 503 until the variable appears.
+
 ### ⏭ START HERE — one ruling left on SP4, and it is not the one anyone expected
 
 **The runtime question is answered by measurement; what is left is a dependency decision.** The recommendation on file is **Node throughout** — `mammoth` and `unpdf` are settled for the two formats that carry the scope of work — **with the spreadsheet dependency chosen deliberately instead of inherited:**

@@ -46,7 +46,7 @@ const get = (p: string): Promise<Res> =>
  * behaviour unrelated to auth -- do not each have to care; the tests that
  * exercise the gate itself override it locally, exactly where it matters. */
 const ADMIN_SECRET = "test-routes-secret-do-not-use-in-prod";
-process.env.ADMIN_SCRAPE_SECRET = ADMIN_SECRET;
+process.env.ADMIN_SECRET = ADMIN_SECRET;
 
 const patch = (p: string, body: unknown): Promise<Res> =>
   fetch(base + p, {
@@ -263,14 +263,14 @@ test("a refused PATCH does not write", async () => {
 /* Fail closed, matching /api/admin exactly: no secret configured means no
  * admin writes at all, rather than writes that are open because nobody set
  * a variable. */
-test("an unset ADMIN_SCRAPE_SECRET refuses the write with 503, not 200", async () => {
-  const held = process.env.ADMIN_SCRAPE_SECRET;
-  delete process.env.ADMIN_SCRAPE_SECRET;
+test("an unset ADMIN_SECRET refuses the write with 503, not 200", async () => {
+  const held = process.env.ADMIN_SECRET;
+  delete process.env.ADMIN_SECRET;
   try {
     const [status] = await patch("/profile", { capabilities: "should not land" });
     expect(status).toBe(503);
   } finally {
-    process.env.ADMIN_SCRAPE_SECRET = held;
+    process.env.ADMIN_SECRET = held;
   }
 });
 
