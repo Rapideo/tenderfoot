@@ -187,6 +187,18 @@ Three ways out — **and this is precisely where mechanical-vs-smart modes stop 
 
 **Mechanical mode needs real parsers. Smart mode needs a request.** The modes design does not remove this decision, but it does mean the answer can be *both*, with the data recording which one produced each field — which is the only way the comparison ever gets made.
 
+> ## ✅ RULED 2026-08-18 — measure before ruling, and the evidence was always on disk
+>
+> **None of the three options was chosen.** The table above rests on one claim — *"Node is the weakest major runtime for this"* — and **that claim has never been tested against a single file.** It is a reputation, carried into a stack assessment and then treated as a constraint.
+>
+> **`corpus/` holds 110 real files: 52 `.docx`, 20 `.pdf`, 11 `.xlsx`, 9 `.zip`, 3 `.xls`, 1 `.pptx`, 76 MB** — every format this decision is about, including the nested `.zip` bundles. A spike parses all of them with Node libraries and reports what breaks and how badly; **the ruling happens after that, against a measured failure rate.**
+>
+> **This is the project's own rule, applied to a runtime instead of an API.** `is_active=false` pointed the whole SAM adapter at a five-million-record archive and every signal reported success — caught by running it, not by reviewing it — and the registry carries `verified_facets` because *an adapter must not trust a parameter it did not verify*. §8.4 makes it sharpest: with no scores in V1, **extraction accuracy is the only thing the system can be right or wrong about**, so it is the worst possible place to inherit an assumption.
+>
+> ⚠️ **The spike must not silently become the ruling.** Node clearing this corpus rules Node in for *these* files — federal and Indiana, with a `.pptx` sample size of one — not for every bundle the system will meet.
+>
+> **The blob half is ruled outright: Vercel Blob** (§"Where documents live" above). Platform-native, one credential, private storage supported. **Not provisioned, on purpose** — and the prior question is still open: SP3.6's Run proved the artifact-in-request pattern, so *whether the original document must be kept at all* has never been asked. Vercel Blob answers "which provider", not "do we keep it".
+
 ## On frameworks — no CSS framework; build the primitives instead
 
 Matt asked whether the finalized prototype argues for adopting a framework, possibly as an early development task.
