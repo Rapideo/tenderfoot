@@ -197,6 +197,16 @@ Three ways out — **and this is precisely where mechanical-vs-smart modes stop 
 >
 > ⚠️ **The spike must not silently become the ruling.** Node clearing this corpus rules Node in for *these* files — federal and Indiana, with a `.pptx` sample size of one — not for every bundle the system will meet.
 >
+> ## ✅ MEASURED 2026-08-18 — and the premise was wrong
+>
+> **The spike ran the same day. Node parsed all of it: 172 attempts, 0 failures, 0 empty results, 80.1 MB in 16.9 s.** `.docx` verified against `<w:t>` ground truth (nothing below 95% fidelity); `.pdf` verified per page (457 pages, none without extractable text). **"Node is the weakest major runtime for this" did not hold against a single file of the real corpus.** Findings: [`2026-08-18-extraction-spike.md`](2026-08-18-extraction-spike.md).
+>
+> **What the measurement moved the decision to.** Not capability — **provenance.** npm's `xlsx` is frozen at 0.18.5 with two high-severity advisories and no fix available, because SheetJS left npm. It parsed 28/28 spreadsheets perfectly. **The surviving case for a Python sidecar is `openpyxl`'s clean supply chain, not Python's parsing**, which is a different and much smaller argument than this section made.
+>
+> ⚠️ **`.pptx` has no maintained Node library** — extraction was hand-rolled from slide XML, against a corpus sample of one file.
+>
+> ⚠️ **No OCR need in this corpus, and that is a property of the corpus.** Federal + Indiana, digital-native throughout. The first scanned bundle needs OCR and no runtime choice avoids it.
+
 > **The blob half is ruled outright: Vercel Blob** (§"Where documents live" above). Platform-native, one credential, private storage supported. **Not provisioned, on purpose** — and the prior question is still open: SP3.6's Run proved the artifact-in-request pattern, so *whether the original document must be kept at all* has never been asked. Vercel Blob answers "which provider", not "do we keep it".
 
 ## On frameworks — no CSS framework; build the primitives instead

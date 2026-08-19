@@ -110,9 +110,33 @@
 
 > **Two ways to make that first click small, neither of them taken** — recorded rather than chosen, because production data is Matt's call: set `last_run_at` on the production row to something recent so the primary branch of the rule applies, or pass an explicit `?since=` (the override is still honoured, §9.6). **Nothing was changed on production beyond the deploy.**
 
-### ⏭ START HERE — the extraction spike (SP4's ruling made it the next real work)
+### ✅ DONE 2026-08-18 — the extraction spike, and the premise did not survive it
 
-~~**The two fixes above are in the working tree and NOT committed.**~~ ✅ **Committed and pushed 2026-08-18** (`bbd051b`, `b04684e`, `53f8e8a`), CI green, production deployed — see above. **The next work is the extraction spike ruled below: parse all 110 `corpus/` files with Node libraries and report what breaks.** Original note follows for the file list. Gate is green on them: **292 tests / 43 files**, `npm run check` exit 0. Files touched: `app/server/src/scrape/window.ts` + `window.test.ts` (both new), `app/server/src/health/check.ts` + `check.test.ts`, `app/server/src/routes/admin.ts` + `admin.test.ts`, `app/client/src/admin/Admin.tsx` + `Admin.test.tsx`.
+**Node parsed everything. 172 parse attempts, 0 failures, 0 empty results, 80.1 MB in 16.9 s.** Full findings: [`docs/2026-08-18-extraction-spike.md`](docs/2026-08-18-extraction-spike.md). Harness committed and re-runnable at `docs/spikes/2026-08-18-extraction/`, with its dependencies installed **there** rather than in the root `package.json` — installing parsers into the project would have pre-committed the repo to Node before the ruling the spike exists to inform.
+
+**The claim the whole SP4 decision rested on — *"Node is the weakest major runtime for this"* — did not hold against a single file.** It was never measured; it was inherited from the stack assessment and treated as a constraint for six days. `.docx` 105/105, `.pdf` 37/37, `.xlsx` 22/22, `.xls` 6/6, `.pptx` 2/2, nine `.zip` bundles opened and 86 members reached.
+
+**"Parsed" was not allowed to mean "did not throw"**, since that is exactly the shape of the two defects found hours earlier the same day. **`.docx` was checked against independent ground truth** — mammoth's output against every `<w:t>` run in the file's own XML — and kept ≥99% on 39 of 52 files and ≥95% on the rest, **with nothing below 95%**. **`.pdf` was checked per PAGE, not per file**, because one scanned page inside a forty-page document is invisible in a file-level average: **457 pages, zero with no extractable text.**
+
+> ⚠️ **THE REAL COST IS SUPPLY CHAIN, NOT PARSING — and no argument would have found it.** **npm's `xlsx` is frozen at 0.18.5 with two high-severity advisories and `No fix available`** (prototype pollution, ReDoS). **SheetJS left npm**; current versions ship only from `cdn.sheetjs.com`. It parsed 28/28 spreadsheets flawlessly including legacy `.xls` binary — capability is not the problem, **provenance is**. Python's `openpyxl` has no equivalent problem, which is now **the strongest surviving argument for the sidecar, and it is an argument about dependency provenance rather than about parsing.**
+>
+> ⚠️ **`.pptx` has no maintained Node library.** Those two results came from unzipping the file and reading `<a:t>` runs out of the slide XML by hand — ten lines, and it worked, but it is hand-rolled where every other format has a library, and the corpus holds exactly **one** distinct `.pptx`.
+>
+> ⚠️ **No OCR need — and that is a fact about this corpus, not about government documents.** Federal + Indiana, entirely digital-native. The first scanned bundle needs OCR and **no runtime choice avoids it**; it would be equally missing in Python.
+
+⚠️ **TWO SCANNER BUGS, BOTH IN THE SPIKE'S OWN CODE, AND THIS IS THE THIRD TIME TODAY.** A `/message/` test matched the literal string `"no messages"` and reported *105/105 files produced warnings* when the truth is **1 of 52**. A `<w:t[^>]*>` regex also matches `<w:tbl>`, so it captured raw XML markup as document text and reported **a 95% silent data loss that does not exist** — 10,161 of its 10,675 "characters of text" were angle-bracket markup. **Settled by a third independent method**, which agreed with the strict scanner exactly: mammoth had extracted everything, and the file is 3.7 MB because it embeds 6.9 MB of fonts. **The size heuristic was discarded rather than tuned** — all three of its flags were false alarms, and a 100 KB file with the same real loss would have graded clean. Same lesson as `fonts.test.ts` on 08-17: **a scanner is worth exactly what it actually matches.**
+
+### ⏭ START HERE — one ruling left on SP4, and it is not the one anyone expected
+
+**The runtime question is answered by measurement; what is left is a dependency decision.** The recommendation on file is **Node throughout** — `mammoth` and `unpdf` are settled for the two formats that carry the scope of work — **with the spreadsheet dependency chosen deliberately instead of inherited:**
+
+**Pin SheetJS from `cdn.sheetjs.com`, or accept a package with unfixable published advisories in a public repo, or run spreadsheets through a Python sidecar.** That is the live question. It is much smaller than "which runtime", and it is Matt's.
+
+Also still open and untouched by the spike: **whether the original document must be kept at all** (Vercel Blob answers *which provider*, not *do we keep it*), and **formatting fidelity** — every number above is characters recovered, and whether a cost-proposal table keeps its structure is untested.
+
+
+
+*(The section below is the previous START HERE, kept for its file list.)* ~~**The two fixes above are in the working tree and NOT committed.**~~ ✅ **Committed and pushed 2026-08-18** (`bbd051b`, `b04684e`, `53f8e8a`), CI green, production deployed — see above. **The next work is the extraction spike ruled below: parse all 110 `corpus/` files with Node libraries and report what breaks.** Original note follows for the file list. Gate is green on them: **292 tests / 43 files**, `npm run check` exit 0. Files touched: `app/server/src/scrape/window.ts` + `window.test.ts` (both new), `app/server/src/health/check.ts` + `check.test.ts`, `app/server/src/routes/admin.ts` + `admin.test.ts`, `app/client/src/admin/Admin.tsx` + `Admin.test.tsx`.
 
 **⚠️ CORRECTED 2026-08-18: production DOES have 006 and 007, and this entry said the opposite for several hours.** Checked directly against production rather than inherited from the previous entry: both columns exist, the backfill has run (**7 `unknown` / 6 `excluded`**), and `schema_migrations` stamps both at **2026-08-18 20:18:19 UTC** — applied by the production deploy that followed pushing `main` after the SP3.6 merge, since `npm run build` runs `migrate:deploy`. *The claim was true when first written, on 08-17, and was carried forward twice without being re-checked. A fact about production has to be re-read from production, not from the last thing that said it.*
 
