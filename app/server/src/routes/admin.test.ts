@@ -464,3 +464,71 @@ test("the temp artifact directory is removed even when the scrape throws", async
     delete ADAPTERS["run-breaks"];
   }
 });
+
+/* ---- 2026-08-18: THE WINDOW, found by clicking the button ---------------
+ *
+ * `/run` used to REQUIRE `?since=`, and the only caller that mattered --
+ * the Run control on /admin -- sent `source.since_default` for it. That
+ * column is an ISO-8601 DURATION ('P7D'), which validateRun rejects, so
+ * every click answered 400 and `last_run_at` never moved. The window is now
+ * derived server-side from the row (scrape/window.ts), per
+ * 003_seed_source_registry.sql's rule: `since = last successful run`, with
+ * since_default as the seed for a source that has never run.
+ *
+ * These use the `fake` adapter -- the only one that runs without a network
+ * -- and `fake`'s test row is seeded with no since_default, so each test
+ * sets the columns it depends on rather than inheriting them. */
+
+test("a run with no ?since= derives the window from the row instead of refusing", async () => {
+  await run(`UPDATE source SET last_run_at = NULL, since_default = 'P7D' WHERE name = 'fake'`);
+
+  const res = await post({}, undefined, "/api/admin/run?source=fake");
+
+  expect(res.status).toBe(200);
+  const stamped = await one<{ last_run_at: string | null }>(
+    `SELECT last_run_at FROM source WHERE name = 'fake'`,
+  );
+  expect(stamped?.last_run_at).not.toBeNull();
+});
+
+/* The defect verbatim: the exact URL the button used to build. It must not
+ * come back as a 400, and -- more importantly -- must not be honoured as a
+ * literal date either. */
+test("a duration in ?since= is refused rather than silently treated as a date", async () => {
+  await run(`UPDATE source SET last_run_at = NULL, since_default = 'P7D' WHERE name = 'fake'`);
+
+  const res = await post({}, undefined, "/api/admin/run?source=fake&since=P7D");
+
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as { error: string };
+  expect(body.error).toMatch(/ISO-8601/);
+});
+
+/* §9.6: "the operator sets the scope of each run". Deriving a default must
+ * not take the explicit override away. */
+test("an explicit ?since= still overrides the derived window", async () => {
+  await run(
+    `UPDATE source SET last_run_at = '2026-01-01T00:00:00Z', since_default = 'P7D' WHERE name = 'fake'`,
+  );
+
+  const res = await post({}, undefined, "/api/admin/run?source=fake&since=2026-08-01");
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { since: string };
+  expect(body.since).toBe("2026-08-01");
+});
+
+/* The rule 003 states, asserted end to end rather than only in window.test.ts:
+ * a source that HAS run resumes from its last run, not from a fixed lookback
+ * that would re-cover ground or lose a day. */
+test("a source that has run before resumes from last_run_at", async () => {
+  await run(
+    `UPDATE source SET last_run_at = '2026-07-04T09:00:00Z', since_default = 'P7D' WHERE name = 'fake'`,
+  );
+
+  const res = await post({}, undefined, "/api/admin/run?source=fake");
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { since: string };
+  expect(new Date(body.since).toISOString()).toBe("2026-07-04T09:00:00.000Z");
+});

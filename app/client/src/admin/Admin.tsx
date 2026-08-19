@@ -377,6 +377,28 @@ export function Admin() {
       setErrors((e) => ({ ...e, [s.id]: data.error ?? `Request failed (${r.status})` }));
       return;
     }
+    /* A 200 does NOT mean this source was probed (2026-08-18). `isProbeable`
+     * above mirrors the server's eligibility rule -- may we contact it --
+     * but the server applies a second filter after that one: a platform with
+     * no probe of its own and a row with no probe_url has nothing to
+     * measure, so `checkSources` skips it deliberately rather than writing a
+     * false 'failing'. Kentucky eMARS VSS and Michigan SIGMA VSS are both in
+     * that state today. Before this, such a click answered `{checked: []}`
+     * and the screen did nothing whatsoever -- identical, to the operator, to
+     * a broken button.
+     *
+     * The REASON comes from the server and is never composed here: it lives
+     * in the probe registry, which is deliberately not the adapter registry
+     * ("a probe can exist for a platform long before an adapter does"), so
+     * any rule written on this side would be a second registry that drifts
+     * out of agreement with the first. */
+    const skip = (data.skipped as { name: string; reason: string }[] | undefined)?.find(
+      (x) => x.name === s.name,
+    );
+    if (skip) {
+      setErrors((e) => ({ ...e, [s.id]: `Not checked — ${skip.reason}` }));
+      return;
+    }
     await load();
   }
 
@@ -393,10 +415,28 @@ export function Admin() {
     if (!secret) return;
     setBusy((b) => ({ ...b, [s.id]: true }));
     setErrors((e) => ({ ...e, [s.id]: "" }));
-    const r = await fetch(
-      `/api/admin/run?source=${encodeURIComponent(s.name)}&since=${encodeURIComponent(s.since_default ?? "")}`,
-      { method: "POST", headers: adminHeaders(secret) },
-    );
+    /* ⚠️ NO `since` PARAMETER, and that is the fix, not an omission
+     * (2026-08-18). This used to append
+     * `&since=${s.since_default}` -- but `since_default` is an ISO-8601
+     * DURATION ('P7D') and the route's `validateRun` requires an ISO-8601
+     * DATE, so every click of Run, on every source, answered
+     *   400 since must be an ISO-8601 date (YYYY-MM-DD[T...]), got: P7D
+     * and `last_run_at` never moved. Found by clicking the button; no test
+     * could have found it, because this file's own test stubbed fetch to
+     * answer `{ok: true}` to any POST and then asserted the defective URL
+     * as the expected one.
+     *
+     * The window is now derived on the SERVER from the row it is about to
+     * stamp (scrape/window.ts), following 003_seed_source_registry.sql's
+     * stated rule -- `since = last successful run`, with `since_default` as
+     * the seed for a source that has never run. That belongs there and not
+     * here for the same reason source resolution does (the task-12 ruling,
+     * routes/admin.ts): the client must not carry a second copy of registry
+     * knowledge, because two copies drift. */
+    const r = await fetch(`/api/admin/run?source=${encodeURIComponent(s.name)}`, {
+      method: "POST",
+      headers: adminHeaders(secret),
+    });
     if (r.status === 401) clearAdminSecret();
     const data = await r.json().catch(() => ({}));
     setBusy((b) => ({ ...b, [s.id]: false }));

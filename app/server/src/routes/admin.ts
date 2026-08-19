@@ -41,6 +41,7 @@ import { validateRun, type RunRequest } from "../scrape/contract.js";
 import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
 import { resolveSource } from "../scrape/resolve-source.js";
+import { resolveSince } from "../scrape/window.js";
 import { checkSources } from "../health/check.js";
 import { one, run as dbRun } from "../db/index.js";
 import { importArtifact } from "../ingest/import-artifact.js";
@@ -215,7 +216,11 @@ admin.post(
         return;
       }
     }
-    res.json({ checked: await checkSources({ sourceName }) });
+    /* Both halves. `skipped` is what lets the Check control say "declined
+     * to probe, and here is why" instead of appearing to do nothing -- see
+     * checkSources' own note. Spread rather than nested so `checked` keeps
+     * exactly the shape every existing caller already reads. */
+    res.json(await checkSources({ sourceName }));
   }),
 );
 
@@ -301,13 +306,52 @@ admin.post(
     // resolveAdapterKey only ever returns a key that is present in ADAPTERS.
     const entry = ADAPTERS[key]!;
 
+    /* Computed here rather than after resolveSource because the row it
+     * reads is the row this route STAMPS, and that target is `entry` +
+     * `key`, which are already in hand. Same expression as the stamp
+     * below, deliberately -- see the ruling on `entry.sourceName ?? key`
+     * there for why `fake` falls back to the key. */
+    const stampTarget = entry.sourceName ?? key;
+
+    /* THE WINDOW (2026-08-18). `?since=` used to be REQUIRED, and the only
+     * caller that mattered -- the Run control on /admin -- had nothing to
+     * put in it but `source.since_default`, which is a DURATION ('P7D')
+     * where validateRun requires a DATE. Every click answered 400 and
+     * `last_run_at` never moved; D5 had never once worked in a browser.
+     *
+     * `?since=` stays honoured when supplied -- §9.6 rules that "the
+     * operator sets the scope of each run", and a derived default must not
+     * take the explicit override away. It is only the ABSENCE of the
+     * parameter that now means "derive it" instead of "refuse". A duration
+     * passed explicitly is still refused by validateRun below, unchanged:
+     * deriving a window is this route's job, guessing what a caller meant
+     * by a malformed one is not. */
+    let since = String(req.query.since ?? "");
+    if (!since) {
+      const row = await one<{ last_run_at: Date | null; since_default: string | null }>(
+        `SELECT last_run_at, since_default FROM source WHERE name = $1`,
+        [stampTarget],
+      );
+      if (!row) {
+        res.status(400).json({
+          error:
+            `No source row named '${stampTarget}' (registry key '${key}'), so no ` +
+            `ingestion window can be derived. Pass ?since= explicitly, or check ` +
+            `migrations/003_seed_source_registry.sql.`,
+        });
+        return;
+      }
+      try {
+        since = resolveSince(row);
+      } catch (e) {
+        res.status(400).json({ error: (e as Error).message });
+        return;
+      }
+    }
+
     let request: RunRequest;
     try {
-      request = validateRun({
-        source: key,
-        since: String(req.query.since ?? ""),
-        depth: "listing",
-      });
+      request = validateRun({ source: key, since, depth: "listing" });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
       return;
@@ -349,7 +393,6 @@ admin.post(
        * makes the write real for `fake` and leaves every resolved source
        * (SAM.gov, USASpending) keyed exactly as it already was. */
       const stamped = new Date().toISOString();
-      const stampTarget = entry.sourceName ?? key;
       /* REVIEW FIX (Important, finding 1): dbRun()'s return value -- the
        * affected-row count (db/index.ts's `run()`) -- used to be discarded.
        * If the targeting above ever regresses (the exact failure the
@@ -381,6 +424,11 @@ admin.post(
        * operator watching "Run" actually wants to see move; `updated` and
        * `linked` ride along for anyone who wants the fuller picture. */
       res.json({
+        /* The window this run actually covered. Reported because it is no
+         * longer necessarily what the caller asked for -- when `?since=` is
+         * omitted it is derived from the row, and an operator watching a
+         * button needs to see which window ran. */
+        since: request.since,
         rows: result.rows,
         imported: imported.imported,
         skipped: imported.skipped,

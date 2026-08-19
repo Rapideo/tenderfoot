@@ -15,6 +15,19 @@ export interface CheckedRow {
   note: string | null;
 }
 
+/* A source we ARE permitted to contact and deliberately did not probe.
+ * Distinct from an excluded row, which never reaches this stage at all --
+ * see the `skipped` note below. */
+export interface SkippedRow {
+  name: string;
+  reason: string;
+}
+
+export interface CheckResult {
+  checked: CheckedRow[];
+  skipped: SkippedRow[];
+}
+
 interface SourceRow {
   id: number;
   name: string;
@@ -23,9 +36,15 @@ interface SourceRow {
   probe_url: string | null;
 }
 
+/* RETURNS BOTH HALVES, since 2026-08-18. It used to return only the probed
+ * rows, and a caller could not tell "probed it, here is the verdict" from
+ * "may contact it, chose not to" -- both were an absence. On /admin that
+ * absence rendered as a Check button that did nothing at all when clicked
+ * (Kentucky eMARS VSS, Michigan SIGMA VSS), which is indistinguishable from
+ * a broken control. The skip is still correct; it is now merely SAID. */
 export async function checkSources(
   opts: { sourceName?: string; fetchImpl?: typeof fetch } = {},
-): Promise<CheckedRow[]> {
+): Promise<CheckResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const rows = opts.sourceName
     ? await all<SourceRow>(
@@ -56,10 +75,23 @@ export async function checkSources(
    * platform list) decides this, so the day a CGI Advantage VSS probe
    * exists, Kentucky and Michigan become probeable again with no change to
    * this file. */
-  const probeable = eligible.filter((r) => {
-    const { method } = probeFor(r.platform);
-    return method !== "generic-url" || !!r.probe_url;
-  });
+  const hasProbeTarget = (r: SourceRow) =>
+    probeFor(r.platform).method !== "generic-url" || !!r.probe_url;
+  const probeable = eligible.filter(hasProbeTarget);
+
+  /* Built from `eligible`, NOT from `rows`: an excluded source has no place
+   * on a list that reads as "nearly probed". The reason names the missing
+   * thing rather than the row, because that is what would have to change --
+   * a probe for the platform (probes/registry.ts) or a probe_url for the
+   * row (migration 007). */
+  const skipped: SkippedRow[] = eligible
+    .filter((r) => !hasProbeTarget(r))
+    .map((r) => ({
+      name: r.name,
+      reason:
+        `no probe target: ${r.platform ?? "this platform"} has no probe of its own ` +
+        `and the row has no probe_url, so nothing could be measured without guessing`,
+    }));
 
   const results = await Promise.allSettled(
     probeable.map(async (row) => {
@@ -81,5 +113,8 @@ export async function checkSources(
 
   /* allSettled, not all: one source failing in an unforeseen way must not
    * discard the rows already written for the others. */
-  return results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  return {
+    checked: results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])),
+    skipped,
+  };
 }

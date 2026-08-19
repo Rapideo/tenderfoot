@@ -497,10 +497,23 @@ test("a Manual import row offers no Run control at all", async () => {
 
 /* The control's actual job: POST the right URL (source name, not a key --
  * the route resolves that server-side per the task-12 ruling) with the
- * ingestion window and the admin secret, and refresh the row when the run
- * completes so last_run_at and the counts move. A test that only checked
- * the button existed would pass even if the click did nothing. */
-test("Run POSTs to /api/admin/run with the source name, window and secret, and reloads when it completes", async () => {
+ * admin secret, and refresh the row when the run completes so last_run_at
+ * and the counts move. A test that only checked the button existed would
+ * pass even if the click did nothing.
+ *
+ * ⚠️ THIS TEST USED TO PIN THE DEFECT (fixed 2026-08-18). It asserted
+ * `"/api/admin/run?source=SAM.gov&since=P7D"` -- and `since=P7D` is exactly
+ * what made every real click fail, because `since_default` is an ISO-8601
+ * DURATION and `validateRun` requires a DATE. The stub below answers
+ * `{ok: true}` to any POST, so nothing here could ever discover that the
+ * server refuses that URL with a 400; the assertion simply wrote the wrong
+ * value down as the expected one and locked it in. The window is now
+ * derived server-side from the row (scrape/window.ts) and the client sends
+ * no `since` at all -- which is also what the codebase's own rule required
+ * all along: the client must not hold a second copy of registry knowledge
+ * (scrape/adapters/registry.ts's header, and the task-12 ruling that put
+ * source resolution on the server for the same reason). */
+test("Run POSTs to /api/admin/run with the source name and secret, and reloads when it completes", async () => {
   sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
   const posts: { url: string; headers: Record<string, string> }[] = [];
   let sourcesLoaded = 0;
@@ -528,7 +541,11 @@ test("Run POSTs to /api/admin/run with the source name, window and secret, and r
   btn.click();
 
   await waitFor(() => expect(posts.length).toBe(1));
-  expect(posts[0]!.url).toBe("/api/admin/run?source=SAM.gov&since=P7D");
+  expect(posts[0]!.url).toBe("/api/admin/run?source=SAM.gov");
+  /* Stated separately from the equality above so a future edit that
+   * reintroduces a window cannot quietly satisfy the assertion by changing
+   * the expected string to match whatever it now sends. */
+  expect(posts[0]!.url).not.toMatch(/since=/);
   expect(posts[0]!.headers["X-Admin-Secret"]).toBe("s3cret");
   /* The mount's own load, plus the reload Run triggers on completion. */
   await waitFor(() => expect(sourcesLoaded).toBe(2));
@@ -599,4 +616,84 @@ test("a non-2xx from Run surfaces the server's error in that row, not swallowed"
 
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("disabled");
+});
+
+/* ---- 2026-08-18: a Check that was declined must say so ------------------
+ *
+ * Found by clicking the button on the real screen, not here. Kentucky eMARS
+ * VSS and Michigan SIGMA VSS satisfy `isProbeable` -- posture 'in', a real
+ * platform -- so the Check control renders. Both fall back to the generic
+ * URL probe with no probe_url, which `checkSources` deliberately SKIPS
+ * rather than reporting as 'failing'. The skip is right. What was wrong is
+ * that the screen said nothing: `200 {"checked": []}`, no state change, no
+ * timestamp, no message. A control that looks the same whether it worked or
+ * was declined is the broken-looking button `isProbeable`'s own comment
+ * exists to prevent.
+ *
+ * The client must not decide this for itself: the reason lives in the
+ * server's probe registry, which is deliberately not the adapter registry
+ * ("a probe can exist for a platform long before an adapter does"), so a
+ * client-side rule would be a second registry that drifts. It reports what
+ * the server tells it and nothing more. */
+test("a Check the server declined to run reports the server's reason on the row", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            checked: [],
+            skipped: [{ name: "SAM.gov", reason: "no probe target: SAM has no probe of its own" }],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources") ? [{ ...baseSource, name: "SAM.gov" }] : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  (await screen.findByRole("button", { name: /check sam\.gov/i })).click();
+
+  expect(await screen.findByText(/no probe target/i)).toBeTruthy();
+});
+
+/* The companion guard: a Check that DID run must not leave a stale
+ * explanation behind. Without this, the assertion above could be satisfied
+ * by a message that is simply always present. */
+test("a Check that did run reports no skip reason", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            checked: [{ name: "SAM.gov", state: "ok", method: "sam", note: "1 records available" }],
+            skipped: [],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources") ? [{ ...baseSource, name: "SAM.gov" }] : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  (await screen.findByRole("button", { name: /check sam\.gov/i })).click();
+
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
 });

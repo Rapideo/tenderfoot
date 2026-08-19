@@ -120,7 +120,7 @@ test("a probed source gets a state, a method, and a checked-at", async () => {
  * comment) and are skipped rather than probed -- see the next test. */
 test("the five checkable rows are checked, disabled ones included", async () => {
   const { impl } = spyFetch();
-  const checked = await checkSources({ fetchImpl: impl });
+  const { checked } = await checkSources({ fetchImpl: impl });
   expect(checked.map((c) => c.name).sort()).toEqual([
     "Illinois BidBuy",
     "Indiana EDS contract register",
@@ -157,7 +157,7 @@ test("the five checkable rows are checked, disabled ones included", async () => 
  * filter above. */
 test("a generic-probe source with no probe_url is left unknown, and is never fetched", async () => {
   const { calls, impl } = spyFetch();
-  const checked = await checkSources({ fetchImpl: impl });
+  const { checked } = await checkSources({ fetchImpl: impl });
 
   expect(checked.map((c) => c.name)).not.toContain("Kentucky eMARS VSS");
   expect(checked.map((c) => c.name)).not.toContain("Michigan SIGMA VSS");
@@ -188,4 +188,51 @@ test("one failing source does not prevent the others being written", async () =>
   );
   expect(sam!.health).toBe("failing");
   expect(other!.health).toBe("ok");
+});
+
+/* ---- 2026-08-18: reporting the rows that were NOT probed -----------------
+ *
+ * Found by clicking the button. Kentucky eMARS VSS and Michigan SIGMA VSS
+ * pass the eligibility rule (posture 'in', a real platform), so /admin
+ * renders a Check control for both -- and clicking it answered
+ * `200 {"checked": []}`: no state change, no timestamp, no error, nothing.
+ * A control that looks identical whether it worked or was silently declined
+ * is the exact failure `Admin.tsx`'s own `isProbeable` comment says it
+ * exists to prevent ("a click never reaches the server just to be silently
+ * ignored, which would look like a broken button rather than an absent
+ * one").
+ *
+ * The SKIP ITSELF IS CORRECT and is not what changes here -- see the test
+ * above: a null probe_url must leave the row 'unknown' rather than write
+ * 'failing'. What was missing is that the decision was never reported, so
+ * no caller could tell "declined to probe" from "probed and said nothing".
+ * The client cannot work it out either: the reason lives in
+ * probes/registry.ts, and that map is deliberately NOT the adapter map
+ * (its own header: "a probe can exist for a platform long before an adapter
+ * does"), so a client-side guess would be a second registry that drifts. */
+test("a source that is eligible but has no probe target is reported as skipped, with a reason", async () => {
+  const { impl } = spyFetch();
+  const { checked, skipped } = await checkSources({ fetchImpl: impl });
+
+  expect(checked.map((c) => c.name)).not.toContain("Kentucky eMARS VSS");
+  expect(skipped.map((s) => s.name).sort()).toEqual([
+    "Kentucky eMARS VSS",
+    "Michigan SIGMA VSS",
+  ]);
+  for (const s of skipped) {
+    expect(s.reason, s.name).toMatch(/probe target/i);
+  }
+});
+
+/* The excluded rows must NOT appear in `skipped` either. `skipped` means
+ * "we may contact this source and chose not to"; an excluded source is one
+ * we may not contact at all, and conflating them would put GovWin IQ on a
+ * list that reads as "nearly probed". */
+test("legally excluded sources are absent from skipped as well as from checked", async () => {
+  const { impl } = spyFetch();
+  const { skipped } = await checkSources({ fetchImpl: impl });
+
+  for (const name of ["GovWin IQ", "BidNet Direct", "BidPrime", "Ohio OhioBuys"]) {
+    expect(skipped.map((s) => s.name), name).not.toContain(name);
+  }
 });
