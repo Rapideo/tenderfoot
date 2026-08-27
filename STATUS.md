@@ -30,32 +30,32 @@
 
 ---
 
-## 📌 PINNED 2026-08-19 (late) — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
+## 📌 PINNED 2026-08-19 (late), §1 AMENDED 2026-08-26 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
 **Working tree clean, everything pushed, gate 299 tests / 43 files.** Two production deploys went out tonight and **production's admin writes are currently DEAD on purpose** — fail-closed, exactly as designed. Nothing is half-finished in the code; what is outstanding is three environment actions and one click.
 
-### ⛔ 1. ROTATE `ADMIN_SECRET` — do this before anything else
+### ⛔ 1. `ADMIN_SECRET` — the ROTATION IS RULED OUT; the Vercel ENTRY still has to be recreated
 
-**The secret is partially exposed. 19 of its 40 characters were printed into a session transcript by Claude**, while inspecting the `.env` line's bytes with `od -c` after a redaction that silently did not apply to that command's output. Not a full compromise; **rotate rather than reason about whether half is enough.**
+**RULED 2026-08-26 by Matt: do not rotate. The partial exposure is an ACCEPTED RISK, closed by decision rather than by action.** 19 of the 40 characters were printed into a session transcript by Claude, while inspecting the `.env` line's bytes with `od -c` after a redaction that silently did not apply to that command's output. **None of that changed — it was weighed and dropped.** *(This item previously read "ROTATE `ADMIN_SECRET` — do this before anything else". It was never done, and it is now not going to be.)*
 
-The rotation and the fix are the same action, which is convenient:
+**Reuse the existing value.** That is the whole of what this ruling closes, and it makes step 1 below disappear.
 
-1. Generate a new 40-char value **in Matt's own terminal** (not through Claude):
-   `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})`
-2. **DELETE** the existing `ADMIN_SECRET` entry in Vercel, then **Add New** with the new value and **tick Production AND Preview before saving.**
-3. Replace the `ADMIN_SECRET=` line in local `.env` (line 26, last line).
+> ⚠️ **WHAT IS NOT CLOSED, BECAUSE IT IS A DIFFERENT FACT: the variable does not reach the production runtime.** `GET /api/admin/health` answered **503 on 2026-08-19** and **503 again on 2026-08-26** — measured both times, not inferred. **Every `/api/admin/*` write on production is dead until the entry is recreated**, which means **§2's demo-criterion click cannot happen before this.** The two were bundled as one action only because the rotation would have forced the recreate anyway; dropping the rotation leaves the recreate exactly where it was.
+
+1. ~~Generate a new 40-char value in Matt's own terminal.~~ **Not doing this — see the ruling above. Keep the current value.**
+2. **DELETE** the existing `ADMIN_SECRET` entry in Vercel, then **Add New** with the **same** value and **tick Production AND Preview before saving.**
+3. Local `.env` line 26 already holds that value and does not change.
 4. **Redeploy**, then verify.
 
-> ⚠️ **Two Vercel behaviours cost an hour tonight and will cost it again.**
+> ⚠️ **Two Vercel behaviours cost an hour on 08-19 and will cost it again.**
 >
-> **Editing an existing variable's environment scope SILENTLY DOES NOT SAVE.** It was set to Production, then "moved" to Preview, and four separate attempts to also tick Production left the listing reading `Preview` only every time. **Creating a fresh entry with every box ticked at creation works** — that is how the Neon vars hold three scopes in one entry. **Delete and recreate; never edit the scope.**
+> **Editing an existing variable's environment scope SILENTLY DOES NOT SAVE.** It was set to Production, then "moved" to Preview, and four separate attempts to also tick Production left the listing reading `Preview` only every time. **Creating a fresh entry with every box ticked at creation works** — that is how the Neon vars hold three scopes in one entry. **Delete and recreate; never edit the scope.** *This is why step 2 is a delete-and-recreate even though the value is unchanged: there is no supported way to just re-tick the box.*
 >
 > **Env vars are baked into a deployment at build time.** Changing one does nothing until the next deploy — which is why production kept working after the variable moved, and then died the moment Matt redeployed.
 
 **Verification is one non-mutating request, and the status code is the whole answer:**
 `curl https://tenderfoot-tau.vercel.app/api/admin/health`
-**`503` = the variable did not reach the runtime. `401` = it did, and the gate is live.** Right now it answers 503.
-
+**`503` = the variable did not reach the runtime. `401` = it did, and the gate is live.** **It answered 503 on 2026-08-26.**
 ### ⛔ 2. THE DEMO CRITERION IS STILL OWED, AND NOW IT IS ACTUALLY POSSIBLE
 
 **`https://tenderfoot-tau.vercel.app/admin` works for the first time ever.** Open it in a real browser, enter the secret when prompted, **click Check on SAM.gov.** All seven eligible production rows read `unknown` with no timestamp — nothing has ever probed production — so a real result is unmistakable.
