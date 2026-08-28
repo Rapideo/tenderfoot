@@ -392,12 +392,19 @@ again. Gate green at **301 tests / 43 files**.
 
 # Ruled before it was built — SP4 T6, 2026-08-28
 
+**Numbered `D8`, not `H4`.** The H1–H3 note above says the letter tells a
+reader whether something was found by building or decided in advance; that
+rule was scoped to SP3.6's health vocabulary, not to every future entry. `D`
+is this file's continuous series across slices, `H` is that one series's own
+name, and starting here the section header — "found by building" vs. "ruled
+before it was built" — carries provenance instead of the prefix.
+
 ## D8 — nested archives are not traversed, and now say so
 
 A `.zip` inside a `.zip` becomes a `document` row marked `failed` with
 `source_note = 'nested archive not traversed'`. Depth 1 is the same limit the
-2026-08-18 spike had — it skipped `Att L - Bidders Library.zip` inside
-`docs.zip` — but the spike skipped it **silently**, which made a missing
-document indistinguishable from a document that contained nothing. A recorded
-failure is queryable; a silent skip is not. Traversal is deferred rather than
-refused: nothing here prevents depth 2 later.
+2026-08-18 spike had — it opened `Att L - Bidders Library.zip` inside
+`docs.zip` and logged `skipped: "not a parseable format"`, a wrong reason
+that lived nowhere durable. A recorded failure is queryable; a wrong reason in
+a throwaway artifact is not. Traversal is deferred rather than refused:
+nothing here prevents depth 2 later.
