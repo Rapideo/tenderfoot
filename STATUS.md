@@ -32,7 +32,7 @@
 
 ## 📌 PINNED — LAST UPDATED 2026-08-28 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
-**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Outstanding: **the 2026-08-27 Run error is still unidentified** (§3 — narrowed, not solved), and **Matt still has to rule on whether production is supposed to be publicly readable** (§4).
+**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. Outstanding: **local development writes to the PRODUCTION database** (§4 — new, needs a ruling), the 2026-08-27 Run failure is **reconstructed but not attributed** (§3 — its missing guard is now fixed), and **whether production is meant to be publicly readable** is still unruled (§5).
 
 ### ✅ 1. `ADMIN_SECRET` — RESOLVED 2026-08-27. The gate is LIVE in production.
 
@@ -103,9 +103,52 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 *(What made it safe is worth keeping straight: nothing was configured around the hazard. `since_default` is still `P7D`, untouched. A real run supplied the real timestamp, and the rule did the rest — which is exactly what 003_seed_source_registry.sql meant by "`since_default` is only a SEED. The rule is `since = last successful run`.")*
 
+#### 🔬 WHAT THE 2026-08-27 FAILURE ACTUALLY DID — reconstructed 2026-08-28 from sequence forensics
+
+**There was no log to read.** Vercel’s runtime-log API answers `403` for this project’s token, and the transaction rolled back, so the database recorded nothing either. The evidence is a gap in a sequence.
+
+**Every `sighting` id is accounted for, and the arithmetic closes exactly:**
+
+| `sighting` ids | what | live |
+|---|---|---|
+| 1 – 201 | corpus import | 201 |
+| 202 – 226 | deleted by hand | matches `n_tup_del = 25` |
+| 227 – 756 | `ingest_run` 2 (2026-08-16) | 530 |
+| 757 – 813 | `ingest_run` 3 (2026-08-17) | 57 |
+| **814 – 9,910** | **ROLLED BACK** | **9,097 — exactly the unaccounted insert count** |
+| 9,911 – 9,912 | `ingest_run` 5 (2026-08-28) | 2 |
+
+201 + 530 + 57 + 2 = **790 live**, which is what the table holds. `stats_reset` is `null`, so those counters are cumulative for the life of the database.
+
+**PROVEN: one aborted transaction consumed 9,097 sighting ids, and it sits chronologically after 2026-08-17 and before 2026-08-28.** `importArtifact` inserts the `ingest_run` row FIRST and the sightings after it — so **the scrape SUCCEEDED and 9,097 rows reached the import** before the transaction died. This was never a failed fetch.
+
+⚠️ **NOT PROVEN: that the 2026-08-27 click caused it.** It is the only recorded Run attempt in the window and the only known failure, and exactly one `ingest_run` id rolled back — consistent with a single aborted import. But **local development writes to this same database** (§4), so a local run cannot be excluded. Strong circumstantial case, not proof.
+
+⚠️ **ALSO NOT PROVEN: that it overran the platform ceiling.** At the measured ~8.6 ms/row, 9,097 rows is ~79s, which fits the 120s that was reserved. The likeliest explanation — that merge is superlinear well past its measured 530-row scale — is untested. **No diagnosis is claimed.**
+
+#### ✅ FIXED 2026-08-28 — the guard that was missing (`scrape/import-budget.ts`)
+
+**The certain defect is not a mis-sized number; it is that nothing checked.** `RUN_HANDLER_BUDGET_MS` bounds only the scrape loop. `importArtifact` and `mergeSightings` run after it, in the same request, against the platform ceiling. The route reserved 120s for them — explicitly, and sized from real measurements — but a **fixed** reservation sized at one scale cannot notice a run arriving at another, and **nothing compared it to the rows actually returned.**
+
+`importFitsInBudget({ rows, elapsedMs })` is pure — both inputs are parameters rather than clock reads, the same posture `resolveSince` takes — and `/run` now calls it **before** `importArtifact`. When the import cannot finish it answers **400**, names the row count and the window, and imports nothing.
+
+**The estimate deliberately carries a factor of two beyond the measured rate.** Both rates come from a 530-row run, and extrapolating them to nine thousand rows as though they were linear is precisely the assumption that left this unguarded. The guard is therefore pessimistic at scale and **will sometimes refuse a run that would have completed** — the correct direction to be wrong in, since a refusal is legible and costs one narrower re-run, while an overrun discards every fetched row silently.
+
+**Zero rows always passes**, deliberately: a run that found nothing must still reach its `last_run_at` stamp, and stranding that stamp would widen the next window — manufacturing the very condition the guard exists to prevent. Gate green at **308 tests / 44 files**.
+
 > 🛟 **If a run ever does land badly: Neon `history_retention_seconds` is 86400 on `wispy-tooth-06225229`.** Branch `main` (`br-super-breeze-aun4swjv`) has a **24-hour** point-in-time restore window. Verified present 2026-08-27.
 
-### ✅ 4. WHAT GOT FIXED ON 2026-08-19, AND ONE CORRECTION THAT MATTERS
+### ⛔ 4. LOCAL DEVELOPMENT WRITES TO THE PRODUCTION DATABASE — found 2026-08-28, UNRESOLVED
+
+**`.env`’s `DATABASE_URL` points at production.** Its host is endpoint `ep-super-bonus-auoe43hj`, and that endpoint belongs to branch **`br-super-breeze-aun4swjv`, which is `main`**. The `test` branch has a different endpoint entirely — `ep-withered-base-au6l4cjf` — which is what `DATABASE_URL_TEST` correctly points at.
+
+**The gate is SAFE; this is not a test problem.** `scripts/check.mjs:185` runs the suite with `DATABASE_URL` overridden to `DATABASE_URL_TEST`, and `useTestSchema()` gives each test file an isolated schema inside that branch. Tests never touch production.
+
+⚠️ **Everything else is not.** `db/index.ts` reads `const CONN = process.env.DATABASE_URL` with no override — so **`npm run dev`, and any bare CLI scrape / import / merge, reads and writes production’s `public` schema.** No guard, no prompt, and nothing in the connection string that reads as "production" to a human glancing at it.
+
+**This is why §3’s attribution cannot be closed** — a local run is an equally available explanation for the 9,097-row rollback — and it is the larger of the two findings. **Matt’s call:** point `DATABASE_URL` at the `test` branch for local work and reserve production for deploys, or leave it and accept that a local mistake lands on live data.
+
+### ✅ 5. WHAT GOT FIXED ON 2026-08-19, AND ONE CORRECTION THAT MATTERS
 
 **`/admin` 404'd in production and always had.** `vercel.json` rewrote only `/api/:path*`, so **every client-side route was a genuine Vercel 404 on a direct request.** Navigating from `/` worked and rendered all 13 rows — which is exactly why nobody noticed, and **the real reason nobody had ever clicked those buttons in production: the URL for doing it did not resolve.** Standard SPA fallback added (`5e518df`); **verified live — `/admin` 200, `/api/health` 200, assets 200.**
 
@@ -117,7 +160,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ⚠️ **Vercel Attack Challenge Mode was tripped, almost certainly by Claude's own probing** — repeated `curl`/`vercel curl` plus two headless Chrome sessions against production in a few minutes. Everything, including static assets, answered `403` with a "Vercel Security Checkpoint" page for several minutes, then cleared on its own. **Back off rather than retry harder**; the control is at `https://vercel.com/koehler-partners/tenderfoot/firewall`.
 
-### ✅ 5. ALSO DONE — extraction spike, part two
+### ✅ 6. ALSO DONE — extraction spike, part two
 
 **Structure survives.** `.docx` tables: 244/244 tables and 758/758 rows preserved by `mammoth.convertToHtml` (the 64-cell gap is vertical-merge continuations, i.e. correct `rowspan`, not loss). `.xlsx` has two traps and **neither is about Node**: declared `!ref` dimensions are fiction (89–99% phantom rows), and **SheetJS replays Excel's cached formula values rather than evaluating** — so a workbook saved without recalculation yields a stale total with no signal. `.pdf` has no table structure at all; geometry is present, reconstruction is not provided. Full write-up: `docs/2026-08-18-extraction-spike.md`.
 

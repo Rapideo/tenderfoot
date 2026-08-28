@@ -42,6 +42,7 @@ import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
 import { resolveSource } from "../scrape/resolve-source.js";
 import { resolveSince } from "../scrape/window.js";
+import { importFitsInBudget } from "../scrape/import-budget.js";
 import { checkSources } from "../health/check.js";
 import { one, run as dbRun } from "../db/index.js";
 import { importArtifact } from "../ingest/import-artifact.js";
@@ -281,6 +282,9 @@ function resolveAdapterKey(source: string): string | undefined {
 admin.post(
   "/run",
   asyncHandler(async (req, res) => {
+    /* Wall clock for the WHOLE request, not just the scrape -- see the
+     * import-budget check below and scrape/import-budget.ts’s header. */
+    const startedAt = Date.now();
     const requested = String(req.query.source ?? "");
     const key = resolveAdapterKey(requested);
     if (key === undefined) {
@@ -364,6 +368,26 @@ admin.post(
     try {
       const out = join(dir, `run-${key}.db`);
       const result = await runScrape(request, entry.make(), out);
+
+      /* THE GUARD (2026-08-28). RUN_HANDLER_BUDGET_MS bounds only the
+       * scrape loop; import and merge run after it, in this same request,
+       * against the platform ceiling. The 120s reserved above is a FIXED
+       * amount sized from a 530-row run, and nothing checked it against
+       * the rows actually returned -- so a much larger scrape started an
+       * import that could not finish, the request was killed mid-
+       * transaction, and every fetched row rolled back with no record
+       * anywhere. Reconstructed from a 9,097-wide gap in sighting_id_seq,
+       * because Vercel’s runtime-log API answers 403 for this token.
+       *
+       * Refused BEFORE importArtifact, so the refusal costs nothing and
+       * says what was thrown away. The temp directory is still removed by
+       * the `finally` below, exactly as on any other exit from this try. */
+      const fit = importFitsInBudget({ rows: result.rows, elapsedMs: Date.now() - startedAt });
+      if (!fit.ok) {
+        res.status(400).json({ error: fit.reason, rows: result.rows, since: request.since });
+        return;
+      }
+
       const imported = await importArtifact(out);
       const merged = await mergeSightings();
 
