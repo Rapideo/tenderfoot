@@ -231,7 +231,11 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ✅ **The local gate's fragility is mostly gone — `corpus.test.ts` went 81.7s → 3.44s (`2cac516`).** ⚠️ **Mostly, not entirely**: the ~73s transaction that caused it is fixed, the 48.3s `DROP SCHEMA` is not. See item 1.
 
-⚠️ **Five merged slice branches still exist and have never been deleted** — `sp0-infrastructure`, `sp1-entity-graph`, `sp1.5-postgres-port`, `sp2-design-system`, `sp3-federal-ingestion` (the last two also on `origin`). Only `sp1-admin-ui` and `sp3.5-org-resolution` were cleaned up. **Deleting `sp3-federal-ingestion` is the cheap way to settle the Neon preview-branch question below**, since it is the one with a live `preview/` branch attached.
+✅ **DONE 2026-08-28: all five merged slice branches are deleted, local and remote.** `sp0-infrastructure` (`66b8669`), `sp1-entity-graph` (`faf060a`), `sp1.5-postgres-port` (`57e52df`), `sp2-design-system` (`fc1d1d9`), `sp3-federal-ingestion` (`3c65a2f`) — the last two also removed from `origin`. **`main` is now the only branch that exists anywhere.** Every one was verified fully merged first (`git branch --merged`, and `-d` rather than `-D`, so an unmerged branch would have refused), local and remote tips confirmed identical. Nothing was lost: the commits are reachable from `main`, only the labels went. Tips recorded above in case a name is ever wanted back.
+
+⛔ **AND IT DID NOT SETTLE THE NEON PREVIEW-BRANCH QUESTION — the opposite.** This file expected deleting `sp3-federal-ingestion` to take its `preview/` branch with it. **It did not.** Neon branch `preview/sp3-federal-ingestion` (`br-falling-wildflower-aul37lat`) was still reachable and answering queries immediately after the git branch was deleted on both sides. It may yet go asynchronously, but nothing observed says it will.
+
+**So the answer is now the reverse of the assumption: the Vercel–Neon integration does not appear to garbage-collect a preview branch when its git branch disappears.** That branch is now genuinely orphaned — no git branch, no deployment, still consuming storage against the project. **Deleting it is Matt’s call** (it is destructive and unrecoverable past the retention window); the alternative is leaving a dead branch that no longer maps to anything.
 
 > ## 🚨 FIRST THING TO KNOW ON RESUME — SIX SLICES ARE SHIPPED, AND THE PRODUCT HOLDS REAL FEDERAL DATA
 >
