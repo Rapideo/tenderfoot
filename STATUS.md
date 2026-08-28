@@ -32,7 +32,7 @@
 
 ## 📌 PINNED — LAST UPDATED 2026-08-28 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
-**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. Outstanding: **local development writes to the PRODUCTION database** (§4 — new, needs a ruling), the 2026-08-27 Run failure is **reconstructed but not attributed** (§3 — its missing guard is now fixed), and **whether production is meant to be publicly readable** is still unruled (§5).
+**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. Outstanding: the 2026-08-27 Run failure is **reconstructed but not attributed** (§3 — its missing guard is now fixed), and **whether production is meant to be publicly readable** is still unruled (§5). Local development no longer touches production (§4, fixed).
 
 ### ✅ 1. `ADMIN_SECRET` — RESOLVED 2026-08-27. The gate is LIVE in production.
 
@@ -138,7 +138,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 > 🛟 **If a run ever does land badly: Neon `history_retention_seconds` is 86400 on `wispy-tooth-06225229`.** Branch `main` (`br-super-breeze-aun4swjv`) has a **24-hour** point-in-time restore window. Verified present 2026-08-27.
 
-### ⛔ 4. LOCAL DEVELOPMENT WRITES TO THE PRODUCTION DATABASE — found 2026-08-28, UNRESOLVED
+### ✅ 4. LOCAL DEVELOPMENT WROTE TO THE PRODUCTION DATABASE — found AND FIXED 2026-08-28
 
 **`.env`’s `DATABASE_URL` points at production.** Its host is endpoint `ep-super-bonus-auoe43hj`, and that endpoint belongs to branch **`br-super-breeze-aun4swjv`, which is `main`**. The `test` branch has a different endpoint entirely — `ep-withered-base-au6l4cjf` — which is what `DATABASE_URL_TEST` correctly points at.
 
@@ -146,7 +146,17 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ⚠️ **Everything else is not.** `db/index.ts` reads `const CONN = process.env.DATABASE_URL` with no override — so **`npm run dev`, and any bare CLI scrape / import / merge, reads and writes production’s `public` schema.** No guard, no prompt, and nothing in the connection string that reads as "production" to a human glancing at it.
 
-**This is why §3’s attribution cannot be closed** — a local run is an equally available explanation for the 9,097-row rollback — and it is the larger of the two findings. **Matt’s call:** point `DATABASE_URL` at the `test` branch for local work and reserve production for deploys, or leave it and accept that a local mistake lands on live data.
+**This is why §3’s attribution cannot be closed** — a local run is an equally available explanation for the 9,097-row rollback — and it was the larger of the two findings.
+
+**✅ RULED AND DONE 2026-08-28: local now points at the `test` branch.** `DATABASE_URL` was repointed to the `test` endpoint, and the production string is preserved in `.env` under the explicit name **`DATABASE_URL_PRODUCTION`** — so reaching production from a local shell is now a deliberate act rather than the default.
+
+**Verified by the DATA, not by the string.** A local connection using the new `DATABASE_URL` returns **1,925 solicitations** and a `SAM.gov.last_run_at` of 2026-08-19 — the `test` branch. Production holds 790 and 2026-08-28. The two are unmistakable from each other, which is the only check worth trusting here.
+
+⚠️ **ONE CONSEQUENCE, and it is deliberate: `npm run migrate` now targets `test`.** `db/migrate.ts:55` reads the same `DATABASE_URL`. **Migrating production is now an explicit act** — run it with `DATABASE_URL` set to `DATABASE_URL_PRODUCTION`. That is the safer default, but it is a behaviour change and will surprise anyone who does not know it.
+
+⚠️ **What was NOT changed.** `.env` still carries the Neon/Vercel integration keys (`POSTGRES_URL`, `PGHOST`, `DATABASE_URL_UNPOOLED`, and the rest) pointing at production. **Nothing in this codebase reads any of them** — the only connection reads are `DATABASE_URL` (`db/index.ts:22`, `db/migrate.ts:55`) and `DATABASE_URL_TEST` (`db/testdb.ts`, `scripts/clean-test-schemas.mjs`) — so they are inert, not a second live path. They are left alone rather than deleted because `vercel env pull` would restore them anyway.
+
+`.env` is properly ignored, not merely untracked (`.gitignore:6`).
 
 ### ✅ 5. WHAT GOT FIXED ON 2026-08-19, AND ONE CORRECTION THAT MATTERS
 
