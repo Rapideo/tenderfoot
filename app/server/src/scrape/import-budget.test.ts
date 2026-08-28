@@ -79,3 +79,32 @@ test("zero rows always fits, however long the scrape took", () => {
   const fit = importFitsInBudget({ rows: 0, elapsedMs: 299_000 });
   expect(fit.ok).toBe(true);
 });
+
+/* ---- 2026-08-28: the ceiling has to be the REAL ceiling ------------------
+ *
+ * This module shipped with CEILING_MS = 300_000, taken from routes/admin.ts's
+ * own comments, which reason throughout about "the platform's ~300s ceiling".
+ * Nobody had checked. `vercel.json` sets `maxDuration: 30` for the one
+ * function that serves every route, so the true ceiling was 30s and every
+ * budget in the system was six to ten times too large to ever fire.
+ *
+ * It was found by running a deliberate seven-day window against production:
+ * 504 FUNCTION_INVOCATION_TIMEOUT after 30.3 seconds, leaving the identical
+ * fingerprint as the 2026-08-27 failure -- 9,099 sighting ids consumed and
+ * rolled back, one ingest_run id consumed and rolled back, nothing imported,
+ * no stamp. That is what the original failure was.
+ *
+ * The root cause was never a wrong number. It was TWO numbers, in two files,
+ * with nothing tying them together -- so one could be changed and the other
+ * would go on quietly reasoning from the old value. This test is that tie. */
+
+test("the ceiling matches vercel.json's maxDuration, so the two cannot drift", async () => {
+  const { readFileSync } = await import("node:fs");
+  const vercelJson = JSON.parse(
+    readFileSync(new URL("../../../../vercel.json", import.meta.url), "utf8"),
+  );
+  const fn = vercelJson.functions?.["api/index.ts"];
+  expect(fn, "vercel.json must configure api/index.ts").toBeDefined();
+  expect(typeof fn.maxDuration).toBe("number");
+  expect(CEILING_MS).toBe(fn.maxDuration * 1000);
+});

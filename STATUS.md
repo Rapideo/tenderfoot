@@ -32,7 +32,7 @@
 
 ## 📌 PINNED — LAST UPDATED 2026-08-28 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
-**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. **No ruling is outstanding.** Production is public **by decision** as of 2026-08-28 (§5), and local development no longer touches production (§4). The one open thread is evidential, not a decision: the 2026-08-27 Run failure is **reconstructed but neither attributed nor diagnosed** (§3), though the missing guard it exposed is fixed.
+**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. **Nothing is outstanding.** Production is public **by decision** (§5), local development no longer touches production (§4), and the 2026-08-27 Run failure is **solved, attributed and fixed** (§3) — a 30-second `maxDuration` in `vercel.json` that every budget in the codebase had been reasoning past, now 300 and tied to the code by a test.
 
 ### ✅ 1. `ADMIN_SECRET` — RESOLVED 2026-08-27. The gate is LIVE in production.
 
@@ -63,7 +63,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 *Automation note for next time:* `getAdminSecret` falls back to `window.prompt`, which **deadlocks CDP**. Seed `sessionStorage['tenderfoot.adminSecret']` via `Page.addScriptToEvaluateOnNewDocument` **before** navigating and the prompt never opens. Controls carry `aria-label="Check <name>"` and `aria-label="Run <name>"`, which makes them unambiguous to target — and makes it easy to be certain you are **not** clicking Run.
 
-### ◐ 3. RUN WORKS — CLICKED IN A BROWSER ON PRODUCTION, and the seven-day hazard is GONE
+### ✅ 3. RUN WORKS, and the 2026-08-27 FAILURE IS SOLVED — a 30-second ceiling nobody had checked
 
 **✅ RUN SUCCEEDED ON PRODUCTION 2026-08-28.** `POST /api/admin/run?source=SAM.gov&since=<15 minutes ago>` answered **`200` in 2.7 seconds**, doing the whole path — scrape, import, merge, stamp:
 
@@ -122,9 +122,30 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **PROVEN: one aborted transaction consumed 9,097 sighting ids, and it sits chronologically after 2026-08-17 and before 2026-08-28.** `importArtifact` inserts the `ingest_run` row FIRST and the sightings after it — so **the scrape SUCCEEDED and 9,097 rows reached the import** before the transaction died. This was never a failed fetch.
 
-⚠️ **NOT PROVEN: that the 2026-08-27 click caused it.** It is the only recorded Run attempt in the window and the only known failure, and exactly one `ingest_run` id rolled back — consistent with a single aborted import. But **local development writes to this same database** (§4), so a local run cannot be excluded. Strong circumstantial case, not proof.
+✅ **SOLVED 2026-08-28 BY REPRODUCING IT.** A deliberate seven-day Run was fired at production with the guard in place. It answered **`504 FUNCTION_INVOCATION_TIMEOUT` after 30.3 seconds**, and left the identical fingerprint:
 
-⚠️ **ALSO NOT PROVEN: that it overran the platform ceiling.** At the measured ~8.6 ms/row, 9,097 rows is ~79s, which fits the 120s that was reserved. The likeliest explanation — that merge is superlinear well past its measured 530-row scale — is untested. **No diagnosis is claimed.**
+| | 2026-08-27 | the reproduction |
+|---|---|---|
+| sighting ids consumed and rolled back | 9,097 | **9,099** (`sighting_seq` 9,912 → 19,011) |
+| `ingest_run` ids consumed and rolled back | one (id 4) | **one (id 7)** |
+| rows imported | 0 | **0** |
+| `last_run_at` stamped | no | **no** |
+
+**Both open questions close at once.** The 2026-08-27 failure was a **30-second function timeout**, and the click is attributed: the same conditions produce the same signature on demand. Not merge superlinearity, not the window size in itself — the function cannot finish that much work inside its ceiling, and dies mid-transaction.
+
+⛔ **THE ROOT CAUSE, AND IT INVALIDATED EVERY BUDGET IN THE SYSTEM: `vercel.json` set `maxDuration: 30`.** Meanwhile `routes/admin.ts` reasons throughout about "the platform’s ~300s ceiling". Nobody had checked the one against the other:
+
+| constant | value | vs the REAL 30s ceiling |
+|---|---|---|
+| `HANDLER_BUDGET_MS` (`/scrape`) | 240,000 | **8× the ceiling** |
+| `RUN_HANDLER_BUDGET_MS` (`/run`) | 180,000 | **6× the ceiling** |
+| `CEILING_MS` (the guard, shipped hours earlier) | 300,000 | **10× the ceiling** |
+
+**None of them could ever fire.** The function always died first. That includes the guard added earlier the same day — it inherited the 300s figure from the very comments that were wrong, so it shipped inert and did not fire on the reproduction either. Recorded rather than quietly corrected, because it is the same mistake twice: **trusting a number written in a comment instead of the file that configures it.**
+
+✅ **FIXED 2026-08-28: `maxDuration` raised 30 → 300**, which is the value every budget in the route was already written against, and which makes a wide first run viable rather than architecturally impossible.
+
+✅ **AND THE ACTUAL ROOT CAUSE IS FIXED, WHICH IS NOT THE NUMBER.** It was **two numbers in two files with nothing tying them together** — one could change and the other would go on reasoning from the old value in silence. `import-budget.test.ts` now **reads `vercel.json` and asserts `CEILING_MS === maxDuration * 1000`**. Keep that test; it is the only thing preventing a third occurrence. Gate green at **309 tests / 44 files**.
 
 #### ✅ FIXED 2026-08-28 — the guard that was missing (`scrape/import-budget.ts`)
 

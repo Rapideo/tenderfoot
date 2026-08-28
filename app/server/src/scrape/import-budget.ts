@@ -31,7 +31,20 @@
  * combined, rounded up. */
 export const MS_PER_ROW = 9;
 
-/* Vercel's function ceiling for the whole request. */
+/* The function ceiling for the whole request.
+ *
+ * THIS MUST EQUAL `vercel.json`'s `functions["api/index.ts"].maxDuration`,
+ * and import-budget.test.ts reads that file and asserts it. The assertion is
+ * not ceremony: this module shipped on 2026-08-28 with 300_000 taken from
+ * routes/admin.ts's comments, which reason throughout about "the platform's
+ * ~300s ceiling", while `vercel.json` actually said `maxDuration: 30`. Every
+ * budget in the system was then six to ten times larger than the ceiling
+ * they were meant to sit under, so none of them could ever fire -- the
+ * function simply died first, mid-transaction, rolling back everything it
+ * had imported and recording nothing.
+ *
+ * The root cause was never a wrong number. It was TWO numbers in two files
+ * with nothing tying them together. The test is the tie; keep it. */
 export const CEILING_MS = 300_000;
 
 /* THE HONEST PART OF THE ESTIMATE. Both rates above come from a 530-row
