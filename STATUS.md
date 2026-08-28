@@ -30,9 +30,9 @@
 
 ---
 
-## 📌 PINNED — LAST UPDATED 2026-08-27 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
+## 📌 PINNED — LAST UPDATED 2026-08-28 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
-**The production admin gate is LIVE (verified `401`) and the demo criterion is MET** — Check on SAM.gov returned real data from production. Gate 299 tests / 43 files. **Production data is verified untouched at 788/788/197.** What is outstanding is now one defect and one ruling: **the Run control errors in production** (§3), and **Matt still has to rule on whether production is supposed to be publicly readable** (§4).
+**The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **790 solicitations / 790 sightings / 198 organizations**, and **Run has now been clicked in a browser on production and completed** — the first time ever. Outstanding: **the 2026-08-27 Run error is still unidentified** (§3 — narrowed, not solved), and **Matt still has to rule on whether production is supposed to be publicly readable** (§4).
 
 ### ✅ 1. `ADMIN_SECRET` — RESOLVED 2026-08-27. The gate is LIVE in production.
 
@@ -63,27 +63,45 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 *Automation note for next time:* `getAdminSecret` falls back to `window.prompt`, which **deadlocks CDP**. Seed `sessionStorage['tenderfoot.adminSecret']` via `Page.addScriptToEvaluateOnNewDocument` **before** navigating and the prompt never opens. Controls carry `aria-label="Check <name>"` and `aria-label="Run <name>"`, which makes them unambiguous to target — and makes it easy to be certain you are **not** clicking Run.
 
-### ⛔ 3. THE RUN CONTROL FAILS IN PRODUCTION — and production is VERIFIED CLEAN
+### ◐ 3. RUN WORKS — CLICKED IN A BROWSER ON PRODUCTION, and the seven-day hazard is GONE
 
-**Run was clicked on SAM.gov in production on 2026-08-27. It returned an error code shortly after, and imported nothing.** The exact code was not captured and **Vercel's runtime-logs API returns `403` for the available token**, so the server side could not be read. The client-side error text is still the missing evidence.
+**✅ RUN SUCCEEDED ON PRODUCTION 2026-08-28.** `POST /api/admin/run?source=SAM.gov&since=<15 minutes ago>` answered **`200` in 2.7 seconds**, doing the whole path — scrape, import, merge, stamp:
+
+```json
+{"since":"2026-08-28T03:46:35.232Z","rows":2,"imported":2,"skipped":false,
+ "ingestedThrough":"2026-08-28T04:01:35.561Z","merged":2,"updated":0,"linked":2,
+ "last_run_at":"2026-08-28T04:01:37.445Z"}
+```
+
+**✅ AND THEN MATT CLICKED THE BUTTON — 2026-08-28, in a real browser, against production. It worked.** `ingest_run` id 6, `rows_imported: 0`, and `last_run_at` moved **04:01:37Z → 04:03:59Z**. **Zero rows is the correct answer, not a failure:** the derived window was the 2 minutes 22 seconds since the previous stamp, and SAM.gov posted nothing in it. The whole path still ran — scrape, import, merge, stamp — and the stamp is the proof.
+
+**This is the first time the Run control has ever completed from a browser in production.** SP3.6’s click-through found on 2026-08-18 that "the Run control had never worked once, in any browser, for any source"; that fix was verified on test, never on production, and the two attempts since had been blocked — first by a 404 on `/admin`, then by a dead `ADMIN_SECRET`, then by the seven-day window. D5 is now genuinely exercised end to end.
+
+**So the Run path is not broken.** The first of the two calls above was invoked with an explicit `?since=` — honoured per §9.6, "the operator sets the scope of each run" — which the Run BUTTON deliberately never sends. That is the whole difference between this call and the failing one.
+
+⚠️ **The 2026-08-27 error is STILL NOT IDENTIFIED, and this does not identify it.** The leading hypothesis is now much narrower — the seven-day window rather than a broken code path — but nothing here proves that, and it is recorded as a hypothesis, not a finding.
+
+**The original failure, for the record. Run was clicked on SAM.gov in production on 2026-08-27; it returned an error code shortly after, and imported nothing.** The exact code was not captured and **Vercel's runtime-logs API returns `403` for the available token**, so the server side could not be read. The client-side error text is still the missing evidence.
 
 **✅ PARTLY MITIGATED 2026-08-27 — D7, `docs/admin-deviations.md`.** The screen now reports a request that never completes. **This does NOT diagnose the failure above; it makes the NEXT one legible.** The non-2xx path was already right (it reads the body and surfaces `data.error`), which is why an error code was seen at all. What was missing: there was **no `try` anywhere in `Admin.tsx`**, so a REJECTED `fetch` — dropped connection, a request killed at the 300s function ceiling, an offline client — escaped the handler and skipped `setBusy(..., false)`. That left **no message and a row frozen busy**, since every control in it is `disabled={busy}` — strictly worse than a swallowed error, because the row could not even be retried. Both handlers now catch, clear busy, and report `Request failed — <message>` in the browser’s own words. Gate green at **301 tests / 43 files**.
 
-> 🔎 **The original error text may still be recoverable.** The row error lives in React state until the next click or a reload, so if the `/admin` tab from 2026-08-27 is still open and untouched, it is still under the SAM.gov row. **Failing that, the safe way to reproduce is to set a recent `last_run_at` on production’s `SAM.gov` row FIRST** — that shrinks the derived window from seven days to minutes and turns Run from a hazard into an ordinary diagnostic. Do not click Run to diagnose it while the window is still `P7D`.
+> 🔎 **The original error text may still be recoverable.** The row error lives in React state until the next click or a reload, so if the `/admin` tab from 2026-08-27 is still open and untouched, it is still under the SAM.gov row. **The advice this note used to carry — "set a recent `last_run_at` first" — is now obsolete, and was never a good idea:** it would have written a false fact, claiming a run that never happened, into a database this file exists to keep honest. The window shrank on its own instead, because a REAL run stamped it. `since_default` was never touched and still reads `P7D`.
 
-**Production was measured after the full 180s budget window elapsed, and is untouched:**
+**Production, measured 2026-08-28 after the successful run** (the 2026-08-27 failure imported nothing; these two rows are the first ingestion into production since 2026-08-17):
 
 | | |
 |---|---|
-| solicitations | **788** (unchanged) |
-| sightings | **788** (unchanged) |
-| organizations | **197** (unchanged) |
-| `ingest_run` rows | **2**, newest **2026-08-17T00:04:30Z** |
-| `source.last_run_at` for SAM.gov | **NULL** |
+| solicitations | 788 → **790** |
+| sightings | 788 → **790** |
+| organizations | 197 → **198** |
+| `ingest_run` rows | 2 → **4** (ids 5 and 6), newest **2026-08-28T04:03:59Z** |
+| `source.last_run_at` for SAM.gov | NULL → **2026-08-28T04:03:59Z** (real, twice) |
 
 **Three things contained it, and they are worth keeping.** `RUN_HANDLER_BUDGET_MS = 180_000` caps the scrape below Vercel's 300s ceiling; the scrape stages into a `mkdtempSync` artifact that a `finally` deletes unconditionally, so a failure before `importArtifact` cannot touch Postgres; and the `affected !== 1` assertion on the `last_run_at` stamp fails loud rather than reporting a success it did not achieve. **The fail-closed, stage-then-import design is what made a misclick harmless. Do not "simplify" any of it.**
 
-⚠️ **The seven-day-window hazard is UNCHANGED and still live.** `SAM.gov` still has `last_run_at = NULL` and `since_default = 'P7D'`, so the next *successful* Run still derives a **seven-day** window. Twelve hours returned 1,724 rows in 43s on the test branch. **Set a recent `last_run_at` before any deliberate first Run.** Diagnosing the failure by clicking Run again is the one move to avoid.
+✅ **THE SEVEN-DAY HAZARD IS GONE, and it closed itself correctly.** `resolveSince` returns `last_run_at` when there is one and only falls back to `since_default` when there is not — so now that a genuine run has stamped **2026-08-28T04:01:37Z**, the Run BUTTON derives a window of *minutes*, not seven days. **Run is now safe to press in the browser**, which it has never been before.
+
+*(What made it safe is worth keeping straight: nothing was configured around the hazard. `since_default` is still `P7D`, untouched. A real run supplied the real timestamp, and the rule did the rest — which is exactly what 003_seed_source_registry.sql meant by "`since_default` is only a SEED. The rule is `since = last successful run`.")*
 
 > 🛟 **If a run ever does land badly: Neon `history_retention_seconds` is 86400 on `wispy-tooth-06225229`.** Branch `main` (`br-super-breeze-aun4swjv`) has a **24-hour** point-in-time restore window. Verified present 2026-08-27.
 
@@ -222,7 +240,7 @@ $s | vercel env add ADMIN_SECRET preview
 >
 > ⚠️ **Do not click Run first.** Production's `SAM.gov` has `last_run_at = NULL` and `since_default = 'P7D'`, so the first Run derives a **seven-day** window. Twelve hours returned 1,724 rows in 43s on the test branch. It is designed to checkpoint rather than die, but it is a large ingest, not a list refresh.
 
-### ⛔ BLOCKED ON MATT — one environment variable, and nothing deploys until it exists
+### ✅ WAS BLOCKED ON MATT — one environment variable; RESOLVED 2026-08-27, see §1
 
 **`146c943` and the rename that follows it are COMMITTED AND NOT PUSHED, deliberately.** Pushing deploys, and deploying this before the variable exists would take the Enable toggle and the Firm Profile editor on production **from working to 503**.
 
