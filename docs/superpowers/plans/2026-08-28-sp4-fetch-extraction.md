@@ -538,8 +538,16 @@ export async function parseXlsx(bytes: Buffer): Promise<ParseResult> {
       }
     }
 
+    /* Assigning !ref rather than passing { range } is NOT a style choice.
+     * sheet_to_csv IGNORES opts.range in xlsx 0.20.3 -- it reads
+     * sheet["!ref"] unconditionally, and only sheet_to_json honours the
+     * option. Passing it would compute the honest range and then silently
+     * discard it: trap 1 defeating itself. Mutation is safe here -- the
+     * workbook is parsed fresh from bytes on every call and never reused. */
+    ws["!ref"] = range;
+
     chunks.push(`# ${name}`);
-    chunks.push(XLSX.utils.sheet_to_csv(ws, { FS: "\t", range }));
+    chunks.push(XLSX.utils.sheet_to_csv(ws, { FS: "\t" }));
   }
 
   return { kind: "text", text: chunks.join("\n"), notes };
