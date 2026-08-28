@@ -215,9 +215,16 @@ test("an unknown type returns null rather than a guess", () => {
   expect(parserFor("", "notes.txt")).toBeNull();
 });
 
-test("the filename decides when the media type is missing or wrong", () => {
-  /* SAM.gov's attachment list frequently omits a usable type. */
+test("the extension WINS when the two signals disagree", () => {
+  /* This is the case that actually proves precedence. octet-stream alone does
+   * not: it matches neither branch, so extension-first and media-type-first
+   * both fall through to the extension and the test cannot tell them apart. */
+  expect(parserFor("application/pdf", "a.docx")).toBe("docx");
   expect(parserFor("application/octet-stream", "RFP.pdf")).toBe("pdf");
+});
+
+test("xlsm is treated as a spreadsheet", () => {
+  expect(parserFor("", "macro-enabled.xlsm")).toBe("xlsx");
 });
 ```
 
