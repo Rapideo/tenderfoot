@@ -981,7 +981,7 @@ const CANDIDATES = `
   SELECT s.id, s.external_id
     FROM solicitation s
    WHERE s.external_id IS NOT NULL
-     AND s.closes_at >= now()::text
+     AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC
    LIMIT $1`;
