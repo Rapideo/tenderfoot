@@ -19,6 +19,11 @@ import pg from "pg";
  * fourteen call sites. */
 pg.types.setTypeParser(20, (v) => (v === null ? null : Number(v)));
 
+/* Side-effect import: raises Node’s happy-eyeballs per-address budget
+ * above TCP’s retransmit timer, BEFORE any pool is built. See that file
+ * for the failure it exists for and the three hypotheses it ruled out. */
+import "./connect-tuning.js";
+
 const CONN = process.env.DATABASE_URL;
 if (!CONN) {
   throw new Error(
