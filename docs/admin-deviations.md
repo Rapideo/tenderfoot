@@ -403,7 +403,7 @@ before it was built" — carries provenance instead of the prefix.
 
 A `.zip` inside a `.zip` becomes a `document` row marked `failed` with
 `source_note = 'nested archive not traversed'`. Depth 1 is the same limit the
-2026-08-18 spike had — it opened `Att L - Bidders Library.zip` inside
+2026-08-18 spike had — it listed `Att L - Bidders Library.zip` inside
 `docs.zip` and logged `skipped: "not a parseable format"`, a wrong reason
 that lived nowhere durable. A recorded failure is queryable; a wrong reason in
 a throwaway artifact is not. Traversal is deferred rather than refused:
