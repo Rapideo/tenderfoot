@@ -387,3 +387,17 @@ because the frozen reference is silent, not because it disagrees.
 **Two tests, and neither implies the other:** the message proves the reason
 survived the failure, and the re-enabled button proves the row can be tried
 again. Gate green at **301 tests / 43 files**.
+
+---
+
+# Ruled before it was built — SP4 T6, 2026-08-28
+
+## D8 — nested archives are not traversed, and now say so
+
+A `.zip` inside a `.zip` becomes a `document` row marked `failed` with
+`source_note = 'nested archive not traversed'`. Depth 1 is the same limit the
+2026-08-18 spike had — it skipped `Att L - Bidders Library.zip` inside
+`docs.zip` — but the spike skipped it **silently**, which made a missing
+document indistinguishable from a document that contained nothing. A recorded
+failure is queryable; a silent skip is not. Traversal is deferred rather than
+refused: nothing here prevents depth 2 later.
