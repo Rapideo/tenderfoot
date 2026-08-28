@@ -65,6 +65,36 @@ export const SCALE_FACTOR = 2;
 /* Response serialisation and connection teardown after merge returns. */
 export const RESERVE_MS = 10_000;
 
+/* ---- THE PHASE BUDGETS, derived from the same ceiling ------------------
+ *
+ * `routes/admin.ts` used to declare these as bare literals -- 240_000 and
+ * 180_000 -- beside a comment reasoning about "the platform's ~300s
+ * ceiling". Nothing tied them to anything. When `vercel.json` actually said
+ * `maxDuration: 30` they were 8x and 6x the real ceiling and could never
+ * fire; the function died first, every time, mid-transaction.
+ *
+ * These are NOT new numbers. 240_000 is exactly 300_000 - 60_000 and
+ * 180_000 is exactly 300_000 - 120_000 -- the very headroom that comment
+ * already claimed to reserve. Deriving them only says out loud what was
+ * already meant, and makes the arithmetic FOLLOW the ceiling instead of
+ * going quietly stale the next time someone edits vercel.json.
+ *
+ * The headrooms differ because the handlers do different amounts of work
+ * after their scrape returns. `/scrape` genuinely does only the one phase.
+ * `/run` also imports and merges inside the same request, so it reserves
+ * twice as much -- and `importFitsInBudget` above is the check that the
+ * reservation is actually big enough for the rows in hand, which is the
+ * part a fixed reservation could never do. */
+
+/** `/scrape` does one phase; it reserves only the response. */
+export const SCRAPE_HEADROOM_MS = 60_000;
+
+/** `/run` also imports and merges after its scrape, so it reserves more. */
+export const RUN_HEADROOM_MS = 120_000;
+
+export const SCRAPE_HANDLER_BUDGET_MS = CEILING_MS - SCRAPE_HEADROOM_MS;
+export const RUN_HANDLER_BUDGET_MS = CEILING_MS - RUN_HEADROOM_MS;
+
 export interface ImportBudgetSubject {
   /** Rows the scrape actually returned. */
   rows: number;

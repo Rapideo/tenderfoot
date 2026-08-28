@@ -42,14 +42,23 @@ import { runScrape } from "../scrape/run.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
 import { resolveSource } from "../scrape/resolve-source.js";
 import { resolveSince } from "../scrape/window.js";
-import { importFitsInBudget } from "../scrape/import-budget.js";
+import {
+  importFitsInBudget,
+  SCRAPE_HANDLER_BUDGET_MS,
+  RUN_HANDLER_BUDGET_MS,
+} from "../scrape/import-budget.js";
 import { checkSources } from "../health/check.js";
 import { one, run as dbRun } from "../db/index.js";
 import { importArtifact } from "../ingest/import-artifact.js";
 import { mergeSightings } from "../merge/merge.js";
 
-/* Below Vercel's 300s ceiling with margin for the response to flush. */
-const HANDLER_BUDGET_MS = 240_000;
+/* MOVED 2026-08-28 to scrape/import-budget.ts, and DERIVED there rather
+ * than written down. This used to read `const HANDLER_BUDGET_MS =
+ * 240_000;` under the comment “Below Vercel's 300s ceiling with margin
+ * for the response to flush” -- but `vercel.json` said `maxDuration: 30`,
+ * so it was EIGHT TIMES the real ceiling and could never fire. The value
+ * is unchanged; it is now `CEILING_MS - SCRAPE_HEADROOM_MS`, and a test
+ * reads vercel.json and asserts the ceiling matches it. See that file. */
 
 /* FIX 3's gate now lives in lib/adminSecret.ts, because a SECOND router
  * needed it (2026-08-18): the two PATCH routes on routes/index.ts were
@@ -75,7 +84,7 @@ admin.post(
       res.status(400).json({ error: (e as Error).message });
       return;
     }
-    request.budgetMs = HANDLER_BUDGET_MS;
+    request.budgetMs = SCRAPE_HANDLER_BUDGET_MS;
 
     const entry = ADAPTERS[request.source];
     if (!entry) {
@@ -238,7 +247,7 @@ admin.post(
 
 /* REVIEW FIX (Important, finding 2): /run does strictly more than /scrape --
  * import and merge run AFTER the scrape loop, inside the SAME request, and
- * `HANDLER_BUDGET_MS` only bounds the scrape loop itself (scrape/run.ts's
+ * `SCRAPE_HANDLER_BUDGET_MS` only bounds the scrape loop itself (run.ts's
  * budget check). Reusing that constant here left the platform's ~300s
  * ceiling with ZERO explicit headroom for the two added phases: a scrape
  * that spent its whole 240s budget would leave ~60s for import and merge
@@ -252,10 +261,13 @@ admin.post(
  * row-at-a-time figure that set-based rewrite replaced). A run at that
  * scale spends well under 10s on import+merge combined, so 120s of headroom
  * below the 300s ceiling is a wide margin -- but it is now an EXPLICIT one,
- * which the shared ceiling was not. `HANDLER_BUDGET_MS` and /scrape are
+ * which the shared ceiling was not. The scrape budget and /scrape are
  * unchanged: /scrape genuinely does only the one phase and its ceiling was
  * already correct. */
-const RUN_HANDLER_BUDGET_MS = 180_000;
+/* MOVED 2026-08-28 to scrape/import-budget.ts and derived there, for the
+ * same reason as the scrape budget above: this read `180_000` against a
+ * ceiling that was actually 30s, so it was six times too large to ever
+ * fire. Unchanged in value -- `CEILING_MS - RUN_HEADROOM_MS`. */
 
 /* CONTROLLER RULING (task-12, closing a gap the brief left open). This route
  * takes the CLI adapter key ('sam', 'usaspending') -- but the /admin screen

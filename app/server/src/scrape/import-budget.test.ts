@@ -1,5 +1,13 @@
 import { expect, test } from "vitest";
-import { importFitsInBudget, MS_PER_ROW, CEILING_MS } from "./import-budget.js";
+import {
+  importFitsInBudget,
+  MS_PER_ROW,
+  CEILING_MS,
+  SCRAPE_HANDLER_BUDGET_MS,
+  RUN_HANDLER_BUDGET_MS,
+  SCRAPE_HEADROOM_MS,
+  RUN_HEADROOM_MS,
+} from "./import-budget.js";
 
 /* THE FAILURE THIS FILE EXISTS FOR, reconstructed 2026-08-28 from sequence
  * forensics rather than from a log.
@@ -107,4 +115,39 @@ test("the ceiling matches vercel.json's maxDuration, so the two cannot drift", a
   expect(fn, "vercel.json must configure api/index.ts").toBeDefined();
   expect(typeof fn.maxDuration).toBe("number");
   expect(CEILING_MS).toBe(fn.maxDuration * 1000);
+});
+
+/* ---- 2026-08-28: the phase budgets, tied to the same ceiling -------------
+ *
+ * The drift test above ties CEILING_MS to vercel.json. The two HANDLER
+ * budgets in routes/admin.ts were not tied to anything: 240_000 and 180_000,
+ * written beside a comment reasoning about a 300s ceiling that vercel.json
+ * did not actually provide. Once maxDuration was 30 they were 8x and 6x the
+ * real ceiling and could never fire.
+ *
+ * They are not new numbers. 240_000 IS 300_000 - 60_000, and 180_000 IS
+ * 300_000 - 120_000 -- exactly the headroom the route's own comment already
+ * claimed to reserve. Deriving them says out loud what was already meant,
+ * and makes the arithmetic move when the ceiling moves instead of being
+ * silently wrong the next time someone edits vercel.json. */
+
+test("the phase budgets are derived from the ceiling, not written beside it", () => {
+  expect(SCRAPE_HANDLER_BUDGET_MS).toBe(CEILING_MS - SCRAPE_HEADROOM_MS);
+  expect(RUN_HANDLER_BUDGET_MS).toBe(CEILING_MS - RUN_HEADROOM_MS);
+});
+
+test("every phase budget leaves real headroom below the ceiling", () => {
+  expect(SCRAPE_HANDLER_BUDGET_MS).toBeLessThan(CEILING_MS);
+  expect(RUN_HANDLER_BUDGET_MS).toBeLessThan(CEILING_MS);
+  /* /run does strictly more after its scrape than /scrape does, so it must
+   * reserve strictly more. */
+  expect(RUN_HANDLER_BUDGET_MS).toBeLessThan(SCRAPE_HANDLER_BUDGET_MS);
+});
+
+test("deriving them changes nothing: the values are what the route already used", () => {
+  /* This ties the constants without moving them. If this assertion ever
+   * fails, the ceiling changed and the budgets followed it -- which is the
+   * point -- but it should never fail as a surprise. */
+  expect(SCRAPE_HANDLER_BUDGET_MS).toBe(240_000);
+  expect(RUN_HANDLER_BUDGET_MS).toBe(180_000);
 });
