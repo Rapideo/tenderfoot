@@ -209,7 +209,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **Structure survives.** `.docx` tables: 244/244 tables and 758/758 rows preserved by `mammoth.convertToHtml` (the 64-cell gap is vertical-merge continuations, i.e. correct `rowspan`, not loss). `.xlsx` has two traps and **neither is about Node**: declared `!ref` dimensions are fiction (89–99% phantom rows), and **SheetJS replays Excel's cached formula values rather than evaluating** — so a workbook saved without recalculation yields a stale total with no signal. `.pdf` has no table structure at all; geometry is present, reconstruction is not provided. Full write-up: `docs/2026-08-18-extraction-spike.md`.
 
-**One ruling still with Matt on SP4:** the spreadsheet dependency — pin SheetJS from `cdn.sheetjs.com`, accept a package with unfixable advisories, or send spreadsheets to a Python sidecar.
+✅ **RULED 2026-08-28: pin SheetJS from `cdn.sheetjs.com`.** Not the npm package with unfixable advisories, not a Python sidecar. That was the last open question on SP4, which is now **designed** — `docs/superpowers/specs/2026-08-28-sp4-fetch-extraction-design.md`.
 
 ---
 
@@ -367,13 +367,13 @@ $s | vercel env add ADMIN_SECRET preview
 >
 > ⚠️ **Order is load-bearing, because there is no fallback: variable first, push second.** Reversed, every admin write answers 503 until the variable appears.
 
-### ⏭ START HERE — one ruling left on SP4, and it is not the one anyone expected
+### ⏭ ~~START HERE — one ruling left on SP4~~ ✅ RULED AND DESIGNED 2026-08-28
 
 **The runtime question is answered by measurement; what is left is a dependency decision.** The recommendation on file is **Node throughout** — `mammoth` and `unpdf` are settled for the two formats that carry the scope of work — **with the spreadsheet dependency chosen deliberately instead of inherited:**
 
-**Pin SheetJS from `cdn.sheetjs.com`, or accept a package with unfixable published advisories in a public repo, or run spreadsheets through a Python sidecar.** That is the live question. It is much smaller than "which runtime", and it is Matt's.
+~~**Pin SheetJS from `cdn.sheetjs.com`, or accept a package with unfixable published advisories in a public repo, or run spreadsheets through a Python sidecar.**~~ ✅ **RULED 2026-08-28: pinned from `cdn.sheetjs.com`.**
 
-Also still open and untouched by the spike: **whether the original document must be kept at all** (Vercel Blob answers *which provider*, not *do we keep it*), and **formatting fidelity** — every number above is characters recovered, and whether a cost-proposal table keeps its structure is untested.
+✅ **Both of the spike’s other open questions are also closed, 2026-08-28.** **Whether the original document must be kept at all: NO** — a citation quotes the extracted passage rather than opening the original, which removes document storage and the blob-provider decision from SP4 entirely. **Formatting fidelity** is answered for the two formats that carry the scope of work (`.docx` tables survive `convertToHtml` completely; `.pdf` has no table structure to preserve) and is now a build requirement rather than an open question. See the SP4 design spec.
 
 
 
