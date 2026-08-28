@@ -13,8 +13,10 @@ ALTER TABLE document ADD COLUMN parent_document_id integer REFERENCES document(i
 -- Precedence is applied at READ time, so the rule can change without
 -- re-extraction and nothing is discarded at ingest.
 --
--- value_text NULL = looked for and ABSENT. No row at all = never looked for.
--- The same three-state distinction extract_status already enforces.
+-- value_text NULL = looked for and ABSENT. No row at all reads as never
+-- looked for OR the attempt failed -- this schema PERMITS that distinction,
+-- it does not enforce it (no constraint can, on a row that need not exist).
+-- document.extract_status is where a failed attempt stays distinguishable.
 CREATE TABLE extracted_field (
   id              integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   solicitation_id integer NOT NULL REFERENCES solicitation(id),

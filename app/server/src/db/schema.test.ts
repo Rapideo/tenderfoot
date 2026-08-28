@@ -280,6 +280,11 @@ test("extracted_field keeps losing values instead of discarding them", async () 
   expect(rows).toHaveLength(2);
 });
 
+/* 23514 is check_violation, asserted by SQLSTATE rather than message text
+ * -- same convention as the FK test above, and for the same reason: a bare
+ * .rejects.toThrow() passes on ANY error, so this test would keep "passing"
+ * even if a future migration replaced the CHECK with, say, a NOT NULL
+ * elsewhere that throws first. */
 test("origin is constrained to the two it may be", async () => {
   const sol = await insert(`INSERT INTO solicitation (title) VALUES ('x') RETURNING id`);
   await expect(
@@ -287,5 +292,5 @@ test("origin is constrained to the two it may be", async () => {
       `INSERT INTO extracted_field (solicitation_id, field_name, origin) VALUES ($1, 'closes_at', 'guess')`,
       [sol],
     ),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ code: "23514" });
 });
