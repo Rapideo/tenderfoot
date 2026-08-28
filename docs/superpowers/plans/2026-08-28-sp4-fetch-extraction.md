@@ -762,7 +762,12 @@ export function extractFields(text: string): FieldDraft[] {
     const before = text.slice(Math.max(0, at - 120), at);
     for (const { field, re } of CUES) {
       if (!re.test(before)) continue;
-      if (found.has(field)) break;
+      /* `continue`, NOT `break`. A 120-character lookback routinely spans two
+       * cues -- "Questions must be submitted by August 5. Proposals are due
+       * September 17" puts both `question` and `due` before the second date.
+       * Breaking here abandoned that date entirely once qa_closes_at was
+       * already claimed, instead of falling through to closes_at. */
+      if (found.has(field)) continue;
       found.set(field, {
         field_name: field,
         value_text: iso(m as RegExpExecArray),
