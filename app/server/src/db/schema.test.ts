@@ -19,7 +19,7 @@ await resetSchema();
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("./migrate.js");
-const { all, one, run, insert, close } = await import("./index.js");
+const { all, one, run, run: dbRun, insert, close } = await import("./index.js");
 
 beforeAll(async () => {
   await migrate(false);
@@ -246,4 +246,46 @@ test("the silent-failure findings survived into the registry", async () => {
     "SELECT verified_facets AS v FROM source WHERE name = 'Michigan SIGMA VSS'",
   );
   expect(mi!.v.silently_ignored).toContain("Show Me");
+});
+
+test("document carries a fetch target and a bundle parent", async () => {
+  const cols = await all<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'document'`,
+  );
+  const names = cols.map((c) => c.column_name);
+  expect(names).toContain("source_url");
+  expect(names).toContain("parent_document_id");
+});
+
+test("extracted_field keeps losing values instead of discarding them", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title) VALUES ('conflict fixture') RETURNING id`,
+  );
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 'mechanical')`,
+    [sol],
+  );
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, quote, produced_by)
+     VALUES ($1, 'closes_at', '2026-08-26', 'document', 'proposals due August 26, 2026', 'mechanical')`,
+    [sol],
+  );
+  const rows = await all<{ origin: string }>(
+    `SELECT origin FROM extracted_field WHERE solicitation_id = $1 AND field_name = 'closes_at'`,
+    [sol],
+  );
+  /* Both survive. The conflict IS the two rows. */
+  expect(rows).toHaveLength(2);
+});
+
+test("origin is constrained to the two it may be", async () => {
+  const sol = await insert(`INSERT INTO solicitation (title) VALUES ('x') RETURNING id`);
+  await expect(
+    dbRun(
+      `INSERT INTO extracted_field (solicitation_id, field_name, origin) VALUES ($1, 'closes_at', 'guess')`,
+      [sol],
+    ),
+  ).rejects.toThrow();
 });
