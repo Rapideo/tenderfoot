@@ -30,39 +30,60 @@
 
 ---
 
-## 📌 PINNED 2026-08-19 (late), §1 AMENDED 2026-08-26 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
+## 📌 PINNED — LAST UPDATED 2026-08-27 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
-**Working tree clean, everything pushed, gate 299 tests / 43 files.** Two production deploys went out tonight and **production's admin writes are currently DEAD on purpose** — fail-closed, exactly as designed. Nothing is half-finished in the code; what is outstanding is three environment actions and one click.
+**The production admin gate is LIVE (verified `401`) and the demo criterion is MET** — Check on SAM.gov returned real data from production. Gate 299 tests / 43 files. **Production data is verified untouched at 788/788/197.** What is outstanding is now one defect and one ruling: **the Run control errors in production** (§3), and **Matt still has to rule on whether production is supposed to be publicly readable** (§4).
 
-### ⛔ 1. `ADMIN_SECRET` — the ROTATION IS RULED OUT; the Vercel ENTRY still has to be recreated
+### ✅ 1. `ADMIN_SECRET` — RESOLVED 2026-08-27. The gate is LIVE in production.
 
-**RULED 2026-08-26 by Matt: do not rotate. The partial exposure is an ACCEPTED RISK, closed by decision rather than by action.** 19 of the 40 characters were printed into a session transcript by Claude, while inspecting the `.env` line's bytes with `od -c` after a redaction that silently did not apply to that command's output. **None of that changed — it was weighed and dropped.** *(This item previously read "ROTATE `ADMIN_SECRET` — do this before anything else". It was never done, and it is now not going to be.)*
+**Verified: `/api/admin/health` answers `401`.** Measured 2026-08-27 late — `X-Powered-By: Express` on the response, so our app replied, not the platform. `requireAdminSecret` can only reach its 401 branch when `process.env.ADMIN_SECRET` is **truthy**, so this is positive proof the variable is in the production runtime. It answered `503` on 08-19 and `503` again on 08-26. It does not any more.
 
-**Reuse the existing value.** That is the whole of what this ruling closes, and it makes step 1 below disappear.
+**What fixed it was recreating the ENTRY, and this is the part to remember.** The delete-and-re-add was done by hand with **Production and Preview ticked at creation**, then a **Redeploy with the build cache unticked**. That redeploy **registered no new GitHub deployment** — the deployments list still tops out at `77d5115` — and yet the behaviour changed. **The build was never wrong; the value was.** ⚠️ **Do not use the deployments list as evidence of what the runtime holds.** A whole diagnostic hour went into "was the alias promoted?", and promotion was never the problem.
 
-> ⚠️ **WHAT IS NOT CLOSED, BECAUSE IT IS A DIFFERENT FACT: the variable does not reach the production runtime.** `GET /api/admin/health` answered **503 on 2026-08-19** and **503 again on 2026-08-26** — measured both times, not inferred. **Every `/api/admin/*` write on production is dead until the entry is recreated**, which means **§2's demo-criterion click cannot happen before this.** The two were bundled as one action only because the rotation would have forced the recreate anyway; dropping the rotation leaves the recreate exactly where it was.
+**Three hypotheses were live before the fix; the winner was the dullest.** (a) the alias still served the old build — false; (b) the key name was wrong — false; (c) **the saved value was empty or never pasted** — effectively this one. `!secret` is true for `""`, so **an empty value yields exactly the same 503 as a missing one.** A clipboard command that prints nothing on success also prints nothing on failure. **Verify the paste by revealing the value and counting characters (40), not by assuming the copy worked.**
 
-1. ~~Generate a new 40-char value in Matt's own terminal.~~ **Not doing this — see the ruling above. Keep the current value.**
-2. **DELETE** the existing `ADMIN_SECRET` entry in Vercel, then **Add New** with the **same** value and **tick Production AND Preview before saving.**
-3. Local `.env` line 26 already holds that value and does not change.
-4. **Redeploy**, then verify.
+**The rotation stays ruled out.** **RULED 2026-08-26 by Matt: do not rotate. The partial exposure is an ACCEPTED RISK, closed by decision rather than by action.** 19 of the 40 characters were printed into a session transcript by Claude, while inspecting the `.env` line's bytes with `od -c` after a redaction that silently did not apply to that command's output. **None of that changed — it was weighed and dropped.** *(This item previously read "ROTATE `ADMIN_SECRET` — do this before anything else". It was never done, and it is now not going to be.)* Local `.env` line 26 holds the value and did not change.
 
-> ⚠️ **Two Vercel behaviours cost an hour on 08-19 and will cost it again.**
+> ⚠️ **Two Vercel behaviours cost an hour on 08-19 and cost more on 08-26. They are still true.**
 >
-> **Editing an existing variable's environment scope SILENTLY DOES NOT SAVE.** It was set to Production, then "moved" to Preview, and four separate attempts to also tick Production left the listing reading `Preview` only every time. **Creating a fresh entry with every box ticked at creation works** — that is how the Neon vars hold three scopes in one entry. **Delete and recreate; never edit the scope.** *This is why step 2 is a delete-and-recreate even though the value is unchanged: there is no supported way to just re-tick the box.*
+> **Editing an existing variable's environment scope SILENTLY DOES NOT SAVE.** It was set to Production, then "moved" to Preview, and four separate attempts to also tick Production left the listing reading `Preview` only every time. **Creating a fresh entry with every box ticked at creation works** — that is how the Neon vars hold three scopes in one entry. **Delete and recreate; never edit the scope.**
 >
 > **Env vars are baked into a deployment at build time.** Changing one does nothing until the next deploy — which is why production kept working after the variable moved, and then died the moment Matt redeployed.
 
-**Verification is one non-mutating request, and the status code is the whole answer:**
-`curl https://tenderfoot-tau.vercel.app/api/admin/health`
-**`503` = the variable did not reach the runtime. `401` = it did, and the gate is live.** **It answered 503 on 2026-08-26.**
-### ⛔ 2. THE DEMO CRITERION IS STILL OWED, AND NOW IT IS ACTUALLY POSSIBLE
+### ✅ 2. THE DEMO CRITERION IS MET — 2026-08-27
 
-**`https://tenderfoot-tau.vercel.app/admin` works for the first time ever.** Open it in a real browser, enter the secret when prompted, **click Check on SAM.gov.** All seven eligible production rows read `unknown` with no timestamp — nothing has ever probed production — so a real result is unmistakable.
+**Check was clicked on SAM.gov in production, and it returned real data.**
 
-⚠️ **Do NOT click Run first.** Production's `SAM.gov` has `last_run_at = NULL` and `since_default = 'P7D'`, so the first Run derives a **seven-day** window. Twelve hours returned 1,724 rows in 43s on the test branch. It checkpoints rather than dies — but it is a large ingest, not a list refresh. Ask Claude to set a recent `last_run_at` first if a small first click is wanted.
+```
+POST /api/admin/health?source=SAM.gov  →  200
+{"checked":[{"name":"SAM.gov","state":"ok","method":"sam","note":"1 records available"}],"skipped":[]}
+```
 
-### ✅ 3. WHAT GOT FIXED TONIGHT, AND ONE CORRECTION THAT MATTERS
+Clicked first by Matt in his own browser, then **independently re-verified by Claude driving Chrome over CDP** (the extension does not connect in this environment; the DevTools Protocol does, with zero new dependencies). The row moved from `checked 9 minutes ago` to `checked 1 second ago` live, state `ok`, no console errors. **`SAM.gov` no longer reads `unknown`** — the "all seven eligible rows read unknown" line above is now stale for that row and true for the other six.
+
+*Automation note for next time:* `getAdminSecret` falls back to `window.prompt`, which **deadlocks CDP**. Seed `sessionStorage['tenderfoot.adminSecret']` via `Page.addScriptToEvaluateOnNewDocument` **before** navigating and the prompt never opens. Controls carry `aria-label="Check <name>"` and `aria-label="Run <name>"`, which makes them unambiguous to target — and makes it easy to be certain you are **not** clicking Run.
+
+### ⛔ 3. THE RUN CONTROL FAILS IN PRODUCTION — and production is VERIFIED CLEAN
+
+**Run was clicked on SAM.gov in production on 2026-08-27. It returned an error code shortly after, and imported nothing.** The exact code was not captured and **Vercel's runtime-logs API returns `403` for the available token**, so the server side could not be read. The client-side error text is still the missing evidence.
+
+**Production was measured after the full 180s budget window elapsed, and is untouched:**
+
+| | |
+|---|---|
+| solicitations | **788** (unchanged) |
+| sightings | **788** (unchanged) |
+| organizations | **197** (unchanged) |
+| `ingest_run` rows | **2**, newest **2026-08-17T00:04:30Z** |
+| `source.last_run_at` for SAM.gov | **NULL** |
+
+**Three things contained it, and they are worth keeping.** `RUN_HANDLER_BUDGET_MS = 180_000` caps the scrape below Vercel's 300s ceiling; the scrape stages into a `mkdtempSync` artifact that a `finally` deletes unconditionally, so a failure before `importArtifact` cannot touch Postgres; and the `affected !== 1` assertion on the `last_run_at` stamp fails loud rather than reporting a success it did not achieve. **The fail-closed, stage-then-import design is what made a misclick harmless. Do not "simplify" any of it.**
+
+⚠️ **The seven-day-window hazard is UNCHANGED and still live.** `SAM.gov` still has `last_run_at = NULL` and `since_default = 'P7D'`, so the next *successful* Run still derives a **seven-day** window. Twelve hours returned 1,724 rows in 43s on the test branch. **Set a recent `last_run_at` before any deliberate first Run.** Diagnosing the failure by clicking Run again is the one move to avoid.
+
+> 🛟 **If a run ever does land badly: Neon `history_retention_seconds` is 86400 on `wispy-tooth-06225229`.** Branch `main` (`br-super-breeze-aun4swjv`) has a **24-hour** point-in-time restore window. Verified present 2026-08-27.
+
+### ✅ 4. WHAT GOT FIXED ON 2026-08-19, AND ONE CORRECTION THAT MATTERS
 
 **`/admin` 404'd in production and always had.** `vercel.json` rewrote only `/api/:path*`, so **every client-side route was a genuine Vercel 404 on a direct request.** Navigating from `/` worked and rendered all 13 rows — which is exactly why nobody noticed, and **the real reason nobody had ever clicked those buttons in production: the URL for doing it did not resolve.** Standard SPA fallback added (`5e518df`); **verified live — `/admin` 200, `/api/health` 200, assets 200.**
 
@@ -74,7 +95,7 @@
 
 ⚠️ **Vercel Attack Challenge Mode was tripped, almost certainly by Claude's own probing** — repeated `curl`/`vercel curl` plus two headless Chrome sessions against production in a few minutes. Everything, including static assets, answered `403` with a "Vercel Security Checkpoint" page for several minutes, then cleared on its own. **Back off rather than retry harder**; the control is at `https://vercel.com/koehler-partners/tenderfoot/firewall`.
 
-### ✅ 4. ALSO DONE TONIGHT — extraction spike, part two
+### ✅ 5. ALSO DONE — extraction spike, part two
 
 **Structure survives.** `.docx` tables: 244/244 tables and 758/758 rows preserved by `mammoth.convertToHtml` (the 64-cell gap is vertical-merge continuations, i.e. correct `rowspan`, not loss). `.xlsx` has two traps and **neither is about Node**: declared `!ref` dimensions are fiction (89–99% phantom rows), and **SheetJS replays Excel's cached formula values rather than evaluating** — so a workbook saved without recalculation yields a stale total with no signal. `.pdf` has no table structure at all; geometry is present, reconstruction is not provided. Full write-up: `docs/2026-08-18-extraction-spike.md`.
 
