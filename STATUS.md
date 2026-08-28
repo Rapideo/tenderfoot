@@ -183,7 +183,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ⚠️ **ONE CONSEQUENCE, and it is deliberate: `npm run migrate` now targets `test`.** `db/migrate.ts:55` reads the same `DATABASE_URL`. **Migrating production is now an explicit act** — run it with `DATABASE_URL` set to `DATABASE_URL_PRODUCTION`. That is the safer default, but it is a behaviour change and will surprise anyone who does not know it.
 
-⚠️ **What was NOT changed.** `.env` still carries the Neon/Vercel integration keys (`POSTGRES_URL`, `PGHOST`, `DATABASE_URL_UNPOOLED`, and the rest) pointing at production. **Nothing in this codebase reads any of them** — the only connection reads are `DATABASE_URL` (`db/index.ts:22`, `db/migrate.ts:55`) and `DATABASE_URL_TEST` (`db/testdb.ts`, `scripts/clean-test-schemas.mjs`) — so they are inert, not a second live path. They are left alone rather than deleted because `vercel env pull` would restore them anyway.
+⚠️ **What was NOT changed.** `.env` still carries the Neon/Vercel integration keys (`POSTGRES_URL`, `PGHOST`, `DATABASE_URL_UNPOOLED`, and the rest) pointing at production. **Nothing in this codebase reads any of them** — the only connection reads are `DATABASE_URL` (`db/index.ts`’s `const CONN`, `db/migrate.ts:55`) and `DATABASE_URL_TEST` (`db/testdb.ts`, `scripts/clean-test-schemas.mjs`) — so they are inert, not a second live path. They are left alone rather than deleted because `vercel env pull` would restore them anyway.
 
 `.env` is properly ignored, not merely untracked (`.gitignore:6`).
 
@@ -213,11 +213,19 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-18
+## 🔖 RESUME HERE — updated 2026-08-28
+
+**You are on `main`, the working tree is CLEAN, everything is pushed, and the gate is green at 314 tests / 45 files.** The whole 2026-08-28 run of work is committed and pushed; production is deployed and healthy. **The pinned block above has no outstanding rulings** — read it first, then this.
+
+**What changed on 2026-08-28, in one line each.** The admin gate went live (§1). The demo criterion was met (§2). Run was clicked in a browser on production for the first time ever, and the 2026-08-27 failure was diagnosed as a 30-second `maxDuration` every budget in the codebase had been reasoning past — now 300, and tied to `vercel.json` by a test (§3). Local development was repointed off production (§4). Production was ruled public by decision (§5). Production holds **9,883 solicitations** after two real ingests, up from 788.
+
+**Two things a future session should not re-investigate.** The `sighting_id_seq` gaps at 814–9,910 and the second block after it are the two failed runs, both explained and both closed — see §3. And the `db/schema.test.ts` flake is a Node happy-eyeballs connection timeout, not a schema fault: `db/connect-tuning.ts` carries the full investigation, including three hypotheses that were each tested and each wrong.
+
+*(Everything from here down is the 2026-08-18 resume and older. It is accurate for its dates; where it conflicts with the above, the above wins.)*
 
 **You are on `main`, SP3.6 IS MERGED, and the working tree is clean.** Merge commit `a110e93` (`--no-ff`, matching this repo's convention), branch `sp3.6-source-health` deleted after merging. Gate green **on the merged result**: **266 tests / 42 files**, `npm run check` exit 0. Thirteen tasks, each implemented and reviewed by a fresh agent; nineteen controller rulings, each recorded with what it costs if wrong; a whole-branch review that returned **Ready to merge** after a five-finding fix wave (`9be2280`).
 
-✅ **THE BUTTONS HAVE NOW BEEN CLICKED — 2026-08-18 — AND BOTH OF THEM WERE BROKEN.** The click-through that SP3.6 still owed finally ran, in real Chrome, and it found two defects that 266 passing tests and a whole-branch review had all missed. **The Run control had never worked once, in any browser, for any source.** Both are fixed; gate is **292 tests / 43 files**, `npm run check` exit 0. See the DONE entry below. ⚠️ **Uncommitted** — the fix is in the working tree, not yet a commit.
+✅ **THE BUTTONS HAVE NOW BEEN CLICKED — 2026-08-18 — AND BOTH OF THEM WERE BROKEN.** The click-through that SP3.6 still owed finally ran, in real Chrome, and it found two defects that 266 passing tests and a whole-branch review had all missed. **The Run control had never worked once, in any browser, for any source.** Both are fixed; gate is **292 tests / 43 files**, `npm run check` exit 0. See the DONE entry below. ~~⚠️ **Uncommitted** — the fix is in the working tree, not yet a commit.~~ **Committed and pushed long since; the tree is clean as of 2026-08-28.**
 
 *(The paragraph this replaced described `main`'s state on 2026-08-17, before SP3.6 existed — 193 tests / 36 files, gate 94s. Accurate for that date, preserved further down this section, and superseded here because SP3.6 has since merged into it.)*
 
