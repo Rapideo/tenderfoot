@@ -951,6 +951,50 @@ test("inserts one pending document per existing attachment", async () => {
   expect(docs.every((d) => d.source_url.length > 0)).toBe(true);
 });
 
+test("writes the portal's own values as listing rows", async () => {
+  /* WITHOUT THIS, NOTHING EVER WRITES origin='listing'. The accuracy query in
+   * Task 8 self-joins on it, so it would return zero rows forever, and the
+   * spec's whole ground-truth argument -- "the portal listing doubles as
+   * ground truth ... Accuracy is a query" -- would be unbuildable. */
+  await resetSchema();
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
+     VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
+    [new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  const listing = await all<{ field_name: string; value_text: string | null }>(
+    `SELECT field_name, value_text FROM extracted_field
+      WHERE origin = 'listing' ORDER BY field_name`,
+  );
+  const byName = Object.fromEntries(listing.map((r) => [r.field_name, r.value_text]));
+  expect(byName["set_aside"]).toBe("SBA");
+  expect(byName["closes_at"]).not.toBeNull();
+  /* A field the portal does not carry is ABSENT, not omitted -- the same
+   * three-state discipline the document side uses. */
+  expect(byName).toHaveProperty("qa_closes_at", null);
+});
+
+test("does not duplicate listing rows when run twice", async () => {
+  /* Discover skips solicitations that already have documents, but a
+   * solicitation with NO attachments would be revisited. */
+  await resetSchema();
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
+    [new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+  const rows = await all<{ c: string }>(
+    `SELECT count(*) AS c FROM extracted_field WHERE origin = 'listing' AND field_name = 'closes_at'`,
+  );
+  expect(Number(rows[0]?.c)).toBe(1);
+});
+
 test("skips solicitations whose deadline has passed", async () => {
   await resetSchema();
   await insert(
@@ -970,7 +1014,7 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement**
 
 ```ts
-import { all, insert } from "../db/index.js";
+import { all, one, insert } from "../db/index.js";
 
 const SAM_RESOURCES = "https://api.sam.gov/prod/opportunity/v1/api/";
 
@@ -978,7 +1022,7 @@ const SAM_RESOURCES = "https://api.sam.gov/prod/opportunity/v1/api/";
  * Production holds ~9,900 solicitations and most are closed, so this makes
  * the first batch the useful batch. */
 const CANDIDATES = `
-  SELECT s.id, s.external_id
+  SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.kind, s.value_cents
     FROM solicitation s
    WHERE s.external_id IS NOT NULL
      AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')
@@ -986,14 +1030,61 @@ const CANDIDATES = `
    ORDER BY s.closes_at ASC
    LIMIT $1`;
 
+/* The six fields SP4 extracts. The portal carries four of them; the other two
+ * exist only in documents, and get an ABSENT listing row so that "the portal
+ * does not carry this" is a recorded fact rather than a gap. */
+const LISTING_FIELDS = [
+  "closes_at", "set_aside", "kind", "value_cents", "qa_closes_at", "prebid_at",
+] as const;
+
+interface Candidate {
+  id: number;
+  external_id: string;
+  closes_at: string | null;
+  set_aside: string | null;
+  kind: string | null;
+  value_cents: string | null;
+}
+
+/* THE GROUND TRUTH ROWS. corpus/FINDINGS.md §1 established that the portal's
+ * structured field was right where all three documents were unreliable, so the
+ * listing is what document extraction is measured AGAINST. Nothing else in this
+ * slice writes origin='listing'; without this, Task 8's accuracy query joins
+ * against an empty set forever. */
+async function writeListingRows(c: Candidate): Promise<void> {
+  const already = await one<{ c: string }>(
+    `SELECT count(*) AS c FROM extracted_field WHERE solicitation_id = $1 AND origin = 'listing'`,
+    [c.id],
+  );
+  if (Number(already?.c ?? 0) > 0) return;
+
+  const value: Record<string, string | null> = {
+    closes_at: c.closes_at,
+    set_aside: c.set_aside,
+    kind: c.kind,
+    value_cents: c.value_cents === null ? null : String(c.value_cents),
+    qa_closes_at: null,
+    prebid_at: null,
+  };
+  for (const f of LISTING_FIELDS) {
+    await insert(
+      `INSERT INTO extracted_field
+         (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+       VALUES ($1, $2, $3, 'listing', 1.0, 'mechanical') RETURNING id`,
+      [c.id, f, value[f] ?? null],
+    );
+  }
+}
+
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ solicitations: number; documents: number }> {
-  const rows = await all<{ id: number; external_id: string }>(CANDIDATES, [limit]);
+  const rows = await all<Candidate>(CANDIDATES, [limit]);
   let documents = 0;
 
   for (const s of rows) {
+    await writeListingRows(s);
     const url = `${SAM_RESOURCES}${encodeURIComponent(s.external_id)}/resources`;
     const res = await fetchImpl(url);
     if (!res.ok) continue;
