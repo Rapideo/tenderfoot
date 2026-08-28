@@ -380,10 +380,33 @@ export function Admin() {
     if (!secret) return;
     setBusy((b) => ({ ...b, [s.id]: true }));
     setErrors((e) => ({ ...e, [s.id]: "" }));
-    const r = await fetch(`/api/admin/health?source=${encodeURIComponent(s.name)}`, {
-      method: "POST",
-      headers: adminHeaders(secret),
-    });
+    /* 2026-08-27: `fetch` REJECTS -- a dropped connection, a request killed
+     * at Vercel’s function ceiling, an offline client -- and there was no
+     * `try` in this file, so the rejection escaped the handler and skipped
+     * the `setBusy(..., false)` below. The operator got no message AND a row
+     * frozen busy, since every control in it is `disabled={busy}`. A
+     * permanently disabled control with no explanation is the same
+     * broken-looking button `isProbeable`’s comment exists to prevent,
+     * reached from the other side.
+     *
+     * The message is the browser’s own and is never composed here: this
+     * screen cannot diagnose why a request died, and inventing wording for it
+     * would be the same second-registry mistake the `since` and source-name
+     * rulings above both refuse.
+     *
+     * Found in production on Run; fixed on both handlers, because the two
+     * fail the same way. Recorded as D7 in docs/admin-deviations.md. */
+    let r: Response;
+    try {
+      r = await fetch(`/api/admin/health?source=${encodeURIComponent(s.name)}`, {
+        method: "POST",
+        headers: adminHeaders(secret),
+      });
+    } catch (err) {
+      setBusy((b) => ({ ...b, [s.id]: false }));
+      setErrors((e) => ({ ...e, [s.id]: `Request failed — ${(err as Error).message}` }));
+      return;
+    }
     if (r.status === 401) clearAdminSecret();
     const data = await r.json().catch(() => ({}));
     setBusy((b) => ({ ...b, [s.id]: false }));
@@ -456,10 +479,20 @@ export function Admin() {
      * here for the same reason source resolution does (the task-12 ruling,
      * routes/admin.ts): the client must not carry a second copy of registry
      * knowledge, because two copies drift. */
-    const r = await fetch(`/api/admin/run?source=${encodeURIComponent(s.name)}`, {
-      method: "POST",
-      headers: adminHeaders(secret),
-    });
+    /* Same rejection guard as checkHealth above -- see its note for why an
+     * escaped rejection freezes the row and why the message is the browser’s
+     * own. This is the handler the defect was actually found on. */
+    let r: Response;
+    try {
+      r = await fetch(`/api/admin/run?source=${encodeURIComponent(s.name)}`, {
+        method: "POST",
+        headers: adminHeaders(secret),
+      });
+    } catch (err) {
+      setBusy((b) => ({ ...b, [s.id]: false }));
+      setErrors((e) => ({ ...e, [s.id]: `Request failed — ${(err as Error).message}` }));
+      return;
+    }
     if (r.status === 401) clearAdminSecret();
     const data = await r.json().catch(() => ({}));
     setBusy((b) => ({ ...b, [s.id]: false }));

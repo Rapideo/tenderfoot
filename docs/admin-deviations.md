@@ -342,3 +342,48 @@ a misleading "never" or a blank.
 **The bundle has nothing to compare this to.** Its HEALTH column is a static
 four-state display with no measurement behind it at all, so this is an
 addition rather than a rendering of anything the bundle omits.
+
+---
+
+# Found in production — 2026-08-27
+
+## D7 — a request that never completes says so, and frees the row
+
+**Found by clicking Run on production, not by a test.** The click returned an
+error, imported nothing, and the error text could not be recovered afterwards:
+Vercel's runtime-log API answers `403` for the token available to this project,
+so the only copy of the reason was on the screen. That is what made the screen's
+own reporting the thing that had to be right.
+
+**The non-2xx path was already correct** and had been since SP3.6's final
+review: both `checkHealth` and `runSource` read the response body and surface
+`data.error`, falling back to `Request failed (<status>)`. Nothing about that
+changed.
+
+**What neither handled is `fetch` REJECTING** — a dropped connection, a request
+killed at Vercel's 300s function ceiling, an offline client. There was no `try`
+anywhere in `Admin.tsx`, so the rejection escaped the handler and skipped the
+`setBusy(..., false)` that every path is supposed to reach. The operator got
+**no message and a row frozen busy**, because every control in the row is
+`disabled={busy}`. A permanently disabled control with no explanation is the
+same broken-looking button `isProbeable`'s own comment exists to prevent,
+arrived at from the other direction — and it is strictly worse than the
+swallowed-error case that review fixed, because the row cannot even be retried.
+
+Both handlers now wrap the `fetch` in a `try`, clear `busy`, and report
+`Request failed — <message>`.
+
+**The message is the browser's own and is never composed here.** This screen
+cannot diagnose why a request died, and inventing wording for it would be the
+same second-registry mistake that the `since` derivation (`scrape/window.ts`)
+and the source-name resolution (`routes/admin.ts`'s `resolveAdapterKey`) both
+exist to refuse: a client-side rule about server conditions is a second copy of
+knowledge, and two copies drift.
+
+**The bundle has nothing to compare this to.** It is a static rendering with no
+request behind it, so this is an addition, not a divergence — numbered here
+because the frozen reference is silent, not because it disagrees.
+
+**Two tests, and neither implies the other:** the message proves the reason
+survived the failure, and the re-enabled button proves the row can be tried
+again. Gate green at **301 tests / 43 files**.

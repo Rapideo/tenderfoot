@@ -67,6 +67,10 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **Run was clicked on SAM.gov in production on 2026-08-27. It returned an error code shortly after, and imported nothing.** The exact code was not captured and **Vercel's runtime-logs API returns `403` for the available token**, so the server side could not be read. The client-side error text is still the missing evidence.
 
+**✅ PARTLY MITIGATED 2026-08-27 — D7, `docs/admin-deviations.md`.** The screen now reports a request that never completes. **This does NOT diagnose the failure above; it makes the NEXT one legible.** The non-2xx path was already right (it reads the body and surfaces `data.error`), which is why an error code was seen at all. What was missing: there was **no `try` anywhere in `Admin.tsx`**, so a REJECTED `fetch` — dropped connection, a request killed at the 300s function ceiling, an offline client — escaped the handler and skipped `setBusy(..., false)`. That left **no message and a row frozen busy**, since every control in it is `disabled={busy}` — strictly worse than a swallowed error, because the row could not even be retried. Both handlers now catch, clear busy, and report `Request failed — <message>` in the browser’s own words. Gate green at **301 tests / 43 files**.
+
+> 🔎 **The original error text may still be recoverable.** The row error lives in React state until the next click or a reload, so if the `/admin` tab from 2026-08-27 is still open and untouched, it is still under the SAM.gov row. **Failing that, the safe way to reproduce is to set a recent `last_run_at` on production’s `SAM.gov` row FIRST** — that shrinks the derived window from seven days to minutes and turns Run from a hazard into an ordinary diagnostic. Do not click Run to diagnose it while the window is still `P7D`.
+
 **Production was measured after the full 180s budget window elapsed, and is untouched:**
 
 | | |

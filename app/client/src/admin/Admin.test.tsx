@@ -769,3 +769,75 @@ test("a 401 from the enabled toggle clears the stored admin secret", async () =>
 
   await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
 });
+
+/* ---- 2026-08-27: a request that never completes ---------------------------
+ *
+ * Found in production, not here. Run was clicked on SAM.gov, reported an
+ * error, and imported nothing -- and the error text could not be recovered
+ * afterwards, because Vercel's runtime-log API answers 403 for the token
+ * available to this project. The only copy of the reason was on the screen,
+ * and the screen is where it had to be readable.
+ *
+ * The non-2xx path above was already right: both handlers read the body and
+ * surface `data.error`. What neither handles is `fetch` REJECTING -- a
+ * dropped connection, a request killed at Vercel's function ceiling, an
+ * offline client. There is no `try` in this file, so the rejection escapes
+ * the handler and `setBusy(..., false)` never runs. The operator gets no
+ * message AND a row frozen busy, because every control in it is
+ * `disabled={busy}`. A control that is permanently disabled with no
+ * explanation is the same broken-looking button `isProbeable`'s comment
+ * exists to prevent, arrived at from the other direction.
+ *
+ * Both assertions matter and neither implies the other: the message proves
+ * the reason survived, and the re-enabled button proves the row can be tried
+ * again. */
+
+test("a Run whose request never completes surfaces the reason and frees the row", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") throw new TypeError("Failed to fetch");
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources")
+            ? [{ ...baseSource, name: "SAM.gov", platform: "SAM", enabled: true }]
+            : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /run sam\.gov/i });
+  btn.click();
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Failed to fetch");
+  expect((btn as HTMLButtonElement).disabled).toBe(false);
+});
+
+test("a Check whose request never completes surfaces the reason and frees the row", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") throw new TypeError("Failed to fetch");
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes("/api/sources") ? [{ ...baseSource, name: "SAM.gov" }] : PROFILE,
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /check sam\.gov/i });
+  btn.click();
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Failed to fetch");
+  expect((btn as HTMLButtonElement).disabled).toBe(false);
+});
