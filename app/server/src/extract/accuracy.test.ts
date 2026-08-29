@@ -50,7 +50,9 @@ afterAll(async () => {
  * added -- agreed=1, disagreed=2, unchanged by that fix. */
 test("the FSSA case: two of three documents disagree with the listing", async () => {
   const sol = await insert(
-    `INSERT INTO solicitation (title) VALUES ('FSSA 26-87847') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id)
+     VALUES ('FSSA 26-87847', (SELECT id FROM source WHERE name = 'SAM.gov'))
+     RETURNING id`,
   );
   await run(
     `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
@@ -88,7 +90,9 @@ test("the FSSA case: two of three documents disagree with the listing", async ()
  * not merely that it scores well. */
 test("a NULL listing value is not ground truth -- the field is absent from the result", async () => {
   const sol = await insert(
-    `INSERT INTO solicitation (title) VALUES ('listing silent on qa_closes_at') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id)
+     VALUES ('listing silent on qa_closes_at', (SELECT id FROM source WHERE name = 'SAM.gov'))
+     RETURNING id`,
   );
   await run(
     `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
@@ -103,4 +107,87 @@ test("a NULL listing value is not ground truth -- the field is absent from the r
 
   const rows = await accuracyByField();
   expect(rows.find((r) => r.field_name === "qa_closes_at")).toBeUndefined();
+});
+
+/* Every test below uses its OWN field_name. accuracyByField() GROUPs across
+ * the whole schema and this file shares one, so two tests naming the same
+ * field would silently add their numbers together -- the hazard the FSSA
+ * test's comment above already flags. */
+
+const SOL = `INSERT INTO solicitation (title, source_id)
+             VALUES ($1, (SELECT id FROM source WHERE name = 'SAM.gov'))
+             RETURNING id`;
+
+/* THE FAILURE THE OLD MEASUREMENT COULD NOT SEE. Before `missed` existed,
+ * this solicitation contributed NOTHING to the result: the extractor read
+ * the document, drew no prebid_at out of it, and the field simply did not
+ * appear -- indistinguishable from "no such field anywhere." The listing
+ * knew the answer the whole time. */
+test("a document the extractor read but drew nothing from counts as a miss", async () => {
+  const sol = await insert(SOL, ["prebid stated by the portal, missed in the PDF"]);
+  await run(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
+     VALUES ($1, 'prebid_at', '2026-09-01', 'listing')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO document (solicitation_id, filename, extract_status)
+     VALUES ($1, 'RFP.pdf', 'extracted')`,
+    [sol],
+  );
+
+  const row = (await accuracyByField()).find((r) => r.field_name === "prebid_at");
+  expect(row).toMatchObject({ agreed: 0, disagreed: 0, missed: 1, opportunities: 1 });
+});
+
+/* A document we never managed to READ is not a missed extraction -- it is a
+ * missed fetch, and Task 10 records that separately as extract_status
+ * 'failed'. Counting it here would blame the extractor for the network, and
+ * would make the miss rate worse every time SAM.gov rate-limited us. The
+ * field drops out of the result entirely rather than scoring a false zero. */
+test("a document that never got read is not counted as a miss", async () => {
+  const sol = await insert(SOL, ["fetch failed before extraction"]);
+  await run(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
+     VALUES ($1, 'value_cents', '1000', 'listing')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO document (solicitation_id, filename, extract_status)
+     VALUES ($1, 'Unreachable.pdf', 'failed')`,
+    [sol],
+  );
+
+  const rows = await accuracyByField();
+  expect(rows.find((r) => r.field_name === "value_cents")).toBeUndefined();
+});
+
+/* THE TWO UNITS, PINNED. agreed/disagreed count document STATEMENTS;
+ * missed/opportunities count SOLICITATIONS. One bundle of three PDFs all
+ * quoting the same set-aside is three statements and one opportunity, and
+ * anyone who adds these four numbers together gets nonsense. If a later
+ * change ever re-bases the first pair onto solicitations, this test fails
+ * loudly instead of the two rates quietly starting to disagree. */
+test("statements and opportunities are counted in different units", async () => {
+  const sol = await insert(SOL, ["three PDFs, one solicitation"]);
+  await run(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
+     VALUES ($1, 'set_aside', 'SBA', 'listing')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO document (solicitation_id, filename, extract_status)
+     VALUES ($1, 'Bundle.pdf', 'extracted')`,
+    [sol],
+  );
+  for (const _ of [1, 2, 3]) {
+    await run(
+      `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, quote)
+       VALUES ($1, 'set_aside', 'SBA', 'document', 'set aside for small business')`,
+      [sol],
+    );
+  }
+
+  const row = (await accuracyByField()).find((r) => r.field_name === "set_aside");
+  expect(row).toMatchObject({ agreed: 3, disagreed: 0, missed: 0, opportunities: 1 });
 });

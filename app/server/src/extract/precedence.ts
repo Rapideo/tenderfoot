@@ -39,15 +39,42 @@ export function resolveField(rows: FieldRow[]): Resolved {
  * writes those NULL rows -- was read alongside this query, not from this
  * file in isolation).
  *
- * PRECISION, NOT RECALL. The WHERE clause also requires `d.value_text IS
- * NOT NULL` -- a document row that states nothing is dropped, not scored as
- * a miss. That means a document that DOES carry a real deadline the
- * extractor failed to classify (fields.ts's "date present, no cue placed
- * it" case) is invisible to this number: it never enters the numerator or
- * the denominator. This query answers "of the values the extractor stated,
- * how many were right" -- not "of the values that were there to find, how
- * many did it find." A missed deadline is the failure this slice cares
- * about most, and this measurement does not see it.
+ * PRECISION *AND NOW* RECALL, IN TWO DIFFERENT UNITS. `agreed` and
+ * `disagreed` answer "of the values the extractor STATED, how many were
+ * right" -- they require `d.value_text IS NOT NULL`, so a document that
+ * states nothing cannot lower them. On their own that is a number which
+ * IMPROVES as the extractor grows more timid, and it cannot see the failure
+ * this slice cares about most: the deadline was in the PDF and we missed
+ * it.
+ *
+ * `missed` and `opportunities` close that hole. An OPPORTUNITY is one
+ * (solicitation, field) pair where the listing states a value AND at least
+ * one of that solicitation's documents was actually processed -- status
+ * 'extracted' or 'absent', the two states that mean the extractor got to
+ * read it. 'failed' and 'pending' are excluded deliberately: a document we
+ * never managed to read is not a missed extraction, it is a missed FETCH,
+ * and conflating them would blame the extractor for the network. A MISS is
+ * an opportunity where no document row states a value at all.
+ *
+ * MIND THE UNITS -- they are not summable. agreed + disagreed counts
+ * DOCUMENT STATEMENTS (a bundle of three PDFs all quoting the deadline
+ * contributes three). missed and opportunities count SOLICITATIONS (that
+ * same bundle contributes one). `missed / opportunities` is a miss rate;
+ * `agreed / (agreed + disagreed)` is a precision rate; anything mixing the
+ * two is meaningless.
+ *
+ * EXPECT THREE FIELDS AT 100% MISSED, AND THAT IS NOT A BUG. fields.ts
+ * marks prebid_required, set_aside and value_cents as NOT_EXTRACTED -- the
+ * extractor never attempts them -- while the listing states all three. So
+ * for those fields every opportunity is a miss, which is the honest
+ * rendering of "we do not extract this yet." That fact used to live only in
+ * a TypeScript constant; it is now visible in the measurement itself,
+ * which is where a scope limit belongs.
+ *
+ * A field can now appear in the result with agreed = 0 AND disagreed = 0.
+ * Before these counts existed such a field was simply absent, which read as
+ * "nothing to report" when it actually meant "we found nothing, every
+ * time."
  *
  * db/index.ts IS IMPORTED DYNAMICALLY, here inside the function, not
  * statically at the top of this file -- mirroring scrape/resolve-source.ts.
@@ -59,21 +86,58 @@ export function resolveField(rows: FieldRow[]): Resolved {
  * a database connection, tripping check.mjs's guard the moment this file
  * existed. */
 export async function accuracyByField(): Promise<
-  { field_name: string; agreed: number; disagreed: number }[]
+  {
+    field_name: string;
+    agreed: number;
+    disagreed: number;
+    missed: number;
+    opportunities: number;
+  }[]
 > {
   const { all } = await import("../db/index.js");
   return all(
-    `SELECT d.field_name,
-            count(*) FILTER (WHERE d.value_text IS NOT DISTINCT FROM l.value_text) AS agreed,
-            count(*) FILTER (WHERE d.value_text IS DISTINCT FROM l.value_text)     AS disagreed
-       FROM extracted_field d
-       JOIN extracted_field l
-         ON l.solicitation_id = d.solicitation_id
-        AND l.field_name      = d.field_name
-        AND l.origin          = 'listing'
-        AND l.value_text     IS NOT NULL
-      WHERE d.origin = 'document' AND d.value_text IS NOT NULL
-      GROUP BY d.field_name
-      ORDER BY d.field_name`,
+    `WITH truth AS (
+        SELECT l.solicitation_id, l.field_name, l.value_text
+          FROM extracted_field l
+         WHERE l.origin = 'listing' AND l.value_text IS NOT NULL
+      ),
+      processed AS (
+        SELECT DISTINCT d.solicitation_id
+          FROM document d
+         WHERE d.extract_status IN ('extracted', 'absent')
+      ),
+      stated AS (
+        SELECT t.field_name,
+               count(*) FILTER (WHERE d.value_text IS NOT DISTINCT FROM t.value_text) AS agreed,
+               count(*) FILTER (WHERE d.value_text IS DISTINCT FROM t.value_text)     AS disagreed
+          FROM extracted_field d
+          JOIN truth t
+            ON t.solicitation_id = d.solicitation_id
+           AND t.field_name      = d.field_name
+         WHERE d.origin = 'document' AND d.value_text IS NOT NULL
+         GROUP BY t.field_name
+      ),
+      coverage AS (
+        SELECT t.field_name,
+               count(*) AS opportunities,
+               count(*) FILTER (
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM extracted_field d
+                    WHERE d.solicitation_id = t.solicitation_id
+                      AND d.field_name      = t.field_name
+                      AND d.origin          = 'document'
+                      AND d.value_text     IS NOT NULL)) AS missed
+          FROM truth t
+          JOIN processed p ON p.solicitation_id = t.solicitation_id
+         GROUP BY t.field_name
+      )
+      SELECT COALESCE(s.field_name, c.field_name) AS field_name,
+             COALESCE(s.agreed, 0)        AS agreed,
+             COALESCE(s.disagreed, 0)     AS disagreed,
+             COALESCE(c.missed, 0)        AS missed,
+             COALESCE(c.opportunities, 0) AS opportunities
+        FROM stated s
+        FULL OUTER JOIN coverage c ON c.field_name = s.field_name
+       ORDER BY 1`,
   );
 }

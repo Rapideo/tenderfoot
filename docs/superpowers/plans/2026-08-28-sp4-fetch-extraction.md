@@ -811,7 +811,7 @@ git commit -m "Extract dates mechanically, with the passage each one came from"
 export interface FieldRow { value_text: string | null; origin: "listing" | "document"; quote: string | null; document_id: number | null; }
 export interface Resolved { value: string | null; origin: "listing" | "document" | null; conflicts: FieldRow[]; }
 export function resolveField(rows: FieldRow[]): Resolved;
-export async function accuracyByField(): Promise<{ field_name: string; agreed: number; disagreed: number }[]>;
+export async function accuracyByField(): Promise<{ field_name: string; agreed: number; disagreed: number; missed: number; opportunities: number }[]>;
 ```
 
 - [ ] **Step 1: Write the failing test**
@@ -872,73 +872,60 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement**
 
 ```ts
-/* NO top-level db import. `db/index.ts` throws "DATABASE_URL is not set" at
- * module load, and scripts/check.mjs deliberately strips that variable from
- * the test child environment -- so a static import here would make merely
- * LOADING this module kill the pure resolveField tests, which touch no
- * database at all. The db import is dynamic, inside accuracyByField, matching
- * the same pattern and the same reasoning in scrape/resolve-source.ts. */
-
-export interface FieldRow {
-  value_text: string | null;
-  origin: "listing" | "document";
-  quote: string | null;
-  document_id: number | null;
-}
-export interface Resolved {
-  value: string | null;
-  origin: "listing" | "document" | null;
-  conflicts: FieldRow[];
-}
-
-/* PRECEDENCE AT READ TIME. corpus/FINDINGS.md §1 establishes that the portal's
- * structured field was right where all three documents were unreliable. Doing
- * this here rather than at write time means the rule can change without
- * re-extraction, and nothing is discarded at ingest. */
-export function resolveField(rows: FieldRow[]): Resolved {
-  const stated = rows.filter((r) => r.value_text !== null);
-  if (stated.length === 0) return { value: null, origin: null, conflicts: [] };
-
-  const listing = stated.find((r) => r.origin === "listing");
-  const winner = listing ?? stated[0]!;
-
-  /* A conflict is a STATED value that disagrees. Absence never conflicts --
-   * "we looked and it is not there" contradicts nothing. */
-  const conflicts = stated.filter((r) => r !== winner && r.value_text !== winner.value_text);
-  return { value: winner.value_text, origin: winner.origin, conflicts };
-}
-
-/* §8.4's measurement, and it is a query rather than a harness. The listing is
- * ground truth ONLY for the fields where it actually STATES a value: Task 9
- * writes a NULL listing row for qa_closes_at and prebid_at on purpose, to
- * record that the portal does not carry them. Without the l.value_text guard,
- * IS DISTINCT FROM scores every correctly-extracted value for those two fields
- * as a disagreement, and they read 0% accuracy forever.
- *
- * THIS MEASURES PRECISION, NOT RECALL. `d.value_text IS NOT NULL` drops rows
- * where the extractor asserted nothing, so a document that carries a real
- * deadline the extractor failed to classify never enters the numerator OR the
- * denominator. The number answers "of the values the extractor stated, how many
- * were right", not "of the values that were there to find, how many did it
- * find". A missed deadline is the failure this slice cares about most, and this
- * measurement does not see it. */
 export async function accuracyByField(): Promise<
-  { field_name: string; agreed: number; disagreed: number }[]
+  {
+    field_name: string;
+    agreed: number;
+    disagreed: number;
+    missed: number;
+    opportunities: number;
+  }[]
 > {
   const { all } = await import("../db/index.js");
   return all(
-    `SELECT d.field_name,
-            count(*) FILTER (WHERE d.value_text IS NOT DISTINCT FROM l.value_text) AS agreed,
-            count(*) FILTER (WHERE d.value_text IS DISTINCT FROM l.value_text)     AS disagreed
-       FROM extracted_field d
-       JOIN extracted_field l
-         ON l.solicitation_id = d.solicitation_id
-        AND l.field_name      = d.field_name
-        AND l.origin          = 'listing'
-        AND l.value_text IS NOT NULL
-      WHERE d.origin = 'document' AND d.value_text IS NOT NULL
-      GROUP BY d.field_name
-      ORDER BY d.field_name`,
+    `WITH truth AS (
+        SELECT l.solicitation_id, l.field_name, l.value_text
+          FROM extracted_field l
+         WHERE l.origin = 'listing' AND l.value_text IS NOT NULL
+      ),
+      processed AS (
+        SELECT DISTINCT d.solicitation_id
+          FROM document d
+         WHERE d.extract_status IN ('extracted', 'absent')
+      ),
+      stated AS (
+        SELECT t.field_name,
+               count(*) FILTER (WHERE d.value_text IS NOT DISTINCT FROM t.value_text) AS agreed,
+               count(*) FILTER (WHERE d.value_text IS DISTINCT FROM t.value_text)     AS disagreed
+          FROM extracted_field d
+          JOIN truth t
+            ON t.solicitation_id = d.solicitation_id
+           AND t.field_name      = d.field_name
+         WHERE d.origin = 'document' AND d.value_text IS NOT NULL
+         GROUP BY t.field_name
+      ),
+      coverage AS (
+        SELECT t.field_name,
+               count(*) AS opportunities,
+               count(*) FILTER (
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM extracted_field d
+                    WHERE d.solicitation_id = t.solicitation_id
+                      AND d.field_name      = t.field_name
+                      AND d.origin          = 'document'
+                      AND d.value_text     IS NOT NULL)) AS missed
+          FROM truth t
+          JOIN processed p ON p.solicitation_id = t.solicitation_id
+         GROUP BY t.field_name
+      )
+      SELECT COALESCE(s.field_name, c.field_name) AS field_name,
+             COALESCE(s.agreed, 0)        AS agreed,
+             COALESCE(s.disagreed, 0)     AS disagreed,
+             COALESCE(c.missed, 0)        AS missed,
+             COALESCE(c.opportunities, 0) AS opportunities
+        FROM stated s
+        FULL OUTER JOIN coverage c ON c.field_name = s.field_name
+       ORDER BY 1`,
   );
 }
 ```
@@ -1016,27 +1003,44 @@ afterAll(async () => {
   await close();
 });
 
-/* Every solicitation fixture below records a SIGHTING, because that row is
- * the ONLY link between a solicitation and the source it came from --
- * `solicitation` itself has no source column. discoverAttachments hands
- * each candidate's external_id to SAM.gov's attachment API, so it selects
- * SAM.gov's rows and nothing else, and a fixture with no sighting is a
- * solicitation that cannot exist in production (measured: 0 of 1,925 rows
- * lack one).
+/* A solicitation cannot exist without a source: migration 010 put
+ * `source_id` ON the row, NOT NULL, so "where did this come from" is no
+ * longer a fact you have to join `sighting` to recover. discoverAttachments
+ * reads that column directly -- it hands each candidate's external_id to
+ * SAM.gov's attachment API, so it must select SAM.gov's rows and nothing
+ * else.
  *
- * 003_seed_source_registry.sql seeds 'SAM.gov', but the corpus-import
- * sources are created at IMPORT time rather than seeded, so a fixture that
- * names one has to create it; `name` is the only NOT NULL column on
- * `source` without a default. A misspelled SAM.gov still fails loudly, just
- * one step later: the implementation's own SAM_SOURCE_NAME would then match
- * no sighting and the candidate list would come back empty. */
-async function sight(solicitationId: number, sourceName = "SAM.gov"): Promise<void> {
-  await run(`INSERT INTO source (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [sourceName]);
+ * The sighting is written too, even though nothing under test reads it any
+ * more. In production every solicitation has one (measured: 0 of 1,925 lack
+ * one) and the migration's backfill derives `source_id` FROM it, so a
+ * fixture without one is a row that could not exist and could not have been
+ * migrated. 003_seed_source_registry.sql seeds 'SAM.gov'; the corpus-import
+ * sources are created at IMPORT time rather than seeded, so a fixture naming
+ * one has to create it -- `name` is the only NOT NULL column on `source`
+ * without a default. */
+interface Fixture {
+  externalId: string;
+  title?: string;
+  closesAt?: string | null;
+  setAside?: string | null;
+  kind?: string | null;
+  source?: string;
+}
+
+async function seed(f: Fixture): Promise<number> {
+  const name = f.source ?? "SAM.gov";
+  await run(`INSERT INTO source (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [name]);
+  const id = await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind, source_id)
+     SELECT $1, $2, $3, $4, $5, src.id FROM source src WHERE src.name = $6 RETURNING id`,
+    [f.title ?? "fixture", f.externalId, f.closesAt ?? null, f.setAside ?? null, f.kind ?? null, name],
+  );
   await insert(
     `INSERT INTO sighting (source_id, solicitation_id)
      SELECT id, $2 FROM source WHERE name = $1 RETURNING id`,
-    [sourceName, solicitationId],
+    [name, id],
   );
+  return id;
 }
 
 const SAM_RESPONSE = {
@@ -1062,13 +1066,11 @@ test("inserts one pending document per existing attachment", async () => {
    * after every reset or the INSERT below fails with "relation
    * \"solicitation\" does not exist". */
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at)
-       VALUES ('live one', 'abc123', $1) RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({
+    title: "live one",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
@@ -1112,13 +1114,13 @@ test("writes the portal's own values as listing rows", async () => {
    * ground truth ... Accuracy is a query" -- would be unbuildable. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
-       VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({
+    title: "live one",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+    setAside: "SBA",
+    kind: "RFP",
+  });
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
 
   await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -1155,12 +1157,11 @@ test("does not duplicate listing rows when run twice", async () => {
    * solicitation with NO attachments would be revisited. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({
+    title: "s",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
   await discoverAttachments(10, stub as unknown as typeof fetch);
   await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -1173,11 +1174,7 @@ test("does not duplicate listing rows when run twice", async () => {
 test("skips solicitations whose deadline has passed", async () => {
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
-    ),
-  );
+  await seed({ title: "closed", externalId: "old", closesAt: "2020-01-01" });
   const stub = vi.fn(async () => new Response("{}", { status: 200 }));
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
   expect(r.solicitations).toBe(0);
@@ -1193,12 +1190,12 @@ test("a solicitation with only SOME listing fields already written gains the res
    * a pre-existing partial set gets topped up, not skipped. */
   await resetSchema();
   await migrate(false);
-  const sol = await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at, set_aside)
-     VALUES ('partial', 'abc123', $1, 'SBA') RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
-  );
-  await sight(sol);
+  const sol = await seed({
+    title: "partial",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+    setAside: "SBA",
+  });
   /* Simulates exactly one field surviving an earlier, interrupted run. */
   await insert(
     `INSERT INTO extracted_field
@@ -1238,17 +1235,12 @@ test("admits solicitations with NO close date, dated ones first", async () => {
    * NULLS LAST keeps a real deadline ahead of them when one exists. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({ title: "undated", externalId: "no-date", closesAt: null });
+  await seed({
+    title: "dated",
+    externalId: "has-date",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
@@ -1274,16 +1266,8 @@ test("skips a malformed attachment without losing the rest of the batch", async 
    * the BATCH surviving, not just the attachment being skipped. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
-    ),
-  );
+  await seed({ title: "a", externalId: "aaa", closesAt: "2099-01-01" });
+  await seed({ title: "b", externalId: "bbb", closesAt: "2099-01-02" });
   const malformed = {
     _embedded: {
       opportunityAttachmentList: [
@@ -1320,21 +1304,9 @@ test("counts a failed fetch as skipped and keeps going", async () => {
    * attachment request never succeeds. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
-    ),
-  );
+  await seed({ title: "a", externalId: "aaa", closesAt: "2099-01-01" });
+  await seed({ title: "b", externalId: "bbb", closesAt: "2099-01-02" });
+  await seed({ title: "c", externalId: "ccc", closesAt: "2099-01-03" });
   const stub = vi
     .fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }))
     .mockRejectedValueOnce(new TypeError("fetch failed"))
@@ -1367,19 +1339,13 @@ test("never hands a non-SAM solicitation's external_id to the SAM.gov API", asyn
    * is not merely included, it is fetched FIRST. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at)
-       VALUES ('indiana one', 'in-999', '2099-01-01') RETURNING id`,
-    ),
-    "Corpus import — Indiana open (2026-08-04)",
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at)
-       VALUES ('sam one', 'sam-111', NULL) RETURNING id`,
-    ),
-  );
+  await seed({
+    title: "indiana one",
+    externalId: "in-999",
+    closesAt: "2099-01-01",
+    source: "Corpus import — Indiana open (2026-08-04)",
+  });
+  await seed({ title: "sam one", externalId: "sam-111", closesAt: null });
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
@@ -1492,15 +1458,18 @@ const downloadUrl = (resourceId: string): string =>
  * Undated rows are admitted and sort last, so a real deadline still wins
  * the ordering wherever one exists.
  *
- * TWO (Critical, found while fixing ONE): `solicitation` has NO source
- * column -- the only link to a source is through `sighting` -- so this
- * query selected EVERY portal's rows and handed their external_ids to
- * SAM.gov's attachment API, which has never heard of them. The two defects
- * compound in the worst direction: the rows that carry a close date are
- * precisely the ones from the WRONG source, so ONE's `NULLS LAST` sorts all
- * of them ahead of every real candidate. The first batches would have been
- * pure 404s and -- thanks to the new `skipped` counter -- would have read
- * as a network fault rather than a query bug.
+ * TWO (Critical, found while fixing ONE): this query selected EVERY
+ * portal's rows and handed their external_ids to SAM.gov's attachment API,
+ * which has never heard of them. At the time `solicitation` had no source
+ * column at all -- the only link to a source was a `sighting` row -- so the
+ * first fix spelled that join out inline here. Migration 010 since put
+ * `source_id` ON the solicitation, NOT NULL, which is what this query now
+ * reads. The two defects compound in the worst direction: the rows that
+ * carry a close date are precisely the ones from the WRONG source, so
+ * ONE's `NULLS LAST` sorts all of them ahead of every real candidate. The
+ * first batches would have been pure 404s and -- thanks to the new
+ * `skipped` counter -- would have read as a network fault rather than a
+ * query bug.
  *
  * The shape above was measured directly against DATABASE_URL before either
  * fix was written: 1,925 solicitations, 1,724 of them SAM.gov with a close
@@ -1522,11 +1491,9 @@ const SAM_SOURCE_NAME = "SAM.gov";
 const CANDIDATES = `
   SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
     FROM solicitation s
+    JOIN source src ON src.id = s.source_id
    WHERE s.external_id IS NOT NULL
-     AND EXISTS (SELECT 1
-                   FROM sighting sg
-                   JOIN source src ON src.id = sg.source_id
-                  WHERE sg.solicitation_id = s.id AND src.name = $2)
+     AND src.name = $2
      AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC NULLS LAST
