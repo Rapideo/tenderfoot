@@ -66,6 +66,13 @@ import { join } from "node:path";
  * honest there; inventing a production hostname to compare against would
  * not be.
  *
+ * The failure this guards is not hypothetical and got MORE likely the day
+ * the Vercel CLI was installed here: `vercel env pull` with no path
+ * argument overwrites .env wholesale, and Vercel's own DATABASE_URL is
+ * production (verified 2026-08-29 -- it resolves to the same endpoint as
+ * POSTGRES_URL, the `main` branch). .env's DATABASE_URL is a deliberate
+ * local override of that value, and one routine pull silently undoes it.
+ *
  * It also PRINTS which arrangement it found, every run. The fact that dev
  * and test currently share one branch is true, deliberate and matched by
  * ci.yml -- but it was discoverable only by diffing two secrets by hand,
@@ -90,7 +97,10 @@ function refuseToRunAgainstProduction() {
     console.error(
       `FAIL   DATABASE_URL names the PRODUCTION database (${prod}).\n` +
         `       This gate runs 'npm run build', which runs 'migrate:deploy'.\n` +
-        `       Point DATABASE_URL at the test or staging branch; production is\n` +
+        `       Most likely cause: 'vercel env pull' with no path argument, which\n` +
+        `       overwrites .env -- Vercel's own DATABASE_URL IS production, and\n` +
+        `       .env's is a deliberate local override of it.\n` +
+        `       Point DATABASE_URL back at the test or staging branch; production is\n` +
         `       reached through DATABASE_URL_PRODUCTION and migrated by deploying.`,
     );
     process.exit(1);
