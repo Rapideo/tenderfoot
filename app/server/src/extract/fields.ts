@@ -26,10 +26,46 @@ const DATE = /\b(january|february|march|april|may|june|july|august|september|oct
  * a non-flat confidence score are both deferred pending the slice's
  * accuracy instrument -- ruled out for this round, not overlooked. */
 const CUES: { field: FieldDraft["field_name"]; re: RegExp }[] = [
-  { field: "qa_closes_at", re: /\bquestions?\b|\binquir(y|ies)\b|\bclarification/i },
+  /* inquir(e|es|y|ies|ing) -- the earlier (e|es)-less form dropped "inquire"
+   * and "inquiring", which the pre-boundary substring match used to catch.
+   * No common English word carries "inquir" as a non-initial stem, so this
+   * widening adds no new collision. */
+  { field: "qa_closes_at", re: /\bquestions?\b|\binquir(e|es|y|ies|ing)\b|\bclarification/i },
   { field: "prebid_at", re: /\bpre-?bid\b|\bpre-?proposal\b|\bsite visit\b/i },
   { field: "closes_at", re: /\bdue\b|\bdeadline\b|\bclosing\b|\bsubmitted by\b|\breceived by\b/i },
 ];
+
+/* HTML block boundaries. mammoth.convertToHtml -- the DOCX path -- emits
+ * ZERO newlines: 52/52 corpus DOCX measured zero "\n" in their converted
+ * text. A schedule table survives conversion as one <tr><td>...</td></tr>
+ * per row (see parsers/docx.test.ts), so a plain "\n" clamp is a no-op on
+ * most of the corpus and the schedule-table misattribution (a date reading
+ * its neighbouring row's cue) stays live there. These closing tags, plus
+ * the various <br> spellings, are the real row/paragraph boundaries on that
+ * path; "\n" is kept for the plain-text path (PDF, XLSX). */
+const BLOCK = /\n|<\/p>|<\/tr>|<\/td>|<br\s*\/?>/gi;
+
+/* The end of the nearest BLOCK match starting before `at`, or 0 if none.
+ * A fresh RegExp per call avoids sharing lastIndex state across dates. */
+function lastBlockBoundaryEnd(text: string, at: number): number {
+  const re = new RegExp(BLOCK.source, BLOCK.flags);
+  let end = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) && m.index < at) {
+    end = m.index + m[0].length;
+  }
+  return end;
+}
+
+/* The start of the nearest BLOCK match at or after `from`, or text.length
+ * if none -- the forward-facing twin of lastBlockBoundaryEnd, used to keep
+ * a quote from running past its row/paragraph into the next one. */
+function nextBlockBoundaryStart(text: string, from: number): number {
+  const re = new RegExp(BLOCK.source, BLOCK.flags);
+  re.lastIndex = from;
+  const m = re.exec(text);
+  return m ? m.index : text.length;
+}
 
 /* Round-trips the match through Date to reject calendar dates that don't
  * exist ("February 31", "September 0"). The DATE regex only checks shape,
@@ -58,15 +94,20 @@ export function extractFields(text: string): FieldDraft[] {
 
   for (const m of text.matchAll(DATE)) {
     const at = m.index ?? 0;
-    /* Clamp the lookback to the current line, in addition to the 120-char
-     * cap. Without this, a padded schedule-of-events table puts three or
-     * four rows inside 120 raw characters, so every row's date sees its
-     * neighbours' cue words -- and a section heading many characters back
-     * can fall inside the window and outrank the date's own line. */
-    const start = Math.max(0, at - 120, text.lastIndexOf("\n", at) + 1);
+    /* Clamp the lookback to the current block (line OR HTML row/paragraph),
+     * in addition to the 120-char cap. Without this, a padded
+     * schedule-of-events table puts three or four rows inside 120 raw
+     * characters, so every row's date sees its neighbours' cue words -- and
+     * a section heading many characters back can fall inside the window and
+     * outrank the date's own row. */
+    const start = Math.max(0, at - 120, lastBlockBoundaryEnd(text, at));
     const before = text.slice(start, at);
     const value = iso(m as RegExpExecArray);
     let classified = false;
+    const dateEnd = at + m[0].length;
+    /* Same clamp, forward: a quote must not run past its own row/paragraph
+     * into a DIFFERENT date sitting just beyond it. */
+    const quoteEnd = Math.min(dateEnd + 20, nextBlockBoundaryStart(text, dateEnd));
 
     for (const { field, re } of CUES) {
       if (!re.test(before)) continue;
@@ -81,7 +122,7 @@ export function extractFields(text: string): FieldDraft[] {
         value_text: value,
         /* Same `start` as classification, so the quote can never omit the
          * cue that justified it -- the citation IS the evidence. */
-        quote: text.slice(start, at + m[0].length + 20).replace(/\s+/g, " ").trim(),
+        quote: text.slice(start, quoteEnd).replace(/\s+/g, " ").trim(),
         confidence: value !== null ? 0.6 : 0,
         ...(value === null
           ? { note: "date text does not correspond to a real calendar date" }

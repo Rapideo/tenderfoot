@@ -132,3 +132,61 @@ test("a date that could not be classified is distinguished from a document with 
   expect(closes?.value_text).toBeNull();
   expect(closes?.note).toBeDefined();
 });
+
+test("clamps the cue lookback at HTML block boundaries -- mammoth emits zero newlines", () => {
+  /* Round 3, fix 1 (CRITICAL). mammoth.convertToHtml emits NO newlines at
+   * all (52/52 corpus DOCX measured zero \n), so the round-2 "\n" clamp was
+   * a no-op on the DOCX path and this exact bug -- closes_at landing on the
+   * Answers-Posted row -- was still live there. A schedule table survives
+   * convertToHtml as <tr><td> rows (see parsers/docx.test.ts), so those
+   * closing tags (plus </p> and <br> variants) are the real row boundaries
+   * on this path. */
+  const text =
+    "<table><tr><td>Deadline for Questions         August 5, 2026</td></tr>" +
+    "<tr><td>Answers Posted                 August 12, 2026</td></tr>" +
+    "<tr><td>Proposals Due                  September 17, 2026</td></tr></table>";
+  const f = extractFields(text);
+  expect(f.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-05");
+  expect(f.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
+});
+
+test("fixed-priority order is pinned behaviourally, not just described in a comment", () => {
+  /* Round 3, fix 2. The fix-3 comment claims cues are tried in fixed
+   * priority order, not by proximity. These two cases pin that claim to
+   * actual output: in each, the LOWER-priority cue sits closer to the date
+   * and the HIGHER-priority cue sits farther away, and the farther,
+   * higher-priority cue must still win. */
+  const qa = extractFields("Questions regarding this solicitation are due by August 1, 2026.");
+  expect(qa.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-01");
+  expect(qa.find((x) => x.field_name === "closes_at")?.value_text).toBeNull();
+
+  const prebid = extractFields(
+    "The site visit is described above; the applicable deadline is August 1, 2026.",
+  );
+  expect(prebid.find((x) => x.field_name === "prebid_at")?.value_text).toBe("2026-08-01");
+  expect(prebid.find((x) => x.field_name === "closes_at")?.value_text).toBeNull();
+});
+
+test("the quote's trailing edge stops at the next block boundary, not inside a different date", () => {
+  /* Round 3, fix 3. The leading edge was clamped in round 2; the trailing
+   * edge was not, so a quote could run past the classified date straight
+   * into the text of a SECOND, unrelated date -- the same reading hazard
+   * that made Critical 1 hard to catch by eye. */
+  const text = "<p>Submission Due Date/Time is September 17, 2026</p><p>August 12, 2026</p>";
+  const f = extractFields(text);
+  const closes = f.find((x) => x.field_name === "closes_at");
+  expect(closes?.value_text).toBe("2026-09-17");
+  expect(closes?.quote).not.toMatch(/August 12/);
+});
+
+test("the widened inquir stem also matches inquire and inquiring, not just inquiry/inquiries", () => {
+  /* Round 3, fix 4. \binquir(y|ies)\b was too narrow -- it dropped
+   * "inquire" and "inquiring", which the old bare substring match caught.
+   * No common English word carries "inquir" as a non-initial stem, so
+   * widening adds no new collision. */
+  const inquire = extractFields("Please inquire by August 5, 2026.");
+  expect(inquire.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-05");
+
+  const inquiring = extractFields("We are inquiring by August 5, 2026.");
+  expect(inquiring.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-05");
+});
