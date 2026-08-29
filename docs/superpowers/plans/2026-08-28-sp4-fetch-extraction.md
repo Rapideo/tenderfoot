@@ -957,8 +957,10 @@ git commit -m "Apply precedence at read time, and keep the disagreement"
 ### Task 9: Discover — attachments into document rows
 
 **Files:**
+- Create: `app/server/migrations/009_one_listing_row.sql`
 - Create: `app/server/src/extract/discover.ts`
 - Test: `app/server/src/extract/discover.test.ts`
+- Test: `app/server/src/db/schema.test.ts` (append one constraint test)
 
 **Interfaces:**
 - Produces: `export async function discoverAttachments(limit: number, fetchImpl?: typeof fetch): Promise<{ solicitations: number; documents: number }>`
@@ -1067,7 +1069,56 @@ test("skips solicitations whose deadline has passed", async () => {
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Make one listing row per field structural**
+
+Nothing today prevents two `listing` rows for the same `(solicitation_id, field_name)`, and `accuracyByField`'s self-join multiplies on duplicates: two differing listing rows against three CORRECT document rows returns `agreed=3, disagreed=3`, pinning the measurement at 50% regardless of how good the extractor is. The guard below in `writeListingRows` is a read-then-write with no transaction, which protects against this task's own re-runs and nothing else.
+
+Create `app/server/migrations/009_one_listing_row.sql`:
+
+```sql
+-- The accuracy measurement (extract/precedence.ts) self-joins document rows
+-- against THE listing row for a field. Two listing rows for one field would
+-- multiply every count and peg the result near 50% no matter how the extractor
+-- performs -- a broken measurement that still looks like a measurement.
+--
+-- Partial, because the constraint is only true of listing rows: a solicitation
+-- legitimately has MANY document rows per field. That is the whole design --
+-- three PDFs disagreeing about one deadline is the case this slice exists for.
+CREATE UNIQUE INDEX extracted_field_one_listing
+    ON extracted_field (solicitation_id, field_name)
+ WHERE origin = 'listing';
+```
+
+Append to `app/server/src/db/schema.test.ts`:
+
+```ts
+test("a field may have many document rows but only one listing row", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title) VALUES ('one listing') RETURNING id`,
+  );
+  const doc = `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+               VALUES ($1, 'closes_at', $2, 'document', 'mechanical')`;
+  /* Many document rows are REQUIRED, not merely tolerated. */
+  await dbRun(doc, [sol, "2026-08-26"]);
+  await dbRun(doc, [sol, "2026-09-17"]);
+
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 'mechanical')`,
+    [sol],
+  );
+  /* 23505 is unique_violation, asserted by SQLSTATE rather than message text. */
+  await expect(
+    dbRun(
+      `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+       VALUES ($1, 'closes_at', '2026-10-01', 'listing', 'mechanical')`,
+      [sol],
+    ),
+  ).rejects.toMatchObject({ code: "23505" });
+});
+```
+
+- [ ] **Step 4: Implement**
 
 ```ts
 import { all, one, insert } from "../db/index.js";
