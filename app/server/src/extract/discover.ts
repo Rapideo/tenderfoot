@@ -73,6 +73,36 @@ const CANDIDATES = `
    ORDER BY s.closes_at ASC NULLS LAST
    LIMIT $1`;
 
+/* THE ROWS DISCOVER WOULD OTHERWISE NEVER LOOK AT AGAIN.
+ *
+ * CANDIDATES above excludes any solicitation that already has a document --
+ * correct for its job, which is finding attachments not yet fetched. But it
+ * means ground truth is written ONCE, at the moment a solicitation is first
+ * walked, and never revisited. If the portal's value was unknown then and
+ * known now, that row stays wrong forever.
+ *
+ * This is not hypothetical and it is not rare. `closes_at` was null on all
+ * 9,682 SAM.gov solicitations until closes-at.ts taught merge to read the
+ * deadline out of the payload it was already holding. Any solicitation
+ * discovered before that ran carries a listing row saying the portal states
+ * no deadline, about a notice whose deadline the portal has published all
+ * along. Nothing enforces that merge runs first, and nothing can: the two
+ * are separate operations over a corpus that keeps arriving.
+ *
+ * So instead of ordering them, this makes the order stop mattering. Whichever
+ * ran last, a later discover repairs the copy. Bounded by the same `limit`
+ * and ordered by the same nearest-deadline rule, so the ground truth that
+ * gets refreshed first is the ground truth about to be used. */
+const REFRESH = `
+  SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
+    FROM solicitation s
+    JOIN source src ON src.id = s.source_id
+   WHERE src.name = $2
+     AND EXISTS (SELECT 1 FROM extracted_field ef
+                  WHERE ef.solicitation_id = s.id AND ef.origin = 'listing')
+   ORDER BY s.closes_at ASC NULLS LAST
+   LIMIT $1`;
+
 /* The six fields SP4 extracts (fields.ts's FieldDraft["field_name"]). The
  * portal carries four of them; the other two exist only in documents, and
  * get an ABSENT listing row so that "the portal does not carry this" is a
@@ -111,11 +141,30 @@ interface AttachmentsResponse {
  *
  * Replaced with ONE statement via `run()`, driven by two parallel arrays
  * unnested into rows, with the partial index from migration 009 as the
- * conflict target. This is naturally idempotent (a re-run of a field that
- * already exists is a no-op) AND naturally self-repairing (a re-run finds
- * and fills only the fields still missing) -- both properties the old guard
- * actively prevented by returning early the moment ANY listing row existed. */
-async function writeListingRows(c: Candidate): Promise<void> {
+ * conflict target. This is naturally idempotent AND naturally self-repairing
+ * -- both properties the old guard actively prevented by returning early the
+ * moment ANY listing row existed.
+ *
+ * DO UPDATE, REVERSING THE DO NOTHING THIS SHIPPED WITH. That earlier choice
+ * rested on a premise that turned out to be false: that a re-run's recomputed
+ * value is "equally correct, but different-looking-in-principle", so leaving
+ * the first write alone loses nothing. It can be MORE correct, and routinely
+ * is. Ground truth here is a COPY of a solicitation column, and that column
+ * changes -- merge.ts rewrites closes_at whenever a source amends a deadline,
+ * and closes-at.ts only started reading SAM deadlines at all on 2026-08-29,
+ * which filled 1,337 columns that had been null since ingest. Every listing
+ * row written before that moment records ABSENT for a value the portal was
+ * publishing the whole time. DO NOTHING made those rows permanent.
+ *
+ * That is not a small distinction in this slice specifically: ABSENT and
+ * "we had not read it yet" are DIFFERENT FACTS, and the three-state
+ * discipline this file is built on exists to keep them apart. Recording the
+ * second as the first is the one way a ground-truth row can lie.
+ *
+ * The `WHERE ... IS DISTINCT FROM` on the DO UPDATE keeps a steady-state run
+ * free -- an unchanged field is not rewritten, so rowCount is a count of
+ * real corrections rather than of rows visited. */
+async function writeListingRows(c: Candidate): Promise<number> {
   const value: Record<string, string | null> = {
     /* Fix round 1, item 7: normalised to the date prefix on write.
      * accuracyByField compares value_text by raw string equality and the
@@ -135,12 +184,14 @@ async function writeListingRows(c: Candidate): Promise<void> {
   const names = [...LISTING_FIELDS];
   const values = names.map((f) => value[f] ?? null);
 
-  await run(
+  return run(
     `INSERT INTO extracted_field
            (solicitation_id, field_name, value_text, origin, confidence, produced_by)
      SELECT $1, f.name, f.val, 'listing', 1.0, 'mechanical'
        FROM unnest($2::text[], $3::text[]) AS f(name, val)
-     ON CONFLICT (solicitation_id, field_name) WHERE origin = 'listing' DO NOTHING`,
+     ON CONFLICT (solicitation_id, field_name) WHERE origin = 'listing'
+     DO UPDATE SET value_text = EXCLUDED.value_text
+               WHERE extracted_field.value_text IS DISTINCT FROM EXCLUDED.value_text`,
     [c.id, names, values],
   );
 }
@@ -148,7 +199,16 @@ async function writeListingRows(c: Candidate): Promise<void> {
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ solicitations: number; skipped: number; documents: number }> {
+): Promise<{ solicitations: number; skipped: number; documents: number; refreshed: number }> {
+  /* BEFORE the main loop, deliberately. Run afterwards it would also re-visit
+   * the solicitations this very call just wrote, which cannot be stale, and
+   * `refreshed` would stop meaning "corrections to rows that were already
+   * here". */
+  let refreshed = 0;
+  for (const s of await all<Candidate>(REFRESH, [limit, SAM_SOURCE_NAME])) {
+    refreshed += await writeListingRows(s);
+  }
+
   const rows = await all<Candidate>(CANDIDATES, [limit, SAM_SOURCE_NAME]);
   let documents = 0;
   let skipped = 0;
@@ -213,5 +273,5 @@ export async function discoverAttachments(
       }
     }
   }
-  return { solicitations: rows.length, skipped, documents };
+  return { solicitations: rows.length, skipped, documents, refreshed };
 }

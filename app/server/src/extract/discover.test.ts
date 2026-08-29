@@ -253,10 +253,15 @@ test("a solicitation with only SOME listing fields already written gains the res
   expect(listing.map((r) => r.field_name)).toEqual([
     "closes_at", "prebid_at", "prebid_required", "qa_closes_at", "set_aside", "value_cents",
   ]);
-  /* ON CONFLICT DO NOTHING, not DO UPDATE -- the surviving row from the
-   * earlier run is left exactly as it was, not overwritten by this run's
-   * (equally correct, but different-looking-in-principle) recomputed value. */
-  expect(listing.find((r) => r.field_name === "closes_at")?.value_text).toBe("2026-09-01");
+  /* REVERSED on 2026-08-29. This used to assert DO NOTHING -- that the row
+   * surviving from the earlier run was left exactly as it was. That rested
+   * on the recomputed value being merely "different-looking", and it is not:
+   * ground truth here is a COPY of a solicitation column, and that column
+   * gets corrected. The fixture's pre-existing '2026-09-01' is precisely a
+   * stale copy, and the run must overwrite it with what the portal says now. */
+  expect(listing.find((r) => r.field_name === "closes_at")?.value_text).toBe(
+    new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+  );
   expect(listing.find((r) => r.field_name === "set_aside")?.value_text).toBe("SBA");
 });
 
@@ -404,3 +409,65 @@ test("never hands a non-SAM solicitation's external_id to the SAM.gov API", asyn
   );
   expect(Number(listing[0]?.c)).toBe(0);
 });
+
+/* THE ORDERING CONSTRAINT, REMOVED RATHER THAN ENFORCED.
+ *
+ * merge.ts populates solicitation.closes_at; discover.ts copies it into a
+ * listing row as ground truth. Nothing sequences them, and nothing can --
+ * they are separate operations over a corpus that keeps arriving. Run in
+ * the wrong order, discover records "the portal states no deadline" about a
+ * notice whose deadline the portal has published all along, and CANDIDATES
+ * never revisits a solicitation once it has documents, so that lie was
+ * permanent.
+ *
+ * This is the exact shape of what happened on 2026-08-29: closes_at was null
+ * on all 9,682 SAM.gov rows until closes-at.ts taught merge to read the
+ * payload it was already holding. */
+test("ground truth written before merge knew the deadline is corrected later", async () => {
+  await resetSchema();
+  await migrate(false);
+  const sol = await seed({ title: "deadline not yet merged", externalId: "abc123", closesAt: null });
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  const first = await discoverAttachments(10, stub as unknown as typeof fetch);
+  expect(first.documents).toBe(2);
+  const before = await all<{ value_text: string | null }>(
+    `SELECT value_text FROM extracted_field
+      WHERE solicitation_id = $1 AND origin = 'listing' AND field_name = 'closes_at'`,
+    [sol],
+  );
+  expect(before[0]?.value_text).toBeNull();
+
+  /* merge catches up, exactly as it did for 1,337 rows. */
+  await run(`UPDATE solicitation SET closes_at = '2026-09-30' WHERE id = $1`, [sol]);
+
+  const second = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  /* CANDIDATES skips it -- it has documents now -- so the repair cannot come
+   * from the main loop, and this asserts that rather than assuming it. */
+  expect(second.solicitations).toBe(0);
+  expect(second.refreshed).toBe(1);
+
+  const after = await all<{ value_text: string | null }>(
+    `SELECT value_text FROM extracted_field
+      WHERE solicitation_id = $1 AND origin = 'listing' AND field_name = 'closes_at'`,
+    [sol],
+  );
+  expect(after[0]?.value_text).toBe("2026-09-30");
+});
+
+/* A refresh that finds nothing wrong must write nothing, or every run would
+ * churn rows it did not change and `refreshed` would count visits instead of
+ * corrections. The DO UPDATE carries `WHERE ... IS DISTINCT FROM` for this. */
+test("a refresh with nothing to correct writes nothing and reports nothing", async () => {
+  await resetSchema();
+  await migrate(false);
+  await seed({ title: "settled", externalId: "abc123", closesAt: "2026-09-30" });
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+  const second = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(second.refreshed).toBe(0);
+});
+

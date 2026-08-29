@@ -950,7 +950,10 @@ git commit -m "Apply precedence at read time, and keep the disagreement"
 - Test: `app/server/src/db/schema.test.ts` (append one constraint test)
 
 **Interfaces:**
-- Produces: `export async function discoverAttachments(limit: number, fetchImpl?: typeof fetch): Promise<{ solicitations: number; skipped: number; documents: number }>`
+- Produces: `export async function discoverAttachments(limit: number, fetchImpl?: typeof fetch): Promise<{ solicitations: number; skipped: number; documents: number; refreshed: number }>`
+  - `refreshed` counts ground-truth rows CORRECTED on this run. It exists because listing rows are a
+    copy of solicitation columns, and merge can populate a column after discover has already recorded
+    it ABSENT — which is what happened to all 9,682 SAM.gov rows before closes-at.ts landed.
   - Selects SAM.gov's rows ONLY, via `sighting` -- `solicitation` carries no source column,
     and every external_id selected here is posted to SAM.gov's attachment API.
   - `skipped` was added in fix round 1 (item 4): it is what lets a caller tell "nothing to fetch"
@@ -1215,10 +1218,15 @@ test("a solicitation with only SOME listing fields already written gains the res
   expect(listing.map((r) => r.field_name)).toEqual([
     "closes_at", "prebid_at", "prebid_required", "qa_closes_at", "set_aside", "value_cents",
   ]);
-  /* ON CONFLICT DO NOTHING, not DO UPDATE -- the surviving row from the
-   * earlier run is left exactly as it was, not overwritten by this run's
-   * (equally correct, but different-looking-in-principle) recomputed value. */
-  expect(listing.find((r) => r.field_name === "closes_at")?.value_text).toBe("2026-09-01");
+  /* REVERSED on 2026-08-29. This used to assert DO NOTHING -- that the row
+   * surviving from the earlier run was left exactly as it was. That rested
+   * on the recomputed value being merely "different-looking", and it is not:
+   * ground truth here is a COPY of a solicitation column, and that column
+   * gets corrected. The fixture's pre-existing '2026-09-01' is precisely a
+   * stale copy, and the run must overwrite it with what the portal says now. */
+  expect(listing.find((r) => r.field_name === "closes_at")?.value_text).toBe(
+    new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+  );
   expect(listing.find((r) => r.field_name === "set_aside")?.value_text).toBe("SBA");
 });
 
@@ -1366,6 +1374,67 @@ test("never hands a non-SAM solicitation's external_id to the SAM.gov API", asyn
   );
   expect(Number(listing[0]?.c)).toBe(0);
 });
+
+/* THE ORDERING CONSTRAINT, REMOVED RATHER THAN ENFORCED.
+ *
+ * merge.ts populates solicitation.closes_at; discover.ts copies it into a
+ * listing row as ground truth. Nothing sequences them, and nothing can --
+ * they are separate operations over a corpus that keeps arriving. Run in
+ * the wrong order, discover records "the portal states no deadline" about a
+ * notice whose deadline the portal has published all along, and CANDIDATES
+ * never revisits a solicitation once it has documents, so that lie was
+ * permanent.
+ *
+ * This is the exact shape of what happened on 2026-08-29: closes_at was null
+ * on all 9,682 SAM.gov rows until closes-at.ts taught merge to read the
+ * payload it was already holding. */
+test("ground truth written before merge knew the deadline is corrected later", async () => {
+  await resetSchema();
+  await migrate(false);
+  const sol = await seed({ title: "deadline not yet merged", externalId: "abc123", closesAt: null });
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  const first = await discoverAttachments(10, stub as unknown as typeof fetch);
+  expect(first.documents).toBe(2);
+  const before = await all<{ value_text: string | null }>(
+    `SELECT value_text FROM extracted_field
+      WHERE solicitation_id = $1 AND origin = 'listing' AND field_name = 'closes_at'`,
+    [sol],
+  );
+  expect(before[0]?.value_text).toBeNull();
+
+  /* merge catches up, exactly as it did for 1,337 rows. */
+  await run(`UPDATE solicitation SET closes_at = '2026-09-30' WHERE id = $1`, [sol]);
+
+  const second = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  /* CANDIDATES skips it -- it has documents now -- so the repair cannot come
+   * from the main loop, and this asserts that rather than assuming it. */
+  expect(second.solicitations).toBe(0);
+  expect(second.refreshed).toBe(1);
+
+  const after = await all<{ value_text: string | null }>(
+    `SELECT value_text FROM extracted_field
+      WHERE solicitation_id = $1 AND origin = 'listing' AND field_name = 'closes_at'`,
+    [sol],
+  );
+  expect(after[0]?.value_text).toBe("2026-09-30");
+});
+
+/* A refresh that finds nothing wrong must write nothing, or every run would
+ * churn rows it did not change and `refreshed` would count visits instead of
+ * corrections. The DO UPDATE carries `WHERE ... IS DISTINCT FROM` for this. */
+test("a refresh with nothing to correct writes nothing and reports nothing", async () => {
+  await resetSchema();
+  await migrate(false);
+  await seed({ title: "settled", externalId: "abc123", closesAt: "2026-09-30" });
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+  const second = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(second.refreshed).toBe(0);
+});
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -1499,6 +1568,36 @@ const CANDIDATES = `
    ORDER BY s.closes_at ASC NULLS LAST
    LIMIT $1`;
 
+/* THE ROWS DISCOVER WOULD OTHERWISE NEVER LOOK AT AGAIN.
+ *
+ * CANDIDATES above excludes any solicitation that already has a document --
+ * correct for its job, which is finding attachments not yet fetched. But it
+ * means ground truth is written ONCE, at the moment a solicitation is first
+ * walked, and never revisited. If the portal's value was unknown then and
+ * known now, that row stays wrong forever.
+ *
+ * This is not hypothetical and it is not rare. `closes_at` was null on all
+ * 9,682 SAM.gov solicitations until closes-at.ts taught merge to read the
+ * deadline out of the payload it was already holding. Any solicitation
+ * discovered before that ran carries a listing row saying the portal states
+ * no deadline, about a notice whose deadline the portal has published all
+ * along. Nothing enforces that merge runs first, and nothing can: the two
+ * are separate operations over a corpus that keeps arriving.
+ *
+ * So instead of ordering them, this makes the order stop mattering. Whichever
+ * ran last, a later discover repairs the copy. Bounded by the same `limit`
+ * and ordered by the same nearest-deadline rule, so the ground truth that
+ * gets refreshed first is the ground truth about to be used. */
+const REFRESH = `
+  SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
+    FROM solicitation s
+    JOIN source src ON src.id = s.source_id
+   WHERE src.name = $2
+     AND EXISTS (SELECT 1 FROM extracted_field ef
+                  WHERE ef.solicitation_id = s.id AND ef.origin = 'listing')
+   ORDER BY s.closes_at ASC NULLS LAST
+   LIMIT $1`;
+
 /* The six fields SP4 extracts (fields.ts's FieldDraft["field_name"]). The
  * portal carries four of them; the other two exist only in documents, and
  * get an ABSENT listing row so that "the portal does not carry this" is a
@@ -1537,11 +1636,30 @@ interface AttachmentsResponse {
  *
  * Replaced with ONE statement via `run()`, driven by two parallel arrays
  * unnested into rows, with the partial index from migration 009 as the
- * conflict target. This is naturally idempotent (a re-run of a field that
- * already exists is a no-op) AND naturally self-repairing (a re-run finds
- * and fills only the fields still missing) -- both properties the old guard
- * actively prevented by returning early the moment ANY listing row existed. */
-async function writeListingRows(c: Candidate): Promise<void> {
+ * conflict target. This is naturally idempotent AND naturally self-repairing
+ * -- both properties the old guard actively prevented by returning early the
+ * moment ANY listing row existed.
+ *
+ * DO UPDATE, REVERSING THE DO NOTHING THIS SHIPPED WITH. That earlier choice
+ * rested on a premise that turned out to be false: that a re-run's recomputed
+ * value is "equally correct, but different-looking-in-principle", so leaving
+ * the first write alone loses nothing. It can be MORE correct, and routinely
+ * is. Ground truth here is a COPY of a solicitation column, and that column
+ * changes -- merge.ts rewrites closes_at whenever a source amends a deadline,
+ * and closes-at.ts only started reading SAM deadlines at all on 2026-08-29,
+ * which filled 1,337 columns that had been null since ingest. Every listing
+ * row written before that moment records ABSENT for a value the portal was
+ * publishing the whole time. DO NOTHING made those rows permanent.
+ *
+ * That is not a small distinction in this slice specifically: ABSENT and
+ * "we had not read it yet" are DIFFERENT FACTS, and the three-state
+ * discipline this file is built on exists to keep them apart. Recording the
+ * second as the first is the one way a ground-truth row can lie.
+ *
+ * The `WHERE ... IS DISTINCT FROM` on the DO UPDATE keeps a steady-state run
+ * free -- an unchanged field is not rewritten, so rowCount is a count of
+ * real corrections rather than of rows visited. */
+async function writeListingRows(c: Candidate): Promise<number> {
   const value: Record<string, string | null> = {
     /* Fix round 1, item 7: normalised to the date prefix on write.
      * accuracyByField compares value_text by raw string equality and the
@@ -1561,12 +1679,14 @@ async function writeListingRows(c: Candidate): Promise<void> {
   const names = [...LISTING_FIELDS];
   const values = names.map((f) => value[f] ?? null);
 
-  await run(
+  return run(
     `INSERT INTO extracted_field
            (solicitation_id, field_name, value_text, origin, confidence, produced_by)
      SELECT $1, f.name, f.val, 'listing', 1.0, 'mechanical'
        FROM unnest($2::text[], $3::text[]) AS f(name, val)
-     ON CONFLICT (solicitation_id, field_name) WHERE origin = 'listing' DO NOTHING`,
+     ON CONFLICT (solicitation_id, field_name) WHERE origin = 'listing'
+     DO UPDATE SET value_text = EXCLUDED.value_text
+               WHERE extracted_field.value_text IS DISTINCT FROM EXCLUDED.value_text`,
     [c.id, names, values],
   );
 }
@@ -1574,7 +1694,16 @@ async function writeListingRows(c: Candidate): Promise<void> {
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ solicitations: number; skipped: number; documents: number }> {
+): Promise<{ solicitations: number; skipped: number; documents: number; refreshed: number }> {
+  /* BEFORE the main loop, deliberately. Run afterwards it would also re-visit
+   * the solicitations this very call just wrote, which cannot be stale, and
+   * `refreshed` would stop meaning "corrections to rows that were already
+   * here". */
+  let refreshed = 0;
+  for (const s of await all<Candidate>(REFRESH, [limit, SAM_SOURCE_NAME])) {
+    refreshed += await writeListingRows(s);
+  }
+
   const rows = await all<Candidate>(CANDIDATES, [limit, SAM_SOURCE_NAME]);
   let documents = 0;
   let skipped = 0;
@@ -1639,7 +1768,7 @@ export async function discoverAttachments(
       }
     }
   }
-  return { solicitations: rows.length, skipped, documents };
+  return { solicitations: rows.length, skipped, documents, refreshed };
 }
 ```
 
