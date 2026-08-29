@@ -28,7 +28,26 @@ export function resolveField(rows: FieldRow[]): Resolved {
 }
 
 /* §8.4's measurement, and it is a query rather than a harness: the listing is
- * ground truth for the fields it carries, so agreement counts itself.
+ * ground truth ONLY for the fields where it actually STATES a value -- Task
+ * 9 writes a 'listing' row with value_text NULL for qa_closes_at and
+ * prebid_at precisely to record "the portal does not carry this" as a fact,
+ * and that fact is not ground truth to score a document extraction against.
+ * `l.value_text IS NOT NULL` below excludes those rows from the join
+ * entirely, so a field the listing never carries drops out of the result
+ * instead of scoring every correct document extraction as 100% wrong
+ * (fix round 1, Critical: caught only because Task 9's brief -- which
+ * writes those NULL rows -- was read alongside this query, not from this
+ * file in isolation).
+ *
+ * PRECISION, NOT RECALL. The WHERE clause also requires `d.value_text IS
+ * NOT NULL` -- a document row that states nothing is dropped, not scored as
+ * a miss. That means a document that DOES carry a real deadline the
+ * extractor failed to classify (fields.ts's "date present, no cue placed
+ * it" case) is invisible to this number: it never enters the numerator or
+ * the denominator. This query answers "of the values the extractor stated,
+ * how many were right" -- not "of the values that were there to find, how
+ * many did it find." A missed deadline is the failure this slice cares
+ * about most, and this measurement does not see it.
  *
  * db/index.ts IS IMPORTED DYNAMICALLY, here inside the function, not
  * statically at the top of this file -- mirroring scrape/resolve-source.ts.
@@ -52,6 +71,7 @@ export async function accuracyByField(): Promise<
          ON l.solicitation_id = d.solicitation_id
         AND l.field_name      = d.field_name
         AND l.origin          = 'listing'
+        AND l.value_text     IS NOT NULL
       WHERE d.origin = 'document' AND d.value_text IS NOT NULL
       GROUP BY d.field_name
       ORDER BY d.field_name`,

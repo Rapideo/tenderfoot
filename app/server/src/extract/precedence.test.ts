@@ -2,11 +2,18 @@ import { expect, test } from "vitest";
 import { resolveField } from "./precedence.js";
 
 /* The FSSA bundle, 26-87847. Three boilerplate PDFs, two deadlines, and the
- * CORRECT date in the file with the LEAST specific name. Every obvious
- * heuristic picks wrong; the portal listing was right. */
+ * CORRECT date in the file with the LEAST specific name. Two of the three
+ * documents carry the stale date; the listing is what actually settles it.
+ * (A bare "pick the later/greater date" heuristic also lands on the right
+ * answer here, by coincidence of this corpus's real numbers -- that is not
+ * a heuristic this fixture can discredit without inventing data. What it
+ * DOES test is that resolveField() prefers 'listing' as an ORIGIN, not as
+ * an accident of array position: the listing row sits after the first
+ * document row, not at index 0, so a resolver that merely returns its
+ * first argument cannot pass by luck.) */
 const FSSA = [
-  { value_text: "2026-09-17", origin: "listing" as const, quote: null, document_id: null },
   { value_text: "2026-08-26", origin: "document" as const, quote: "due August 26, 2026", document_id: 1 },
+  { value_text: "2026-09-17", origin: "listing" as const, quote: null, document_id: null },
   { value_text: "2026-09-17", origin: "document" as const, quote: "due September 17, 2026", document_id: 2 },
   { value_text: "2026-08-26", origin: "document" as const, quote: "due August 26, 2026", document_id: 3 },
 ];
