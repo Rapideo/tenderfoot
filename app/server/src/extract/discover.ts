@@ -32,15 +32,18 @@ const downloadUrl = (resourceId: string): string =>
  * Undated rows are admitted and sort last, so a real deadline still wins
  * the ordering wherever one exists.
  *
- * TWO (Critical, found while fixing ONE): `solicitation` has NO source
- * column -- the only link to a source is through `sighting` -- so this
- * query selected EVERY portal's rows and handed their external_ids to
- * SAM.gov's attachment API, which has never heard of them. The two defects
- * compound in the worst direction: the rows that carry a close date are
- * precisely the ones from the WRONG source, so ONE's `NULLS LAST` sorts all
- * of them ahead of every real candidate. The first batches would have been
- * pure 404s and -- thanks to the new `skipped` counter -- would have read
- * as a network fault rather than a query bug.
+ * TWO (Critical, found while fixing ONE): this query selected EVERY
+ * portal's rows and handed their external_ids to SAM.gov's attachment API,
+ * which has never heard of them. At the time `solicitation` had no source
+ * column at all -- the only link to a source was a `sighting` row -- so the
+ * first fix spelled that join out inline here. Migration 010 since put
+ * `source_id` ON the solicitation, NOT NULL, which is what this query now
+ * reads. The two defects compound in the worst direction: the rows that
+ * carry a close date are precisely the ones from the WRONG source, so
+ * ONE's `NULLS LAST` sorts all of them ahead of every real candidate. The
+ * first batches would have been pure 404s and -- thanks to the new
+ * `skipped` counter -- would have read as a network fault rather than a
+ * query bug.
  *
  * The shape above was measured directly against DATABASE_URL before either
  * fix was written: 1,925 solicitations, 1,724 of them SAM.gov with a close
@@ -62,11 +65,9 @@ const SAM_SOURCE_NAME = "SAM.gov";
 const CANDIDATES = `
   SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
     FROM solicitation s
+    JOIN source src ON src.id = s.source_id
    WHERE s.external_id IS NOT NULL
-     AND EXISTS (SELECT 1
-                   FROM sighting sg
-                   JOIN source src ON src.id = sg.source_id
-                  WHERE sg.solicitation_id = s.id AND src.name = $2)
+     AND src.name = $2
      AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC NULLS LAST

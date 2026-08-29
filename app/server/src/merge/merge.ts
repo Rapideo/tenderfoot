@@ -149,7 +149,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * (`->>` renders an object as JSON text where String() gives
    * "[object Object]"), and this rewrite is about round trips, not about
    * quietly changing what a title is. */
-  const inserts: { external_id: string; title: string }[] = [];
+  const inserts: { external_id: string; title: string; source_id: number }[] = [];
   /* Keyed by solicitation id so a later group wins, exactly as sequential
    * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
    * -- a sighting linked via a different external_id -- and `UPDATE ... FROM
@@ -181,7 +181,11 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     }
 
     if (g.solicitation_id === null) {
-      inserts.push({ external_id: g.external_id, title });
+      /* Migration 010: the solicitation records the source whose payload it
+       * reflects, and `latest_source_id` IS that source -- the same one `raw`
+       * and therefore `title` above were read from. Passing anything else
+       * here would make the column disagree with the row it describes. */
+      inserts.push({ external_id: g.external_id, title, source_id: g.latest_source_id });
       if (chain.length) chains.set(g.external_id, chain);
     } else if (Number(g.unlinked) > 0) {
       titleUpdates.set(g.solicitation_id, title);
@@ -215,11 +219,16 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * unnest preserving row order. */
     const inserted = inserts.length
       ? await q.all<{ id: number; external_id: string }>(
-          `INSERT INTO solicitation (external_id, title)
-           SELECT u.external_id, u.title
-             FROM unnest($1::text[], $2::text[]) AS u(external_id, title)
+          `INSERT INTO solicitation (external_id, title, source_id)
+           SELECT u.external_id, u.title, u.source_id
+             FROM unnest($1::text[], $2::text[], $3::int[])
+               AS u(external_id, title, source_id)
            RETURNING id, external_id`,
-          [inserts.map((i) => i.external_id), inserts.map((i) => i.title)],
+          [
+            inserts.map((i) => i.external_id),
+            inserts.map((i) => i.title),
+            inserts.map((i) => i.source_id),
+          ],
         )
       : [];
     for (const row of inserted) links.push({ external_id: row.external_id, solId: row.id });

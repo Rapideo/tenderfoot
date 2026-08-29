@@ -67,7 +67,7 @@ test("all eleven objects plus the two alias tables exist", async () => {
  * which is localised and version-dependent. */
 test("foreign keys are enforced, not decorative", async () => {
   await expect(
-    run("INSERT INTO solicitation (org_id, title) VALUES (99999, 'ghost')"),
+    run("INSERT INTO solicitation (org_id, title, source_id) VALUES (99999, 'ghost', (SELECT id FROM source WHERE name = 'SAM.gov'))"),
   ).rejects.toMatchObject({ code: "23503" });
 });
 
@@ -78,7 +78,7 @@ test("many sightings may point at one solicitation", async () => {
     "INSERT INTO organization (name) VALUES ('Test Agency') RETURNING id",
   );
   const solId = await insert(
-    "INSERT INTO solicitation (org_id, title) VALUES ($1, 'Test RFP') RETURNING id",
+    "INSERT INTO solicitation (org_id, title, source_id) VALUES ($1, 'Test RFP', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id",
     [orgId],
   );
   const srcId = await insert(
@@ -260,7 +260,7 @@ test("document carries a fetch target and a bundle parent", async () => {
 
 test("extracted_field keeps losing values instead of discarding them", async () => {
   const sol = await insert(
-    `INSERT INTO solicitation (title) VALUES ('conflict fixture') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id) VALUES ('conflict fixture', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`,
   );
   await dbRun(
     `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
@@ -286,7 +286,7 @@ test("extracted_field keeps losing values instead of discarding them", async () 
  * even if a future migration replaced the CHECK with, say, a NOT NULL
  * elsewhere that throws first. */
 test("origin is constrained to the two it may be", async () => {
-  const sol = await insert(`INSERT INTO solicitation (title) VALUES ('x') RETURNING id`);
+  const sol = await insert(`INSERT INTO solicitation (title, source_id) VALUES ('x', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`);
   await expect(
     dbRun(
       `INSERT INTO extracted_field (solicitation_id, field_name, origin) VALUES ($1, 'closes_at', 'guess')`,
@@ -297,7 +297,7 @@ test("origin is constrained to the two it may be", async () => {
 
 test("a field may have many document rows but only one listing row", async () => {
   const sol = await insert(
-    `INSERT INTO solicitation (title) VALUES ('one listing') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id) VALUES ('one listing', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`,
   );
   const doc = `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
                VALUES ($1, 'closes_at', $2, 'document', 'mechanical')`;

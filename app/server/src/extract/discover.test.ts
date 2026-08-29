@@ -41,27 +41,44 @@ afterAll(async () => {
   await close();
 });
 
-/* Every solicitation fixture below records a SIGHTING, because that row is
- * the ONLY link between a solicitation and the source it came from --
- * `solicitation` itself has no source column. discoverAttachments hands
- * each candidate's external_id to SAM.gov's attachment API, so it selects
- * SAM.gov's rows and nothing else, and a fixture with no sighting is a
- * solicitation that cannot exist in production (measured: 0 of 1,925 rows
- * lack one).
+/* A solicitation cannot exist without a source: migration 010 put
+ * `source_id` ON the row, NOT NULL, so "where did this come from" is no
+ * longer a fact you have to join `sighting` to recover. discoverAttachments
+ * reads that column directly -- it hands each candidate's external_id to
+ * SAM.gov's attachment API, so it must select SAM.gov's rows and nothing
+ * else.
  *
- * 003_seed_source_registry.sql seeds 'SAM.gov', but the corpus-import
- * sources are created at IMPORT time rather than seeded, so a fixture that
- * names one has to create it; `name` is the only NOT NULL column on
- * `source` without a default. A misspelled SAM.gov still fails loudly, just
- * one step later: the implementation's own SAM_SOURCE_NAME would then match
- * no sighting and the candidate list would come back empty. */
-async function sight(solicitationId: number, sourceName = "SAM.gov"): Promise<void> {
-  await run(`INSERT INTO source (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [sourceName]);
+ * The sighting is written too, even though nothing under test reads it any
+ * more. In production every solicitation has one (measured: 0 of 1,925 lack
+ * one) and the migration's backfill derives `source_id` FROM it, so a
+ * fixture without one is a row that could not exist and could not have been
+ * migrated. 003_seed_source_registry.sql seeds 'SAM.gov'; the corpus-import
+ * sources are created at IMPORT time rather than seeded, so a fixture naming
+ * one has to create it -- `name` is the only NOT NULL column on `source`
+ * without a default. */
+interface Fixture {
+  externalId: string;
+  title?: string;
+  closesAt?: string | null;
+  setAside?: string | null;
+  kind?: string | null;
+  source?: string;
+}
+
+async function seed(f: Fixture): Promise<number> {
+  const name = f.source ?? "SAM.gov";
+  await run(`INSERT INTO source (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [name]);
+  const id = await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind, source_id)
+     SELECT $1, $2, $3, $4, $5, src.id FROM source src WHERE src.name = $6 RETURNING id`,
+    [f.title ?? "fixture", f.externalId, f.closesAt ?? null, f.setAside ?? null, f.kind ?? null, name],
+  );
   await insert(
     `INSERT INTO sighting (source_id, solicitation_id)
      SELECT id, $2 FROM source WHERE name = $1 RETURNING id`,
-    [sourceName, solicitationId],
+    [name, id],
   );
+  return id;
 }
 
 const SAM_RESPONSE = {
@@ -87,13 +104,11 @@ test("inserts one pending document per existing attachment", async () => {
    * after every reset or the INSERT below fails with "relation
    * \"solicitation\" does not exist". */
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at)
-       VALUES ('live one', 'abc123', $1) RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({
+    title: "live one",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
@@ -137,13 +152,13 @@ test("writes the portal's own values as listing rows", async () => {
    * ground truth ... Accuracy is a query" -- would be unbuildable. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
-       VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({
+    title: "live one",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+    setAside: "SBA",
+    kind: "RFP",
+  });
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
 
   await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -180,12 +195,11 @@ test("does not duplicate listing rows when run twice", async () => {
    * solicitation with NO attachments would be revisited. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({
+    title: "s",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
   await discoverAttachments(10, stub as unknown as typeof fetch);
   await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -198,11 +212,7 @@ test("does not duplicate listing rows when run twice", async () => {
 test("skips solicitations whose deadline has passed", async () => {
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
-    ),
-  );
+  await seed({ title: "closed", externalId: "old", closesAt: "2020-01-01" });
   const stub = vi.fn(async () => new Response("{}", { status: 200 }));
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
   expect(r.solicitations).toBe(0);
@@ -218,12 +228,12 @@ test("a solicitation with only SOME listing fields already written gains the res
    * a pre-existing partial set gets topped up, not skipped. */
   await resetSchema();
   await migrate(false);
-  const sol = await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at, set_aside)
-     VALUES ('partial', 'abc123', $1, 'SBA') RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
-  );
-  await sight(sol);
+  const sol = await seed({
+    title: "partial",
+    externalId: "abc123",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+    setAside: "SBA",
+  });
   /* Simulates exactly one field surviving an earlier, interrupted run. */
   await insert(
     `INSERT INTO extracted_field
@@ -263,17 +273,12 @@ test("admits solicitations with NO close date, dated ones first", async () => {
    * NULLS LAST keeps a real deadline ahead of them when one exists. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
-      [new Date(Date.now() + 86_400_000).toISOString()],
-    ),
-  );
+  await seed({ title: "undated", externalId: "no-date", closesAt: null });
+  await seed({
+    title: "dated",
+    externalId: "has-date",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
@@ -299,16 +304,8 @@ test("skips a malformed attachment without losing the rest of the batch", async 
    * the BATCH surviving, not just the attachment being skipped. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
-    ),
-  );
+  await seed({ title: "a", externalId: "aaa", closesAt: "2099-01-01" });
+  await seed({ title: "b", externalId: "bbb", closesAt: "2099-01-02" });
   const malformed = {
     _embedded: {
       opportunityAttachmentList: [
@@ -345,21 +342,9 @@ test("counts a failed fetch as skipped and keeps going", async () => {
    * attachment request never succeeds. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
-    ),
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
-    ),
-  );
+  await seed({ title: "a", externalId: "aaa", closesAt: "2099-01-01" });
+  await seed({ title: "b", externalId: "bbb", closesAt: "2099-01-02" });
+  await seed({ title: "c", externalId: "ccc", closesAt: "2099-01-03" });
   const stub = vi
     .fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }))
     .mockRejectedValueOnce(new TypeError("fetch failed"))
@@ -392,19 +377,13 @@ test("never hands a non-SAM solicitation's external_id to the SAM.gov API", asyn
    * is not merely included, it is fetched FIRST. */
   await resetSchema();
   await migrate(false);
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at)
-       VALUES ('indiana one', 'in-999', '2099-01-01') RETURNING id`,
-    ),
-    "Corpus import — Indiana open (2026-08-04)",
-  );
-  await sight(
-    await insert(
-      `INSERT INTO solicitation (title, external_id, closes_at)
-       VALUES ('sam one', 'sam-111', NULL) RETURNING id`,
-    ),
-  );
+  await seed({
+    title: "indiana one",
+    externalId: "in-999",
+    closesAt: "2099-01-01",
+    source: "Corpus import — Indiana open (2026-08-04)",
+  });
+  await seed({ title: "sam one", externalId: "sam-111", closesAt: null });
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
       new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),

@@ -22,7 +22,7 @@ await resetSchema();
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate, appliedMigrations } = await import("./migrate.js");
-const { run, close } = await import("./index.js");
+const { run, one, insert, close } = await import("./index.js");
 
 afterAll(async () => {
   await close();
@@ -56,4 +56,53 @@ test("foreign keys are enforced", async () => {
   await expect(
     run("INSERT INTO sighting (source_id) VALUES (99999)"),
   ).rejects.toMatchObject({ code: "23503" });
+});
+
+/* THE BACKFILL, NOT JUST THE COLUMN. A fresh schema can never exercise
+ * migration 010's UPDATE -- there are no pre-existing rows to backfill --
+ * so this test rewinds that one file and re-applies it against rows that
+ * predate it, which is the only situation the backfill exists for. Testing
+ * that `source_id` merely EXISTS would pass against a migration whose
+ * UPDATE did nothing at all, and production would come out the far side
+ * with the column NOT NULL and every value wrong. */
+test("010 backfills source_id from the LATEST sighting, then refuses a row without one", async () => {
+  await migrate(false);
+
+  await run(`DROP INDEX solicitation_source`);
+  await run(`ALTER TABLE solicitation DROP COLUMN source_id`);
+  await run(`DELETE FROM schema_migrations WHERE name = '010_solicitation_source.sql'`);
+
+  const older = await insert(`INSERT INTO source (name) VALUES ('Older source') RETURNING id`);
+  const newer = await insert(`INSERT INTO source (name) VALUES ('Newer source') RETURNING id`);
+  const sol = await insert(`INSERT INTO solicitation (title) VALUES ('pre-010') RETURNING id`);
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES ($1, $2, now() - interval '2 days')`,
+    [older, sol],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES ($1, $2, now() - interval '1 day')`,
+    [newer, sol],
+  );
+
+  expect(await migrate(false)).toEqual(["010_solicitation_source.sql"]);
+
+  /* The LATEST sighting wins, which is merge.ts's own `latest_source_id`
+   * rule. An "earliest wins" backfill would pick `older` here and would
+   * then disagree with every row merge.ts writes from that point on -- two
+   * rules for one column, which is how a field stops meaning anything. */
+  const row = await one<{ source_id: number }>(
+    `SELECT source_id FROM solicitation WHERE id = $1`,
+    [sol],
+  );
+  expect(row?.source_id).toBe(newer);
+
+  /* 23502 is not_null_violation. This is the point of the whole column: a
+   * row with no source is invisible to `WHERE source_id = ...`, so the
+   * constraint is what turns a future omission into a loud failure rather
+   * than a silently short candidate list. */
+  await expect(
+    run(`INSERT INTO solicitation (title) VALUES ('no source')`),
+  ).rejects.toMatchObject({ code: "23502" });
 });
