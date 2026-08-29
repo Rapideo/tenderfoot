@@ -1,6 +1,6 @@
 # Tenderfoot — status
 
-**Updated 2026-08-18.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-08-29.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
 > **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
 >
@@ -31,6 +31,8 @@
 ---
 
 ## 📌 PINNED — LAST UPDATED 2026-08-28 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
+
+> *2026-08-29: the resume block below is newer than this one and carries the current state. Nothing pinned here was invalidated by the 08-28/29 run, but the solicitation counts here predate it — production now holds 7,644 SAM.gov deadlines that were null when this block was written.*
 
 **The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **9,883 solicitations / 11,121 sightings / 1,214 organizations** after two real ingests on 2026-08-28 (12-hour, then seven-day), and **Run has been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. **Nothing is outstanding.** Production is public **by decision** (§5), local development no longer touches production (§4), and the 2026-08-27 Run failure is **solved, attributed and fixed** (§3) — a 30-second `maxDuration` in `vercel.json` that every budget in the codebase had been reasoning past, now 300 and tied to the code by a test.
 
@@ -213,9 +215,47 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-28
+## 🔖 RESUME HERE — updated 2026-08-29
 
-**You are on `main`, the working tree is CLEAN, everything is pushed, and the gate is green at 314 tests / 45 files.** The whole 2026-08-28 run of work is committed and pushed; production is deployed and healthy. **The pinned block above has no outstanding rulings** — read it first, then this.
+> ⚠️ **YOU ARE ON `sp4-fetch-extraction`, NOT `main`, AND THIS BRANCH HAS NEVER BEEN PUSHED.**
+> The only remote branch is `origin/main`. Every SP4 commit — tasks 1–9 plus the nine from the
+> night of 08-28/29 — exists **on one laptop and nowhere else**, and **production is deployed
+> from it**. `git push -u origin sp4-fetch-extraction` is the one-line fix and it is the single
+> highest-value thing to do before anything else.
+
+**Working tree CLEAN. Gate green at 382 tests / 55 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+
+### ✅ THE NIGHT OF 2026-08-28/29 — SP4 Task 9 closed, and the slice's premise nearly did not survive
+
+**Nine commits.** `9cf85a2` `885416e` `a8eaaa3` `72ba4fa` `bbb7e01` `42e3204` `6c66a8b` `a0a41d6` `5d7a711`, plus `6e12897` for the DOOGIE entry. Full reasoning in `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/progress.md`; DOOGIE entries 248–271.
+
+**Task 9's review found two Criticals that together meant the slice produced NOTHING**, and a third was found while fixing them. (a) The SAM attachment endpoint was written from memory and 404s on every id — the correct host was already in `adapters/sam.ts` and `probes/sam.ts`, now shared as `SAM_HOST`. (b) `left(closes_at,10) >= today` is NULL for a NULL `closes_at` and WHERE reads NULL as false, so **every SAM.gov solicitation was silently excluded** from the candidate list. (c) `solicitation` had no source column at all, so the query handed Indiana ids to a federal API — and the NULLS-LAST fix for (b) sorted those wrong-source rows to the FRONT.
+
+⚠️ **None of the three was catchable by the tests that existed.** `source_url.length > 0` was the only thing pinning the endpoint and passes against the wrong host; no fixture had a NULL `closes_at`. **New rule, now enforced in the tests: a test that composes the same constant the implementation composes moves with the bug instead of catching it.** URLs are literals now. Every fix in this run was verified by MUTATION — fourteen mutants across the night, all killed.
+
+**Migration 010 — `solicitation.source_id`, NOT NULL**, backfilled latest-sighting-wins to match `merge.ts`'s own `latest_source_id` rule. NOT NULL is load-bearing: a null source is invisible to `WHERE source_id = …`, the same silent-exclusion shape as (b).
+
+**`accuracyByField` gained `missed` and `opportunities`** (Matt ruled options 1+2). ⚠️ **The units differ and DO NOT SUM** — `agreed`/`disagreed` count document statements, `missed`/`opportunities` count solicitations. A test pins both. Expect `set_aside`, `value_cents` and `prebid_required` to report **100% missed**: `fields.ts` marks them `NOT_EXTRACTED`, so that is honest, not broken.
+
+**🔴 THE BIG ONE — the accuracy instrument had NO GROUND TRUTH AT ALL.** The first live smoke run worked (7 documents, 0 skipped) and **every listing row it wrote said ABSENT**. Measured: all six fields null on **all 9,682 production SAM.gov rows**. The accuracy query requires a stated listing value, so it would have reported **zero fields — not the one field we had already reduced it to.** *Green tests over an empty premise, for the whole slice.* **Generalisation worth keeping: tests prove the code does what it says, and say nothing about whether the data can support what the code is FOR.**
+
+**The fix was already in the database.** `sighting.raw` carried `responseDate` on 7,644 of 9,682 rows. `merge.ts` had only ever learned to read ONE field out of the payload — the title — and `ingest/corpus.ts` was the sole writer of `closes_at` anywhere, which is exactly why 201 corpus rows had deadlines and no SAM row did. New `merge/closes-at.ts`, same shape as `org-chain.ts`. ⚠️ **It reads `responseDateActual` (local), NOT `responseDate` (UTC) — they are the same instant, `closes_at` is a bare date, and on 39 of 1,338 (2.9%) they disagree.** Every one is an evening deadline rolling past midnight in UTC, so reading the UTC field records deadlines **a day LATE**. Measured, not assumed.
+
+**Ordering constraint REMOVED rather than enforced.** merge populates `closes_at`; discover copies it into ground truth; nothing sequences them and nothing can. `ON CONFLICT DO NOTHING` became `DO UPDATE` (reversing an earlier decision in the same round, whose premise proved false) plus a bounded `REFRESH` pass, so a later run repairs the copy whichever order they ran in. **ABSENT and "we had not read it yet" are different facts** — recording the second as the first is the one way a ground-truth row can lie.
+
+**Gate hygiene, worth not re-deriving.** `check.mjs` asserted ".env's DATABASE_URL is the PRODUCTION pooler" — **false and load-bearing**, it was the entire justification for the build-step override, which was therefore substituting a value for itself. Now `refuseToRunAgainstProduction()` checks the invariant instead of asserting it, comparing by DATABASE not by string (Neon serves pooled and direct hosts for one endpoint). ⚠️ **`vercel env pull` with no path argument overwrites `.env`, and Vercel's own `DATABASE_URL` IS production** — that guard is what catches it. Also: **`api/index.ts`, the file Vercel actually deploys, was in NO TypeScript project** and had never been typechecked; `tsconfig.api.json` fixes our side. ⚠️ **Vercel still prints a spurious `admin.ts` TS2339 and still does not fail the build on type errors** — that half is unfixed, and is a deploy-pipeline decision.
+
+**PRODUCTION IS CAUGHT UP, both halves.** `mergeSightings` ran against production after a pre-flight that measured the blast radius (0 unlinked sightings ⇒ no inserts, no links possible): result `{created:0, updated:0, linked:0, orgsAttached:0, deadlinesSet:7644}`. SAM.gov **0 → 7,644 dated**. Then deployed — migrations 007 → 010 applied, `source_id` backfilled 9,682/140/61 with zero NULLs.
+
+### ⏭ START HERE — SP4 Task 10, the extract orchestrator
+
+**Brief: `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/task-10-brief.md`.** Walks the pending `document` rows, fetches each, extracts fields, records failures. **53 pending documents and live ground truth are waiting on the `test` branch** — the smoke runs left real state in `public` there, deliberately.
+
+⚠️ **`extract_status` transitions now carry weight they did not before.** `opportunities` counts only solicitations with a document in `extracted` or `absent` — a `failed` document is a missed FETCH, not a missed extraction, and conflating them blames the extractor for the network.
+
+**Then Task 11** (the two admin endpoints, time-budgeted) **and Task 12** (the screen + the seam test, which is the regression test for the FSSA near-miss). **Then a fresh review of Task 9** — that diff now carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh.
+
+**Open, and Matt's:** ① push this branch (see the warning at the top); ② whether Vercel's build should fail on type errors; ③ the staging-branch decision — `.env`'s `DATABASE_URL` and `DATABASE_URL_TEST` are currently the SAME string, both pointing at `test`, which ci.yml mirrors deliberately; ④ delete the abandoned `preview/sp3-federal-ingestion` Neon branch from the console, **not** through the MCP. **Standing:** execute the slice sequence in order, no shortcuts (ruled 2026-08-29).
 
 **What changed on 2026-08-28, in one line each.** The admin gate went live (§1). The demo criterion was met (§2). Run was clicked in a browser on production for the first time ever, and the 2026-08-27 failure was diagnosed as a 30-second `maxDuration` every budget in the codebase had been reasoning past — now 300, and tied to `vercel.json` by a test (§3). Local development was repointed off production (§4). Production was ruled public by decision (§5). Production holds **9,883 solicitations** after two real ingests, up from 788.
 
@@ -367,7 +407,7 @@ $s | vercel env add ADMIN_SECRET preview
 >
 > ⚠️ **Order is load-bearing, because there is no fallback: variable first, push second.** Reversed, every admin write answers 503 until the variable appears.
 
-### ⏭ ~~START HERE — one ruling left on SP4~~ ✅ RULED AND DESIGNED 2026-08-28
+### ~~⏭ START HERE — one ruling left on SP4~~ ✅ RULED AND DESIGNED 2026-08-28 — *superseded 2026-08-29; the live START HERE is above*
 
 **The runtime question is answered by measurement; what is left is a dependency decision.** The recommendation on file is **Node throughout** — `mammoth` and `unpdf` are settled for the two formats that carry the scope of work — **with the spreadsheet dependency chosen deliberately instead of inherited:**
 
