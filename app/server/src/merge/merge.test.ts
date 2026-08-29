@@ -287,3 +287,67 @@ test("an already-merged solicitation with no organisation gets one on the next m
   );
   expect(row?.name).toBe("DEPT OF STATE");
 });
+
+/* THE DEADLINE, on the same argument as the organisation above and with a
+ * worse starting position: 9,682 of 9,682 production SAM.gov solicitations
+ * carried closes_at NULL while every stored payload held the date. Nothing
+ * read it, because merge only ever read the title. SP4's accuracy query
+ * treats the listing as ground truth ONLY where it states a value, so with
+ * closes_at null everywhere the measurement had nothing to measure at all.
+ *
+ * These rows are fully linked and have an organisation, so every other
+ * branch of the merge loop skips them -- which is exactly why this is
+ * tested against an ALREADY-MERGED row rather than a fresh insert. */
+test("an already-merged solicitation with no deadline gets one on the next merge", async () => {
+  await sightRaw(
+    sourceSam,
+    "DUE-1",
+    {
+      title: "Deadline in the payload all along",
+      responseDate: "2026-09-02T03:59:00+00:00",
+      responseDateActual: "2026-09-01T23:59:00-04:00",
+      responseTimeZone: "America/New_York",
+      organizationHierarchy: [{ level: 1, name: "DEPT OF STATE" }],
+    },
+    "2026-08-20T00:00:00Z",
+  );
+  await mergeSightings();
+  await run(`UPDATE solicitation SET closes_at = NULL WHERE external_id = 'DUE-1'`);
+
+  const res = await mergeSightings();
+  expect(res.deadlinesSet).toBe(1);
+
+  /* The LOCAL day, not the UTC one. This payload is the real evening-deadline
+   * shape: 23:59 Eastern on the 1st is 03:59 UTC on the 2nd, and reading the
+   * UTC field would record the deadline a day late. */
+  const row = await one<{ closes_at: string }>(
+    `SELECT closes_at FROM solicitation WHERE external_id = 'DUE-1'`,
+  );
+  expect(row?.closes_at).toBe("2026-09-01");
+});
+
+/* A steady-state run must not rewrite rows that already agree, or every
+ * merge would report work it did not do and dirty rows it did not change.
+ * The guard is IS DISTINCT FROM rather than <>, because <> against a NULL
+ * closes_at yields NULL and updates nothing at all. */
+test("a merge that changes no deadline reports none and writes none", async () => {
+  const res = await mergeSightings();
+  expect(res.deadlinesSet).toBe(0);
+});
+
+/* Corpus imports set closes_at at ingest and closesAt() returns null for
+ * them, so they must be left exactly as they are -- not blanked by a source
+ * whose payload this reader cannot parse. */
+test("a source with no readable deadline never clears one that exists", async () => {
+  await sight(sourceA, "KEEP-1", "Has a deadline from ingest", "2026-08-21T00:00:00Z");
+  await mergeSightings();
+  await run(`UPDATE solicitation SET closes_at = '2027-01-15' WHERE external_id = 'KEEP-1'`);
+
+  await mergeSightings();
+
+  const row = await one<{ closes_at: string }>(
+    `SELECT closes_at FROM solicitation WHERE external_id = 'KEEP-1'`,
+  );
+  expect(row?.closes_at).toBe("2027-01-15");
+});
+

@@ -40,6 +40,7 @@
  */
 import { all, tx } from "../db/index.js";
 import { orgChain } from "./org-chain.js";
+import { closesAt } from "./closes-at.js";
 
 export interface MergeResult {
   created: number;
@@ -48,6 +49,10 @@ export interface MergeResult {
   /** Solicitations that gained an `org_id` on this run, including ones
    * merged earlier while nothing read the organisation out of the payload. */
   orgsAttached: number;
+  /** Solicitations whose `closes_at` was written or corrected on this run,
+   * including ones merged earlier while nothing read the deadline out of the
+   * payload -- which, before closes-at.ts existed, was every one of them. */
+  deadlinesSet: number;
 }
 
 interface Group {
@@ -149,13 +154,22 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * (`->>` renders an object as JSON text where String() gives
    * "[object Object]"), and this rewrite is about round trips, not about
    * quietly changing what a title is. */
-  const inserts: { external_id: string; title: string; source_id: number }[] = [];
+  const inserts: {
+    external_id: string;
+    title: string;
+    source_id: number;
+    closes_at: string | null;
+  }[] = [];
   /* Keyed by solicitation id so a later group wins, exactly as sequential
    * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
    * -- a sighting linked via a different external_id -- and `UPDATE ... FROM
    * unnest` would otherwise pick among duplicate keys arbitrarily, turning
    * "last wins" into "whichever the planner reached first". */
   const titleUpdates = new Map<number, string>();
+  /* Keyed the same way and for the same reason as titleUpdates above: a
+   * later group wins, deterministically, rather than the planner choosing
+   * among duplicate keys. */
+  const deadlineUpdates = new Map<number, string>();
   const links: { external_id: string; solId: number }[] = [];
   /* external_id -> the chain for it. Collected for new groups and for any
    * existing solicitation still missing an organisation, so a re-run repairs
@@ -180,12 +194,34 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       if (!jurisdictionByName.has(name)) jurisdictionByName.set(name, src?.jurisdiction ?? null);
     }
 
+    /* THE DEADLINE IS ITS OWN REASON TO DO WORK, exactly as a missing
+     * organisation is below. Collected for EVERY group that already has a
+     * solicitation -- not only those with unlinked sightings -- because the
+     * rows that need it most are the ones merged before closes-at.ts
+     * existed, and those have nothing unlinked and an organisation already
+     * attached, so every branch below skips them. Measured at the time this
+     * landed: 9,682 of 9,682 SAM.gov solicitations had a null closes_at
+     * while their stored payloads carried the date all along.
+     *
+     * A null result never enters the map, so a source with no deadline to
+     * read (USASpending) and corpus imports (which set closes_at at ingest
+     * and would be clobbered by a null) are both left untouched. */
+    const closes = closesAt(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && closes !== null) {
+      deadlineUpdates.set(g.solicitation_id, closes);
+    }
+
     if (g.solicitation_id === null) {
       /* Migration 010: the solicitation records the source whose payload it
        * reflects, and `latest_source_id` IS that source -- the same one `raw`
        * and therefore `title` above were read from. Passing anything else
        * here would make the column disagree with the row it describes. */
-      inserts.push({ external_id: g.external_id, title, source_id: g.latest_source_id });
+      inserts.push({
+        external_id: g.external_id,
+        title,
+        source_id: g.latest_source_id,
+        closes_at: closes,
+      });
       if (chain.length) chains.set(g.external_id, chain);
     } else if (Number(g.unlinked) > 0) {
       titleUpdates.set(g.solicitation_id, title);
@@ -219,15 +255,16 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * unnest preserving row order. */
     const inserted = inserts.length
       ? await q.all<{ id: number; external_id: string }>(
-          `INSERT INTO solicitation (external_id, title, source_id)
-           SELECT u.external_id, u.title, u.source_id
-             FROM unnest($1::text[], $2::text[], $3::int[])
-               AS u(external_id, title, source_id)
+          `INSERT INTO solicitation (external_id, title, source_id, closes_at)
+           SELECT u.external_id, u.title, u.source_id, u.closes_at
+             FROM unnest($1::text[], $2::text[], $3::int[], $4::text[])
+               AS u(external_id, title, source_id, closes_at)
            RETURNING id, external_id`,
           [
             inserts.map((i) => i.external_id),
             inserts.map((i) => i.title),
             inserts.map((i) => i.source_id),
+            inserts.map((i) => i.closes_at),
           ],
         )
       : [];
@@ -239,6 +276,22 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
              FROM unnest($1::int[], $2::text[]) AS u(id, title)
             WHERE s.id = u.id AND s.title <> u.title`,
           [[...titleUpdates.keys()], [...titleUpdates.values()]],
+        )
+      : 0;
+
+    /* IS DISTINCT FROM, not <>, because the column being null is the whole
+     * case this repairs -- `<>` against NULL yields NULL and WHERE reads
+     * that as false, so a `<>` guard here would update precisely nothing and
+     * look like it worked. That is the same NULL-comparison trap that hid an
+     * empty candidate list in extract/discover.ts. The guard still makes a
+     * steady-state run free: nothing is written when the payload agrees with
+     * the column. */
+    const deadlinesSet = deadlineUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET closes_at = u.closes_at
+             FROM unnest($1::int[], $2::text[]) AS u(id, closes_at)
+            WHERE s.id = u.id AND s.closes_at IS DISTINCT FROM u.closes_at`,
+          [[...deadlineUpdates.keys()], [...deadlineUpdates.values()]],
         )
       : 0;
 
@@ -326,6 +379,6 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       }
     }
 
-    return { created: inserted.length, updated, linked, orgsAttached };
+    return { created: inserted.length, updated, linked, orgsAttached, deadlinesSet };
   });
 }
