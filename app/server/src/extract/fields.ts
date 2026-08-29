@@ -35,51 +35,90 @@ const CUES: { field: FieldDraft["field_name"]; re: RegExp }[] = [
   { field: "closes_at", re: /\bdue\b|\bdeadline\b|\bclosing\b|\bsubmitted by\b|\breceived by\b/i },
 ];
 
-/* HTML block boundaries -- ROW only, not paragraph or cell.
+/* Block boundaries -- the points where "a different fact starts here".
  *
- * mammoth.convertToHtml -- the DOCX path -- emits ZERO newlines: 52/52
- * corpus DOCX measured zero "\n" in their converted text, so a plain "\n"
- * clamp is a no-op on most of the corpus. A schedule table survives
- * conversion as <tr><td><p>label</p></td><td><p>value</p></td></tr> --
- * mammoth wraps EVERY cell's content in its own <p>, so the label and its
- * value, though they belong to one logical row, sit in sibling <p>s and
- * sibling <td>s. `</p>` and `</td>` therefore cut FINER than the meaning:
- * clamping on either one walls a date off from the very cue that names it,
- * and a real schedule table yields nothing (confirmed against the real
- * mammoth HTML for corpus/indiana/005030000087847/RFP26-87847 Addendum
- * 1.docx). `</tr>` is the boundary that means "a different fact starts
- * here" for a table. Kept `\n` for the plain-text path (PDF, XLSX) and
- * `<br>` (all spellings) since neither of those introduces this problem.
- *
- * Accepted cost: DOCX prose paragraphs no longer clamp at all, since
- * mammoth's only paragraph marker is the `</p>` this drops -- a section
- * heading can still bleed into the next paragraph's date on that path.
- * That is the same failure class as the hard-wrap and cover-page cases
- * already deferred to the accuracy-instrument work; extracting nothing
- * from a table is strictly worse, and tables are the layout this slice
- * exists to read. */
-const BLOCK = /\n|<\/tr>|<br\s*\/?>/gi;
+ * `\n` covers the plain-text path (PDF, XLSX). The HTML tags cover the DOCX
+ * path: mammoth.convertToHtml emits ZERO newlines (52/52 corpus DOCX
+ * measured zero "\n"), so without HTML tokens the DOCX path has no clamp at
+ * all. `<table[\s>]` and `</table>` are matched only to track nesting; they
+ * are not themselves boundaries. */
+const BLOCK = /\n|<\/tr>|<br\s*\/?>|<\/p>|<table[\s>]|<\/table>/gi;
 
-/* The end of the nearest BLOCK match starting before `at`, or 0 if none.
- * A fresh RegExp per call avoids sharing lastIndex state across dates. */
-function lastBlockBoundaryEnd(text: string, at: number): number {
+/* One pass per call. `</p>` counts only OUTSIDE a <table>: inside one,
+ * mammoth wraps every cell in its own <p>, so a real two-column schedule row
+ * arrives as <tr><td><p>label</p></td><td><p>date</p></td></tr> and a `</p>`
+ * boundary would wall the date off from its own row's label -- the table
+ * then extracts nothing (measured on the real mammoth HTML for
+ * corpus/indiana/005030000087847/RFP26-87847 Addendum 1.docx). `</tr>` is
+ * the row boundary there, and it is enough. In prose, `</p>` is mammoth's
+ * ONLY paragraph marker, so without this rule the DOCX path has no paragraph
+ * clamp while the plain-text path does -- and the two paths then disagree
+ * about the same words, with the DOCX one failing unsafely (a heading
+ * bleeding into the next paragraph's date files a close date as the Q&A
+ * deadline, quoted so it reads like corroboration). */
+function blockBoundaries(text: string): { start: number; end: number }[] {
   const re = new RegExp(BLOCK.source, BLOCK.flags);
-  let end = 0;
+  const out: { start: number; end: number }[] = [];
+  let depth = 0;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) && m.index < at) {
-    end = m.index + m[0].length;
+  while ((m = re.exec(text))) {
+    const tok = m[0].toLowerCase();
+    if (tok.startsWith("<table")) {
+      depth++;
+      continue;
+    }
+    if (tok === "</table>") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (tok === "</p>" && depth > 0) continue;
+    out.push({ start: m.index, end: m.index + m[0].length });
+  }
+  return out;
+}
+
+/* The end of the nearest boundary starting before `at`, or 0 if none.
+ * Boundaries are in ascending order, so this binary-searches rather than
+ * rescanning the text. The version this replaced recompiled a RegExp and
+ * re-scanned the whole document once per date, which is quadratic on
+ * date-dense text; one pass plus a binary search is not. */
+function lastBoundaryEnd(bounds: { start: number; end: number }[], at: number): number {
+  let lo = 0;
+  let hi = bounds.length - 1;
+  let end = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (bounds[mid]!.start < at) {
+      end = bounds[mid]!.end;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
   }
   return end;
 }
 
-/* The start of the nearest BLOCK match at or after `from`, or text.length
- * if none -- the forward-facing twin of lastBlockBoundaryEnd, used to keep
- * a quote from running past its row/paragraph into the next one. */
-function nextBlockBoundaryStart(text: string, from: number): number {
-  const re = new RegExp(BLOCK.source, BLOCK.flags);
-  re.lastIndex = from;
-  const m = re.exec(text);
-  return m ? m.index : text.length;
+/* The start of the nearest boundary at or after `from`, or `fallback`
+ * (text.length) if none -- the forward-facing twin of lastBoundaryEnd, used
+ * to keep a quote from running past its own row/paragraph into the next. */
+function nextBoundaryStart(
+  bounds: { start: number; end: number }[],
+  from: number,
+  fallback: number,
+): number {
+  let lo = 0;
+  let hi = bounds.length - 1;
+  let start = fallback;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (bounds[mid]!.start >= from) {
+      start = bounds[mid]!.start;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return start;
 }
 
 /* Round-trips the match through Date to reject calendar dates that don't
@@ -106,6 +145,9 @@ export function extractFields(text: string): FieldDraft[] {
    * "we found a date and could not place it" (a recall miss) from "there is
    * no date here" (a true negative) -- see the note applied below. */
   let unclassifiedDateSeen = false;
+  /* Scanned ONCE for the whole document; both clamps below are lookups into
+   * it. The <table> nesting rule needs a single left-to-right pass anyway. */
+  const bounds = blockBoundaries(text);
 
   for (const m of text.matchAll(DATE)) {
     const at = m.index ?? 0;
@@ -115,14 +157,14 @@ export function extractFields(text: string): FieldDraft[] {
      * characters, so every row's date sees its neighbours' cue words -- and
      * a section heading many characters back can fall inside the window and
      * outrank the date's own row. */
-    const start = Math.max(0, at - 120, lastBlockBoundaryEnd(text, at));
+    const start = Math.max(0, at - 120, lastBoundaryEnd(bounds, at));
     const before = text.slice(start, at);
     const value = iso(m as RegExpExecArray);
     let classified = false;
     const dateEnd = at + m[0].length;
     /* Same clamp, forward: a quote must not run past its own row/paragraph
      * into a DIFFERENT date sitting just beyond it. */
-    const quoteEnd = Math.min(dateEnd + 20, nextBlockBoundaryStart(text, dateEnd));
+    const quoteEnd = Math.min(dateEnd + 20, nextBoundaryStart(bounds, dateEnd, text.length));
 
     for (const { field, re } of CUES) {
       if (!re.test(before)) continue;

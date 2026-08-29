@@ -171,15 +171,24 @@ test("the quote's trailing edge stops at the next block boundary, not inside a d
   /* Round 3, fix 3. The leading edge was clamped in round 2; the trailing
    * edge was not, so a quote could run past the classified date straight
    * into the text of a SECOND, unrelated date -- the same reading hazard
-   * that made Critical 1 hard to catch by eye. Uses <br>, not </p>: round
-   * 4 dropped </p> (and </td>) from the boundary set entirely, since
-   * mammoth wraps every table cell in its own <p> and clamping there walls
-   * a date off from its own row's cue. */
-  const text = "Submission Due Date/Time is September 17, 2026<br>August 12, 2026";
-  const f = extractFields(text);
-  const closes = f.find((x) => x.field_name === "closes_at");
-  expect(closes?.value_text).toBe("2026-09-17");
-  expect(closes?.quote).not.toMatch(/August 12/);
+   * that made Critical 1 hard to catch by eye.
+   *
+   * The primary fixture is </p>, not <br>, because that is the separator
+   * this clamp actually meets: across the 52 corpus DOCX, mammoth emits
+   * </p> 2,304 times and <br> 27 times. The earlier <br> fixture exercised
+   * the rarest separator on the very path the clamp exists for. <br> is
+   * still asserted below so its coverage is not lost. */
+  const paragraphs = extractFields(
+    "<p>Submission Due Date/Time is September 17, 2026</p><p>August 12, 2026</p>",
+  );
+  const byParagraph = paragraphs.find((x) => x.field_name === "closes_at");
+  expect(byParagraph?.value_text).toBe("2026-09-17");
+  expect(byParagraph?.quote).not.toMatch(/August 12/);
+
+  const breaks = extractFields("Submission Due Date/Time is September 17, 2026<br>August 12, 2026");
+  const byBreak = breaks.find((x) => x.field_name === "closes_at");
+  expect(byBreak?.value_text).toBe("2026-09-17");
+  expect(byBreak?.quote).not.toMatch(/August 12/);
 });
 
 test("the widened inquir stem also matches inquire and inquiring, not just inquiry/inquiries", () => {
@@ -192,4 +201,61 @@ test("the widened inquir stem also matches inquire and inquiring, not just inqui
 
   const inquiring = extractFields("We are inquiring by August 5, 2026.");
   expect(inquiring.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-05");
+});
+
+test("a form's own due date does not become the solicitation's close date", () => {
+  /* Round 4 (CRITICAL), case 3. Verbatim mammoth.convertToHtml output from
+   * corpus/indiana/005030000087847/Att H - Reference Check Form.docx. With
+   * no </p> clamp on the DOCX path, "Reference Check Form Due Date:" -- a
+   * heading in its OWN paragraph -- reached across into the next
+   * paragraph's date and produced closes_at = 2026-08-26 at full
+   * confidence, against a manifest truth of 09/17 and against every other
+   * document in the folder. A wrong deadline is a missed bid; the heading
+   * must not cross the paragraph break. */
+  const text =
+    "<p><strong>Attachment H</strong></p><p><strong>Reference Check Form </strong></p>" +
+    "<p><strong>RFP 26-87847</strong></p><p><br />Reference Check Form Due Date: </p>" +
+    "<p><strong>August 26, 2026 @ 03:00PM Eastern Time</strong></p>";
+  const f = extractFields(text);
+  expect(f.find((x) => x.field_name === "closes_at")?.value_text).toBeNull();
+  expect(f.find((x) => x.field_name === "qa_closes_at")?.value_text).toBeNull();
+  expect(f.find((x) => x.field_name === "prebid_at")?.value_text).toBeNull();
+});
+
+test("the DOCX and plain-text paths agree: a heading paragraph is not a cue for the next one", () => {
+  /* Round 4 (CRITICAL), case 4. The plain-text fixture above ("a heading
+   * does not bleed into the next section") already pins this for \n. With
+   * </p> missing from the boundary set, the IDENTICAL words on the DOCX
+   * path classified the close date as the Q&A deadline and quoted
+   * "Questions and Clarifications" alongside it, so the wrong answer read
+   * like corroboration -- the two paths disagreed, and the DOCX one failed
+   * unsafely. </p> is mammoth's only paragraph marker (it emits no \n), so
+   * it is what makes the two paths agree. */
+  const f = extractFields(
+    "<p>Questions and Clarifications</p><p>Proposals are due September 17, 2026.</p>",
+  );
+  expect(f.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
+  expect(f.find((x) => x.field_name === "qa_closes_at")?.value_text).toBeNull();
+});
+
+test("inside a table, a cell's second paragraph still sees its own row's label", () => {
+  /* Round 4, case 5 -- the reason </p> is a boundary only OUTSIDE a
+   * <table>. mammoth genuinely splits a cell across paragraphs (the real
+   * addendum's "Submission Due Date/Time" row has its time in a second <p>
+   * inside the same <td>), and it wraps every cell in a <p> regardless. If
+   * </p> were an unconditional boundary, the label and the date -- one
+   * logical row -- would be walled apart and the schedule table would
+   * extract nothing. </tr> is the row boundary inside a table; the sibling
+   * rows below confirm it still separates them. */
+  const text =
+    "<table>" +
+    "<tr><td><p>Deadline to Submit Written Questions</p></td>" +
+    "<td><p>3:00 PM Eastern Time on</p><p>August 5, 2026</p></td></tr>" +
+    "<tr><td><p>Response to Written Questions/Amendments</p></td><td><p>August 12, 2026</p></td></tr>" +
+    "<tr><td><p>Submission Due Date/Time </p></td>" +
+    "<td><p>September 17, 2026</p><p>by 3:00 PM Eastern Time</p></td></tr>" +
+    "</table>";
+  const f = extractFields(text);
+  expect(f.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-05");
+  expect(f.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
 });
