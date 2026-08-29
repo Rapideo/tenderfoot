@@ -823,9 +823,12 @@ import { resolveField } from "./precedence.js";
 /* The FSSA bundle, 26-87847. Three boilerplate PDFs, two deadlines, and the
  * CORRECT date in the file with the LEAST specific name. Every obvious
  * heuristic picks wrong; the portal listing was right. */
+/* The listing row is deliberately NOT first. With it at index 0 it is also
+ * `stated[0]`, so every assertion below passes against an implementation with
+ * no precedence rule at all -- verified by mutation. */
 const FSSA = [
-  { value_text: "2026-09-17", origin: "listing" as const, quote: null, document_id: null },
   { value_text: "2026-08-26", origin: "document" as const, quote: "due August 26, 2026", document_id: 1 },
+  { value_text: "2026-09-17", origin: "listing" as const, quote: null, document_id: null },
   { value_text: "2026-09-17", origin: "document" as const, quote: "due September 17, 2026", document_id: 2 },
   { value_text: "2026-08-26", origin: "document" as const, quote: "due August 26, 2026", document_id: 3 },
 ];
@@ -905,8 +908,20 @@ export function resolveField(rows: FieldRow[]): Resolved {
   return { value: winner.value_text, origin: winner.origin, conflicts };
 }
 
-/* §8.4's measurement, and it is a query rather than a harness: the listing is
- * ground truth for the fields it carries, so agreement counts itself. */
+/* §8.4's measurement, and it is a query rather than a harness. The listing is
+ * ground truth ONLY for the fields where it actually STATES a value: Task 9
+ * writes a NULL listing row for qa_closes_at and prebid_at on purpose, to
+ * record that the portal does not carry them. Without the l.value_text guard,
+ * IS DISTINCT FROM scores every correctly-extracted value for those two fields
+ * as a disagreement, and they read 0% accuracy forever.
+ *
+ * THIS MEASURES PRECISION, NOT RECALL. `d.value_text IS NOT NULL` drops rows
+ * where the extractor asserted nothing, so a document that carries a real
+ * deadline the extractor failed to classify never enters the numerator OR the
+ * denominator. The number answers "of the values the extractor stated, how many
+ * were right", not "of the values that were there to find, how many did it
+ * find". A missed deadline is the failure this slice cares about most, and this
+ * measurement does not see it. */
 export async function accuracyByField(): Promise<
   { field_name: string; agreed: number; disagreed: number }[]
 > {
@@ -920,6 +935,7 @@ export async function accuracyByField(): Promise<
          ON l.solicitation_id = d.solicitation_id
         AND l.field_name      = d.field_name
         AND l.origin          = 'listing'
+        AND l.value_text IS NOT NULL
       WHERE d.origin = 'document' AND d.value_text IS NOT NULL
       GROUP BY d.field_name
       ORDER BY d.field_name`,
