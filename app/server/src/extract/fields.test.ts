@@ -259,3 +259,35 @@ test("inside a table, a cell's second paragraph still sees its own row's label",
   expect(f.find((x) => x.field_name === "qa_closes_at")?.value_text).toBe("2026-08-05");
   expect(f.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
 });
+
+test("an unmatched <table> does not suppress the paragraph clamp for the rest of the document", () => {
+  /* Round 5 (CRITICAL). The <table> guard was a counter, so one open with no
+   * close disabled the </p> clamp for everything after it -- re-opening the
+   * exact round-4 failure: the close date filed as qa_closes_at at 0.6
+   * confidence, quoted with "Questions and Clarifications" so the wrong
+   * answer reads like corroboration. Opens are now PAIRED with closes and an
+   * unmatched open is ignored.
+   *
+   * Not reachable through mammoth today -- it escapes < in text content, and
+   * across all 72 corpus texts final depth is 0 with 0 stray closes. It
+   * becomes reachable at the wiring step, from a caller that truncates
+   * stored text mid-table or concatenates a PDF's plain text (which CAN
+   * contain a literal "<table") with a DOCX's HTML. Nothing in the signature
+   * states that precondition, so the function must not depend on it. */
+  const prose = "<p>Questions and Clarifications</p><p>Proposals are due September 17, 2026.</p>";
+
+  const unclosed = extractFields("<table><tr><td><p>Schedule of Events</p></td></tr>" + prose);
+  expect(unclosed.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
+  expect(unclosed.find((x) => x.field_name === "qa_closes_at")?.value_text).toBeNull();
+
+  /* A literal, unescaped "<table>" sitting in prose -- the same shape, from a
+   * source that does not escape the way mammoth does. */
+  const literal = extractFields("<p>See the <table> below.</p>" + prose);
+  expect(literal.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
+  expect(literal.find((x) => x.field_name === "qa_closes_at")?.value_text).toBeNull();
+
+  /* A stray </table> with no open must not throw or shift anything either. */
+  const stray = extractFields("</table>" + prose);
+  expect(stray.find((x) => x.field_name === "closes_at")?.value_text).toBe("2026-09-17");
+  expect(stray.find((x) => x.field_name === "qa_closes_at")?.value_text).toBeNull();
+});

@@ -44,35 +44,63 @@ const CUES: { field: FieldDraft["field_name"]; re: RegExp }[] = [
  * are not themselves boundaries. */
 const BLOCK = /\n|<\/tr>|<br\s*\/?>|<\/p>|<table[\s>]|<\/table>/gi;
 
-/* One pass per call. `</p>` counts only OUTSIDE a <table>: inside one,
- * mammoth wraps every cell in its own <p>, so a real two-column schedule row
- * arrives as <tr><td><p>label</p></td><td><p>date</p></td></tr> and a `</p>`
- * boundary would wall the date off from its own row's label -- the table
- * then extracts nothing (measured on the real mammoth HTML for
+/* One pass per call. `</p>` counts only OUTSIDE a MATCHED <table> span:
+ * inside one, mammoth wraps every cell in its own <p>, so a real two-column
+ * schedule row arrives as <tr><td><p>label</p></td><td><p>date</p></td></tr>
+ * and a `</p>` boundary would wall the date off from its own row's label --
+ * the table then extracts nothing (measured on the real mammoth HTML for
  * corpus/indiana/005030000087847/RFP26-87847 Addendum 1.docx). `</tr>` is
  * the row boundary there, and it is enough. In prose, `</p>` is mammoth's
  * ONLY paragraph marker, so without this rule the DOCX path has no paragraph
  * clamp while the plain-text path does -- and the two paths then disagree
  * about the same words, with the DOCX one failing unsafely (a heading
  * bleeding into the next paragraph's date files a close date as the Q&A
- * deadline, quoted so it reads like corroboration). */
+ * deadline, quoted so it reads like corroboration).
+ *
+ * The opens are PAIRED with their closes rather than counted, and an
+ * unmatched open is ignored. A bare counter would let one stray `<table`
+ * suppress `</p>` for the whole remainder of the document -- re-opening that
+ * same unsafe failure -- and three plausible inputs produce one: an unclosed
+ * table, a literal unescaped `<table>` in prose, and HTML truncated
+ * mid-table, which is what any length cap yields. None is reachable through
+ * mammoth today (it escapes `<` in text content; across all 72 corpus texts
+ * final depth is 0 and stray closes are 0), but the signature states no such
+ * precondition, and the callers that will truncate or concatenate texts are
+ * not written yet. */
 function blockBoundaries(text: string): { start: number; end: number }[] {
   const re = new RegExp(BLOCK.source, BLOCK.flags);
-  const out: { start: number; end: number }[] = [];
-  let depth = 0;
+  const toks: { tok: string; start: number; end: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    const tok = m[0].toLowerCase();
+    toks.push({ tok: m[0].toLowerCase(), start: m.index, end: m.index + m[0].length });
+  }
+
+  /* Pre-pass: pair each `</table>` with its most recent unclosed open and
+   * mark the tokens between them. Opens left on the stack at the end never
+   * closed, so they mark nothing -- an unmatched `<table` narrows no window
+   * and the text after it keeps its paragraph clamp. A `</table>` with no
+   * open is likewise ignored. */
+  const insideTable = new Array<boolean>(toks.length).fill(false);
+  const opens: number[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const tok = toks[i]!.tok;
     if (tok.startsWith("<table")) {
-      depth++;
-      continue;
+      opens.push(i);
+    } else if (tok === "</table>") {
+      const open = opens.pop();
+      if (open === undefined) continue;
+      for (let k = open + 1; k < i; k++) insideTable[k] = true;
     }
-    if (tok === "</table>") {
-      depth = Math.max(0, depth - 1);
-      continue;
-    }
-    if (tok === "</p>" && depth > 0) continue;
-    out.push({ start: m.index, end: m.index + m[0].length });
+  }
+
+  const out: { start: number; end: number }[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]!;
+    /* <table>/</table> are read for their nesting only; neither is itself a
+     * point where a different fact starts. */
+    if (t.tok.startsWith("<table") || t.tok === "</table>") continue;
+    if (t.tok === "</p>" && insideTable[i]) continue;
+    out.push({ start: t.start, end: t.end });
   }
   return out;
 }
