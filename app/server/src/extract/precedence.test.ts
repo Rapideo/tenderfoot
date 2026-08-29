@@ -40,6 +40,21 @@ test("documents decide when the listing has nothing to say", () => {
   expect(r.origin).toBe("document");
 });
 
+test("precedence is origin-based, not date-based", () => {
+  /* Synthetic, not the FSSA citation: the FSSA fixture's values are a
+   * multiset whose maximum already equals the correct (listing) answer, so
+   * no reordering of it can distinguish resolveField() from a bare
+   * "pick the later date" heuristic (fix round 1 finding). Here the
+   * document's date is chronologically LATER than the listing's, so a
+   * max-date mutant returns 2026-10-01 and fails; the real rule returns the
+   * listing's 2026-09-17 regardless. */
+  const r = resolveField([
+    { value_text: "2026-10-01", origin: "document", quote: "due October 1, 2026", document_id: 1 },
+    { value_text: "2026-09-17", origin: "listing", quote: null, document_id: null },
+  ]);
+  expect(r.value).toBe("2026-09-17");
+});
+
 test("looked-for-and-absent is not a conflict", () => {
   const r = resolveField([
     { value_text: "2026-09-17", origin: "listing", quote: null, document_id: null },

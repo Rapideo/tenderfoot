@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { useTestSchema, resetSchema } from "../db/testdb.js";
 
 /* accuracyByField() is the ONE database-touching export of precedence.ts.
@@ -14,6 +14,21 @@ import { useTestSchema, resetSchema } from "../db/testdb.js";
  * reintroducing it one layer up. */
 useTestSchema("test_accuracy");
 await resetSchema();
+
+/* Ruling 6 (SP2 T2 coordinator review; see db/schema.test.ts and
+ * db/migrate.test.ts for the same config). Vitest's default 5000ms
+ * testTimeout and 10000ms hookTimeout are too tight for a live round trip
+ * against the shared Neon test-branch compute: a cold start alone measures
+ * ~1.1s, and several agents can be running the suite concurrently against
+ * the same compute (each gets its own SCHEMA -- SP1.5 Ruling 3 -- but they
+ * still contend for the one compute's connections). This file's own
+ * beforeAll migrate() measured ~3.6s against the 10000ms default
+ * hookTimeout -- a 2.8x margin even uncontended, and
+ * scripts/clean-test-schemas.mjs records this exact failure already having
+ * been paid for once (corpus.test.ts tipping over the default under
+ * parallel load and failing a gate that had passed minutes earlier).
+ * 30000ms matches every other db-backed test file's margin. */
+vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("../db/migrate.js");
 const { insert, run, close } = await import("../db/index.js");
@@ -50,6 +65,11 @@ test("the FSSA case: two of three documents disagree with the listing", async ()
     );
   }
 
+  /* accuracyByField() GROUPs by field_name across the WHOLE schema, not
+   * scoped to the solicitation this test just inserted -- fix round 2,
+   * coordinator nit. This assertion is correct only because no other test
+   * in this file writes a 'closes_at' pair; a future test that did would
+   * silently change these numbers without touching this test's own rows. */
   const rows = await accuracyByField();
   expect(rows.find((r) => r.field_name === "closes_at")).toMatchObject({
     agreed: 1,
