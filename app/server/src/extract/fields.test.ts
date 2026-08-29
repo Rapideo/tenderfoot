@@ -171,8 +171,11 @@ test("the quote's trailing edge stops at the next block boundary, not inside a d
   /* Round 3, fix 3. The leading edge was clamped in round 2; the trailing
    * edge was not, so a quote could run past the classified date straight
    * into the text of a SECOND, unrelated date -- the same reading hazard
-   * that made Critical 1 hard to catch by eye. */
-  const text = "<p>Submission Due Date/Time is September 17, 2026</p><p>August 12, 2026</p>";
+   * that made Critical 1 hard to catch by eye. Uses <br>, not </p>: round
+   * 4 dropped </p> (and </td>) from the boundary set entirely, since
+   * mammoth wraps every table cell in its own <p> and clamping there walls
+   * a date off from its own row's cue. */
+  const text = "Submission Due Date/Time is September 17, 2026<br>August 12, 2026";
   const f = extractFields(text);
   const closes = f.find((x) => x.field_name === "closes_at");
   expect(closes?.value_text).toBe("2026-09-17");

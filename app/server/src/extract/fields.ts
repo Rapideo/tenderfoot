@@ -35,15 +35,30 @@ const CUES: { field: FieldDraft["field_name"]; re: RegExp }[] = [
   { field: "closes_at", re: /\bdue\b|\bdeadline\b|\bclosing\b|\bsubmitted by\b|\breceived by\b/i },
 ];
 
-/* HTML block boundaries. mammoth.convertToHtml -- the DOCX path -- emits
- * ZERO newlines: 52/52 corpus DOCX measured zero "\n" in their converted
- * text. A schedule table survives conversion as one <tr><td>...</td></tr>
- * per row (see parsers/docx.test.ts), so a plain "\n" clamp is a no-op on
- * most of the corpus and the schedule-table misattribution (a date reading
- * its neighbouring row's cue) stays live there. These closing tags, plus
- * the various <br> spellings, are the real row/paragraph boundaries on that
- * path; "\n" is kept for the plain-text path (PDF, XLSX). */
-const BLOCK = /\n|<\/p>|<\/tr>|<\/td>|<br\s*\/?>/gi;
+/* HTML block boundaries -- ROW only, not paragraph or cell.
+ *
+ * mammoth.convertToHtml -- the DOCX path -- emits ZERO newlines: 52/52
+ * corpus DOCX measured zero "\n" in their converted text, so a plain "\n"
+ * clamp is a no-op on most of the corpus. A schedule table survives
+ * conversion as <tr><td><p>label</p></td><td><p>value</p></td></tr> --
+ * mammoth wraps EVERY cell's content in its own <p>, so the label and its
+ * value, though they belong to one logical row, sit in sibling <p>s and
+ * sibling <td>s. `</p>` and `</td>` therefore cut FINER than the meaning:
+ * clamping on either one walls a date off from the very cue that names it,
+ * and a real schedule table yields nothing (confirmed against the real
+ * mammoth HTML for corpus/indiana/005030000087847/RFP26-87847 Addendum
+ * 1.docx). `</tr>` is the boundary that means "a different fact starts
+ * here" for a table. Kept `\n` for the plain-text path (PDF, XLSX) and
+ * `<br>` (all spellings) since neither of those introduces this problem.
+ *
+ * Accepted cost: DOCX prose paragraphs no longer clamp at all, since
+ * mammoth's only paragraph marker is the `</p>` this drops -- a section
+ * heading can still bleed into the next paragraph's date on that path.
+ * That is the same failure class as the hard-wrap and cover-page cases
+ * already deferred to the accuracy-instrument work; extracting nothing
+ * from a table is strictly worse, and tables are the layout this slice
+ * exists to read. */
+const BLOCK = /\n|<\/tr>|<br\s*\/?>/gi;
 
 /* The end of the nearest BLOCK match starting before `at`, or 0 if none.
  * A fresh RegExp per call avoids sharing lastIndex state across dates. */
