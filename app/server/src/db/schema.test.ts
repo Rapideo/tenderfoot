@@ -294,3 +294,28 @@ test("origin is constrained to the two it may be", async () => {
     ),
   ).rejects.toMatchObject({ code: "23514" });
 });
+
+test("a field may have many document rows but only one listing row", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title) VALUES ('one listing') RETURNING id`,
+  );
+  const doc = `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+               VALUES ($1, 'closes_at', $2, 'document', 'mechanical')`;
+  /* Many document rows are REQUIRED, not merely tolerated. */
+  await dbRun(doc, [sol, "2026-08-26"]);
+  await dbRun(doc, [sol, "2026-09-17"]);
+
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 'mechanical')`,
+    [sol],
+  );
+  /* 23505 is unique_violation, asserted by SQLSTATE rather than message text. */
+  await expect(
+    dbRun(
+      `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+       VALUES ($1, 'closes_at', '2026-10-01', 'listing', 'mechanical')`,
+      [sol],
+    ),
+  ).rejects.toMatchObject({ code: "23505" });
+});
