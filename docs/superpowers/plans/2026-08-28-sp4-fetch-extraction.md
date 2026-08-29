@@ -963,17 +963,56 @@ git commit -m "Apply precedence at read time, and keep the disagreement"
 - Test: `app/server/src/db/schema.test.ts` (append one constraint test)
 
 **Interfaces:**
-- Produces: `export async function discoverAttachments(limit: number, fetchImpl?: typeof fetch): Promise<{ solicitations: number; documents: number }>`
+- Produces: `export async function discoverAttachments(limit: number, fetchImpl?: typeof fetch): Promise<{ solicitations: number; skipped: number; documents: number }>`
+  - `skipped` was added in fix round 1 (item 4): it is what lets a caller tell "nothing to fetch"
+    (`skipped: 0`) from "every request failed" (`skipped === solicitations`). Task 11's handler
+    returns the object with `res.json(result)`, so the field reaches the admin endpoint unchanged.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-import { expect, test, vi } from "vitest";
-import { discoverAttachments } from "./discover.js";
+import { afterAll, expect, test, vi } from "vitest";
 import { useTestSchema, resetSchema } from "../db/testdb.js";
-import { all, insert } from "../db/index.js";
 
-useTestSchema("discover");
+/* Point at a scratch SCHEMA before importing anything that opens a pool.
+ * discover.ts has a STATIC top-level `import ... from "../db/index.js"`
+ * (correct there -- every export of discover.ts is db-backed, unlike
+ * precedence.ts, which keeps a pure half free of any database import). That
+ * means importing discover.js itself, not only db/index.js directly, must
+ * happen AFTER useTestSchema() runs: a static `import` at the top of THIS
+ * file is hoisted ahead of any top-level statement regardless of where it
+ * sits in the source, so db/index.ts's module-level `pool` would otherwise
+ * get built from whatever DATABASE_URL happened to be ambient (unset under
+ * `npm run check`, or the real one under a plain `vitest run` with .env
+ * loaded) with no TENDERFOOT_SCHEMA search_path at all -- not this test's
+ * isolated schema. Every other db-backed test file in this codebase
+ * (db/schema.test.ts, db/migrate.test.ts, db/health-schema.test.ts,
+ * extract/accuracy.test.ts) avoids exactly this by importing such modules
+ * dynamically, after useTestSchema(); this file follows the same shape.
+ *
+ * Fix round 1, item 6: named "test_discover", not "discover". testdb.ts
+ * suffixes this to "<logical>_<runSuffix>", and
+ * scripts/clean-test-schemas.mjs only ever reclaims schemas matching
+ * test_%, bench_%, or verify_% -- every one of the twelve sibling
+ * db-backed test files already uses a "test_" prefix. A bare "discover"
+ * prefix is exactly the leak that script's own header comment documents
+ * having already cost the project once (106 abandoned schemas, a suite
+ * slow enough to fail its own timeout). */
+useTestSchema("test_discover");
+
+/* Ruling 6 (SP2 T2 coordinator review), same as every other db-backed test
+ * file (db/schema.test.ts, db/migrate.test.ts, extract/accuracy.test.ts):
+ * the shared Neon test-branch compute cold-starts at ~1.1s and is contended
+ * by parallel test files, so the 5000ms/10000ms defaults are too tight. */
+vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
+
+const { migrate } = await import("../db/migrate.js");
+const { discoverAttachments } = await import("./discover.js");
+const { all, insert, close } = await import("../db/index.js");
+
+afterAll(async () => {
+  await close();
+});
 
 const SAM_RESPONSE = {
   _embedded: {
@@ -991,12 +1030,22 @@ const SAM_RESPONSE = {
 
 test("inserts one pending document per existing attachment", async () => {
   await resetSchema();
+  /* resetSchema() drops every table migrate() created, including
+   * schema_migrations itself -- each test in this file wants its own
+   * independently empty schema (unlike the other db-backed test files,
+   * which reset once for the whole file), so migrate() must be re-run
+   * after every reset or the INSERT below fails with "relation
+   * \"solicitation\" does not exist". */
+  await migrate(false);
   await insert(
     `INSERT INTO solicitation (title, external_id, closes_at)
      VALUES ('live one', 'abc123', $1) RETURNING id`,
     [new Date(Date.now() + 86_400_000).toISOString()],
   );
-  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+  const stub = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
+  );
 
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
 
@@ -1006,7 +1055,27 @@ test("inserts one pending document per existing attachment", async () => {
   );
   expect(docs.map((d) => d.filename)).toEqual(["Pricing.xlsx", "RFP.pdf"]);
   expect(docs.every((d) => d.extract_status === "pending")).toBe(true);
-  expect(docs.every((d) => d.source_url.length > 0)).toBe(true);
+
+  /* Fix round 1, CRITICAL 1: `source_url.length > 0` was the only thing
+   * pinning the endpoint, and it passes just as happily against the wrong
+   * host this task originally shipped -- a URL written from memory that
+   * 404s on every id. Both URLs are spelled out here as LITERALS rather
+   * than built from the imported SAM_HOST on purpose: a test that composes
+   * the same constant the implementation composes moves with it, and would
+   * have stayed green through the exact defect it is here to catch. These
+   * two strings were verified live against SAM.gov. */
+  expect(stub.mock.calls[0]?.[0]).toBe(
+    "https://sam.gov/api/prod/opps/v3/opportunities/abc123/resources",
+  );
+  expect(docs.map((d) => d.source_url)).toEqual([
+    "https://sam.gov/api/prod/opps/v3/opportunities/resources/files/r2/download",
+    "https://sam.gov/api/prod/opps/v3/opportunities/resources/files/r1/download",
+  ]);
+  /* sam.ts's adapter and probe both treat the User-Agent as mandatory --
+   * the default Node agent is rejected outright. */
+  expect(
+    (stub.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+  ).toMatchObject({ "User-Agent": expect.stringContaining("Mozilla") });
 });
 
 test("writes the portal's own values as listing rows", async () => {
@@ -1015,6 +1084,7 @@ test("writes the portal's own values as listing rows", async () => {
    * spec's whole ground-truth argument -- "the portal listing doubles as
    * ground truth ... Accuracy is a query" -- would be unbuildable. */
   await resetSchema();
+  await migrate(false);
   await insert(
     `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
      VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
@@ -1029,10 +1099,25 @@ test("writes the portal's own values as listing rows", async () => {
       WHERE origin = 'listing' ORDER BY field_name`,
   );
   const byName = Object.fromEntries(listing.map((r) => [r.field_name, r.value_text]));
+
+  /* Fix round 1, item 5: pins the WHOLE six-field set by name. Before this,
+   * reverting LISTING_FIELDS back to the brief's wrong 'kind' entry left
+   * all four tests in this file green -- none of them named the field that
+   * silently went missing (prebid_required). Object.keys, not
+   * toHaveProperty per-field, is what actually catches an extra or missing
+   * name. */
+  expect(Object.keys(byName).sort()).toEqual([
+    "closes_at", "prebid_at", "prebid_required", "qa_closes_at", "set_aside", "value_cents",
+  ]);
   expect(byName["set_aside"]).toBe("SBA");
   expect(byName["closes_at"]).not.toBeNull();
   /* A field the portal does not carry is ABSENT, not omitted -- the same
-   * three-state discipline the document side uses. */
+   * three-state discipline the document side uses. toHaveProperty, not a
+   * bare index read, is what actually proves the row EXISTS: `byName
+   * ["qa_closes_at"]` alone reads as `undefined` identically whether the
+   * row is present with value_text NULL or simply missing -- the
+   * Object.keys assertion above closes that gap too, but this pins the
+   * NULL value specifically. */
   expect(byName).toHaveProperty("qa_closes_at", null);
 });
 
@@ -1040,6 +1125,7 @@ test("does not duplicate listing rows when run twice", async () => {
   /* Discover skips solicitations that already have documents, but a
    * solicitation with NO attachments would be revisited. */
   await resetSchema();
+  await migrate(false);
   await insert(
     `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
     [new Date(Date.now() + 86_400_000).toISOString()],
@@ -1055,6 +1141,7 @@ test("does not duplicate listing rows when run twice", async () => {
 
 test("skips solicitations whose deadline has passed", async () => {
   await resetSchema();
+  await migrate(false);
   await insert(
     `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
   );
@@ -1062,6 +1149,159 @@ test("skips solicitations whose deadline has passed", async () => {
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
   expect(r.solicitations).toBe(0);
   expect(stub).not.toHaveBeenCalled();
+});
+
+test("a solicitation with only SOME listing fields already written gains the rest on a later run", async () => {
+  /* Fix round 1, item 8: the OLD read-then-write guard returned early the
+   * moment ANY listing row existed for a solicitation -- so a run that died
+   * partway through (three of six fields written, say) left that
+   * solicitation looking "already done" PERMANENTLY, with no path to ever
+   * fill the other three. This pins the replacement's self-repair property:
+   * a pre-existing partial set gets topped up, not skipped. */
+  await resetSchema();
+  await migrate(false);
+  const sol = await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at, set_aside)
+     VALUES ('partial', 'abc123', $1, 'SBA') RETURNING id`,
+    [new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  /* Simulates exactly one field surviving an earlier, interrupted run. */
+  await insert(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-01', 'listing', 1.0, 'mechanical') RETURNING id`,
+    [sol],
+  );
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  const listing = await all<{ field_name: string; value_text: string | null }>(
+    `SELECT field_name, value_text FROM extracted_field
+      WHERE solicitation_id = $1 AND origin = 'listing' ORDER BY field_name`,
+    [sol],
+  );
+  expect(listing.map((r) => r.field_name)).toEqual([
+    "closes_at", "prebid_at", "prebid_required", "qa_closes_at", "set_aside", "value_cents",
+  ]);
+  /* ON CONFLICT DO NOTHING, not DO UPDATE -- the surviving row from the
+   * earlier run is left exactly as it was, not overwritten by this run's
+   * (equally correct, but different-looking-in-principle) recomputed value. */
+  expect(listing.find((r) => r.field_name === "closes_at")?.value_text).toBe("2026-09-01");
+  expect(listing.find((r) => r.field_name === "set_aside")?.value_text).toBe("SBA");
+});
+
+test("admits solicitations with NO close date, dated ones first", async () => {
+  /* Fix round 1, CRITICAL 2: `left(closes_at, 10) >= ...` evaluates to NULL
+   * for a NULL closes_at and WHERE treats that as false, so the original
+   * predicate silently excluded EVERY SAM.gov solicitation -- measured on
+   * production, 9,682 of them, none carrying a close date. The task
+   * inserted zero documents not because the fetch failed but because the
+   * candidate list was empty. Nothing in this file caught it: every
+   * fixture happened to set closes_at.
+   *
+   * This pins both halves of the fix -- undated rows are ADMITTED, and
+   * NULLS LAST keeps a real deadline ahead of them when one exists. */
+  await resetSchema();
+  await migrate(false);
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
+    [new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  const stub = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
+  );
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(2);
+  const requested = stub.mock.calls.map((c) => String(c[0]));
+  expect(requested[0]).toContain("has-date");
+  expect(requested[1]).toContain("no-date");
+});
+
+test("skips a malformed attachment without losing the rest of the batch", async () => {
+  /* Fix round 1, item 3: document.filename is NOT NULL, so an attachment
+   * SAM.gov returns without a name threw 23502 from inside a loop with no
+   * try/catch -- taking out this solicitation's remaining attachments AND
+   * every candidate after it. resourceId is unconstrained and fails more
+   * quietly: it yields the well-formed URL `.../files/undefined/download`,
+   * and a document row Task 10 fetches, fails, and marks failed forever.
+   *
+   * Two solicitations, not one, because the claim being pinned is about
+   * the BATCH surviving, not just the attachment being skipped. */
+  await resetSchema();
+  await migrate(false);
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  );
+  const malformed = {
+    _embedded: {
+      opportunityAttachmentList: [
+        {
+          attachments: [
+            { resourceId: "r1", type: "file", fileExists: "1" }, // no name
+            { name: "NoId.pdf", type: "file", fileExists: "1" }, // no resourceId
+            { name: "Good.pdf", resourceId: "r3", type: "file", fileExists: "1" },
+          ],
+        },
+      ],
+    },
+  };
+  const stub = vi.fn(async () => new Response(JSON.stringify(malformed), { status: 200 }));
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(2);
+  expect(r.documents).toBe(2); // one good attachment from EACH solicitation
+  const docs = await all<{ filename: string }>(`SELECT filename FROM document`);
+  expect(docs.map((d) => d.filename)).toEqual(["Good.pdf", "Good.pdf"]);
+});
+
+test("counts a failed fetch as skipped and keeps going", async () => {
+  /* Fix round 1, item 4: a THROWN fetch (DNS failure, connection reset)
+   * used to kill the whole batch while a non-OK response merely skipped one
+   * solicitation -- an inconsistency, not a deliberate distinction. Both
+   * now skip one solicitation and are counted, which is what lets an
+   * operator tell "nothing to fetch" (skipped 0) from "every request
+   * failed" (skipped === solicitations).
+   *
+   * Also pins the ordering inside the loop: listing rows are written
+   * BEFORE the fetch, so ground truth still lands for a solicitation whose
+   * attachment request never succeeds. */
+  await resetSchema();
+  await migrate(false);
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
+  );
+  const stub = vi
+    .fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }))
+    .mockRejectedValueOnce(new TypeError("fetch failed"))
+    .mockResolvedValueOnce(new Response("not json", { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(3);
+  expect(r.skipped).toBe(2); // the throw AND the unparseable body
+  expect(r.documents).toBe(2); // only the third solicitation's attachments
+  const listing = await all<{ c: string }>(
+    `SELECT count(*) AS c FROM extracted_field WHERE origin = 'listing'`,
+  );
+  expect(Number(listing[0]?.c)).toBe(18); // six fields x three solicitations
 });
 ```
 
@@ -1121,25 +1361,51 @@ test("a field may have many document rows but only one listing row", async () =>
 - [ ] **Step 4: Implement**
 
 ```ts
-import { all, one, insert } from "../db/index.js";
+import { all, run, insert } from "../db/index.js";
+import { SAM_HOST } from "../scrape/adapters/sam.js";
 
-const SAM_RESOURCES = "https://api.sam.gov/prod/opportunity/v1/api/";
+/* Task 9 fix round 1 (CRITICAL): the original host here was
+ * `https://api.sam.gov/prod/opportunity/v1/api/`, written from memory and
+ * never verified -- it 404s on every id shape, so this function inserted
+ * zero documents, ever. The real, working, unauthenticated endpoints (same
+ * host the scrape adapter and health probe already use -- see SAM_HOST's
+ * own comment) are:
+ *
+ *   {SAM_HOST}/opps/v3/opportunities/{noticeId}/resources           -- list
+ *   {SAM_HOST}/opps/v3/opportunities/resources/files/{resourceId}/download
+ *                                                    -- 303 -> signed S3
+ *
+ * The response SHAPE this file already parses (_embedded.
+ * opportunityAttachmentList[].attachments[]) was correct from the start;
+ * only the URL was wrong. */
+const resourcesUrl = (noticeId: string): string =>
+  `${SAM_HOST}/opps/v3/opportunities/${encodeURIComponent(noticeId)}/resources`;
+const downloadUrl = (resourceId: string): string =>
+  `${SAM_HOST}/opps/v3/opportunities/resources/files/${encodeURIComponent(resourceId)}/download`;
 
-/* Nearest LIVE deadline first; closed solicitations are skipped entirely.
- * Production holds ~9,900 solicitations and most are closed, so this makes
- * the first batch the useful batch. */
+/* Fix round 1: measured on production, SAM.gov holds 9,682 solicitations and
+ * ZERO with a non-null closes_at -- they are not closed, SAM ingest simply
+ * never populates the column. That is a gap in the ingestion slice
+ * surfacing here, not something this task owns or can repair; the fix here
+ * is only to stop silently excluding every one of them. `left(...) >= ...`
+ * on a NULL closes_at evaluates to NULL, which WHERE treats as false, so
+ * the original predicate passed only the 22 Indiana notices that happen to
+ * carry a date -- handing THEIR external_ids to the SAM.gov attachment API,
+ * which is wrong for a non-SAM source. Undated rows are now admitted and
+ * sort last, so a live deadline still wins the ordering when one exists. */
 const CANDIDATES = `
-  SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.kind, s.value_cents
+  SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
     FROM solicitation s
    WHERE s.external_id IS NOT NULL
-     AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')
+     AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
-   ORDER BY s.closes_at ASC
+   ORDER BY s.closes_at ASC NULLS LAST
    LIMIT $1`;
 
-/* The six fields SP4 extracts. The portal carries four of them; the other two
- * exist only in documents, and get an ABSENT listing row so that "the portal
- * does not carry this" is a recorded fact rather than a gap. */
+/* The six fields SP4 extracts (fields.ts's FieldDraft["field_name"]). The
+ * portal carries four of them; the other two exist only in documents, and
+ * get an ABSENT listing row so that "the portal does not carry this" is a
+ * recorded fact rather than a gap. */
 const LISTING_FIELDS = [
   "closes_at", "set_aside", "prebid_required", "value_cents", "qa_closes_at", "prebid_at",
 ] as const;
@@ -1149,69 +1415,134 @@ interface Candidate {
   external_id: string;
   closes_at: string | null;
   set_aside: string | null;
-  kind: string | null;
+  prebid_required: boolean | null;
   value_cents: string | null;
+}
+
+interface AttachmentsResponse {
+  _embedded?: { opportunityAttachmentList?: { attachments?: Record<string, string>[] }[] };
 }
 
 /* THE GROUND TRUTH ROWS. corpus/FINDINGS.md §1 established that the portal's
  * structured field was right where all three documents were unreliable, so the
  * listing is what document extraction is measured AGAINST. Nothing else in this
  * slice writes origin='listing'; without this, Task 8's accuracy query joins
- * against an empty set forever. */
+ * against an empty set forever.
+ *
+ * Fix round 1, item 8: this used to be a read-then-write guard ("if any
+ * listing row exists for this solicitation, do nothing") wrapped around six
+ * separate INSERTs. That guard's failure mode is PERMANENT, not merely
+ * racy: a run that died after writing three of six fields left the
+ * solicitation looking "already done" forever, and nothing ever repaired
+ * it. It also could not be made concurrency-safe by bolting `ON CONFLICT
+ * DO NOTHING` onto `insert()` -- that helper throws when a conflict
+ * produces no RETURNING row, which is exactly what DO NOTHING does.
+ *
+ * Replaced with ONE statement via `run()`, driven by two parallel arrays
+ * unnested into rows, with the partial index from migration 009 as the
+ * conflict target. This is naturally idempotent (a re-run of a field that
+ * already exists is a no-op) AND naturally self-repairing (a re-run finds
+ * and fills only the fields still missing) -- both properties the old guard
+ * actively prevented by returning early the moment ANY listing row existed. */
 async function writeListingRows(c: Candidate): Promise<void> {
-  const already = await one<{ c: string }>(
-    `SELECT count(*) AS c FROM extracted_field WHERE solicitation_id = $1 AND origin = 'listing'`,
-    [c.id],
-  );
-  if (Number(already?.c ?? 0) > 0) return;
-
   const value: Record<string, string | null> = {
-    closes_at: c.closes_at,
+    /* Fix round 1, item 7: normalised to the date prefix on write.
+     * accuracyByField compares value_text by raw string equality and the
+     * document side always emits YYYY-MM-DD (fields.ts's `iso()`).
+     * Production's closes_at values happen to already be bare dates today,
+     * but this fixture (and any future ISO-8601-with-time value) is not --
+     * left uncut, a correct document extraction would compare
+     * "2026-08-28" against "2026-08-28T00:00:00.000Z" and score as a
+     * disagreement, in the slice's own ground truth. */
+    closes_at: c.closes_at === null ? null : c.closes_at.slice(0, 10),
     set_aside: c.set_aside,
-    kind: c.kind,
+    prebid_required: c.prebid_required === null ? null : String(c.prebid_required),
     value_cents: c.value_cents === null ? null : String(c.value_cents),
     qa_closes_at: null,
     prebid_at: null,
   };
-  for (const f of LISTING_FIELDS) {
-    await insert(
-      `INSERT INTO extracted_field
-         (solicitation_id, field_name, value_text, origin, confidence, produced_by)
-       VALUES ($1, $2, $3, 'listing', 1.0, 'mechanical') RETURNING id`,
-      [c.id, f, value[f] ?? null],
-    );
-  }
+  const names = [...LISTING_FIELDS];
+  const values = names.map((f) => value[f] ?? null);
+
+  await run(
+    `INSERT INTO extracted_field
+           (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+     SELECT $1, f.name, f.val, 'listing', 1.0, 'mechanical'
+       FROM unnest($2::text[], $3::text[]) AS f(name, val)
+     ON CONFLICT (solicitation_id, field_name) WHERE origin = 'listing' DO NOTHING`,
+    [c.id, names, values],
+  );
 }
 
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ solicitations: number; documents: number }> {
+): Promise<{ solicitations: number; skipped: number; documents: number }> {
   const rows = await all<Candidate>(CANDIDATES, [limit]);
   let documents = 0;
+  let skipped = 0;
 
   for (const s of rows) {
     await writeListingRows(s);
-    const url = `${SAM_RESOURCES}${encodeURIComponent(s.external_id)}/resources`;
-    const res = await fetchImpl(url);
-    if (!res.ok) continue;
-    const body = (await res.json()) as {
-      _embedded?: { opportunityAttachmentList?: { attachments?: Record<string, string>[] }[] };
-    };
+
+    /* Fix round 1, item 4: a thrown fetch (network error) used to kill the
+     * WHOLE batch, while a non-OK response only skipped this one
+     * solicitation -- an inconsistency, not a deliberate distinction. Both
+     * now skip just this solicitation and are counted the same way, so an
+     * operator can tell "nothing to fetch" (skipped: 0) from "every request
+     * failed" (skipped === solicitations) once this fix lands. The
+     * User-Agent is not decoration -- sam.ts's adapter and probe both treat
+     * it as mandatory; the default Node agent is rejected. */
+    const url = resourcesUrl(s.external_id);
+    let res: Response;
+    try {
+      res = await fetchImpl(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    } catch {
+      skipped++;
+      continue;
+    }
+    if (!res.ok) {
+      skipped++;
+      continue;
+    }
+
+    let body: AttachmentsResponse;
+    try {
+      body = (await res.json()) as AttachmentsResponse;
+    } catch {
+      skipped++;
+      continue;
+    }
+
     const list = body._embedded?.opportunityAttachmentList ?? [];
     for (const group of list) {
       for (const a of group.attachments ?? []) {
         if (a.fileExists !== "1") continue;
+        /* Fix round 1, item 3: `a.name` is typed as string but SAM.gov can
+         * hand back an attachment with no name at runtime. document.filename
+         * is NOT NULL, so an unguarded insert throws 23502 with no
+         * try/catch around this loop -- which aborted this solicitation's
+         * WHOLE remaining attachment list AND every candidate after it in
+         * the batch. Skip just the malformed attachment instead; it is
+         * simply never counted as a document.
+         *
+         * `a.resourceId` needs the SAME guard for a quieter reason: it is
+         * NOT NULL-constrained by anything, so a missing one produces the
+         * perfectly well-formed URL `.../files/undefined/download` and a
+         * document row that Task 10 then fetches, fails, and marks failed
+         * forever. tsconfig's noUncheckedIndexedAccess is what forces the
+         * check to be written; the runtime reason is the one that matters. */
+        if (!a.name || !a.resourceId) continue;
         await insert(
           `INSERT INTO document (solicitation_id, filename, source_url, extract_status)
            VALUES ($1, $2, $3, 'pending') RETURNING id`,
-          [s.id, a.name, `${SAM_RESOURCES}core/download?token=${a.resourceId}`],
+          [s.id, a.name, downloadUrl(a.resourceId)],
         );
         documents++;
       }
     }
   }
-  return { solicitations: rows.length, documents };
+  return { solicitations: rows.length, skipped, documents };
 }
 ```
 

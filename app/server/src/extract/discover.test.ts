@@ -15,8 +15,17 @@ import { useTestSchema, resetSchema } from "../db/testdb.js";
  * isolated schema. Every other db-backed test file in this codebase
  * (db/schema.test.ts, db/migrate.test.ts, db/health-schema.test.ts,
  * extract/accuracy.test.ts) avoids exactly this by importing such modules
- * dynamically, after useTestSchema(); this file follows the same shape. */
-useTestSchema("discover");
+ * dynamically, after useTestSchema(); this file follows the same shape.
+ *
+ * Fix round 1, item 6: named "test_discover", not "discover". testdb.ts
+ * suffixes this to "<logical>_<runSuffix>", and
+ * scripts/clean-test-schemas.mjs only ever reclaims schemas matching
+ * test_%, bench_%, or verify_% -- every one of the twelve sibling
+ * db-backed test files already uses a "test_" prefix. A bare "discover"
+ * prefix is exactly the leak that script's own header comment documents
+ * having already cost the project once (106 abandoned schemas, a suite
+ * slow enough to fail its own timeout). */
+useTestSchema("test_discover");
 
 /* Ruling 6 (SP2 T2 coordinator review), same as every other db-backed test
  * file (db/schema.test.ts, db/migrate.test.ts, extract/accuracy.test.ts):
@@ -60,7 +69,10 @@ test("inserts one pending document per existing attachment", async () => {
      VALUES ('live one', 'abc123', $1) RETURNING id`,
     [new Date(Date.now() + 86_400_000).toISOString()],
   );
-  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+  const stub = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
+  );
 
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
 
@@ -70,7 +82,27 @@ test("inserts one pending document per existing attachment", async () => {
   );
   expect(docs.map((d) => d.filename)).toEqual(["Pricing.xlsx", "RFP.pdf"]);
   expect(docs.every((d) => d.extract_status === "pending")).toBe(true);
-  expect(docs.every((d) => d.source_url.length > 0)).toBe(true);
+
+  /* Fix round 1, CRITICAL 1: `source_url.length > 0` was the only thing
+   * pinning the endpoint, and it passes just as happily against the wrong
+   * host this task originally shipped -- a URL written from memory that
+   * 404s on every id. Both URLs are spelled out here as LITERALS rather
+   * than built from the imported SAM_HOST on purpose: a test that composes
+   * the same constant the implementation composes moves with it, and would
+   * have stayed green through the exact defect it is here to catch. These
+   * two strings were verified live against SAM.gov. */
+  expect(stub.mock.calls[0]?.[0]).toBe(
+    "https://sam.gov/api/prod/opps/v3/opportunities/abc123/resources",
+  );
+  expect(docs.map((d) => d.source_url)).toEqual([
+    "https://sam.gov/api/prod/opps/v3/opportunities/resources/files/r2/download",
+    "https://sam.gov/api/prod/opps/v3/opportunities/resources/files/r1/download",
+  ]);
+  /* sam.ts's adapter and probe both treat the User-Agent as mandatory --
+   * the default Node agent is rejected outright. */
+  expect(
+    (stub.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+  ).toMatchObject({ "User-Agent": expect.stringContaining("Mozilla") });
 });
 
 test("writes the portal's own values as listing rows", async () => {
@@ -94,10 +126,25 @@ test("writes the portal's own values as listing rows", async () => {
       WHERE origin = 'listing' ORDER BY field_name`,
   );
   const byName = Object.fromEntries(listing.map((r) => [r.field_name, r.value_text]));
+
+  /* Fix round 1, item 5: pins the WHOLE six-field set by name. Before this,
+   * reverting LISTING_FIELDS back to the brief's wrong 'kind' entry left
+   * all four tests in this file green -- none of them named the field that
+   * silently went missing (prebid_required). Object.keys, not
+   * toHaveProperty per-field, is what actually catches an extra or missing
+   * name. */
+  expect(Object.keys(byName).sort()).toEqual([
+    "closes_at", "prebid_at", "prebid_required", "qa_closes_at", "set_aside", "value_cents",
+  ]);
   expect(byName["set_aside"]).toBe("SBA");
   expect(byName["closes_at"]).not.toBeNull();
   /* A field the portal does not carry is ABSENT, not omitted -- the same
-   * three-state discipline the document side uses. */
+   * three-state discipline the document side uses. toHaveProperty, not a
+   * bare index read, is what actually proves the row EXISTS: `byName
+   * ["qa_closes_at"]` alone reads as `undefined` identically whether the
+   * row is present with value_text NULL or simply missing -- the
+   * Object.keys assertion above closes that gap too, but this pins the
+   * NULL value specifically. */
   expect(byName).toHaveProperty("qa_closes_at", null);
 });
 
@@ -129,4 +176,157 @@ test("skips solicitations whose deadline has passed", async () => {
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
   expect(r.solicitations).toBe(0);
   expect(stub).not.toHaveBeenCalled();
+});
+
+test("a solicitation with only SOME listing fields already written gains the rest on a later run", async () => {
+  /* Fix round 1, item 8: the OLD read-then-write guard returned early the
+   * moment ANY listing row existed for a solicitation -- so a run that died
+   * partway through (three of six fields written, say) left that
+   * solicitation looking "already done" PERMANENTLY, with no path to ever
+   * fill the other three. This pins the replacement's self-repair property:
+   * a pre-existing partial set gets topped up, not skipped. */
+  await resetSchema();
+  await migrate(false);
+  const sol = await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at, set_aside)
+     VALUES ('partial', 'abc123', $1, 'SBA') RETURNING id`,
+    [new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  /* Simulates exactly one field surviving an earlier, interrupted run. */
+  await insert(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-01', 'listing', 1.0, 'mechanical') RETURNING id`,
+    [sol],
+  );
+  const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  const listing = await all<{ field_name: string; value_text: string | null }>(
+    `SELECT field_name, value_text FROM extracted_field
+      WHERE solicitation_id = $1 AND origin = 'listing' ORDER BY field_name`,
+    [sol],
+  );
+  expect(listing.map((r) => r.field_name)).toEqual([
+    "closes_at", "prebid_at", "prebid_required", "qa_closes_at", "set_aside", "value_cents",
+  ]);
+  /* ON CONFLICT DO NOTHING, not DO UPDATE -- the surviving row from the
+   * earlier run is left exactly as it was, not overwritten by this run's
+   * (equally correct, but different-looking-in-principle) recomputed value. */
+  expect(listing.find((r) => r.field_name === "closes_at")?.value_text).toBe("2026-09-01");
+  expect(listing.find((r) => r.field_name === "set_aside")?.value_text).toBe("SBA");
+});
+
+test("admits solicitations with NO close date, dated ones first", async () => {
+  /* Fix round 1, CRITICAL 2: `left(closes_at, 10) >= ...` evaluates to NULL
+   * for a NULL closes_at and WHERE treats that as false, so the original
+   * predicate silently excluded EVERY SAM.gov solicitation -- measured on
+   * production, 9,682 of them, none carrying a close date. The task
+   * inserted zero documents not because the fetch failed but because the
+   * candidate list was empty. Nothing in this file caught it: every
+   * fixture happened to set closes_at.
+   *
+   * This pins both halves of the fix -- undated rows are ADMITTED, and
+   * NULLS LAST keeps a real deadline ahead of them when one exists. */
+  await resetSchema();
+  await migrate(false);
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
+    [new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  const stub = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
+  );
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(2);
+  const requested = stub.mock.calls.map((c) => String(c[0]));
+  expect(requested[0]).toContain("has-date");
+  expect(requested[1]).toContain("no-date");
+});
+
+test("skips a malformed attachment without losing the rest of the batch", async () => {
+  /* Fix round 1, item 3: document.filename is NOT NULL, so an attachment
+   * SAM.gov returns without a name threw 23502 from inside a loop with no
+   * try/catch -- taking out this solicitation's remaining attachments AND
+   * every candidate after it. resourceId is unconstrained and fails more
+   * quietly: it yields the well-formed URL `.../files/undefined/download`,
+   * and a document row Task 10 fetches, fails, and marks failed forever.
+   *
+   * Two solicitations, not one, because the claim being pinned is about
+   * the BATCH surviving, not just the attachment being skipped. */
+  await resetSchema();
+  await migrate(false);
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  );
+  const malformed = {
+    _embedded: {
+      opportunityAttachmentList: [
+        {
+          attachments: [
+            { resourceId: "r1", type: "file", fileExists: "1" }, // no name
+            { name: "NoId.pdf", type: "file", fileExists: "1" }, // no resourceId
+            { name: "Good.pdf", resourceId: "r3", type: "file", fileExists: "1" },
+          ],
+        },
+      ],
+    },
+  };
+  const stub = vi.fn(async () => new Response(JSON.stringify(malformed), { status: 200 }));
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(2);
+  expect(r.documents).toBe(2); // one good attachment from EACH solicitation
+  const docs = await all<{ filename: string }>(`SELECT filename FROM document`);
+  expect(docs.map((d) => d.filename)).toEqual(["Good.pdf", "Good.pdf"]);
+});
+
+test("counts a failed fetch as skipped and keeps going", async () => {
+  /* Fix round 1, item 4: a THROWN fetch (DNS failure, connection reset)
+   * used to kill the whole batch while a non-OK response merely skipped one
+   * solicitation -- an inconsistency, not a deliberate distinction. Both
+   * now skip one solicitation and are counted, which is what lets an
+   * operator tell "nothing to fetch" (skipped 0) from "every request
+   * failed" (skipped === solicitations).
+   *
+   * Also pins the ordering inside the loop: listing rows are written
+   * BEFORE the fetch, so ground truth still lands for a solicitation whose
+   * attachment request never succeeds. */
+  await resetSchema();
+  await migrate(false);
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  );
+  await insert(
+    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
+  );
+  const stub = vi
+    .fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }))
+    .mockRejectedValueOnce(new TypeError("fetch failed"))
+    .mockResolvedValueOnce(new Response("not json", { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(3);
+  expect(r.skipped).toBe(2); // the throw AND the unparseable body
+  expect(r.documents).toBe(2); // only the third solicitation's attachments
+  const listing = await all<{ c: string }>(
+    `SELECT count(*) AS c FROM extracted_field WHERE origin = 'listing'`,
+  );
+  expect(Number(listing[0]?.c)).toBe(18); // six fields x three solicitations
 });
