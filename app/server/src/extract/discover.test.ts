@@ -35,11 +35,34 @@ vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("../db/migrate.js");
 const { discoverAttachments } = await import("./discover.js");
-const { all, insert, close } = await import("../db/index.js");
+const { all, run, insert, close } = await import("../db/index.js");
 
 afterAll(async () => {
   await close();
 });
+
+/* Every solicitation fixture below records a SIGHTING, because that row is
+ * the ONLY link between a solicitation and the source it came from --
+ * `solicitation` itself has no source column. discoverAttachments hands
+ * each candidate's external_id to SAM.gov's attachment API, so it selects
+ * SAM.gov's rows and nothing else, and a fixture with no sighting is a
+ * solicitation that cannot exist in production (measured: 0 of 1,925 rows
+ * lack one).
+ *
+ * 003_seed_source_registry.sql seeds 'SAM.gov', but the corpus-import
+ * sources are created at IMPORT time rather than seeded, so a fixture that
+ * names one has to create it; `name` is the only NOT NULL column on
+ * `source` without a default. A misspelled SAM.gov still fails loudly, just
+ * one step later: the implementation's own SAM_SOURCE_NAME would then match
+ * no sighting and the candidate list would come back empty. */
+async function sight(solicitationId: number, sourceName = "SAM.gov"): Promise<void> {
+  await run(`INSERT INTO source (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [sourceName]);
+  await insert(
+    `INSERT INTO sighting (source_id, solicitation_id)
+     SELECT id, $2 FROM source WHERE name = $1 RETURNING id`,
+    [sourceName, solicitationId],
+  );
+}
 
 const SAM_RESPONSE = {
   _embedded: {
@@ -64,10 +87,12 @@ test("inserts one pending document per existing attachment", async () => {
    * after every reset or the INSERT below fails with "relation
    * \"solicitation\" does not exist". */
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at)
-     VALUES ('live one', 'abc123', $1) RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at)
+       VALUES ('live one', 'abc123', $1) RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
@@ -112,10 +137,12 @@ test("writes the portal's own values as listing rows", async () => {
    * ground truth ... Accuracy is a query" -- would be unbuildable. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
-     VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
+       VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
 
@@ -153,9 +180,11 @@ test("does not duplicate listing rows when run twice", async () => {
    * solicitation with NO attachments would be revisited. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
   await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -169,8 +198,10 @@ test("does not duplicate listing rows when run twice", async () => {
 test("skips solicitations whose deadline has passed", async () => {
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
+    ),
   );
   const stub = vi.fn(async () => new Response("{}", { status: 200 }));
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -192,6 +223,7 @@ test("a solicitation with only SOME listing fields already written gains the res
      VALUES ('partial', 'abc123', $1, 'SBA') RETURNING id`,
     [new Date(Date.now() + 86_400_000).toISOString()],
   );
+  await sight(sol);
   /* Simulates exactly one field surviving an earlier, interrupted run. */
   await insert(
     `INSERT INTO extracted_field
@@ -231,12 +263,16 @@ test("admits solicitations with NO close date, dated ones first", async () => {
    * NULLS LAST keeps a real deadline ahead of them when one exists. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
@@ -263,11 +299,15 @@ test("skips a malformed attachment without losing the rest of the batch", async 
    * the BATCH surviving, not just the attachment being skipped. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+    ),
   );
   const malformed = {
     _embedded: {
@@ -305,14 +345,20 @@ test("counts a failed fetch as skipped and keeps going", async () => {
    * attachment request never succeeds. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
+    ),
   );
   const stub = vi
     .fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }))
@@ -329,4 +375,53 @@ test("counts a failed fetch as skipped and keeps going", async () => {
     `SELECT count(*) AS c FROM extracted_field WHERE origin = 'listing'`,
   );
   expect(Number(listing[0]?.c)).toBe(18); // six fields x three solicitations
+});
+
+test("never hands a non-SAM solicitation's external_id to the SAM.gov API", async () => {
+  /* `solicitation` has no source column, so before the sighting predicate
+   * this function selected EVERY portal's rows and posted their ids to a
+   * federal API that has never heard of them. Measured on the live
+   * database: 201 of 1,925 solicitations are corpus imports and ALL of
+   * them carry a close date, while all 1,724 SAM.gov rows carry none -- so
+   * `ORDER BY closes_at NULLS LAST` sorted every wrong-source row to the
+   * FRONT. The first twenty batches of ten would have fetched nothing but
+   * 404s, counted as `skipped`, looking like a network fault.
+   *
+   * The corpus-import row here is dated and the SAM row is not, which is
+   * the real distribution -- so if the predicate is dropped, the wrong row
+   * is not merely included, it is fetched FIRST. */
+  await resetSchema();
+  await migrate(false);
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at)
+       VALUES ('indiana one', 'in-999', '2099-01-01') RETURNING id`,
+    ),
+    "Corpus import — Indiana open (2026-08-04)",
+  );
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at)
+       VALUES ('sam one', 'sam-111', NULL) RETURNING id`,
+    ),
+  );
+  const stub = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
+  );
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(1);
+  expect(stub).toHaveBeenCalledOnce();
+  expect(String(stub.mock.calls[0]?.[0])).toContain("sam-111");
+  /* And the wrong-source solicitation gets no ground-truth rows either --
+   * listing values written from a candidate this function should never
+   * have selected would be just as wrong as the fetch. */
+  const listing = await all<{ c: string }>(
+    `SELECT count(*) AS c FROM extracted_field ef
+       JOIN solicitation s ON s.id = ef.solicitation_id
+      WHERE ef.origin = 'listing' AND s.external_id = 'in-999'`,
+  );
+  expect(Number(listing[0]?.c)).toBe(0);
 });

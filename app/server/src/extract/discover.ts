@@ -20,20 +20,53 @@ const resourcesUrl = (noticeId: string): string =>
 const downloadUrl = (resourceId: string): string =>
   `${SAM_HOST}/opps/v3/opportunities/resources/files/${encodeURIComponent(resourceId)}/download`;
 
-/* Fix round 1: measured on production, SAM.gov holds 9,682 solicitations and
- * ZERO with a non-null closes_at -- they are not closed, SAM ingest simply
- * never populates the column. That is a gap in the ingestion slice
- * surfacing here, not something this task owns or can repair; the fix here
- * is only to stop silently excluding every one of them. `left(...) >= ...`
- * on a NULL closes_at evaluates to NULL, which WHERE treats as false, so
- * the original predicate passed only the 22 Indiana notices that happen to
- * carry a date -- handing THEIR external_ids to the SAM.gov attachment API,
- * which is wrong for a non-SAM source. Undated rows are now admitted and
- * sort last, so a live deadline still wins the ordering when one exists. */
+/* Two fix-round-1 defects live in this query, and they compound, so they
+ * are documented together.
+ *
+ * ONE (Critical): `left(closes_at, 10) >= ...` is NULL when closes_at is
+ * NULL, and WHERE treats NULL as false -- so every row without a close date
+ * was silently dropped. That is not a small subset: NO SAM.gov solicitation
+ * carries one. SAM ingest never populates the column, which is a gap in the
+ * ingestion slice surfacing here rather than something this task owns or
+ * can repair; all this fix does is stop excluding every affected row.
+ * Undated rows are admitted and sort last, so a real deadline still wins
+ * the ordering wherever one exists.
+ *
+ * TWO (Critical, found while fixing ONE): `solicitation` has NO source
+ * column -- the only link to a source is through `sighting` -- so this
+ * query selected EVERY portal's rows and handed their external_ids to
+ * SAM.gov's attachment API, which has never heard of them. The two defects
+ * compound in the worst direction: the rows that carry a close date are
+ * precisely the ones from the WRONG source, so ONE's `NULLS LAST` sorts all
+ * of them ahead of every real candidate. The first batches would have been
+ * pure 404s and -- thanks to the new `skipped` counter -- would have read
+ * as a network fault rather than a query bug.
+ *
+ * The shape above was measured directly against DATABASE_URL before either
+ * fix was written: 1,925 solicitations, 1,724 of them SAM.gov with a close
+ * date on none, 201 corpus imports with a close date on all. Filtering to
+ * SAM.gov leaves 1,724 candidates, so TWO narrows the set without
+ * re-creating the emptiness ONE just repaired. (An earlier reading logged
+ * during review reported the same SHAPE at a different scale -- 9,682
+ * SAM.gov rows, 22 dated non-SAM ones. Both support both fixes; the
+ * discrepancy is flagged in progress.md and is about which database was
+ * being read, not about what the query does.)
+ *
+ * The source name is spelled as the seed spells it
+ * (003_seed_source_registry.sql). resolve-source.ts's FIX 1 is the
+ * cautionary tale: the adapter registry's short key 'sam' is NOT the row's
+ * name, and assuming it was cost a full live scrape before the mismatch
+ * surfaced at import time. */
+const SAM_SOURCE_NAME = "SAM.gov";
+
 const CANDIDATES = `
   SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
     FROM solicitation s
    WHERE s.external_id IS NOT NULL
+     AND EXISTS (SELECT 1
+                   FROM sighting sg
+                   JOIN source src ON src.id = sg.source_id
+                  WHERE sg.solicitation_id = s.id AND src.name = $2)
      AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC NULLS LAST
@@ -115,7 +148,7 @@ export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ solicitations: number; skipped: number; documents: number }> {
-  const rows = await all<Candidate>(CANDIDATES, [limit]);
+  const rows = await all<Candidate>(CANDIDATES, [limit, SAM_SOURCE_NAME]);
   let documents = 0;
   let skipped = 0;
 

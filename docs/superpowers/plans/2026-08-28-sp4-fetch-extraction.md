@@ -964,6 +964,8 @@ git commit -m "Apply precedence at read time, and keep the disagreement"
 
 **Interfaces:**
 - Produces: `export async function discoverAttachments(limit: number, fetchImpl?: typeof fetch): Promise<{ solicitations: number; skipped: number; documents: number }>`
+  - Selects SAM.gov's rows ONLY, via `sighting` -- `solicitation` carries no source column,
+    and every external_id selected here is posted to SAM.gov's attachment API.
   - `skipped` was added in fix round 1 (item 4): it is what lets a caller tell "nothing to fetch"
     (`skipped: 0`) from "every request failed" (`skipped === solicitations`). Task 11's handler
     returns the object with `res.json(result)`, so the field reaches the admin endpoint unchanged.
@@ -1008,11 +1010,34 @@ vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("../db/migrate.js");
 const { discoverAttachments } = await import("./discover.js");
-const { all, insert, close } = await import("../db/index.js");
+const { all, run, insert, close } = await import("../db/index.js");
 
 afterAll(async () => {
   await close();
 });
+
+/* Every solicitation fixture below records a SIGHTING, because that row is
+ * the ONLY link between a solicitation and the source it came from --
+ * `solicitation` itself has no source column. discoverAttachments hands
+ * each candidate's external_id to SAM.gov's attachment API, so it selects
+ * SAM.gov's rows and nothing else, and a fixture with no sighting is a
+ * solicitation that cannot exist in production (measured: 0 of 1,925 rows
+ * lack one).
+ *
+ * 003_seed_source_registry.sql seeds 'SAM.gov', but the corpus-import
+ * sources are created at IMPORT time rather than seeded, so a fixture that
+ * names one has to create it; `name` is the only NOT NULL column on
+ * `source` without a default. A misspelled SAM.gov still fails loudly, just
+ * one step later: the implementation's own SAM_SOURCE_NAME would then match
+ * no sighting and the candidate list would come back empty. */
+async function sight(solicitationId: number, sourceName = "SAM.gov"): Promise<void> {
+  await run(`INSERT INTO source (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [sourceName]);
+  await insert(
+    `INSERT INTO sighting (source_id, solicitation_id)
+     SELECT id, $2 FROM source WHERE name = $1 RETURNING id`,
+    [sourceName, solicitationId],
+  );
+}
 
 const SAM_RESPONSE = {
   _embedded: {
@@ -1037,10 +1062,12 @@ test("inserts one pending document per existing attachment", async () => {
    * after every reset or the INSERT below fails with "relation
    * \"solicitation\" does not exist". */
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at)
-     VALUES ('live one', 'abc123', $1) RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at)
+       VALUES ('live one', 'abc123', $1) RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
@@ -1085,10 +1112,12 @@ test("writes the portal's own values as listing rows", async () => {
    * ground truth ... Accuracy is a query" -- would be unbuildable. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
-     VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at, set_aside, kind)
+       VALUES ('live one', 'abc123', $1, 'SBA', 'RFP') RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
 
@@ -1126,9 +1155,11 @@ test("does not duplicate listing rows when run twice", async () => {
    * solicitation with NO attachments would be revisited. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('s', 'abc123', $1) RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(async () => new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }));
   await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -1142,8 +1173,10 @@ test("does not duplicate listing rows when run twice", async () => {
 test("skips solicitations whose deadline has passed", async () => {
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('closed', 'old', '2020-01-01') RETURNING id`,
+    ),
   );
   const stub = vi.fn(async () => new Response("{}", { status: 200 }));
   const r = await discoverAttachments(10, stub as unknown as typeof fetch);
@@ -1165,6 +1198,7 @@ test("a solicitation with only SOME listing fields already written gains the res
      VALUES ('partial', 'abc123', $1, 'SBA') RETURNING id`,
     [new Date(Date.now() + 86_400_000).toISOString()],
   );
+  await sight(sol);
   /* Simulates exactly one field surviving an earlier, interrupted run. */
   await insert(
     `INSERT INTO extracted_field
@@ -1204,12 +1238,16 @@ test("admits solicitations with NO close date, dated ones first", async () => {
    * NULLS LAST keeps a real deadline ahead of them when one exists. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('undated', 'no-date', NULL) RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
-    [new Date(Date.now() + 86_400_000).toISOString()],
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('dated', 'has-date', $1) RETURNING id`,
+      [new Date(Date.now() + 86_400_000).toISOString()],
+    ),
   );
   const stub = vi.fn(
     async (_url: string, _init?: RequestInit) =>
@@ -1236,11 +1274,15 @@ test("skips a malformed attachment without losing the rest of the batch", async 
    * the BATCH surviving, not just the attachment being skipped. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+    ),
   );
   const malformed = {
     _embedded: {
@@ -1278,14 +1320,20 @@ test("counts a failed fetch as skipped and keeps going", async () => {
    * attachment request never succeeds. */
   await resetSchema();
   await migrate(false);
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('a', 'aaa', '2099-01-01') RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('b', 'bbb', '2099-01-02') RETURNING id`,
+    ),
   );
-  await insert(
-    `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at) VALUES ('c', 'ccc', '2099-01-03') RETURNING id`,
+    ),
   );
   const stub = vi
     .fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }))
@@ -1302,6 +1350,55 @@ test("counts a failed fetch as skipped and keeps going", async () => {
     `SELECT count(*) AS c FROM extracted_field WHERE origin = 'listing'`,
   );
   expect(Number(listing[0]?.c)).toBe(18); // six fields x three solicitations
+});
+
+test("never hands a non-SAM solicitation's external_id to the SAM.gov API", async () => {
+  /* `solicitation` has no source column, so before the sighting predicate
+   * this function selected EVERY portal's rows and posted their ids to a
+   * federal API that has never heard of them. Measured on the live
+   * database: 201 of 1,925 solicitations are corpus imports and ALL of
+   * them carry a close date, while all 1,724 SAM.gov rows carry none -- so
+   * `ORDER BY closes_at NULLS LAST` sorted every wrong-source row to the
+   * FRONT. The first twenty batches of ten would have fetched nothing but
+   * 404s, counted as `skipped`, looking like a network fault.
+   *
+   * The corpus-import row here is dated and the SAM row is not, which is
+   * the real distribution -- so if the predicate is dropped, the wrong row
+   * is not merely included, it is fetched FIRST. */
+  await resetSchema();
+  await migrate(false);
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at)
+       VALUES ('indiana one', 'in-999', '2099-01-01') RETURNING id`,
+    ),
+    "Corpus import — Indiana open (2026-08-04)",
+  );
+  await sight(
+    await insert(
+      `INSERT INTO solicitation (title, external_id, closes_at)
+       VALUES ('sam one', 'sam-111', NULL) RETURNING id`,
+    ),
+  );
+  const stub = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(SAM_RESPONSE), { status: 200 }),
+  );
+
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(1);
+  expect(stub).toHaveBeenCalledOnce();
+  expect(String(stub.mock.calls[0]?.[0])).toContain("sam-111");
+  /* And the wrong-source solicitation gets no ground-truth rows either --
+   * listing values written from a candidate this function should never
+   * have selected would be just as wrong as the fetch. */
+  const listing = await all<{ c: string }>(
+    `SELECT count(*) AS c FROM extracted_field ef
+       JOIN solicitation s ON s.id = ef.solicitation_id
+      WHERE ef.origin = 'listing' AND s.external_id = 'in-999'`,
+  );
+  expect(Number(listing[0]?.c)).toBe(0);
 });
 ```
 
@@ -1383,20 +1480,53 @@ const resourcesUrl = (noticeId: string): string =>
 const downloadUrl = (resourceId: string): string =>
   `${SAM_HOST}/opps/v3/opportunities/resources/files/${encodeURIComponent(resourceId)}/download`;
 
-/* Fix round 1: measured on production, SAM.gov holds 9,682 solicitations and
- * ZERO with a non-null closes_at -- they are not closed, SAM ingest simply
- * never populates the column. That is a gap in the ingestion slice
- * surfacing here, not something this task owns or can repair; the fix here
- * is only to stop silently excluding every one of them. `left(...) >= ...`
- * on a NULL closes_at evaluates to NULL, which WHERE treats as false, so
- * the original predicate passed only the 22 Indiana notices that happen to
- * carry a date -- handing THEIR external_ids to the SAM.gov attachment API,
- * which is wrong for a non-SAM source. Undated rows are now admitted and
- * sort last, so a live deadline still wins the ordering when one exists. */
+/* Two fix-round-1 defects live in this query, and they compound, so they
+ * are documented together.
+ *
+ * ONE (Critical): `left(closes_at, 10) >= ...` is NULL when closes_at is
+ * NULL, and WHERE treats NULL as false -- so every row without a close date
+ * was silently dropped. That is not a small subset: NO SAM.gov solicitation
+ * carries one. SAM ingest never populates the column, which is a gap in the
+ * ingestion slice surfacing here rather than something this task owns or
+ * can repair; all this fix does is stop excluding every affected row.
+ * Undated rows are admitted and sort last, so a real deadline still wins
+ * the ordering wherever one exists.
+ *
+ * TWO (Critical, found while fixing ONE): `solicitation` has NO source
+ * column -- the only link to a source is through `sighting` -- so this
+ * query selected EVERY portal's rows and handed their external_ids to
+ * SAM.gov's attachment API, which has never heard of them. The two defects
+ * compound in the worst direction: the rows that carry a close date are
+ * precisely the ones from the WRONG source, so ONE's `NULLS LAST` sorts all
+ * of them ahead of every real candidate. The first batches would have been
+ * pure 404s and -- thanks to the new `skipped` counter -- would have read
+ * as a network fault rather than a query bug.
+ *
+ * The shape above was measured directly against DATABASE_URL before either
+ * fix was written: 1,925 solicitations, 1,724 of them SAM.gov with a close
+ * date on none, 201 corpus imports with a close date on all. Filtering to
+ * SAM.gov leaves 1,724 candidates, so TWO narrows the set without
+ * re-creating the emptiness ONE just repaired. (An earlier reading logged
+ * during review reported the same SHAPE at a different scale -- 9,682
+ * SAM.gov rows, 22 dated non-SAM ones. Both support both fixes; the
+ * discrepancy is flagged in progress.md and is about which database was
+ * being read, not about what the query does.)
+ *
+ * The source name is spelled as the seed spells it
+ * (003_seed_source_registry.sql). resolve-source.ts's FIX 1 is the
+ * cautionary tale: the adapter registry's short key 'sam' is NOT the row's
+ * name, and assuming it was cost a full live scrape before the mismatch
+ * surfaced at import time. */
+const SAM_SOURCE_NAME = "SAM.gov";
+
 const CANDIDATES = `
   SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
     FROM solicitation s
    WHERE s.external_id IS NOT NULL
+     AND EXISTS (SELECT 1
+                   FROM sighting sg
+                   JOIN source src ON src.id = sg.source_id
+                  WHERE sg.solicitation_id = s.id AND src.name = $2)
      AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC NULLS LAST
@@ -1478,7 +1608,7 @@ export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ solicitations: number; skipped: number; documents: number }> {
-  const rows = await all<Candidate>(CANDIDATES, [limit]);
+  const rows = await all<Candidate>(CANDIDATES, [limit, SAM_SOURCE_NAME]);
   let documents = 0;
   let skipped = 0;
 
