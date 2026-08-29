@@ -14,20 +14,102 @@
  * file.
  *
  * I2: the obvious fix -- just load .env -- is wrong on its own. Root
- * package.json's `build` script is `migrate:deploy && ...`, and .env's
- * DATABASE_URL is the PRODUCTION pooler (it's the same file Vercel's real
- * deploy needs). Loading .env for the whole gate and then calling `npm run
- * build` unmodified would run a schema migration against production from
- * a local test run, the moment a new migration exists to apply -- today
- * it's a no-op only because all four are already applied. So the build
- * step below runs with DATABASE_URL overridden to DATABASE_URL_TEST on
- * this ONE child process's environment only. The `build` script's own
- * definition is untouched: a real `npm run build` (what Vercel's deploy
- * actually runs) still sees whatever DATABASE_URL its own environment
- * provides. */
+ * package.json's `build` script is `migrate:deploy && ...`, so loading .env
+ * for the whole gate and then calling `npm run build` unmodified runs a
+ * schema migration against whatever DATABASE_URL names. The build step
+ * below therefore overrides DATABASE_URL with DATABASE_URL_TEST on this ONE
+ * child process's environment. The `build` script's own definition is
+ * untouched: a real `npm run build` (what Vercel's deploy actually runs)
+ * still sees whatever DATABASE_URL its own environment provides.
+ *
+ * CORRECTION, 2026-08-29. This comment used to assert that ".env's
+ * DATABASE_URL is the PRODUCTION pooler." IT IS NOT, and had not been for
+ * some time. .env carries FOUR names for two different databases: the
+ * production branch is DATABASE_URL_PRODUCTION (plus the POSTGRES_* set
+ * Vercel injects), while DATABASE_URL and DATABASE_URL_TEST are currently
+ * the SAME string, both pointing at the `test` branch. ci.yml does the same
+ * thing deliberately and says so (`DATABASE_URL: secrets.DATABASE_URL_TEST`).
+ *
+ * That mattered more than a wrong comment usually does, because this one is
+ * the entire justification for the override below -- so the override was
+ * reading as a live safety mechanism while actually substituting a value
+ * for itself. Worse, the comment described the DANGEROUS configuration as
+ * the normal one, and DATABASE_URL_PRODUCTION is sitting in the same file
+ * ready to be pasted across.
+ *
+ * The override is KEPT, not deleted. It costs nothing, and it is the only
+ * thing standing between a local `npm run check` and a production migration
+ * on the day someone does point DATABASE_URL at production. What has been
+ * added is refuseToRunAgainstProduction() below, which checks that
+ * invariant instead of assuming it -- a comment cannot fail a build. */
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+/* THE INVARIANT THE OVERRIDES BELOW REST ON, CHECKED RATHER THAN ASSUMED.
+ *
+ * Everything this script does with DATABASE_URL assumes it does not name
+ * the production database. For most of this project's life that assumption
+ * was recorded only in a comment, and the comment was wrong -- see the
+ * CORRECTION above. This function is the same claim, enforced.
+ *
+ * Comparison is by DATABASE, not by string: Neon hands out a pooled host
+ * (`ep-name-1234-pooler.…`) and a direct host (`ep-name-1234.…`) for the
+ * one endpoint, so two URLs that differ textually can be the same database.
+ * Stripping the `-pooler` suffix off the first label is what makes
+ * DATABASE_URL_PRODUCTION and POSTGRES_URL_NON_POOLING compare equal, which
+ * they should, because they are.
+ *
+ * The check is skipped, not failed, when DATABASE_URL_PRODUCTION is unset:
+ * CI has no such variable (it supplies only DATABASE_URL and
+ * DATABASE_URL_TEST) and there is nothing to compare against. A skip is
+ * honest there; inventing a production hostname to compare against would
+ * not be.
+ *
+ * It also PRINTS which arrangement it found, every run. The fact that dev
+ * and test currently share one branch is true, deliberate and matched by
+ * ci.yml -- but it was discoverable only by diffing two secrets by hand,
+ * which is how it stayed invisible long enough for the comment above to rot
+ * around it. */
+function databaseIdentity(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const [endpoint, ...rest] = u.hostname.split(".");
+    return `${endpoint.replace(/-pooler$/, "")}.${rest.join(".")}${u.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+function refuseToRunAgainstProduction() {
+  const dev = databaseIdentity(process.env.DATABASE_URL);
+  const prod = databaseIdentity(process.env.DATABASE_URL_PRODUCTION);
+
+  if (dev && prod && dev === prod) {
+    console.error(
+      `FAIL   DATABASE_URL names the PRODUCTION database (${prod}).\n` +
+        `       This gate runs 'npm run build', which runs 'migrate:deploy'.\n` +
+        `       Point DATABASE_URL at the test or staging branch; production is\n` +
+        `       reached through DATABASE_URL_PRODUCTION and migrated by deploying.`,
+    );
+    process.exit(1);
+  }
+
+  if (!prod) {
+    console.log("OK     DATABASE_URL_PRODUCTION is unset -- nothing to compare against (CI).");
+  } else if (dev && dev === databaseIdentity(process.env.DATABASE_URL_TEST)) {
+    console.log(
+      `OK     DATABASE_URL is not production. Dev and test share ${dev}, so the\n` +
+        `       build-step override below substitutes a value for itself -- deliberate,\n` +
+        `       and the same arrangement ci.yml uses.`,
+    );
+  } else {
+    console.log("OK     DATABASE_URL is not production, and is distinct from DATABASE_URL_TEST.");
+  }
+}
+
+refuseToRunAgainstProduction();
 
 function run(npmScript, env = process.env) {
   // One joined command string, not a separate args array -- npmScript is
@@ -150,14 +232,19 @@ checkGalleryMarkerPresentInSource();
 run("typecheck");
 
 /* DATABASE_URL is cleared from the `test` child's environment, on purpose
- * (post-merge re-review finding). .env's DATABASE_URL is PRODUCTION, and
- * loading .env for the whole gate (C1/I2 above) puts it in every child's
- * environment unless removed. It is safe today ONLY because all four test
- * files call useTestSchema() -- which overwrites process.env.DATABASE_URL
- * with the test branch's connection string -- before importing
- * db/index.ts. A future test file that forgot that call would otherwise
- * connect straight to production instead of failing to find a database at
- * all.
+ * (post-merge re-review finding). Loading .env for the whole gate (C1/I2
+ * above) puts DATABASE_URL into every child's environment unless it is
+ * removed, and a test file is then one forgotten useTestSchema() call away
+ * from connecting to whatever it names -- silently, because the connection
+ * SUCCEEDS.
+ *
+ * This block's original wording said that variable was production. It is
+ * not (see the CORRECTION at the top), and refuseToRunAgainstProduction()
+ * above now enforces that it never becomes production without the gate
+ * saying so. The clearing stays regardless, for a reason that never
+ * depended on which database it named: a test that reaches ANY real
+ * database outside its own schema is a test that can see another test's
+ * rows.
  *
  * That is the exact failure shape this project has already paid for three
  * times: a loud failure quietly becoming a silent one pointed at
@@ -172,7 +259,7 @@ run("typecheck");
  *
  * Do not "fix" this by putting DATABASE_URL back into testEnv -- that is
  * the bug this block exists to close. */
-const { DATABASE_URL: _productionUrlKeptOutOfTestEnv, ...testEnv } = process.env;
+const { DATABASE_URL: _keptOutOfTestEnvOnPurpose, ...testEnv } = process.env;
 run("test", testEnv);
 
 /* No redundant "is DATABASE_URL_TEST set" check here: `test` above already
@@ -181,7 +268,7 @@ run("test", testEnv);
  * line is ever reached) -- a second check here could never actually run,
  * and an unreachable guidance message is worse than none, since someone
  * would trust it exists. The gate's own build step must never see
- * production -- see I2 above. */
+ * production -- see I2 and refuseToRunAgainstProduction() above. */
 run("build", { ...process.env, DATABASE_URL: process.env.DATABASE_URL_TEST });
 
 checkGalleryMarkerAbsentFromBuild();
