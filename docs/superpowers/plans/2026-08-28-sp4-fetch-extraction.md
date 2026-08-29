@@ -1333,9 +1333,20 @@ export async function runExtract(opts: {
         continue;
       }
 
+      /* Parser notes describe the DOCUMENT, not any one field -- "cell B3 is a
+       * cached formula", "this PDF has no table structure". They belong on the
+       * document row. Putting them on extracted_field.note would collide with
+       * the FIELD note, which says something different and per-field: whether we
+       * looked, whether a date was seen but unplaced, whether the text was not a
+       * real calendar date. An earlier draft of this task bound the parser notes
+       * into extracted_field.note and never wrote f.note at all, silently
+       * discarding every one of those. */
       await dbRun(
-        `UPDATE document SET extracted_text = $2, extract_status = 'extracted', produced_by = 'mechanical' WHERE id = $1`,
-        [doc.id, parsed.text],
+        `UPDATE document
+            SET extracted_text = $2, extract_status = 'extracted',
+                produced_by = 'mechanical', source_note = $3
+          WHERE id = $1`,
+        [doc.id, parsed.text, parsed.notes.join(" | ") || null],
       );
 
       for (const f of extractFields(parsed.text)) {
@@ -1350,7 +1361,15 @@ export async function runExtract(opts: {
             doc.id,
             f.quote,
             f.confidence,
-            parsed.notes.join(" | ") || null,
+            /* f.note, NOT parsed.notes. This is the field's own account of
+             * itself -- "not extracted", "a date was present but no cue placed
+             * it in this field", "date text does not correspond to a real
+             * calendar date". Task 7 spent three fix rounds producing these, and
+             * the accuracy measurement depends on them: without the
+             * date-seen-but-unplaced note, a recall miss is indistinguishable
+             * from a document that genuinely had no date, and the instrument
+             * scores it as a clean true negative. */
+            f.note ?? null,
           ],
         );
       }
