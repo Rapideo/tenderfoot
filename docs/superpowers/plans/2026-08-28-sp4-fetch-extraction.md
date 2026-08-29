@@ -1141,7 +1141,7 @@ const CANDIDATES = `
  * exist only in documents, and get an ABSENT listing row so that "the portal
  * does not carry this" is a recorded fact rather than a gap. */
 const LISTING_FIELDS = [
-  "closes_at", "set_aside", "kind", "value_cents", "qa_closes_at", "prebid_at",
+  "closes_at", "set_aside", "prebid_required", "value_cents", "qa_closes_at", "prebid_at",
 ] as const;
 
 interface Candidate {
