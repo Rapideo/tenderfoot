@@ -869,7 +869,12 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement**
 
 ```ts
-import { all } from "../db/index.js";
+/* NO top-level db import. `db/index.ts` throws "DATABASE_URL is not set" at
+ * module load, and scripts/check.mjs deliberately strips that variable from
+ * the test child environment -- so a static import here would make merely
+ * LOADING this module kill the pure resolveField tests, which touch no
+ * database at all. The db import is dynamic, inside accuracyByField, matching
+ * the same pattern and the same reasoning in scrape/resolve-source.ts. */
 
 export interface FieldRow {
   value_text: string | null;
@@ -905,6 +910,7 @@ export function resolveField(rows: FieldRow[]): Resolved {
 export async function accuracyByField(): Promise<
   { field_name: string; agreed: number; disagreed: number }[]
 > {
+  const { all } = await import("../db/index.js");
   return all(
     `SELECT d.field_name,
             count(*) FILTER (WHERE d.value_text IS NOT DISTINCT FROM l.value_text) AS agreed,
