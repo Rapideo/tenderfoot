@@ -408,3 +408,46 @@ A `.zip` inside a `.zip` becomes a `document` row marked `failed` with
 that lived nowhere durable. A recorded failure is queryable; a wrong reason in
 a throwaway artifact is not. Traversal is deferred rather than refused:
 nothing here prevents depth 2 later.
+
+---
+
+# Found by building — SP4 T10, 2026-08-30
+
+## D9 — a bundle's members are extracted where their bytes are, not later
+
+Task 10's brief expanded a `.zip` into child `document` rows marked
+`pending`, for a later batch to fetch and extract. **A member row cannot be
+fetched by a later batch, ever.** Its bytes came from inside an archive, so
+it has no `source_url`, and ruling 1 keeps no bytes anywhere — the design
+says documents are fetched, parsed and DISCARDED, and migration 008's own
+comment records that `path` is a dead column from the pre-Vercel filesystem
+design. The spike reached 86 members across nine bundles; as briefed, every
+one of them would have become a row that the next pass fetched from nothing,
+failed, and stamped `download failed` — the network blamed for a design gap,
+a wrong reason made durable, which is the exact thing [D8] exists to prevent
+one paragraph up the same code path.
+
+So a member is extracted at the only moment its bytes exist: inside the
+parent's own iteration, by the same `absorb()` that handles a top-level
+document, so a member cannot get quieter treatment than a file that arrived
+on its own. Nothing else moves. The parent is still marked `extracted` with
+no text of its own (design §5), members still carry `parent_document_id`
+(§3.1), and a nested archive is still D8's recorded failure at depth 1 —
+`expand` is a boolean parameter rather than a counter precisely so that
+traversing deeper would require deleting it.
+
+**Two consequences worth stating.** The parent is marked `extracted` AFTER
+its members, so a run killed mid-expansion leaves the bundle `pending` and
+the next run redoes it; the opposite order would mark the bundle done and
+strand the members it had not written yet. And a `pending` row with no
+`source_url` is now a recognisable thing — a member stranded by exactly that
+kill — so it is failed with a reason that says so and says how to recover it,
+rather than being reported as a download that failed.
+
+**Not deviated from, though §4.3 words it as one:** `WHERE closes_at >=
+now()`. The `ORDER BY` is what makes the first batch the useful batch, and it
+is kept. The filter is not, for two reasons: a comparison against a NULL
+`closes_at` yields NULL and WHERE reads NULL as false, which is Task 9's
+Critical (b) verbatim; and a permanent filter makes the returned `remaining`
+a lie, since documents on a since-closed solicitation would sit `pending`
+forever under a counter that never reaches zero.
