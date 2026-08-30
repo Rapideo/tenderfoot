@@ -451,3 +451,34 @@ is kept. The filter is not, for two reasons: a comparison against a NULL
 Critical (b) verbatim; and a permanent filter makes the returned `remaining`
 a lie, since documents on a since-closed solicitation would sit `pending`
 forever under a counter that never reaches zero.
+
+---
+
+# Found by building — SP4 T12, 2026-08-30
+
+## D10 — the two batch controls sit at the foot of the registry card
+
+`Discover` and `Extract` act on the document queue, which belongs to no
+source, so they cannot join the per-row controls the way Check and Run did.
+The design bundle predates SP4 and has no control group for them at all.
+Rather than invent a region, they sit at the foot of the Source Registry card
+and reuse the row controls' own button classes — the same "native affordance,
+not a designed one" posture D1 and D5 took, with the visual design of this
+screen still deferred. They are placed AFTER the rows because that is the
+order of the work: a source is run, which produces solicitations; discover
+asks what is attached to them; extract reads what discover found.
+
+**They carry their own busy flag, and that is not a detail.** The task brief
+spelled both buttons `disabled={busy}` — but `busy` in `Admin.tsx` is a
+`Record<number, boolean>` keyed by source id, and an object is always truthy,
+so both controls would have shipped **permanently disabled**. A disabled
+control with no explanation is the same broken-looking button D7 exists to
+prevent, reached from a third side. `Admin.test.tsx` now asserts `.disabled`
+is `false` before clicking, so it cannot come back.
+
+**The readout does not flatten the two endpoints into one shape.** Extract
+returns `processed`/`failed`/`remaining`; discover returns
+`documents`/`solicitations`. The brief rendered `data.processed ??
+data.documents ?? 0` into one sentence, which prints a zero for a key the
+endpoint never sends — a number an operator cannot tell from a real zero.
+The presence of `remaining` selects the wording instead.

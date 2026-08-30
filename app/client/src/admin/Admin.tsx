@@ -448,6 +448,65 @@ export function Admin() {
     await load();
   }
 
+  /* SP4's two batch controls. SCREEN-level, not row-level, so they carry
+   * their own busy flag rather than joining the `busy`/`errors` maps keyed by
+   * source id -- discover and extract walk the document queue, which belongs
+   * to no single row.
+   *
+   * That distinction is not cosmetic. The task brief spelled these buttons
+   * `disabled={busy}`, and `busy` here is a Record<number, boolean>: an
+   * object, always truthy, so both controls would have shipped PERMANENTLY
+   * DISABLED. A disabled control with no explanation is the same
+   * broken-looking button D7 exists to prevent, reached from a third side,
+   * and it is the kind of thing only a browser or a test that asserts
+   * `.disabled` ever notices.
+   *
+   * Same shape as checkHealth and runSource otherwise, D7's rejection guard
+   * included: a `fetch` that REJECTS must clear busy and report, or the
+   * control freezes with nothing said. */
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchError, setBatchError] = useState("");
+  const [batchResult, setBatchResult] = useState("");
+
+  async function callBatch(label: string, path: string) {
+    const secret = getAdminSecret();
+    if (!secret) return;
+    setBatchBusy(true);
+    setBatchError("");
+    setBatchResult("");
+    let r: Response;
+    try {
+      r = await fetch(path, { method: "POST", headers: adminHeaders(secret) });
+    } catch (err) {
+      setBatchBusy(false);
+      setBatchError(`Request failed — ${(err as Error).message}`);
+      return;
+    }
+    if (r.status === 401) clearAdminSecret();
+    const data = await r.json().catch(() => ({}));
+    setBatchBusy(false);
+    if (!r.ok) {
+      /* Same rule the rest of this screen follows: a 400 from a fail-closed
+       * guard is the most useful thing this screen can show, and swallowing
+       * it turns a deliberate refusal into a control that silently does
+       * nothing. */
+      setBatchError(data.error ?? `Request failed (${r.status})`);
+      return;
+    }
+    /* THE TWO ENDPOINTS COUNT DIFFERENT THINGS, and the readout says which
+     * rather than flattening them. Extract returns `processed` and
+     * `remaining` (documents it read, documents still queued); discover
+     * returns `documents` and `solicitations` (rows it created, notices it
+     * asked about). Rendering a zero where a key was never sent would be a
+     * number the operator has no way to distinguish from a real zero. */
+    setBatchResult(
+      data.remaining === undefined
+        ? `${label}: ${data.documents ?? 0} document(s) from ${data.solicitations ?? 0} solicitation(s)`
+        : `${label}: processed ${data.processed ?? 0}, ${data.failed ?? 0} failed, ${data.remaining} remaining`,
+    );
+    await load();
+  }
+
   /* D5, finally housed. Same shape as checkHealth above -- prompt-once
    * secret, shared busy flag, clear-on-401, reload on completion so
    * last_run_at and the counts move. `?source=` carries `s.name` (the
@@ -598,6 +657,40 @@ export function Admin() {
             onRunSource={runSource}
           />
         ))}
+
+        {/* D10. The design bundle has no control group for these -- it
+            predates SP4 -- so they sit at the foot of the registry card
+            rather than in a new region invented for them, and reuse the
+            row controls' own button classes. Placed AFTER the rows because
+            that is the order of the work: a source is run, which produces
+            solicitations; discover asks what is attached to them; extract
+            reads what discover found. */}
+        <div className="admin-batch-controls">
+          <button
+            type="button"
+            className="admin-check-btn"
+            disabled={batchBusy}
+            aria-label="Discover attachments"
+            onClick={() => callBatch("Discover", "/api/admin/discover?limit=10")}
+          >
+            Discover
+          </button>
+          <button
+            type="button"
+            className="admin-run-btn"
+            disabled={batchBusy}
+            aria-label="Extract documents"
+            onClick={() => callBatch("Extract", "/api/admin/extract?limit=10")}
+          >
+            Extract
+          </button>
+          {batchResult ? <p className="admin-batch">{batchResult}</p> : null}
+          {batchError ? (
+            <p className="admin-error" role="alert">
+              {batchError}
+            </p>
+          ) : null}
+        </div>
       </section>
     </main>
   );
