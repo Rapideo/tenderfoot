@@ -49,8 +49,56 @@ interface Doc {
  * poor property for the one character this module exists to notice. */
 const NUL = "\u0000";
 
-const unsupported = (filename: string): string =>
-  `unsupported type: ${filename.toLowerCase().split(".").pop() ?? "unknown"}`;
+/* TWO DIFFERENT FACTS, TWO DIFFERENT MESSAGES, because source_note is a
+ * column an operator greps to find out what a portal actually serves.
+ *
+ * The first live run recorded `unsupported type: current request for
+ * proposal` for a SAM.gov document named exactly that, with no extension at
+ * all -- because splitting on "." returns the WHOLE NAME when there is no
+ * dot. It reads as though "current request for proposal" were a file type.
+ * A file we cannot type at all and a file whose type we know and cannot
+ * parse are different problems with different answers, so they say different
+ * things. */
+const unsupported = (filename: string): string => {
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0 || dot === filename.length - 1) {
+    return `no file extension, so nothing determines a parser: "${filename}"`;
+  }
+  return `unsupported type: ${filename.slice(dot + 1).toLowerCase()}`;
+};
+
+/* WHY THE BODY OF A FAILED DOWNLOAD IS WORTH READING.
+ *
+ * Four documents in the first live run failed with `download failed: HTTP
+ * 400`, and an operator cannot tell that apart from SAM.gov being down. The
+ * body said `{"errors":{"message":"The resource has been deleted."}}` --
+ * permanent, not worth retrying, and sitting unread. One of those two
+ * failures is worth clicking again and the other never will be.
+ *
+ * Deliberately NOT portal-specific: it looks for the usual places a message
+ * hides and otherwise gives up quietly. Bounded and wrapped, because this
+ * runs on the failure path and must not manufacture a second failure -- a
+ * body that is huge, empty, HTML, or unreadable simply yields nothing extra,
+ * leaving the status code that was always there. */
+async function serverReason(res: Response): Promise<string> {
+  try {
+    const body = (await res.text()).slice(0, 2000);
+    if (!body.trim()) return "";
+    let message = "";
+    try {
+      const parsed = JSON.parse(body) as Record<string, any>;
+      message = parsed?.errors?.message ?? parsed?.message ?? parsed?.error ?? "";
+    } catch {
+      /* Not JSON. A short plain-text body may still say something; an HTML
+       * error page never says anything worth a column. */
+      if (!/^\s*</.test(body) && body.length <= 200) message = body;
+    }
+    const clean = String(message).replace(/\s+/g, " ").trim().slice(0, 160);
+    return clean ? ` -- ${clean}` : "";
+  } catch {
+    return "";
+  }
+}
 
 async function fail(id: number, why: string): Promise<void> {
   await dbRun(`UPDATE document SET extract_status = 'failed', source_note = $2 WHERE id = $1`, [
@@ -136,8 +184,18 @@ async function absorb(doc: Doc, bytes: Buffer, expand: boolean): Promise<boolean
   if (parsed.kind === "unsupported" || parsed.text.trim() === "") {
     /* FAIL CLOSED: never mark `extracted` without text. `extracted` is what
      * accuracyByField counts as an opportunity, so an empty one scores every
-     * field as a miss against a document that was never read. */
-    await fail(doc.id, "parsed but produced no text");
+     * field as a miss against a document that was never read.
+     *
+     * THE PARSER'S EXPLANATION RIDES ALONG, because this branch overwrites
+     * source_note with its own reason and would otherwise throw away the one
+     * fact that makes the failure actionable. "1 page but no text layer" is
+     * a scan and a category decision; "parsed but produced no text" alone is
+     * indistinguishable from a corrupt file or a parser fault. */
+    const why =
+      parsed.kind === "unsupported"
+        ? parsed.reason
+        : parsed.notes.join(" | ");
+    await fail(doc.id, why ? `parsed but produced no text: ${why}` : "parsed but produced no text");
     return true;
   }
 
@@ -265,7 +323,7 @@ export async function runExtract(opts: {
     try {
       const res = await doFetch(doc.source_url);
       if (!res.ok) {
-        await record(`download failed: HTTP ${res.status}`);
+        await record(`download failed: HTTP ${res.status}${await serverReason(res)}`);
         continue;
       }
       bytes = Buffer.from(await res.arrayBuffer());

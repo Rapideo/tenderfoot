@@ -393,6 +393,98 @@ test("a NUL byte in the text is removed, and does not take the batch with it", a
   ).toEqual({ extract_status: "extracted" });
 });
 
+/* Same builder as pdf.test.ts's, and local for the same reason every other
+ * fixture in this suite is: a valid one-page PDF with no content stream, the
+ * shape a scan has once the image is removed. */
+function emptyPagePdf(): Buffer {
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objs.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) pdf += `${String(off).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+}
+
+/* The parser's explanation is worth nothing if it stops at the parser. The
+ * fail-closed branch overwrites source_note with its own reason, so unless
+ * that reason CARRIES the notes, "1 page, no text layer" -- the fact that
+ * distinguishes a scan from a corrupt file -- never reaches the column an
+ * operator queries. Found on `Sign In Sheet 8-10.pdf`, 2026-08-30. */
+test("a scanned PDF is failed with the parser's own explanation attached", async () => {
+  await fresh();
+  const doc = await pending("Sign In Sheet.pdf");
+
+  const r = await runExtract({ limit: 5, budgetMs: 10_000, fetchImpl: bytes(emptyPagePdf()) });
+
+  expect(r.failed).toBe(1);
+  const row = await one<{ extract_status: string; source_note: string }>(
+    `SELECT extract_status, source_note FROM document WHERE id = $1`,
+    [doc],
+  );
+  expect(row?.extract_status).toBe("failed");
+  expect(row?.source_note).toMatch(/no text/i);
+  expect(row?.source_note).toMatch(/no text layer/i);
+});
+
+/* FOUND BY THE FIRST LIVE RUN, 2026-08-30. SAM.gov serves a document called
+ * `Current Request for Proposal`, with no extension at all, and the failure
+ * recorded for it read `unsupported type: current request for proposal` --
+ * because the extension split returns the WHOLE NAME when there is no dot.
+ * True in the sense that nothing could parse it, and misleading in the sense
+ * that it names a "type" that is not one, which is worse than useless in a
+ * column an operator greps to find out what SAM.gov actually serves. */
+test("a filename with no extension reports that, not the whole name as a type", async () => {
+  await fresh();
+  const doc = await pending("Current Request for Proposal");
+
+  const r = await runExtract({ limit: 5, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
+
+  expect(r.failed).toBe(1);
+  const row = await one<{ source_note: string }>(
+    `SELECT source_note FROM document WHERE id = $1`,
+    [doc],
+  );
+  expect(row?.source_note).toMatch(/no file extension/i);
+  expect(row?.source_note).not.toMatch(/type: current request/i);
+});
+
+/* FOUND BY THE FIRST LIVE RUN, 2026-08-30, on four real documents. SAM.gov
+ * answers a download for a withdrawn attachment with HTTP 400 and a JSON
+ * body saying "The resource has been deleted." -- and all we recorded was
+ * `download failed: HTTP 400`, which an operator cannot tell apart from
+ * SAM.gov being down. One is permanent and one is worth retrying, and the
+ * difference was sitting unread in the response body. */
+test("a download failure records the reason the server gave, not just the code", async () => {
+  await fresh();
+  const doc = await pending("Withdrawn.pdf");
+  const deleted = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ errors: { message: "The resource has been deleted." } }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+  ) as unknown as typeof fetch;
+
+  await runExtract({ limit: 5, budgetMs: 10_000, fetchImpl: deleted });
+
+  const row = await one<{ source_note: string }>(
+    `SELECT source_note FROM document WHERE id = $1`,
+    [doc],
+  );
+  expect(row?.source_note).toMatch(/HTTP 400/);
+  expect(row?.source_note).toMatch(/resource has been deleted/i);
+});
+
 /* Spec §4.3: nearest live deadline first. Ordering is the whole of what
  * makes the first batch the useful batch, and `limit` is what makes the
  * order observable -- with a limit above the queue size every ordering
