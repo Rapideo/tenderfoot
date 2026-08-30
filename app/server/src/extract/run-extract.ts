@@ -61,7 +61,9 @@ const NEXT = `
    WHERE d.extract_status = 'pending'
      AND d.parent_document_id IS NULL
    ORDER BY (s.closes_at IS NOT NULL AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')) DESC,
-            s.closes_at ASC NULLS LAST
+            CASE WHEN s.closes_at IS NOT NULL AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')
+                 THEN s.closes_at END ASC NULLS LAST,
+            s.closes_at DESC NULLS LAST
    LIMIT $1`;
 
 interface Doc {
@@ -206,15 +208,12 @@ async function absorb(doc: Doc, bytes: Buffer, expand: boolean): Promise<boolean
        * and the accuracy instrument would count one document's opinion
        * twice.
        *
-       * `failed` is deliberately NOT skipped, and the reason is a real
-       * sequence rather than caution. A stranded member sits in the queue as
-       * an ordinary pending row, so the loop reaches it BEFORE its parent is
-       * re-expanded, finds no source_url, and fails it with "expand its
-       * parent bundle again to recover this member". Skipping every
-       * non-pending member would make that message a lie -- the parent would
-       * re-expand and step straight over the row it was telling the operator
-       * to expect back. It carries no extracted_field rows either, having
-       * never been read, so redoing it duplicates nothing. */
+       * `failed` is deliberately NOT skipped. A member reaches that state
+       * without ever having been read -- the reconciliation pass at the top
+       * of runExtract marks stranded members failed so they are visible --
+       * so it carries no extracted_field rows and redoing it duplicates
+       * nothing. Skipping it would strand it a second time, permanently, in
+       * the one pass able to recover it. */
       if (child.extract_status === "extracted") continue;
       const childId = child.id;
       /* D9 -- THE MEMBER IS EXTRACTED HERE, NOT LEFT FOR A LATER BATCH.
@@ -345,6 +344,33 @@ export async function runExtract(opts: {
 }): Promise<{ processed: number; failed: number; remaining: number }> {
   const doFetch = opts.fetchImpl ?? fetch;
   const started = Date.now();
+
+  /* RECONCILE THE UNREACHABLE FIRST (review round 2, finding 3).
+   *
+   * Members are not in the queue -- their parent is responsible for them --
+   * which closes the clobbering hole and opens one at the other end: a member
+   * left `pending` by a parent that FAILED mid-expansion is reachable by
+   * nothing at all, and is not even counted in `remaining`. Invisible and
+   * unrecoverable is strictly worse than wrongly-shaped and visible.
+   *
+   * A pass rather than a catch-local sweep, because a catch only covers the
+   * failure it wraps: a process killed at the platform ceiling leaves exactly
+   * this state and runs no catch at all. The predicate is the whole
+   * invariant -- a pending member whose parent is not itself pending cannot
+   * be reached by anything, whatever put it there.
+   *
+   * It reports `failed` rather than silently deleting, because the row is the
+   * only surviving record that the bundle contained that file. */
+  await dbRun(
+    `UPDATE document d
+        SET extract_status = 'failed',
+            source_note = 'stranded: its parent bundle stopped mid-expansion and is no longer pending'
+      WHERE d.extract_status = 'pending'
+        AND d.parent_document_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM document p
+                     WHERE p.id = d.parent_document_id AND p.extract_status <> 'pending')`,
+  );
+
   const queue = await all<Doc>(NEXT, [opts.limit]);
 
   let processed = 0;
@@ -369,10 +395,12 @@ export async function runExtract(opts: {
       continue;
     }
 
-    /* A pending row with no source_url is a bundle member stranded by a run
-     * that died mid-expansion (see absorb's D9 note). Its bytes are gone and
-     * cannot be recovered from here -- the honest record is that, not
-     * "download failed", which would blame the network for it. */
+    /* A TOP-LEVEL row with no source_url. Members cannot reach here any more
+     * -- the queue excludes them and the reconciliation pass above handles
+     * the stranded ones -- but nothing constrains a top-level document to
+     * carry a URL, and one that does not has no bytes to fetch. The honest
+     * record is that, not "download failed", which would blame the network
+     * for a row that never had a target. */
     if (!doc.source_url) {
       await record("no source_url: expand its parent bundle again to recover this member");
       continue;

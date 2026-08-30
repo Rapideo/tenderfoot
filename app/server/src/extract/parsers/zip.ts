@@ -10,8 +10,21 @@ export async function parseZip(bytes: Buffer): Promise<ParseResult> {
   const members: { filename: string; bytes: Buffer }[] = [];
   for (const [path, entry] of Object.entries(zip.files)) {
     if (entry.dir) continue;
+    /* THE FULL ARCHIVE PATH, not the basename. Flattening was harmless while
+     * nothing depended on the name being unique; migration 011's partial
+     * unique index on (parent_document_id, filename) made it LOSSY. A bundle
+     * shipping `Volume 1/SOW.pdf` and `Volume 2/SOW.pdf` -- ordinary in
+     * federal solicitations, which ship per-volume folders -- produced two
+     * members with one name, so the second collided with the first and its
+     * bytes, text and fields were discarded with nothing recorded anywhere.
+     *
+     * A path is unique within an archive by construction, so keeping it is
+     * both the fix and the better record: `document.filename` now says which
+     * volume a file came from. Downstream is unaffected -- parserFor takes
+     * the extension after the last dot, and D8's nested-archive check is a
+     * `.zip` suffix test; a path satisfies both. */
     members.push({
-      filename: path.split("/").pop() ?? path,
+      filename: path,
       bytes: Buffer.from(await entry.async("nodebuffer")),
     });
   }

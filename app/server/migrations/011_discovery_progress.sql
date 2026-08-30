@@ -53,6 +53,41 @@ CREATE INDEX solicitation_attachments_checked
 -- `parent_document_id` is NULL for every top-level document and several of
 -- those legitimately share a filename -- two solicitations may each ship a
 -- `Wage Determination.pdf`, and they are different documents.
+-- DE-DUPLICATE BEFORE THE INDEX, or the index cannot be built (review round
+-- 2, finding 1). The comment above asserts these duplicates have already been
+-- produced; if any pair exists, CREATE UNIQUE INDEX raises 23505, migrate()
+-- throws, and the deploy is blocked PERMANENTLY, because every retry hits the
+-- same rows. It compounds: the ADD COLUMN above is in the same migration, so
+-- `attachments_checked_at` never lands either, and the newly deployed
+-- candidate query then fails on a column that does not exist.
+--
+-- MEASURED BEFORE WRITING THIS, read-only, on both databases: production
+-- holds 0 documents and 0 member rows, and the test branch 0 duplicate pairs.
+-- So this deletes nothing today. It is here because a migration that only
+-- works against the databases someone happened to check is not a migration.
+--
+-- The row KEPT is the lowest id -- the first copy, the one whose extraction
+-- any extracted_field rows point at. The copies removed are artifacts of a
+-- re-expansion, never a fact anybody recorded, and their dependent fields go
+-- with them because extracted_field.document_id is a foreign key and would
+-- otherwise block the delete.
+DELETE FROM extracted_field
+ WHERE document_id IN (
+   SELECT d.id FROM document d
+     JOIN (SELECT parent_document_id, filename, min(id) AS keep_id
+             FROM document WHERE parent_document_id IS NOT NULL
+            GROUP BY parent_document_id, filename HAVING count(*) > 1) dup
+       ON dup.parent_document_id = d.parent_document_id AND dup.filename = d.filename
+    WHERE d.id <> dup.keep_id);
+
+DELETE FROM document d
+ USING (SELECT parent_document_id, filename, min(id) AS keep_id
+          FROM document WHERE parent_document_id IS NOT NULL
+         GROUP BY parent_document_id, filename HAVING count(*) > 1) dup
+ WHERE d.parent_document_id = dup.parent_document_id
+   AND d.filename = dup.filename
+   AND d.id <> dup.keep_id;
+
 CREATE UNIQUE INDEX document_member_unique
   ON document(parent_document_id, filename)
   WHERE parent_document_id IS NOT NULL;

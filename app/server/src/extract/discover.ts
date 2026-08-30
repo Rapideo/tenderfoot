@@ -69,7 +69,8 @@ const CANDIDATES = `
    WHERE s.external_id IS NOT NULL
      AND src.name = $2
      AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
-     AND s.attachments_checked_at IS NULL
+     AND (s.attachments_checked_at IS NULL
+          OR s.attachments_checked_at < now() - interval '1 day')
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC NULLS LAST
    LIMIT $1`;
@@ -89,9 +90,20 @@ const CANDIDATES = `
  *
  * A NULL closes_at makes the first key `false`, not NULL, because the
  * `IS NOT NULL` conjunct is evaluated first: undated rows sort with the
- * expired group and then last within it. */
+ * expired group and then last within it.
+ *
+ * REVIEW ROUND 2, FINDING 5: three keys, not two. The second orders the LIVE
+ * group by nearest deadline and is NULL for everything else, so the expired
+ * rows tie on it and fall through to the third -- which sorts them
+ * most-recently-closed FIRST. Two keys left the expired group in ascending
+ * order, i.e. the 2020 notices ahead of last week's, and that is not a corner
+ * case: on 2026-08-30 every document in the queue belonged to a closed
+ * solicitation, so the live-first key selected nothing and the sort collapsed
+ * to exactly the ordering it was added to replace. */
 const LIVE_FIRST = `(s.closes_at IS NOT NULL AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')) DESC,
-            s.closes_at ASC NULLS LAST`;
+            CASE WHEN s.closes_at IS NOT NULL AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')
+                 THEN s.closes_at END ASC NULLS LAST,
+            s.closes_at DESC NULLS LAST`;
 
 /* THE ROWS DISCOVER WOULD OTHERWISE NEVER LOOK AT AGAIN.
  *

@@ -708,3 +708,61 @@ test("takes the nearest deadline first", async () => {
   );
   expect(done?.filename).toBe("soon.pptx");
 });
+
+/* ---- REVIEW ROUND 2, 2026-08-30 ---------------------------------------- */
+
+/* FINDING 3 (Medium). Excluding members from the queue fixed the clobbering,
+ * and opened a hole at the other end: a member stranded by a parent that
+ * FAILED mid-expansion is now invisible to the queue AND uncounted in
+ * `remaining`, where it used to be picked up and marked failed with an
+ * actionable note. Invisible and unrecoverable is strictly worse than
+ * wrongly-shaped and visible.
+ *
+ * Closed with a reconciliation pass rather than a catch-local sweep, because
+ * a catch only covers the failure it wraps: a process killed at the platform
+ * ceiling leaves exactly the same state and runs no catch at all. A pending
+ * member whose parent is not itself pending cannot be reached by anything,
+ * whatever put it there. */
+test("a member stranded under a failed parent is surfaced, not left invisible", async () => {
+  await fresh();
+  const parent = await pending("bundle.zip");
+  const sol = await one<{ solicitation_id: number }>(
+    `SELECT solicitation_id FROM document WHERE id = $1`,
+    [parent],
+  );
+  await run(`UPDATE document SET extract_status = 'failed' WHERE id = $1`, [parent]);
+  const orphan = await insert(
+    `INSERT INTO document (solicitation_id, filename, parent_document_id, extract_status)
+     VALUES ($1, 'Stranded.pdf', $2, 'pending') RETURNING id`,
+    [sol?.solicitation_id, parent],
+  );
+
+  await runExtract({ limit: 5, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
+
+  const row = await one<{ extract_status: string; source_note: string }>(
+    `SELECT extract_status, source_note FROM document WHERE id = $1`,
+    [orphan],
+  );
+  expect(row?.extract_status).toBe("failed");
+  expect(row?.source_note).toMatch(/parent/i);
+});
+
+/* FINDING 5 (Low), and it matters more than "low" suggests in the state
+ * actually measured: every document in the 2026-08-30 live run belonged to an
+ * already-closed solicitation. With nothing live, the live-first key selects
+ * nothing, the sort collapses to plain `closes_at ASC`, and the operator's
+ * first batch is the 2020 notices -- the very ordering the fix was supposed
+ * to end. Within the expired group, most-recently-closed is the useful end. */
+test("among already-closed solicitations, the most recently closed comes first", async () => {
+  await fresh();
+  await pending("ancient.pptx", "2020-01-01");
+  await pending("recent.pptx", "2026-08-01");
+
+  const r = await runExtract({ limit: 1, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
+
+  expect(r.processed).toBe(1);
+  const done = await one<{ filename: string }>(
+    `SELECT filename FROM document WHERE extract_status = 'failed'`,
+  );
+  expect(done?.filename).toBe("recent.pptx");
+});

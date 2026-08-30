@@ -609,3 +609,42 @@ test("discover stops on its budget and reports only what it walked", async () =>
    * otherwise a budget stop reports work it did not do. */
   expect(r.solicitations).toBe(1);
 });
+
+/* REVIEW ROUND 2, FINDING 4 (Medium). Stamping `attachments_checked_at` once
+ * and never looking again retires a notice FOREVER -- including one amended
+ * tomorrow with an SOW or a wage determination, which is ordinary on SAM.gov.
+ * It also fails the `NOT EXISTS (document)` half the moment it has any
+ * document, so nothing else would bring it back either. That is the same
+ * "the portal changed its mind" case REFRESH exists for on the listing side,
+ * with nothing analogous here.
+ *
+ * A bounded re-check window keeps the stall closed (a notice is not re-asked
+ * on every click) without freezing it (it is re-asked tomorrow). */
+test("a notice checked long enough ago is asked again; one checked just now is not", async () => {
+  await resetSchema();
+  await migrate(false);
+  const stale = await seed({
+    title: "amended since",
+    externalId: "stale1",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  const fresh = await seed({
+    title: "just asked",
+    externalId: "fresh1",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  await run(`UPDATE solicitation SET attachments_checked_at = now() - interval '2 days' WHERE id = $1`, [stale]);
+  await run(`UPDATE solicitation SET attachments_checked_at = now() WHERE id = $1`, [fresh]);
+
+  /* The url parameter is declared so `mock.calls[0][0]` is a typed element
+   * rather than an index into an empty tuple -- tsc rejects the latter, which
+   * is the check catching a test that could not have asserted what it says. */
+  const stub = vi.fn(async (_url: string, _init?: RequestInit) =>
+    new Response(JSON.stringify({ _embedded: {} }), { status: 200 }),
+  );
+  const r = await discoverAttachments(10, stub as unknown as typeof fetch);
+
+  expect(r.solicitations).toBe(1);
+  expect(stub).toHaveBeenCalledTimes(1);
+  expect(String(stub.mock.calls[0]?.[0])).toContain("stale1");
+});
