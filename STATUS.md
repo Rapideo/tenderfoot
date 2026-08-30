@@ -222,7 +222,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 > `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
 > changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 392 tests / 56 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 406 tests / 57 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
 
 ### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
 
@@ -260,13 +260,25 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **PRODUCTION IS CAUGHT UP, both halves.** `mergeSightings` ran against production after a pre-flight that measured the blast radius (0 unlinked sightings ⇒ no inserts, no links possible): result `{created:0, updated:0, linked:0, orgsAttached:0, deadlinesSet:7644}`. SAM.gov **0 → 7,644 dated**. Then deployed — migrations 007 → 010 applied, `source_id` backfilled 9,682/140/61 with zero NULLs.
 
-### ⏭ START HERE — SP4 Task 11, the two admin endpoints
+### ✅ 2026-08-30 — SP4 Task 11, the two endpoints
 
-**Brief: `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/task-11-brief.md`.** Two time-budgeted endpoints over `discoverAttachments` and `runExtract`, bounded by `RUN_HANDLER_BUDGET_MS` against `CEILING_MS`. **53 pending documents and live ground truth are waiting on the `test` branch** — the smoke runs left real state in `public` there, deliberately, and this is the task that should finally run against them.
+**`49f6352`.** `POST /api/admin/discover` and `POST /api/admin/extract`, both under the router's existing `requireAdminSecret`, both bounded by `RUN_HANDLER_BUDGET_MS`. Gate green at **406 tests / 57 files**.
 
-⚠️ **`extract_status` transitions carry weight.** `opportunities` counts only solicitations with a document in `extracted` or `absent` — a `failed` document is a missed FETCH, not a missed extraction, and conflating them blames the extractor for the network. Task 10 pins that distinction with a test; the endpoint must not undo it by collapsing the counts it returns.
+**🔴 The brief's clamp had a bug and its test could not have caught it.** `Math.min(Number(q ?? 10) || 10, MAX)` lets a NEGATIVE through — `-5` is truthy so `||` misses it, and `Math.min` misses it too since `-5` is already below the maximum — and it reaches Postgres as `LIMIT -5`. **Measured, not argued: reinstating that expression as a mutant turns `?limit=-5` into a 500.** The briefed test asserted only that `?limit=99999` answered 200, which is equally true with the clamp deleted. Now `lib/batchLimit.ts`, pure, eight unit tests, and **both endpoints echo the effective limit** — an operator who asks for 99999 and gets 50 should be told, and a clamp nobody can observe is a clamp no test can pin.
 
-**Then Task 12** (the screen + the seam test, which is the regression test for the FSSA near-miss). **Then a fresh review of Task 9** — that diff now carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh. **Task 10 wants a review of its own**, D9 first.
+⚠️ **The two 401 tests pass "for free"** — an unmatched route under the gate 401s before it 404s. That is why they are worth having: what they actually pin is the mounting **order**, which is invisible at the call site. Mounted above `admin.use(requireAdminSecret)`, an unauthenticated POST to `/discover` answers 200 and scrapes a federal API from the app's IP. Three mutants, three killed.
+
+**Not done, deliberately: the live run.** Both endpoints are proved against fixtures only. The **53 pending documents on the `test` branch** are still waiting, and firing at SAM.gov for real is outward-facing and Matt's call.
+
+### ⏭ START HERE — SP4 Task 12, the screen and the seam test
+
+**Brief: `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/task-12-brief.md`.** The Admin controls over the two endpoints, plus the seam test that is the regression test for the FSSA near-miss. It reads `data.processed ?? data.documents ?? 0` and `data.remaining ?? 0`; the endpoints' added `limit` key is additive and safe.
+
+⚠️ **`extract_status` transitions carry weight.** `opportunities` counts only solicitations with a document in `extracted` or `absent` — a `failed` document is a missed FETCH, not a missed extraction, and conflating them blames the extractor for the network. Tasks 10 and 11 both pin that distinction; the screen must not undo it by collapsing what it shows.
+
+**Then a browser click-through, over CDP** — the extension has never connected on this machine. This is the first moment SP4 has a surface, and 08-18 and 08-28 are the argument: `Run` had never worked in *any* browser and `Check` was silently inert on two rows, and the passing server-half tests saw neither.
+
+**Then a fresh review of Task 9** — that diff now carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh. **Tasks 10 and 11 want reviews of their own**, D9 first.
 
 **Open, and Matt's:** ~~① push this branch~~ ✅ **done 2026-08-30**; ② whether Vercel's build should fail on type errors; ③ the staging-branch decision — `.env`'s `DATABASE_URL` and `DATABASE_URL_TEST` are currently the SAME string, both pointing at `test`, which ci.yml mirrors deliberately; ④ delete the abandoned `preview/sp3-federal-ingestion` Neon branch from the console, **not** through the MCP. **Standing:** execute the slice sequence in order, no shortcuts (ruled 2026-08-29).
 
