@@ -31,6 +31,7 @@
 |---|---|
 | `app/server/migrations/012_triage.sql` | `triage_sample`, `triage_sample_item`, the `pursuit_latest` index |
 | `app/server/src/triage/latest.ts` | The `DISTINCT ON` current-state query and its reusable SQL fragment |
+| `app/server/src/triage/eligibility.ts` | The membership predicate, alone, so `queue.ts` and `sample.ts` need not import each other |
 | `app/server/src/triage/queue.ts` | Queue membership, ordering, paging, and the deadline-conflict flag |
 | `app/server/src/triage/sample.ts` | Drawing, reading and listing materialised samples |
 | `app/server/src/triage/decide.ts` | Appending a decision; mandatory-on-Pass |
@@ -344,8 +345,11 @@ git commit -m "The latest-decision query, defined once so the queue and metrics 
 ## Task 3: `triage/queue.ts` — membership, order, and constant cost
 
 **Files:**
+- Create: `app/server/src/triage/eligibility.ts`
 - Create: `app/server/src/triage/queue.ts`
 - Test: `app/server/src/triage/queue.test.ts`
+
+> **Controller ruling (pre-flight, 2026-08-30): `ELIGIBLE` lives in its own module, not in `queue.ts`.** As first drafted, `queue.ts` imported `getSample` from `sample.ts` (Task 5) while `sample.ts` imported `ELIGIBLE` back from `queue.ts` — a genuine ESM cycle. It would happen to work, because both uses sit inside function bodies and resolve lazily, but it breaks the moment either is used at module top level. A one-export module with one responsibility costs four lines.
 
 **Interfaces:**
 - Consumes: `LATEST_PURSUIT` from `./latest.js`
@@ -353,7 +357,7 @@ git commit -m "The latest-decision query, defined once so the queue and metrics 
   - `interface QueueItem { id, title, org_name, jurisdiction, closes_at, value_cents, kind, set_aside, source_name, documents, sightings, deadline_conflict }`
   - `interface QueuePage { mode: "all" | "sample"; sample: null; total: number; remaining: number; items: QueueItem[] }`
   - `queuePage(opts?: { limit?: number; offset?: number }): Promise<QueuePage>`
-  - `ELIGIBLE: string` — the membership predicate, exported for reuse by `sample.ts`
+  - `ELIGIBLE: string` from `./eligibility.js` — the membership predicate, imported by both `queue.ts` and `sample.ts`
 
 **Note on `sample` and `mode`:** this task always returns `mode: "all"` and `sample: null`. Task 5 adds sample mode. The fields exist from the start so the client's shape never changes.
 
@@ -500,11 +504,37 @@ Expected: FAIL — cannot resolve `./queue.js`.
 
 - [ ] **Step 3: Implement**
 
+Create `app/server/src/triage/eligibility.ts`:
+
+```ts
+/* MEMBERSHIP. Undecided, and not closed.
+ *
+ * "Undecided" is: no pursuit row at all, OR a latest row still in 'New'.
+ * 'New' is migration 002's default and means untouched -- treating any
+ * pursuit row as a decision would empty the queue for anything the system
+ * had merely written a placeholder for.
+ *
+ * closes_at is `text` holding ISO dates, so a string comparison against a
+ * bound ISO date is the correct ordering. NULL is included deliberately:
+ * a missing deadline is not a reason to hide an opportunity.
+ *
+ * IT LIVES IN ITS OWN MODULE so queue.ts and sample.ts can both use it
+ * without importing each other -- queue.ts needs sample.ts's getSample, and
+ * a mutual import is a cycle waiting to bite.
+ *
+ * Expects the caller to bind today's ISO date as $1, and to have joined
+ * the latest-pursuit view as `lp` and the solicitation as `s`. */
+export const ELIGIBLE = `
+      (lp.state IS NULL OR lp.state = 'New')
+  AND (s.closes_at IS NULL OR s.closes_at >= $1)`;
+```
+
 Create `app/server/src/triage/queue.ts`:
 
 ```ts
 import { all, one } from "../db/index.js";
 import { LATEST_PURSUIT } from "./latest.js";
+import { ELIGIBLE } from "./eligibility.js";
 
 export interface DeadlineConflict {
   value_text: string;
@@ -538,20 +568,6 @@ export interface QueuePage {
   remaining: number;
   items: QueueItem[];
 }
-
-/* MEMBERSHIP. Undecided, and not closed.
- *
- * "Undecided" is: no pursuit row at all, OR a latest row still in 'New'.
- * 'New' is migration 002's default and means untouched -- treating any
- * pursuit row as a decision would empty the queue for anything the system
- * had merely written a placeholder for.
- *
- * closes_at is `text` holding ISO dates, so a string comparison against a
- * bound ISO date is the correct ordering. NULL is included deliberately:
- * a missing deadline is not a reason to hide an opportunity. */
-export const ELIGIBLE = `
-      (lp.state IS NULL OR lp.state = 'New')
-  AND (s.closes_at IS NULL OR s.closes_at >= $1)`;
 
 const NOW_ISO = () => new Date().toISOString().slice(0, 10);
 
@@ -838,11 +854,11 @@ git commit -m "Decisions are appended, never overwritten -- and Pass carries a r
 
 **Files:**
 - Create: `app/server/src/triage/sample.ts`
-- Modify: `app/server/src/triage/queue.ts` (add `sampleId` support)
+- Modify: `app/server/src/triage/queue.ts` (add `sampleId` support — it imports `ELIGIBLE` from `./eligibility.js`, created in Task 3)
 - Test: `app/server/src/triage/sample.test.ts`
 
 **Interfaces:**
-- Consumes: `ELIGIBLE` from `./queue.js`
+- Consumes: `ELIGIBLE` from `./eligibility.js`
 - Produces:
   - `interface SampleHeader { id, source_id, source_name, drawn_at, seed, n_requested, population_size, drawn, decided, note }`
   - `drawSample(opts: { sourceId: number; n: number; seed?: string; note?: string }): Promise<SampleHeader>`
@@ -1001,7 +1017,7 @@ Create `app/server/src/triage/sample.ts`:
 
 ```ts
 import { all, one, tx } from "../db/index.js";
-import { ELIGIBLE } from "./queue.js";
+import { ELIGIBLE } from "./eligibility.js";
 import { LATEST_PURSUIT } from "./latest.js";
 
 export interface SampleHeader {
@@ -2095,8 +2111,16 @@ Create `app/client/src/shell/Shell.test.tsx`:
 ```tsx
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
 import { Shell } from "./Shell";
+
+/* CONTROLLER RULING (pre-flight, 2026-08-30): every Shell render is wrapped.
+ * Shell's nav renders <Link to="/">, and <Link> outside a Router THROWS --
+ * so four of the five tests below would have failed for a reason that has
+ * nothing to do with what they assert. */
+const render = (ui: ReactNode) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
 
 const SOURCES = [
   { id: 1, name: "SAM.gov", health: "ok", enabled: true, last_run_at: "2026-08-28T04:03:59Z" },
