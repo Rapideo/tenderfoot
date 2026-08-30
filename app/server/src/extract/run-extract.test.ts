@@ -126,6 +126,101 @@ test("stops on the budget and reports what remains", async () => {
   expect(Number(still[0]?.c)).toBe(3);
 });
 
+/* SPEC §7, and it was missing entirely: "A 429 stops the batch cleanly and
+ * reports `remaining` rather than retrying harder. This project has already
+ * burst-probed a host into a defensive posture once" -- Vercel Attack
+ * Challenge Mode, 2026-08-19.
+ *
+ * Two properties, and the second is the one an ordinary reading misses. The
+ * batch STOPS, so the remaining documents are not fired at a host that has
+ * just asked us to slow down. And the rate-limited document stays PENDING
+ * rather than being marked `failed`: a 429 is the most transient failure
+ * there is, and `failed` is where permanent things go -- the deleted
+ * resource, the unparseable type. Marking it failed would discard a document
+ * SAM.gov was perfectly willing to serve a minute later, and no later run
+ * would ever pick it up again. */
+test("a 429 stops the batch and leaves the document pending, not failed", async () => {
+  await fresh();
+  const first = await pending("First.pdf", "2026-09-01");
+  await pending("Second.pdf", "2026-09-02");
+  const limited = vi.fn(
+    async () => new Response("slow down", { status: 429, headers: { "Retry-After": "60" } }),
+  );
+
+  const r = await runExtract({
+    limit: 5,
+    budgetMs: 10_000,
+    fetchImpl: limited as unknown as typeof fetch,
+  });
+
+  /* Asked once, then stopped -- not once per remaining document. */
+  expect(limited).toHaveBeenCalledTimes(1);
+  expect(r.processed).toBe(0);
+  expect(r.failed).toBe(0);
+  expect(r.remaining).toBe(2);
+
+  const row = await one<{ extract_status: string; source_note: string | null }>(
+    `SELECT extract_status, source_note FROM document WHERE id = $1`,
+    [first],
+  );
+  expect(row?.extract_status).toBe("pending");
+  /* Not a silent stop: the reason is on the row, so an operator asking why a
+   * batch did nothing has an answer without reading logs that do not exist. */
+  expect(row?.source_note).toMatch(/429|rate/i);
+});
+
+/* SPEC §8's resumability row -- "kill a batch mid-way; assert finished
+ * documents stay `extracted` and the rest stay `pending`" -- which the
+ * budget test above does NOT cover: a zero budget stops before the first
+ * document, so it only ever proves the all-pending case. The MIXED state is
+ * the one the property is about, and it is the one 2026-08-27 got wrong.
+ *
+ * Made deterministic by the fetch itself: one download takes longer than the
+ * whole budget, so document one starts and document two finds it spent. The
+ * budget is WALL CLOCK FOR THE CALL -- `started` is captured before the
+ * queue query, so it covers that query too, which is why the budget here is
+ * seconds rather than the milliseconds a first draft used. That draft
+ * processed nothing at all, because a Neon round trip had already outrun a
+ * 50ms budget before the loop began. Correct behaviour; a badly chosen
+ * number. */
+test("a batch stopped mid-way keeps what it finished and leaves the rest pending", async () => {
+  await fresh();
+  const firstDoc = await pending("First.xlsx", "2026-09-01");
+  await pending("Second.xlsx", "2026-09-02");
+  await pending("Third.xlsx", "2026-09-03");
+  const slow = vi.fn(async () => {
+    await new Promise((r) => setTimeout(r, 4000));
+    return new Response(new Uint8Array(workbook()), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const r = await runExtract({ limit: 5, budgetMs: 3000, fetchImpl: slow });
+
+  expect(r.processed).toBe(1);
+  expect(r.remaining).toBe(2);
+
+  /* The one that finished is COMMITTED -- text, status and fields -- not
+   * rolled back with the batch it was part of. */
+  const done = await one<{ extract_status: string; extracted_text: string }>(
+    `SELECT extract_status, extracted_text FROM document WHERE id = $1`,
+    [firstDoc],
+  );
+  expect(done?.extract_status).toBe("extracted");
+  expect(done?.extracted_text).toContain("September 15, 2026");
+  expect(
+    await one<{ c: number }>(
+      `SELECT count(*) AS c FROM extracted_field WHERE document_id = $1`,
+      [firstDoc],
+    ),
+  ).toEqual({ c: 6 });
+
+  /* And the rest are exactly as they were, ready for the next run. */
+  expect(
+    await one<{ c: number }>(
+      `SELECT count(*) AS c FROM document WHERE extract_status = 'pending'`,
+    ),
+  ).toEqual({ c: 2 });
+});
+
 /* ADDED, not in the brief. Every one of the three tests above feeds the
  * orchestrator a file it cannot parse, so between them they never reach the
  * success path -- extractFields, the extracted_field rows, produced_by and

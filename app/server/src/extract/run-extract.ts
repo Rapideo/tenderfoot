@@ -322,6 +322,34 @@ export async function runExtract(opts: {
     let bytes: Buffer;
     try {
       const res = await doFetch(doc.source_url);
+
+      /* 429 STOPS THE BATCH, and does NOT fail the document (design §7).
+       *
+       * Two decisions, and both cut against the obvious handling. Stopping
+       * is the spec's own instruction -- "reports `remaining` rather than
+       * retrying harder" -- because continuing would fire every remaining
+       * download at a host that has just asked us to slow down. This project
+       * has already burst-probed a host into a defensive posture once:
+       * Vercel Attack Challenge Mode, 2026-08-19.
+       *
+       * And the row stays `pending`. A 429 is the most TRANSIENT failure
+       * there is, while `failed` is where permanent things go -- the deleted
+       * resource, the type nothing can parse. Marking it failed would
+       * discard a document the host would have served a minute later, and
+       * nothing would ever pick it up again, since the queue is
+       * `extract_status = 'pending'`. The reason is written to source_note
+       * anyway so the stop is not silent: an operator asking why a batch did
+       * nothing has an answer, and this project has no runtime logs to fall
+       * back on (Vercel's log API answers 403 for this token). */
+      if (res.status === 429) {
+        const after = res.headers.get("Retry-After");
+        await dbRun(`UPDATE document SET source_note = $2 WHERE id = $1`, [
+          doc.id,
+          `not read: HTTP 429 rate limit${after ? `, Retry-After ${after}` : ""} -- batch stopped here`,
+        ]);
+        break;
+      }
+
       if (!res.ok) {
         await record(`download failed: HTTP ${res.status}${await serverReason(res)}`);
         continue;
