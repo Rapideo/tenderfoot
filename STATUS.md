@@ -222,7 +222,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 > `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
 > changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 411 tests / 57 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 417 tests / 58 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
 
 ### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
 
@@ -282,13 +282,24 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ⚠️ **The page counts surfaced a category nobody had named:** three of the "scans" are **photo attachments** — `Canopy Pictures` (8 pages), `Pictures - Set 1` (20), `Pictures - Set 2` (20). OCR would not help those; they are photographs, not scanned text. "Image-only PDF" is at least two categories and only one could ever repay OCR.
 
-### ⏭ START HERE — SP4 Task 12, the screen and the seam test
+### ✅ 2026-08-30 — SP4 Task 12, the screen and the seam test
 
-**Brief: `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/task-12-brief.md`.** The Admin controls over the two endpoints, plus the seam test that is the regression test for the FSSA near-miss. It reads `data.processed ?? data.documents ?? 0` and `data.remaining ?? 0`; the endpoints' added `limit` key is additive and safe.
+**`c75d080` + `f5b959c`.** The two batch controls on `/admin`, and the FSSA regression test. **Browser click-through RUN over CDP** against the `test` branch — both controls enabled, both clicked, both reported, no console errors, no failed API requests.
 
-⚠️ **`extract_status` transitions carry weight.** `opportunities` counts only solicitations with a document in `extracted` or `absent` — a `failed` document is a missed FETCH, not a missed extraction, and conflating them blames the extractor for the network. Tasks 10 and 11 both pin that distinction; the screen must not undo it by collapsing what it shows.
+**🔴 THE BRIEFED SEAM TEST CANNOT PASS, and finding out why was the work.** It asserts a conflict over the real FSSA bundle; there is none, because every value today's extractor states is `2026-09-17`. **FINDINGS §1 is not wrong** — two of the three PDFs really do carry `August 26, 2026`. ⚠️ **The extractor misses it because the cover pages read `Submission Due Date and Time:
+August 26, 2026` — cue and date on DIFFERENT LINES — and `fields.ts` clamps the lookback at a block boundary.** The schedule tables put cue and date on one line, which is why 17 September *is* found. **So the extractor is blind to the label-above-value layout, and is safe here BY ACCIDENT.** Relax that clamp — a natural-looking improvement — and these documents begin stating the stale date, at which point precedence becomes load-bearing for real. **Strong candidate for the next `fields.ts` pass:** the same blindness very likely explains much of the live run's 16 "date present but no cue placed it" notes.
 
-**Then a browser click-through, over CDP** — the extension has never connected on this machine. This is the first moment SP4 has a surface, and 08-18 and 08-28 are the argument: `Run` had never worked in *any* browser and `Check` was silently inert on two rows, and the passing server-half tests saw neither.
+Split into three tests, none of which lies: the premise (the stale date really is in the bundle, checked first), the real files (listing wins, and at least one document was actually read), and the protection itself with the documented values fed in directly. **Deliberately not pinned: the absence of a conflict** — that is today's accident, and pinning an accident makes a future improvement look like a regression. Mutating precedence fails with *"expected 2026-08-26 to be 2026-09-17"* — the near-miss itself.
+
+**Two more brief defects.** Both buttons were spelled `disabled={busy}`, and `busy` is a `Record<number, boolean>` — always truthy, so they would have shipped **permanently disabled** (D10). And the readout flattened both endpoints into `data.processed ?? data.documents ?? 0`, printing a zero for a key the endpoint never sends.
+
+**The click-through found a third thing, in my own readout.** A real Discover reported *"0 document(s) from 10 solicitation(s)"* and nothing could say whether those notices carry no attachments or whether **all ten requests failed**. `discover.ts` added `skipped` for exactly that distinction and I had left it off the only surface that shows it. Fixed and re-run: *"0 skipped"*, so the answer is genuinely "no attachments".
+
+### ⏭ START HERE — the demo criterion's remainder, then the reviews
+
+⚠️ **TWO OF THE CRITERION'S SIX BULLETS ASK FOR A SCREEN THAT DOES NOT EXIST.** "Open one solicitation and confirm a field shows its value, its confidence, and the quoted passage" and "confirm a real listing-vs-document disagreement is visible on the record" both need a solicitation **record view**. The app has three routes: Health, Admin, and the dev-only Gallery. **No SP4 task builds a record screen, and this table says the record belongs to SP6 ("Triage + record").** `FactPanel` — the primitive that renders value + confidence + quote — exists and is exercised in the gallery; nothing composes it over a real solicitation. Not a Task 12 failure, and not something to tick off quietly either. **Matt's call: defer these two to SP6, or add a minimal record view to SP4.**
+
+**Still Matt's:** the production deploy, which is the criterion's first bullet. Everything below it that can be done locally has been.
 
 **Then a fresh review of Task 9** — that diff now carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh. **Tasks 10 and 11 want reviews of their own**, D9 first.
 
