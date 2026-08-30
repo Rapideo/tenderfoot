@@ -1,5 +1,26 @@
 # SP4 — Fetch and extraction: Implementation Plan
 
+> ## ✅ COMPLETE — merged to `main` 2026-08-30 (`cc8babe`, `--no-ff`)
+>
+> Twelve tasks, 61 commits, gate **430 tests / 58 files**. Deployed to production and verified
+> the same day. **The plan below is kept as written, including the parts that turned out to be
+> wrong** — several task briefs could not run as specified, and what replaced them is recorded
+> in `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/progress.md` rather than by editing the
+> briefs into hindsight. The three worth knowing before reading any brief here:
+>
+> - **Task 10's fixture is illegal** — migration 010 made `solicitation.source_id` NOT NULL later
+>   the same night the brief was written.
+> - **Task 11's clamp lets a negative through** (`Number(x) || 10`; `-5` is truthy and `Math.min`
+>   does not catch it) and its test asserted only a 200, which is equally true with the clamp
+>   deleted.
+> - **Task 12's seam test cannot pass as written** — it asserts a conflict the current extractor
+>   does not produce, for a reason that took measuring to find (see §10.1 of the spec and the
+>   ledger).
+>
+> **Architecture note below is superseded in one respect:** *Extract* holds bytes in memory for
+> the length of a request rather than writing a temp file. Same intent — nothing is retained —
+> reached more directly, since nothing ever touches a disk.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fetch each live solicitation's attachments, parse them mechanically, and record every extracted field with its confidence and the passage it came from — keeping disagreements rather than resolving them away.

@@ -270,6 +270,10 @@ The SQL itself is small and every item has a direct equivalent:
   > **Corrected the same day.** This bullet originally claimed the *domain* date columns — `closes_at`, `ends_at`, `posted_at` — also become `timestamptz`, and called it a clean win. **The important half of that is wrong.** The corpus carries `MM/DD` with no time and no zone; casting `'2026-08-15'` to `timestamptz` yields midnight **UTC**, which renders as *August 14, 8:00 PM* in Eastern. **A deadline that displays as the previous day is a defect**, and `closes_at` is the highest-consequence extracted field in the system (§8.4).
   >
   > The right model is probably `date` for contract and award dates and `timestamptz` for deadlines — **but that is a decision about timezone semantics, not a driver swap**, and taking it inside the port would be precisely the unratified-decision failure `Proto2PRD` §4.7.5 names. **Domain dates stay `text` through SP1.5**, with the change scheduled before SP4, when extraction starts producing times rather than dates. Recorded in the SP1.5 plan, decision 5.
+  >
+  > ⚠️ **AMENDED 2026-08-30: SP4 SHIPPED AND THE CHANGE DID NOT HAPPEN.** `closes_at` is still `text`, and SP4 was built on that — the candidate and queue predicates compare `left(closes_at, 10)` as a string, and `discover.ts` normalises listing values to a bare date prefix for exactly the same reason. So this is now an **undischarged decision that SP4 has built on**, not one still comfortably ahead of the work.
+  >
+  > **It also acquired evidence in the meantime, which is what it was waiting for.** `merge/closes-at.ts` reads SAM.gov's `responseDateActual` (local) rather than `responseDate` (UTC) because the two disagree on **39 of 1,338 rows (2.9%)** — every one an evening deadline rolling past midnight in UTC, so reading the UTC field records the deadline **a day late**. That is this bullet's own "displays as the previous day" defect, measured on real data. The decision is still Matt's, and it should now be taken against that number.
 
 **One thing to watch.** `value_cents` is `INTEGER` and must become `bigint`, not `integer` — a contract over about $21 million overflows a 32-bit integer, and the corpus contains contracts in that range.
 
@@ -289,7 +293,7 @@ The SQL itself is small and every item has a direct equivalent:
 | | By |
 |---|---|
 | **Where long ingestion runs.** §5.3 fetches in three hops and assumed a process that could run for minutes. Function invocations are capped | **SP3** |
-| **Which blob provider.** `document.path` now means a blob key. Thousands of bundles to 21 MB — a bill, not free disk | **SP4** |
+| ~~**Which blob provider.**~~ ✅ **CLOSED 2026-08-28 by ruling, not by choosing one.** SP4's design ruling 1 removes document storage entirely: documents are fetched, parsed and **discarded**, because a citation quotes the extracted passage and there are no bytes to keep. `document.path` stays as a dead column from the pre-Vercel filesystem design (migration 008's own comment says why it was not dropped). The 21 MB bundles are still real — they are held in memory for the length of one request and never written anywhere | ~~SP4~~ **done** |
 | **Measure the plan limits** — function `maxDuration`, cron frequency, Neon autosuspend and compute hours — and write them into workflow spec §10.1 | **SP7, earlier if possible** |
 
 > **The IMPACT lesson stops being an analogy here.** Production went down thirteen days after launch because free-tier Supabase auto-pauses — *"not a bug, a documented property of the plan, never written down."* **Tenderfoot is now on a serverless Postgres that also suspends when idle.** Same shape, same class of platform. §10.1 of the workflow spec is a table of empty cells for exactly that reason: those numbers get **measured and dated**, not recalled.

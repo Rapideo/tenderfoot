@@ -632,3 +632,39 @@ August 29, 2026:
 270. Residual, said out loud rather than discovered later: production is still deployed from sp4-fetch-extraction, not main, and Task 9 has never been re-reviewed. That diff now carries six things the original review never saw. The review debt is real and it's mine to schedule.
 
 271. Nine commits, gate green at 382 tests. The honest summary of the evening is that the slice went from provably measuring nothing to closed end to end — and every one of the three things that made it measure nothing was invisible to a full green suite.
+
+August 30, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand. Covers the day session: Tasks 10–12, the first live run, two review rounds, the deploy, and the merge.]*
+
+272. Pushed the branch first. It had sixty-odd commits on one laptop and production deployed off it. One line, and it had been the highest-value unqueued thing on the board for two days.
+
+273. Task 10, the extract orchestrator. Two parts of the brief could not run: its fixture inserted a solicitation with no source_id, which migration 010 had made illegal later the same night the brief was written, and its imports were static in a file where that points the connection pool at the wrong database. Neither was a judgement call, both were just stale.
+
+274. The part that was a judgement call: the brief expanded a zip into child rows marked pending, for a later batch to fetch. A member has no source_url — its bytes came from inside an archive — and ruling 1 keeps no bytes anywhere. So every one of the spike's 86 members would have become a row that a later pass fetched from nothing, failed, and stamped "download failed". Blaming the network for a design gap, one paragraph up the same code path from the deviation that exists to stop exactly that. Extracted them inline instead and numbered it D9.
+
+275. Also noticed the brief's three tests never once reach the success path — all three feed the thing a file no parser can read. The orchestrator's entire purpose was unpinned by the suite meant to prove it. Same shape as the night before.
+
+276. Task 11's clamp had a real bug and a test that could not have caught it. `Math.min(Number(q ?? 10) || 10, MAX)` lets a negative straight through, because -5 is truthy and Math.min doesn't catch what's already below the maximum. It reaches Postgres as LIMIT -5. The briefed test asserted only that ?limit=99999 returned 200 — equally true with the clamp deleted.
+
+277. Then the first live run, and it earned its keep in about four minutes. A real drawings PDF parses to text containing a NUL byte, which Postgres text cannot hold. The throw came from a write sitting outside the try/catch, so it escaped and took every remaining document in the batch with it — while "one bad document does not kill the batch" stayed green throughout, because all of its bad documents fail at parse time and never reach a write.
+
+278. What the per-document commit was worth, measured rather than argued: the crashed batch left six extracted and two failed committed, seventy-one pending, and the document that threw still pending. Nothing rolled back. That decision was made after 2026-08-27 cost a day; this is the first time it paid.
+
+279. First real accuracy reading, all 79 documents: closes_at agreed 2, disagreed 0, missed 14. Precision 100%, recall 12.5%. The two hits are exact matches to the portal and one of them quotes "Proposals are due no later than: August 31, 2026 at 10:00 AM Central" — cue and date together, with the citation showing why.
+
+280. Drove the admin screen in a real browser over CDP, since the extension has never connected on this machine. Both new buttons worked. The click-through found a defect in my own readout: Discover reported "0 documents from 10 solicitations" and nothing on screen could say whether those notices have no files or whether all ten requests failed. discover.ts added a `skipped` counter for exactly that distinction and I'd left it off the only surface that shows it.
+
+281. Read that number as benign. It was also the stuck case, and the first review round is what caught it: a notice with no attachments never gets a document row, and a document row was the only thing retiring a candidate, so discovery could not advance past it — forever. Ten of them at the head of the queue stall the phase completely. A number that answers one question is not evidence about a different one.
+
+282. Same round: the ground-truth refresh repaired only the most-expired rows, forever, and my own new queue had the identical defect in reasoning I'd defended at length. And the gate's production guard was checking DATABASE_URL while the build step substitutes DATABASE_URL_TEST — so the value that actually reaches migrate:deploy was compared to nothing. Proved that one live by pointing it at production for a single command and watching it exit 1.
+
+283. Second round found six more, and one was a regression the first round created. The unique index I'd added to stop duplicate bundle members made the filename load-bearing — and the zip parser flattens every entry to its basename. A bundle shipping "Volume 1/SOW.pdf" and "Volume 2/SOW.pdf" produced two members with one name, so the second silently overwrote the first. The fix meant to prevent duplicate rows was deleting real files.
+
+284. Told Matt the cover-page layout blindness probably explained most of the recall misses. Measured it against those sixteen documents: it explains zero of them. Wrote that claim into three files before checking it. What the misses actually are is a cue vocabulary gap — two of them say "must be returned no later than", which isn't in the cue list at all. Corrected all three places.
+
+285. Deployed to production and verified four ways rather than one, because /api/health listing a migration only proves a file was recorded as applied. Checked read-only that the column and the partial index actually exist, that the data is intact, and that both new endpoints answer 401. Two snags worth keeping: `vercel --prod` failed "Not authorized" until the scope was passed explicitly, and piping the deploy through `head` killed the local CLI while the build carried on server-side — so the answer to a truncated deploy is to inspect it, never to redeploy.
+
+286. Merged to main, --no-ff, sixty-one commits. Gate green at 430 tests. SP4 is done and the next slice is SP6, which is the GO/NO-GO gate — and which now also carries two bullets of SP4's own demo criterion, deferred to it because they need a record view that does not exist.
+
+287. The honest summary: thirteen review findings across two rounds, plus one the live run found and one I found while fixing another. Not one of them was visible to a green suite. The recall number is 12.5% and the denominator assumes every miss was ours, which nobody has checked — that's the labelling task, and it's the one thing here a person has to do.

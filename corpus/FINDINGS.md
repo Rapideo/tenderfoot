@@ -52,6 +52,42 @@ Two design consequences:
    thing that makes this failure recoverable. A rejection you cannot inspect is a bug you will
    never find.
 
+### What the built extractor actually does with this bundle — measured 2026-08-30
+
+**SP4 shipped, so this finding now has an outcome rather than a prediction.** Run against these
+three PDFs, the mechanical extractor states `2026-09-17` and nothing else. It never produces the
+stale 26 August at all.
+
+**That is the right answer reached by the wrong route, and the distinction matters.** The
+extractor is not preferring the correct date over the stale one — it cannot see the stale one.
+The cover pages read:
+
+```
+Submission Due Date and Time:
+August 26, 2026
+```
+
+Cue and date on **different lines**. `fields.ts` clamps its lookback at a block boundary, so the
+cue falls outside the window and the date is never classified. The schedule tables read
+`Submission Due Date/Time September 17, 2026` on **one** line, which is why 17 September *is*
+found. So the system is safe here **by accident**, and the day that clamp is relaxed — a
+natural-looking improvement — these documents begin stating 26 August and the precedence rule in
+consequence 1 becomes load-bearing for real.
+
+**Which is why the regression test is in two parts** (`app/server/src/extract/seam.test.ts`): one
+over these real files asserting only what must always hold — the listing wins, and the stale date
+really is in the bundle — and a separate one pinning precedence with the documented values fed in
+directly, where no change to `fields.ts` can quietly empty it out. Deliberately **not** pinned:
+the absence of a conflict. That is today's accident, and pinning an accident makes a future
+improvement look like a regression.
+
+**Consequence 1 is now in the spec**, as this document asked: `specs/2026-08-28-sp4-fetch-extraction-design.md`
+§6. Consequence 2 is built — `resolveField` keeps the losing rows with their quotes — but ⚠️ **nothing
+in the product displays them**, because the record view belongs to SP6. The mechanism is tested
+and has never been seen by a person.
+
+---
+
 ### The addendum does not save you
 
 `RFP26-87847 Addendum 1.docx` exists and enumerates its own changes — edits to Attachment I,
