@@ -222,7 +222,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 > `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
 > changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 407 tests / 57 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 411 tests / 57 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
 
 ### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
 
@@ -278,7 +278,9 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **📊 FIRST LIVE ACCURACY READING — all 79 documents, 0 pending at the end.** `closes_at`: **agreed 2, disagreed 0, missed 14, opportunities 16** — **precision 100%, recall 12.5%.** Both hits match the portal exactly; the clearer quotes *"Proposals are due no later than: August 31, 2026 at 10:00 AM Central"*. **The misses are self-describing:** 53 of 69 rows carry no note (no date in the text — Q&A sheets, wage determinations, forms: clean true negatives) and **16 carry "a date was present but no cue placed it in this field"**. Those 16 are the actionable recall signal for `fields.ts`, and they are exactly what Task 7's note was built to make visible. **Not chased** — the instrument's job was to surface them, and it did. The other five fields do not appear at all: the `truth` CTE needs a STATED listing value and the listing states none of them either, so there is no opportunity to miss.
 
-**Three small things observed, not fixed:** a document with no extension fails with `unsupported type: current request for proposal` (the extension split returns the whole name when there is no dot) — honest but misleading; two documents failed `download failed: HTTP 400` from SAM.gov, uninvestigated; and an image-only `Sign In Sheet` failed `parsed but produced no text`, which is fail-closed behaving exactly as designed (OCR is out of scope).
+**✅ The three small things are FIXED, same day.** Each reason the run recorded was true and useless, in a different way. `unsupported type: current request for proposal` came from splitting a filename on `.` and taking the last part — the whole name, when there is no dot. `download failed: HTTP 400` was indistinguishable from SAM.gov being down; **probed live, the body says `{"errors":{"message":"The resource has been deleted."}}`** on all four — permanent, never worth retrying, and sitting unread. And `parsed but produced no text` was indistinguishable from a corrupt file or an unpdf fault: **pages but no text is a scan**, so `parsePdf` now reports the page count and the fail-closed branch carries the parser's explanation into `source_note`, without which the fact stops at the parser. **Verified on the nine real failed rows, re-queued and re-run**, not only on fixtures — 9 of 79 documents fail (11.4%), all nine permanent and all nine now self-explaining.
+
+⚠️ **The page counts surfaced a category nobody had named:** three of the "scans" are **photo attachments** — `Canopy Pictures` (8 pages), `Pictures - Set 1` (20), `Pictures - Set 2` (20). OCR would not help those; they are photographs, not scanned text. "Image-only PDF" is at least two categories and only one could ever repay OCR.
 
 ### ⏭ START HERE — SP4 Task 12, the screen and the seam test
 
