@@ -1,5 +1,16 @@
 # Deadline labelling worksheet — the 14 recall misses
 
+> ## ⏸ PARKED 2026-08-30, by Matt's ruling. Nobody is working this.
+>
+> It is committed and ready, and it is **not** the current task. It was parked because it gates
+> nothing: SP6's gate measures *"discovery and volume, not precision"*, so extraction recall is
+> not an input to the GO / NO-GO decision, and SP6's own citation display will give a better feel
+> for recall than filling this in cold.
+>
+> ⚠️ **The consequence, and the reason to read this before quoting any number:** `recall 12.5%`
+> is now formally **UNVALIDATED** — a lower bound, not a measurement. Filling this in is what
+> would turn it into one.
+
 **Generated 2026-08-30 from the Neon `test` branch.** One block per solicitation the accuracy
 instrument scored as a *miss* for `closes_at`: the portal states a deadline, at least one of its
 documents was read, and no document stated a deadline back.

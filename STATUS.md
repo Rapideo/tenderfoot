@@ -217,64 +217,39 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-08-30
 
-## ☑️ TOMORROW — 2026-08-31. READ THIS FIRST; IT IS THE ONLY OPEN TASK.
+## ⏸ PARKED — the deadline labelling task. Ruled by Matt, 2026-08-30.
 
-**Matt is hand-labelling `docs/2026-08-30-deadline-labelling.md`.** Fourteen blocks, one per
-solicitation the accuracy instrument scored as a `closes_at` recall miss. He sets each `VERDICT`
-to `IN-DOC` / `NOT-IN-DOC` / `UNSURE`, and pastes the phrasing wherever a document really does
-state a deadline. **He may have finished, part-finished, or not started — check the file before
-assuming.**
+**`docs/2026-08-30-deadline-labelling.md` is built and committed, and is NOT the next task.**
+Nobody is working it. It is out of the sequence until Matt takes it up again.
 
-### What it is for, in one line
-The reported **recall of 12.5%** (`agreed 2, disagreed 0, missed 14, opportunities 16`) assumes
-**every one of the fourteen misses was ours**. Nobody has checked whether those documents state a
-deadline at all, and no query can: the instrument cannot tell "we failed to read it" from "it was
-never there". `IN-DOC ÷ 14` is the real number.
+**Why it could be parked cleanly:** it gates nothing. SP6's gate measures *"discovery and volume,
+not precision"* (Plan of Action §6), so extraction recall is not an input to the GO / NO-GO
+decision the next slice exists to make. And SP6 will surface the question better anyway — the
+citation display deferred into it shows value, confidence and the quoted sentence per record, so
+paging through real solicitations gives a feel for recall that the worksheet cold does not.
 
-### What to do with the results
-1. **Recount.** If most are `NOT-IN-DOC`, the honest recall is `2 ÷ (2 + IN-DOC count)`, and
-   **STATUS, the SP4 slice row and the ledger all currently report the pessimistic figure** — they
-   need correcting together, not one of them.
-2. **Widen the cue vocabulary — the cheap, high-yield fix.** `CUES` in
-   `app/server/src/extract/fields.ts` is `due | deadline | closing | submitted by | received by`.
-   Two known misses say *"must be returned **no later than**"*, which is not in it. Every
-   `IN-DOC` phrasing Matt writes down is a candidate. **Test-first, and mutate**, per the file's
-   own history: `fields.ts` took three fix rounds in Task 7.
-3. **Re-run and re-measure** against the `test` branch, then report old and new side by side.
+### ⚠️ WHAT DIES WITH IT — the recall figure is now formally UNVALIDATED
 
-### ⚠️ Five things a fresh session will otherwise get wrong
-- **The data lives on the Neon `test` branch.** `.env`'s `DATABASE_URL` and `DATABASE_URL_TEST`
-  are the SAME string, both `test`; **production holds 9,883 solicitations and 0 documents**, so
-  re-running extraction against production measures nothing and writes for the first time.
-- **Do NOT repeat the cover-page theory.** `fields.ts` really is blind to a cue on one line and
-  its date on the next (the FSSA bundle proves it) — but **measured against the sixteen live
-  unplaced-date notes it explains 0 of them.** I wrote that claim into three files before checking
-  it. Relaxing the block clamp is a separate and expensive question; the clamp exists so padded
-  schedule tables do not steal each other's cues.
-- **`accuracyByField()` lives in `extract/precedence.ts`**, not in a script. `missed`/
-  `opportunities` count SOLICITATIONS; `agreed`/`disagreed` count document STATEMENTS. **They do
-  not sum.**
-- **The seam test is deliberately in three parts** (`extract/seam.test.ts`). It does **not** pin
-  the absence of a conflict — that is today's accident, and pinning it would make a future
-  `fields.ts` improvement look like a regression. If widening the cues makes the FSSA documents
-  start stating `2026-08-26`, that is **expected**, and precedence is what keeps it harmless.
-- **Full reasoning is in `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/progress.md`**, which
-  is gitignored and local-only. Read it before re-deriving anything.
+**`recall 12.5%` is a LOWER BOUND, not a measurement, and every place it appears now says so.**
+It is `2 ÷ 16`, and the 16 assumes **all fourteen misses were ours** — that every one of those
+documents states a deadline we failed to read. Nobody has checked; a first skim of the worksheet
+suggests several genuinely never state one, in which case the true denominator is smaller and the
+real recall materially higher.
 
-### Also outstanding, neither blocking nor urgent
-- **The production click-through** — SP4's one non-deferred criterion bullet still unrun.
-  ⚠️ The first Discover click there writes `document` rows into a database that has none.
-- **Matt's, unchanged:** whether Vercel's build should fail on type errors; the staging-branch
-  decision; deleting the abandoned `preview/sp3-federal-ingestion` Neon branch **from the console,
-  not the MCP**. **Now actionable:** the accuracy threshold spec §9 deferred until a real number
-  existed — there is one, and the labelling may change it before it is set.
+**This is the same class of error `corpus/calibration/README.md` already legislates against** — a
+figure whose base rate is wrong by construction. That rule bans the *flattering* version. This is
+the unflattering one, which is easier to leave standing because it feels like caution, and is
+just as untrue. **Do not quote 12.5% as the system's measured recall** — not in a report, a demo,
+or a threshold decision.
 
-### Then: SP6 — Triage + record, the GO / NO-GO gate
-It also carries **two bullets of SP4's demo criterion**, deferred to it because they need a record
-view SP6 owns. `specs/2026-08-28-sp4-fetch-extraction-design.md` §10.1 names what that costs.
+**Also parked with it:** widening the cue vocabulary in `fields.ts` (we know `"must be returned
+no later than"` is missed, and not what else), and **setting the accuracy threshold** — spec §9
+deferred that until a real number existed, and there still is not one.
+
+**Nothing here is pre-specified.** When the task comes back it starts from the worksheet as
+built; no design decisions were taken in advance of it.
 
 ---
-
 
 > ✅ **SP4 IS MERGED TO `main`, 2026-08-30** (`cc8babe`, `--no-ff`, sixty-one commits), and
 > **deployed to production and verified**. The working tree is on `main`; `sp4-fetch-extraction`
@@ -337,7 +312,7 @@ view SP6 owns. `specs/2026-08-28-sp4-fetch-extraction-design.md` §10.1 names wh
 
 **What the per-document commit was worth, measured:** the crashed batch left 6 extracted and 2 failed **committed**, 71 pending, and the document that threw still `pending` — consistent, resumable, retried successfully next run. **Nothing rolled back.** And the budget stop fired unprompted on real data: 32 documents in 125.9s against a 120s budget, then a clean stop reporting `remaining: 14`.
 
-**📊 FIRST LIVE ACCURACY READING — all 79 documents, 0 pending at the end.** `closes_at`: **agreed 2, disagreed 0, missed 14, opportunities 16** — **precision 100%, recall 12.5%.** Both hits match the portal exactly; the clearer quotes *"Proposals are due no later than: August 31, 2026 at 10:00 AM Central"*. **The misses are self-describing:** 53 of 69 rows carry no note (no date in the text — Q&A sheets, wage determinations, forms: clean true negatives) and **16 carry "a date was present but no cue placed it in this field"**. Those 16 are the actionable recall signal for `fields.ts`, and they are exactly what Task 7's note was built to make visible. **Not chased** — the instrument's job was to surface them, and it did. The other five fields do not appear at all: the `truth` CTE needs a STATED listing value and the listing states none of them either, so there is no opportunity to miss.
+**📊 FIRST LIVE ACCURACY READING — all 79 documents, 0 pending at the end.** `closes_at`: **agreed 2, disagreed 0, missed 14, opportunities 16** — precision **100%**, recall ⚠️ **12.5% UNVALIDATED — a lower bound, not a measurement** (the 16 assumes all fourteen misses were ours; see the PARKED block at the top). Both hits match the portal exactly; the clearer quotes *"Proposals are due no later than: August 31, 2026 at 10:00 AM Central"*. **The misses are self-describing:** 53 of 69 rows carry no note (no date in the text — Q&A sheets, wage determinations, forms: clean true negatives) and **16 carry "a date was present but no cue placed it in this field"**. Those 16 are the actionable recall signal for `fields.ts`, and they are exactly what Task 7's note was built to make visible. **Not chased** — the instrument's job was to surface them, and it did. The other five fields do not appear at all: the `truth` CTE needs a STATED listing value and the listing states none of them either, so there is no opportunity to miss.
 
 **✅ The three small things are FIXED, same day.** Each reason the run recorded was true and useless, in a different way. `unsupported type: current request for proposal` came from splitting a filename on `.` and taking the last part — the whole name, when there is no dot. `download failed: HTTP 400` was indistinguishable from SAM.gov being down; **probed live, the body says `{"errors":{"message":"The resource has been deleted."}}`** on all four — permanent, never worth retrying, and sitting unread. And `parsed but produced no text` was indistinguishable from a corrupt file or an unpdf fault: **pages but no text is a scan**, so `parsePdf` now reports the page count and the fail-closed branch carries the parser's explanation into `source_note`, without which the fact stops at the parser. **Verified on the nine real failed rows, re-queued and re-run**, not only on fixtures — 9 of 79 documents fail (11.4%), all nine permanent and all nine now self-explaining.
 
@@ -415,7 +390,7 @@ Gate green on `main` at **430 tests / 58 files**, trees identical to the branch,
 **Two things carried out of SP4, neither blocking:**
 
 1. **The click-through on production.** The one non-deferred criterion bullet still unrun. ⚠️ **The first Discover click on production will ask SAM.gov about live notices and write `document` rows into a database that currently has none** — production holds 9,883 solicitations and **0 documents**. Bounded by `?limit=10` and the clamp, but it is the first write of its kind there.
-2. **The deadline labelling task — the highest-value thing a human can do on this slice.** ✅ **Worksheet committed 2026-08-30: [`docs/2026-08-30-deadline-labelling.md`](docs/2026-08-30-deadline-labelling.md)** — 14 blocks, one per recall miss, each with the portal's value, every document read, and every date-bearing line in context, with a `VERDICT` field per block. **The 12.5% recall figure assumes every miss was ours**, and nobody has checked; a first skim suggests several are clean `NOT-IN-DOC`, which would mean the extractor is doing considerably better than the number says.
+2. ~~**The deadline labelling task**~~ **⏸ PARKED 2026-08-30 by ruling — see the block at the top of RESUME HERE.** Worksheet built and committed at [`docs/2026-08-30-deadline-labelling.md`](docs/2026-08-30-deadline-labelling.md) — 14 blocks, one per recall miss, each with the portal's value, every document read, and every date-bearing line in context, with a `VERDICT` field per block. **The 12.5% recall figure assumes every miss was ours**, and nobody has checked; a first skim suggests several are clean `NOT-IN-DOC`, which would mean the extractor is doing considerably better than the number says.
 
 **Still Matt's, unchanged:** whether Vercel's build should fail on type errors; the staging-branch decision (`.env`'s `DATABASE_URL` and `DATABASE_URL_TEST` are the SAME string, both `test`, which ci.yml mirrors deliberately); and deleting the abandoned `preview/sp3-federal-ingestion` Neon branch from the console, **not** through the MCP. **Now also actionable:** the accuracy threshold spec §9 deferred until there was a real number — there is one.
 
@@ -765,7 +740,7 @@ $s | vercel env add ADMIN_SECRET preview
 | **SP3** | Federal ingestion — SAM.gov + USASpending, landing **sightings** | ✅ **MERGED to `main` 2026-08-16** (`6a8cf67`), built 2026-08-15. Tasks 1–9: run contract, adapter framework, SQLite transport artifact, checkpointing scrape loop, CLI, migration 005 + importer + import CLI, SAM.gov adapter, USASpending adapter, `POST /api/admin/scrape`. **Both adapters characterised against live APIs, not written from memory** — ⚠️ **and that was still not enough:** the characterisation covered the parameters somebody thought to vary, and `is_active` was inherited unexamined from a corpus script, aiming the whole adapter at the archive. Caught 2026-08-16 by the **first live end-to-end run**, not by review or tests. Hand-invoked and operator-scoped per §9.6. ✅ **RUN LIVE AGAINST SAM.gov 2026-08-16** — 530 open notices scraped, imported and merged into production |
 | **SP3.5** | **Merge — sightings into canonical records** *(added 2026-08-15)* | ✅ **MERGED to `main` 2026-08-16** (`6a8cf67`), built 2026-08-15. Tasks 10–11: `mergeSightings()` and honest `perSourceYield()`, plus `npm run merge`. `2G` split — schema shipped in SP1, merge logic is this. **Demo criterion met, but see the caveat:** cross-source dedup is exercised only by a synthetic fixture, because SAM and USASpending do not share an ID namespace. Plan §6.5. **Rewritten set-based 2026-08-16** — 3m36s → 4.07s; the per-group transaction had made cost track the whole corpus rather than the new batch |
 | **SP3.6** | **Source health + the run trigger** *(added 2026-08-16, A3's ruling)* | ✅ **MERGED to `main` 2026-08-18** (`a110e93`, `--no-ff`), built the same day. **✅ DEMO CRITERION NOW FULLY RUN — and the browser half found two defects the server half could not: `Run` had never worked in any browser (it sent the `since_default` DURATION where the route requires a DATE, 400 every time), and `Check` was silently inert on the two rows with no probe target. Both fixed 2026-08-18; gate 292 tests / 43 files.** *(This row read ◐ BUILT … NOT YET MERGED, demo criterion NOT YET RUN for the part of 08-18 between the two, which was accurate then and is superseded here.)* Thirteen tasks implemented, twelve reviewed at the time of writing (the paperwork task, this one, under review): migration 006 (`source_health_valid` CHECK — `ok`/`failing`/`rot`/`excluded`/`unknown` — plus `health_checked_at`/`health_method`/`health_note`/`probe_url`), eligibility rules (posture governs contact, not `enabled`), a platform-keyed probe registry (real SAM/USASpending probes, `genericUrlProbe` fallback, hard 10s timeout, `allSettled`), the orchestrator (`checkSources`), `POST /api/admin/health` and `POST /api/admin/run` (scrape → import → merge in one request, artifact alive only inside it), the screen's Check and Run controls, and the `app/shared` type reconciliation (`SourceHealth`/`SourceRow.health` narrowed to the real DB enum — surfaced no defect, since Task 11 had already fixed the one client consumer). Gate **263 tests / 42 files**, `npm run check` exit 0. Design: `docs/superpowers/specs/2026-08-17-source-health-design.md`. Plan: `docs/superpowers/plans/2026-08-18-sp3.6-source-health.md`. **Two things deliberately left alone:** `PATCH /api/sources/:id` is still unauthenticated (only Check/Run gained `requireAdminSecret`), and `Region A.2 : Status Bar` is still unbuilt (a shell region; A1 makes the shell a hard dependency). **⚠️ Demo criterion (design spec §10) is outstanding — built-and-gate-green is not the same claim as demoed** |
-| **SP4** | Fetch + extraction — documents parsed, fields cited | ✅ **MERGED to `main` 2026-08-30** (`cc8babe`, `--no-ff`), built and deployed the same day. Twelve tasks, 61 commits, gate **430 tests / 58 files**. Migrations 010 and 011. **Run live**: 79 documents processed on the test branch, 0 pending; first accuracy reading `closes_at` agreed 2 / disagreed 0 / missed 14 / opportunities 16 — precision 100%, recall 12.5%, **denominator honestly unknown** (it assumes every miss was ours). Browser click-through done over CDP. **Two review rounds, thirteen findings, all fixed** — including a regression the first round created. Demo criterion bullets 2 and 3 **deferred to SP6** by ruling; what dies with that is in the spec's §10.1. ⏭ Remaining: the click-through on PRODUCTION, and the deadline-labelling task |
+| **SP4** | Fetch + extraction — documents parsed, fields cited | ✅ **MERGED to `main` 2026-08-30** (`cc8babe`, `--no-ff`), built and deployed the same day. Twelve tasks, 61 commits, gate **430 tests / 58 files**. Migrations 010 and 011. **Run live**: 79 documents processed on the test branch, 0 pending; first accuracy reading `closes_at` agreed 2 / disagreed 0 / missed 14 / opportunities 16 — precision 100%; ⚠️ **recall 12.5% is UNVALIDATED, a lower bound rather than a measurement** (the denominator assumes every miss was ours; validating it is PARKED). Browser click-through done over CDP. **Two review rounds, thirteen findings, all fixed** — including a regression the first round created. Demo criterion bullets 2 and 3 **deferred to SP6** by ruling; what dies with that is in the spec's §10.1. ⏭ Remaining: the click-through on PRODUCTION, and the deadline-labelling task |
 | ~~SP5~~ | ~~Matching engine~~ | **Removed 2026-08-11** |
 | **SP6** | Triage + record. **← GO / NO-GO** | — |
 | **SP7** | Live ingestion *(on GO)* | — |
