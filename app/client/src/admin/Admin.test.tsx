@@ -841,3 +841,112 @@ test("a Check whose request never completes surfaces the reason and frees the ro
   expect(alert.textContent).toContain("Failed to fetch");
   expect((btn as HTMLButtonElement).disabled).toBe(false);
 });
+
+/* ---- SP4 T12: the two screen-level batch controls ---------------------- */
+
+/* These are SCREEN-level controls, not row-level ones, so they carry their
+ * own busy flag. The task brief spelled them `disabled={busy}` -- but `busy`
+ * in this component is a Record<number, boolean>, and an object is always
+ * truthy, so both buttons would have shipped permanently disabled. A
+ * disabled control with no explanation is the same broken-looking button D7
+ * exists to prevent, reached from a third side; asserted here so it cannot
+ * come back. */
+test("Extract POSTs with the admin secret and reports what remains", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  const calls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        calls.push(String(url));
+        expect((init.headers as Record<string, string>)["X-Admin-Secret"]).toBe("s3cret");
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ processed: 3, failed: 0, remaining: 41, limit: 10 }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (String(url).includes("/api/sources") ? [{ ...baseSource }] : PROFILE),
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /extract documents/i });
+  expect((btn as HTMLButtonElement).disabled).toBe(false);
+  btn.click();
+
+  expect(await screen.findByText(/41/)).toBeTruthy();
+  expect(calls[0]).toContain("/api/admin/extract");
+});
+
+test("Discover is a separate control, and posts to its own endpoint", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  const calls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        calls.push(String(url));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ solicitations: 9, skipped: 4, documents: 7, refreshed: 1, limit: 10 }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (String(url).includes("/api/sources") ? [{ ...baseSource }] : PROFILE),
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  (await screen.findByRole("button", { name: /discover attachments/i })).click();
+
+  /* Discover reports `documents`, not `processed`; the readout has to render
+   * the count the endpoint actually returns rather than a zero standing in
+   * for a key it never sends. */
+  const line = await screen.findByText(/document/i);
+  expect(line.textContent).toMatch(/7/);
+
+  /* AND `skipped`, which is the only number that separates "those notices
+   * have no attachments" from "every request failed" -- discover.ts added
+   * that counter for exactly this distinction (its fix-round-1 note: an
+   * operator can tell skipped: 0 from skipped === solicitations). Dropping
+   * it from the one surface that shows it defeats the fix. Found by the
+   * 2026-08-30 click-through, where a real run reported "0 document(s) from
+   * 10 solicitation(s)" and nothing on the screen could say which. */
+  expect(line.textContent).toMatch(/4 skipped/i);
+  expect(calls[0]).toContain("/api/admin/discover");
+});
+
+/* D7 again, on the third control that can freeze. A rejected fetch must
+ * clear busy AND say why -- found in production on Run, and there is no
+ * reason these two would fail differently. */
+test("an Extract whose request never completes surfaces the reason and frees the control", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") throw new TypeError("Failed to fetch");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (String(url).includes("/api/sources") ? [{ ...baseSource }] : PROFILE),
+      };
+    }) as unknown as typeof fetch,
+  );
+
+  render(<Admin />);
+  const btn = await screen.findByRole("button", { name: /extract documents/i });
+  btn.click();
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Failed to fetch");
+  expect((btn as HTMLButtonElement).disabled).toBe(false);
+});

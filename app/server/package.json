@@ -12,7 +12,11 @@
     "@tenderfoot/shared": "*",
     "cors": "^2.8.5",
     "express": "^4.21.0",
-    "pg": "^8.23.0"
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.1",
+    "pg": "^8.23.0",
+    "unpdf": "^1.8.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

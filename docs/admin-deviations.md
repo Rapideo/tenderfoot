@@ -387,3 +387,98 @@ because the frozen reference is silent, not because it disagrees.
 **Two tests, and neither implies the other:** the message proves the reason
 survived the failure, and the re-enabled button proves the row can be tried
 again. Gate green at **301 tests / 43 files**.
+
+---
+
+# Ruled before it was built — SP4 T6, 2026-08-28
+
+**Numbered `D8`, not `H4`.** The H1–H3 note above says the letter tells a
+reader whether something was found by building or decided in advance; that
+rule was scoped to SP3.6's health vocabulary, not to every future entry. `D`
+is this file's continuous series across slices, `H` is that one series's own
+name, and starting here the section header — "found by building" vs. "ruled
+before it was built" — carries provenance instead of the prefix.
+
+## D8 — nested archives are not traversed, and now say so
+
+A `.zip` inside a `.zip` becomes a `document` row marked `failed` with
+`source_note = 'nested archive not traversed'`. Depth 1 is the same limit the
+2026-08-18 spike had — it listed `Att L - Bidders Library.zip` inside
+`docs.zip` and logged `skipped: "not a parseable format"`, a wrong reason
+that lived nowhere durable. A recorded failure is queryable; a wrong reason in
+a throwaway artifact is not. Traversal is deferred rather than refused:
+nothing here prevents depth 2 later.
+
+---
+
+# Found by building — SP4 T10, 2026-08-30
+
+## D9 — a bundle's members are extracted where their bytes are, not later
+
+Task 10's brief expanded a `.zip` into child `document` rows marked
+`pending`, for a later batch to fetch and extract. **A member row cannot be
+fetched by a later batch, ever.** Its bytes came from inside an archive, so
+it has no `source_url`, and ruling 1 keeps no bytes anywhere — the design
+says documents are fetched, parsed and DISCARDED, and migration 008's own
+comment records that `path` is a dead column from the pre-Vercel filesystem
+design. The spike reached 86 members across nine bundles; as briefed, every
+one of them would have become a row that the next pass fetched from nothing,
+failed, and stamped `download failed` — the network blamed for a design gap,
+a wrong reason made durable, which is the exact thing [D8] exists to prevent
+one paragraph up the same code path.
+
+So a member is extracted at the only moment its bytes exist: inside the
+parent's own iteration, by the same `absorb()` that handles a top-level
+document, so a member cannot get quieter treatment than a file that arrived
+on its own. Nothing else moves. The parent is still marked `extracted` with
+no text of its own (design §5), members still carry `parent_document_id`
+(§3.1), and a nested archive is still D8's recorded failure at depth 1 —
+`expand` is a boolean parameter rather than a counter precisely so that
+traversing deeper would require deleting it.
+
+**Two consequences worth stating.** The parent is marked `extracted` AFTER
+its members, so a run killed mid-expansion leaves the bundle `pending` and
+the next run redoes it; the opposite order would mark the bundle done and
+strand the members it had not written yet. And a `pending` row with no
+`source_url` is now a recognisable thing — a member stranded by exactly that
+kill — so it is failed with a reason that says so and says how to recover it,
+rather than being reported as a download that failed.
+
+**Not deviated from, though §4.3 words it as one:** `WHERE closes_at >=
+now()`. The `ORDER BY` is what makes the first batch the useful batch, and it
+is kept. The filter is not, for two reasons: a comparison against a NULL
+`closes_at` yields NULL and WHERE reads NULL as false, which is Task 9's
+Critical (b) verbatim; and a permanent filter makes the returned `remaining`
+a lie, since documents on a since-closed solicitation would sit `pending`
+forever under a counter that never reaches zero.
+
+---
+
+# Found by building — SP4 T12, 2026-08-30
+
+## D10 — the two batch controls sit at the foot of the registry card
+
+`Discover` and `Extract` act on the document queue, which belongs to no
+source, so they cannot join the per-row controls the way Check and Run did.
+The design bundle predates SP4 and has no control group for them at all.
+Rather than invent a region, they sit at the foot of the Source Registry card
+and reuse the row controls' own button classes — the same "native affordance,
+not a designed one" posture D1 and D5 took, with the visual design of this
+screen still deferred. They are placed AFTER the rows because that is the
+order of the work: a source is run, which produces solicitations; discover
+asks what is attached to them; extract reads what discover found.
+
+**They carry their own busy flag, and that is not a detail.** The task brief
+spelled both buttons `disabled={busy}` — but `busy` in `Admin.tsx` is a
+`Record<number, boolean>` keyed by source id, and an object is always truthy,
+so both controls would have shipped **permanently disabled**. A disabled
+control with no explanation is the same broken-looking button D7 exists to
+prevent, reached from a third side. `Admin.test.tsx` now asserts `.disabled`
+is `false` before clicking, so it cannot come back.
+
+**The readout does not flatten the two endpoints into one shape.** Extract
+returns `processed`/`failed`/`remaining`; discover returns
+`documents`/`solicitations`. The brief rendered `data.processed ??
+data.documents ?? 0` into one sentence, which prints a zero for a key the
+endpoint never sends — a number an operator cannot tell from a real zero.
+The presence of `remaining` selects the wording instead.

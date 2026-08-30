@@ -1,5 +1,5 @@
 import type { Probe, ProbeResult } from "../probe.js";
-import { parseSamPage } from "../../scrape/adapters/sam.js";
+import { parseSamPage, SAM_HOST } from "../../scrape/adapters/sam.js";
 
 /* A real, minimal SAM query -- one page, smallest window the API accepts.
  *
@@ -19,7 +19,7 @@ import { parseSamPage } from "../../scrape/adapters/sam.js";
  * catch, self-inflicted. size=1 keeps the request itself as small as the
  * adapter's size=100 pages allow. */
 const PROBE_URL =
-  "https://sam.gov/api/prod/sgs/v1/search?index=opp&size=1&sort=-modifiedDate&is_active=true";
+  `${SAM_HOST}/sgs/v1/search?index=opp&size=1&sort=-modifiedDate&is_active=true`;
 
 export const samProbe: Probe = async ({ fetchImpl }): Promise<ProbeResult> => {
   const method = "sam";

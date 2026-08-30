@@ -43,8 +43,16 @@
  */
 import type { Adapter, ListingItem, ListingPage } from "../adapter.js";
 
+/* The one real SAM.gov host, exported so nothing else re-types it from
+ * memory. Task 9 fix round 1: extract/discover.ts originally hardcoded
+ * `https://api.sam.gov/prod/...` -- a wrong host that 404s on every id --
+ * because the person writing that URL didn't read this file first. Sharing
+ * this constant is the guard against a THIRD (and then fourth) spelling;
+ * health/probes/sam.ts imports it too. */
+export const SAM_HOST = "https://sam.gov/api/prod";
+
 const BASE =
-  "https://sam.gov/api/prod/sgs/v1/search?index=opp&size=100&sort=-modifiedDate&is_active=true";
+  `${SAM_HOST}/sgs/v1/search?index=opp&size=100&sort=-modifiedDate&is_active=true`;
 
 export function parseSamPage(body: string): { items: ListingItem[]; count: number } {
   const d = JSON.parse(body);

@@ -300,3 +300,41 @@
   background: var(--text-label);
   flex: none;
 }
+
+/* D10. SP4's two screen-level controls. The design bundle predates this
+ * slice and has no control group for them, so they take the same "native
+ * affordance, not a designed one" posture as Check and Run above -- the
+ * smallest thing that makes them legible, grouped and clickable, with the
+ * visual design of this screen still deferred.
+ *
+ * A row, not a cell: unlike Check and Run these belong to no source, so they
+ * sit at the foot of the registry card and wrap rather than joining the grid
+ * the rows are laid out on. */
+.admin-batch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-top: 1px solid var(--line-row);
+}
+
+/* The readout says what a batch did. Mono because every figure on this
+ * screen that an operator compares between runs is mono, and it takes the
+ * full row so a result never sits half-hidden beside the buttons. */
+.admin-batch {
+  flex-basis: 100%;
+  margin: 0;
+  font: 400 11px/1.5 "IBM Plex Mono";
+  color: var(--text-tertiary);
+}
+
+/* `.admin-error` carries its own bottom border for use between rows; inside
+ * this group it is the last thing in the card, so the border would draw a
+ * line under nothing. */
+.admin-batch-controls .admin-error {
+  flex-basis: 100%;
+  padding: 8px 0 0;
+  background: none;
+  border-bottom: none;
+}

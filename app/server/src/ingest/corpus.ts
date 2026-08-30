@@ -156,10 +156,13 @@ async function insertRows(
   );
 
   const inserted = await q.all<{ id: number; external_id: string }>(
+    /* Migration 010: source_id is constant for the batch -- `srcId` is the
+     * source this whole import is attributed to -- so it rides in as a scalar
+     * parameter rather than a tenth parallel array. */
     `INSERT INTO solicitation (org_id, external_id, title, kind, status, posted_at,
-                               closes_at, codes, source_note)
+                               closes_at, codes, source_note, source_id)
      SELECT org_id, external_id, title, kind, status, posted_at, closes_at,
-            codes::jsonb, source_note
+            codes::jsonb, source_note, $10::int
        FROM UNNEST($1::int[], $2::text[], $3::text[], $4::text[], $5::text[],
                    $6::text[], $7::text[], $8::text[], $9::text[])
          AS t(org_id, external_id, title, kind, status, posted_at, closes_at,
@@ -175,6 +178,7 @@ async function insertRows(
       rows.map((r) => r.closesAt),
       rows.map((r) => (r.codes === null ? null : JSON.stringify(r.codes))),
       rows.map((r) => r.note),
+      srcId,
     ],
   );
 

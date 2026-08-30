@@ -212,3 +212,46 @@ It passes when:
 4. The accuracy query returns a number per field, comparing `document` values against `listing` values.
 
 ⚠️ **Built-and-gate-green is not the same claim as demoed.** SP3.6 learned this the hard way: its server half passed every test while both buttons above it were broken in a browser. **The click-through is part of this criterion, not a follow-up to it.**
+
+---
+
+## 10.1 Criterion bullets 2 and 3 are DEFERRED TO SP6 — ruled by Matt, 2026-08-30
+
+**Bullets 2 and 3 are not SP4's to pass, and the headline sentence of §10 is
+half deferred with them.** Both require a solicitation **record view**. The
+app has three routes — Health, Admin, and the dev-only Gallery — no SP4 task
+builds a record screen, and STATUS's slice table puts the record in **SP6
+(Triage + record)**. The criterion was written assuming a surface a later
+slice owns.
+
+**What SP4 still passes on its own:** bullet 1 (`document` rows exist with
+`source_url`; nothing processed stays `pending`) and bullet 4 (the accuracy
+query returns a number per field — first live reading 2026-08-30: `closes_at`
+agreed 2, disagreed 0, missed 14, opportunities 16).
+
+### What dies with the deferral, named rather than left to be discovered
+
+**SP4 can no longer demonstrate its own headline.** The slice is *"documents
+parsed, fields **cited**"*. A citation exists to be inspected by a person.
+Deferred, SP4 proves a citation is **stored**, never that it is **readable**.
+
+**The conflict-preservation design goes unwitnessed.** `precedence.ts` keeps
+rejected values on the explicit ground that *"a rejection you cannot inspect
+is a bug you will never find"* — and with no record view, the only person who
+can inspect one holds a `psql` prompt. The mechanism is tested and has never
+been seen.
+
+**The FSSA near-miss stays theoretical inside the product.** The seam test
+proves the listing wins. Nobody can open 26-87847 in the app and see the
+stale 26 August sitting beneath the correct 17 September with its quote,
+which is the thing the whole precedence rule was built to make visible.
+
+**And the expensive one: a class of discovery moves to the GO/NO-GO gate.**
+Whether the citations are *useful* — whether a quote is long enough to
+justify its value, whether a confidence number means anything to a reader,
+whether these six fields are the right six — is now first tested at SP6,
+which is the gate that decides whether the project continues. That is the
+costliest place to learn a citation is unreadable.
+
+**Not carried forward as a design.** Nothing here specifies the record view;
+that is SP6's to design when SP6 is designed.

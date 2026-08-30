@@ -19,7 +19,7 @@ await resetSchema();
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("./migrate.js");
-const { all, one, run, insert, close } = await import("./index.js");
+const { all, one, run, run: dbRun, insert, close } = await import("./index.js");
 
 beforeAll(async () => {
   await migrate(false);
@@ -67,7 +67,7 @@ test("all eleven objects plus the two alias tables exist", async () => {
  * which is localised and version-dependent. */
 test("foreign keys are enforced, not decorative", async () => {
   await expect(
-    run("INSERT INTO solicitation (org_id, title) VALUES (99999, 'ghost')"),
+    run("INSERT INTO solicitation (org_id, title, source_id) VALUES (99999, 'ghost', (SELECT id FROM source WHERE name = 'SAM.gov'))"),
   ).rejects.toMatchObject({ code: "23503" });
 });
 
@@ -78,7 +78,7 @@ test("many sightings may point at one solicitation", async () => {
     "INSERT INTO organization (name) VALUES ('Test Agency') RETURNING id",
   );
   const solId = await insert(
-    "INSERT INTO solicitation (org_id, title) VALUES ($1, 'Test RFP') RETURNING id",
+    "INSERT INTO solicitation (org_id, title, source_id) VALUES ($1, 'Test RFP', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id",
     [orgId],
   );
   const srcId = await insert(
@@ -246,4 +246,76 @@ test("the silent-failure findings survived into the registry", async () => {
     "SELECT verified_facets AS v FROM source WHERE name = 'Michigan SIGMA VSS'",
   );
   expect(mi!.v.silently_ignored).toContain("Show Me");
+});
+
+test("document carries a fetch target and a bundle parent", async () => {
+  const cols = await all<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'document'`,
+  );
+  const names = cols.map((c) => c.column_name);
+  expect(names).toContain("source_url");
+  expect(names).toContain("parent_document_id");
+});
+
+test("extracted_field keeps losing values instead of discarding them", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('conflict fixture', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`,
+  );
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 'mechanical')`,
+    [sol],
+  );
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, quote, produced_by)
+     VALUES ($1, 'closes_at', '2026-08-26', 'document', 'proposals due August 26, 2026', 'mechanical')`,
+    [sol],
+  );
+  const rows = await all<{ origin: string }>(
+    `SELECT origin FROM extracted_field WHERE solicitation_id = $1 AND field_name = 'closes_at'`,
+    [sol],
+  );
+  /* Both survive. The conflict IS the two rows. */
+  expect(rows).toHaveLength(2);
+});
+
+/* 23514 is check_violation, asserted by SQLSTATE rather than message text
+ * -- same convention as the FK test above, and for the same reason: a bare
+ * .rejects.toThrow() passes on ANY error, so this test would keep "passing"
+ * even if a future migration replaced the CHECK with, say, a NOT NULL
+ * elsewhere that throws first. */
+test("origin is constrained to the two it may be", async () => {
+  const sol = await insert(`INSERT INTO solicitation (title, source_id) VALUES ('x', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`);
+  await expect(
+    dbRun(
+      `INSERT INTO extracted_field (solicitation_id, field_name, origin) VALUES ($1, 'closes_at', 'guess')`,
+      [sol],
+    ),
+  ).rejects.toMatchObject({ code: "23514" });
+});
+
+test("a field may have many document rows but only one listing row", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('one listing', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`,
+  );
+  const doc = `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+               VALUES ($1, 'closes_at', $2, 'document', 'mechanical')`;
+  /* Many document rows are REQUIRED, not merely tolerated. */
+  await dbRun(doc, [sol, "2026-08-26"]);
+  await dbRun(doc, [sol, "2026-09-17"]);
+
+  await dbRun(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 'mechanical')`,
+    [sol],
+  );
+  /* 23505 is unique_violation, asserted by SQLSTATE rather than message text. */
+  await expect(
+    dbRun(
+      `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, produced_by)
+       VALUES ($1, 'closes_at', '2026-10-01', 'listing', 'mechanical')`,
+      [sol],
+    ),
+  ).rejects.toMatchObject({ code: "23505" });
 });

@@ -580,3 +580,55 @@ August 18, 2026:
 246. Promotion to the playbook left for me again rather than done off the back of the incident. Right call, same as 211.
 
 247. Asked where we actually are: still mechanics, no analysis built. Nothing in the system forms an opinion about a solicitation. SP5 stays parked where it was put on 08-11.
+
+August 29, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand. Covers the session that started the evening of the 28th and ran past midnight. Aug 19–28 have no entries and were deliberately not backfilled.]*
+
+248. Told Claude to resume. SP4 Task 9 was mid-fix-round: discover writes the attachment rows and the ground-truth rows the accuracy query measures against. Review had found two Criticals and together they meant the slice produced nothing at all.
+
+249. First: the SAM attachment endpoint was written from memory and 404s on every id shape. The repo already knew the right host — the scrape adapter and the health probe both use sam.gov/api/prod and always have. Second time this project has paid for a value invented next to a file that already contains it.
+
+250. Second: `left(closes_at, 10) >= today` is NULL when closes_at is NULL, and WHERE reads NULL as false. Every SAM.gov solicitation was silently dropped from the candidate list. The query looked like it was working.
+
+251. The part I want kept is that neither Critical was catchable by the tests that existed. `source_url.length > 0` was the only thing pinning the endpoint — it passes just as happily against the invented host. And not one fixture had a NULL closes_at, which is the only shape SAM rows come in. Same failure as Task 8, in the round that was supposed to be closing it.
+
+252. New rule out of that, and it's a sharp one: a test that composes the same constant the implementation composes moves with the bug instead of catching it. The URLs are written out as literals now. Verified by mutation rather than by reading — five mutants, five killed.
+
+253. Third Critical, found while fixing the second, not by review. `solicitation` had no source column at all; the only record of where a row came from was a sighting. So the query handed Indiana purchasing ids to a federal API. Worse, the NULLS-LAST fix I'd just approved made it sharper — the only rows carrying a deadline are the wrong-source ones, so they sorted to the front of every batch.
+
+254. Ruled: put the source on the solicitation, NOT NULL. The constraint is the point, not tidiness. A row with a null source is invisible to `WHERE source_id = ...` — silently excluded, never counted — which is the identical shape to the closes_at bug four entries up. Same failure twice in one evening is a pattern, not a coincidence.
+
+255. Then the smoke test, which is the entry that matters. Discover had never once produced a document row, anywhere, in any environment. Everything had been verified by hand-probing the API and by fixtures. First live run: 7 documents, 0 skipped, real filenames. The code was right.
+
+256. And every ground-truth row it wrote said ABSENT. Not a fixture artifact — all six fields are null on all 9,682 production SAM.gov rows. The accuracy query requires a stated listing value, so it would have reported zero fields. Not the one field we'd already talked ourselves down to. Zero. The slice's entire premise was unbuilt and nothing in the suite could have said so.
+
+257. That's the generalisation I want written down: fixtures prove the code does what it says and say nothing about whether the data can support the thing the code is for. We had green tests over an empty premise for the whole slice.
+
+258. The data was there the whole time. `responseDate`, sitting in `sighting.raw` on 7,644 of 9,682 rows. merge.ts turns sightings into canonical records and had only ever learned to read one field out of the payload — the title. corpus.ts was the sole writer of closes_at anywhere in the codebase, which is exactly why the 201 corpus rows had deadlines and none of the SAM ones did.
+
+259. Ruled the backfill ahead of Task 10. Building the extractor first means building against a measurement that reads zero either way.
+
+260. The field choice was the real decision and I'd have got it wrong. `responseDate` and `responseDateActual` are the same instant — UTC and the notice's own timezone. closes_at is a bare date, so picking between them is picking which DAY, and on 2.9% they disagree. Every one of those is an evening deadline rolling past midnight in UTC. Reading the obvious field records deadlines a day LATE, which is the one direction that actively misleads a bidder.
+
+261. Worth keeping as its own idea: when two fields are the same instant in different renderings, truncating one is a decision, not a formatting step. It got measured — 39 of 1,338 — rather than reasoned about.
+
+262. Settled the thing that had been bothering me: two production row counts in the log that didn't agree. They were never in conflict. Two Neon branches, and nobody had written down which was which. The tell is that the old query selects exactly 22 rows on both.
+
+263. What fell out of that is worse than the row counts. check.mjs asserted ".env's DATABASE_URL is the PRODUCTION pooler." False, and load-bearing — it was the entire justification for the override protecting production from a local test run, so the override was substituting a value for itself. The comment described the dangerous configuration as the normal one.
+
+264. Fixed by making it a guard rather than a sentence. A comment cannot fail a build. It compares by database rather than by string, because Neon serves a pooled and a direct host for one endpoint and a string compare waves the second one straight through.
+
+265. Then I had it install the Vercel CLI, which made that footgun considerably more reachable — `vercel env pull` with no path overwrites .env, and Vercel's own DATABASE_URL *is* production. The guard added an hour earlier is the thing that catches it. Accidental good timing rather than foresight, but I'll take it.
+
+266. Deploy printed a TypeScript error and deployed anyway. Chased it: the error itself is spurious, but `api/index.ts` — the file Vercel actually builds — was in no TypeScript project. Root tsconfig is `files: []` plus references and none of the three include it. We had never typechecked the deployed entrypoint. Two facts I want kept separate: our gate had a hole, and Vercel does not fail a build on type errors. Only the first is fixed.
+
+267. Last piece was an ordering constraint I'd have been happy to write down as a rule and then forget. merge populates closes_at, discover copies it into ground truth, nothing sequences them. Run backwards, discover records "the portal states no deadline" about a notice whose deadline was published all along — permanently, because it never revisits a solicitation once it has documents.
+
+268. Removed it instead of enforcing it, and the argument is the good part: ABSENT and "we hadn't read it yet" are different facts. The three-state discipline exists to keep them apart, and recording the second as the first is the one way a ground-truth row can lie. That reverses a decision from earlier in the same round — DO NOTHING became DO UPDATE — which is the right direction for a premise that turned out to be false.
+
+269. Caught production up, both halves. Pre-flighted the merge rather than assuming its blast radius: 0 unlinked sightings meant no inserts or links were possible, and the run matched the prediction exactly — deadlinesSet 7644, everything else zero. Then deployed. Health endpoint returns ok with all ten migrations.
+
+270. Residual, said out loud rather than discovered later: production is still deployed from sp4-fetch-extraction, not main, and Task 9 has never been re-reviewed. That diff now carries six things the original review never saw. The review debt is real and it's mine to schedule.
+
+271. Nine commits, gate green at 382 tests. The honest summary of the evening is that the slice went from provably measuring nothing to closed end to end — and every one of the three things that made it measure nothing was invisible to a full green suite.

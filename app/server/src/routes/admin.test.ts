@@ -532,3 +532,89 @@ test("a source that has run before resumes from last_run_at", async () => {
   const body = (await res.json()) as { since: string };
   expect(new Date(body.since).toISOString()).toBe("2026-07-04T09:00:00.000Z");
 });
+
+/* ---- SP4 T11: the two extraction endpoints ---------------------------- */
+
+/* Both inherit `admin.use(requireAdminSecret)`, so neither declares auth of
+ * its own -- and that is exactly why they are asserted here. An inherited
+ * gate is invisible at the call site: nothing in either handler would look
+ * wrong if the `use` above it were removed or mounted after them. /extract
+ * writes to every document it touches and /discover fetches a federal API
+ * from the app's IP, so an ungated one is FIX 3's amplifier again. */
+test("discover requires the admin secret", async () => {
+  const res = await post({}, {}, "/api/admin/discover");
+  expect(res.status).toBe(401);
+});
+
+test("extract requires the admin secret", async () => {
+  const res = await post({}, {}, "/api/admin/extract");
+  expect(res.status).toBe(401);
+});
+
+/* NO resetSchema() HERE, though the brief's version of this test opened with
+ * one. This file migrates ONCE, in beforeAll, and every test after shares
+ * that schema -- resetSchema() drops it, tables and schema_migrations
+ * together, so the call would take out both this test and every test after
+ * it. (run-extract.test.ts can reset per test because it re-runs migrate()
+ * each time; this file does not.) There are no pending documents in this
+ * schema, which is the point: the empty case must answer 200 with zeroes,
+ * not 500 or an empty body. */
+test("extract reports what it did and what remains", async () => {
+  const res = await post({}, undefined, "/api/admin/extract?limit=5");
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { processed: number; failed: number; remaining: number };
+  expect(body.processed).toBe(0);
+  expect(body.failed).toBe(0);
+  expect(body.remaining).toBe(0);
+});
+
+/* THE CLAMP, ASSERTED. The brief's version of this test checked only that
+ * `?limit=99999` answered 200 -- which is equally true with the clamp
+ * deleted, so it pinned nothing. The effective limit is echoed in the
+ * response precisely so this can be asserted, and so an operator who asks
+ * for 99999 and gets 50 is TOLD, rather than left to infer it from a batch
+ * that stopped early. */
+test("an operator-supplied limit is clamped, not trusted", async () => {
+  const res = await post({}, undefined, "/api/admin/extract?limit=99999");
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { limit: number };
+  expect(body.limit).toBe(50);
+});
+
+/* A negative limit is the case the obvious `Number(x) || 10` spelling lets
+ * through: -5 is truthy, and Math.min does not catch it either. It would
+ * reach Postgres as `LIMIT -5` and come back a 500 naming a SQL fault. */
+test("a limit that cannot do work never reaches the query", async () => {
+  const res = await post({}, undefined, "/api/admin/extract?limit=-5");
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { limit: number };
+  expect(body.limit).toBe(10);
+});
+
+/* Discover's own shape, and a live-network guard. This schema holds no
+ * SAM.gov solicitation, so the candidate query returns nothing and NO fetch
+ * is made -- asserted rather than assumed, because if a future fixture ever
+ * put one here, this suite would start scraping a federal API on every gate
+ * run. The zeroes are what makes that failure loud instead of silent. */
+test("discover answers with its four counts, and touches no network to do it", async () => {
+  const res = await post({}, undefined, "/api/admin/discover?limit=5");
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as {
+    solicitations: number;
+    skipped: number;
+    documents: number;
+    refreshed: number;
+    limit: number;
+  };
+  expect(body).toEqual({
+    solicitations: 0,
+    skipped: 0,
+    documents: 0,
+    refreshed: 0,
+    limit: 5,
+  });
+});

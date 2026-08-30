@@ -15,7 +15,7 @@
     "dev": "node scripts/dev.mjs",
     "migrate:deploy": "tsx app/server/src/db/migrate.ts",
     "build": "npm run migrate:deploy && npm run build --workspace app/client",
-    "typecheck": "tsc --build --force",
+    "typecheck": "tsc --build --force && tsc -p tsconfig.api.json",
     "test": "vitest run",
     "sync:tokens": "node scripts/sync-tokens.mjs",
     "tokens": "python prototype/tools/verify-tokens.py && python prototype/tools/verify-type.py && node scripts/sync-tokens.mjs --check",
