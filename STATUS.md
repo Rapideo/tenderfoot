@@ -217,6 +217,45 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-08-30
 
+## ▶️ NEXT SESSION — START SP6. Session ended 2026-08-30 at a clean stop.
+
+**SP4 is closed: merged (`cc8babe`), deployed to production, verified, docs current, tree clean,
+gate green at 430 tests / 58 files.** Nothing is half-done and nothing is waiting on a decision.
+
+**The next slice is SP6 — Triage + record.** It is the **GO / NO-GO gate**, and it is the first
+slice that produces screens a person outside the project would recognise. Two of SP4's demo
+criterion bullets were deferred into it (the citation display: value, confidence, and the quoted
+passage), so it is slightly larger than the original plan describes.
+
+### How to start it — design pass first, not screens
+This project's pattern is **spec → plan → task briefs**, and SP6 has not had its design pass.
+Do that before any code. Invoke the brainstorming skill first, per the standing rule for
+creative work; there is real input to work from rather than a blank page:
+
+- **`reference/Tenderfoot SVRC.md`** specifies the views — `View 1.1 : The Queue`,
+  `2.1 Brief`, `2.3 Extracted Fields`, `2.4 Documents`, `2.5 Timeline`. ⚠️ **It is a frozen
+  reference.** Read `svrc-outline-format` conventions before writing against it, and where it is
+  silent, **build the smallest thing and number the deviation** — `docs/admin-deviations.md` is
+  the continuous series (D10 is the latest).
+- **Seventeen signed-off primitives** already exist on the dev-only `/dev/gallery` route. The
+  visual language is done; SP6 is **composition**, not design-from-scratch.
+- **Real data is behind it**: 9,883 solicitations and 7,644 deadlines on production, plus 79
+  extracted documents with cited fields on the `test` branch.
+
+### ⚠️ Two things not to undo
+- **The labelling task is PARKED** (next block down). Do not restart it, and do not quote
+  **12.5% recall** as measured — it is an unvalidated lower bound.
+- **`docs/superpowers/specs/2026-08-28-sp4-fetch-extraction-design.md` §10.1** names what SP6
+  inherited and what the deferral cost. Read it before deciding what the record view must show.
+
+### Still Matt's, none blocking
+Whether Vercel's build should fail on type errors; the staging-branch decision; deleting the
+abandoned `preview/sp3-federal-ingestion` Neon branch **from the console, not the MCP**; and the
+production click-through, which is SP4's one unrun non-deferred criterion bullet.
+⚠️ **The first Discover click on production writes `document` rows into a database that has none.**
+
+---
+
 ## ⏸ PARKED — the deadline labelling task. Ruled by Matt, 2026-08-30.
 
 **`docs/2026-08-30-deadline-labelling.md` is built and committed, and is NOT the next task.**
