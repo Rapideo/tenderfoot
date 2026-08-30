@@ -496,12 +496,22 @@ export function Admin() {
     /* THE TWO ENDPOINTS COUNT DIFFERENT THINGS, and the readout says which
      * rather than flattening them. Extract returns `processed` and
      * `remaining` (documents it read, documents still queued); discover
-     * returns `documents` and `solicitations` (rows it created, notices it
-     * asked about). Rendering a zero where a key was never sent would be a
-     * number the operator has no way to distinguish from a real zero. */
+     * returns `documents`, `solicitations` and `skipped` (rows it created,
+     * notices it asked about, notices it could not ask about). Rendering a
+     * zero where a key was never sent would be a number the operator has no
+     * way to distinguish from a real zero.
+     *
+     * `skipped` IS NOT OPTIONAL HERE, and the 2026-08-30 click-through is
+     * why: a real run reported "0 document(s) from 10 solicitation(s)" and
+     * nothing on the screen could say whether those ten notices genuinely
+     * carry no attachments or whether all ten requests failed. discover.ts
+     * added that counter for precisely this distinction -- skipped: 0 means
+     * nothing to fetch, skipped === solicitations means every request failed
+     * -- and leaving it off the only surface that shows it defeats the fix. */
     setBatchResult(
       data.remaining === undefined
-        ? `${label}: ${data.documents ?? 0} document(s) from ${data.solicitations ?? 0} solicitation(s)`
+        ? `${label}: ${data.documents ?? 0} document(s) from ${data.solicitations ?? 0} solicitation(s), ` +
+            `${data.skipped ?? 0} skipped`
         : `${label}: processed ${data.processed ?? 0}, ${data.failed ?? 0} failed, ${data.remaining} remaining`,
     );
     await load();

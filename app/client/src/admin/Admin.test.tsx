@@ -894,7 +894,7 @@ test("Discover is a separate control, and posts to its own endpoint", async () =
         return {
           ok: true,
           status: 200,
-          json: async () => ({ solicitations: 2, skipped: 0, documents: 7, refreshed: 1, limit: 10 }),
+          json: async () => ({ solicitations: 9, skipped: 4, documents: 7, refreshed: 1, limit: 10 }),
         };
       }
       return {
@@ -911,7 +911,17 @@ test("Discover is a separate control, and posts to its own endpoint", async () =
   /* Discover reports `documents`, not `processed`; the readout has to render
    * the count the endpoint actually returns rather than a zero standing in
    * for a key it never sends. */
-  expect(await screen.findByText(/7/)).toBeTruthy();
+  const line = await screen.findByText(/document/i);
+  expect(line.textContent).toMatch(/7/);
+
+  /* AND `skipped`, which is the only number that separates "those notices
+   * have no attachments" from "every request failed" -- discover.ts added
+   * that counter for exactly this distinction (its fix-round-1 note: an
+   * operator can tell skipped: 0 from skipped === solicitations). Dropping
+   * it from the one surface that shows it defeats the fix. Found by the
+   * 2026-08-30 click-through, where a real run reported "0 document(s) from
+   * 10 solicitation(s)" and nothing on the screen could say which. */
+  expect(line.textContent).toMatch(/4 skipped/i);
   expect(calls[0]).toContain("/api/admin/discover");
 });
 
