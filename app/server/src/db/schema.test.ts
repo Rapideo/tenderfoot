@@ -319,3 +319,55 @@ test("a field may have many document rows but only one listing row", async () =>
     ),
   ).rejects.toMatchObject({ code: "23505" });
 });
+
+test("triage_sample records the population it drew from", async () => {
+  const src = await insert(`INSERT INTO source (name) VALUES ('sample fixture') RETURNING id`);
+  const sample = await insert(
+    `INSERT INTO triage_sample (source_id, seed, n_requested, population_size)
+     VALUES ($1, 'seed-a', 100, 4812) RETURNING id`,
+    [src],
+  );
+  const row = await one<{ population_size: number; n_requested: number }>(
+    `SELECT population_size, n_requested FROM triage_sample WHERE id = $1`,
+    [sample],
+  );
+  /* Both, separately. A source with 40 eligible rows and n=100 draws 40,
+   * and one number cannot carry both facts. */
+  expect(row?.population_size).toBe(4812);
+  expect(row?.n_requested).toBe(100);
+});
+
+test("population_size cannot be left off a sample", async () => {
+  const src = await insert(`INSERT INTO source (name) VALUES ('no denominator') RETURNING id`);
+  await expect(
+    dbRun(
+      `INSERT INTO triage_sample (source_id, seed, n_requested) VALUES ($1, 'seed-b', 10)`,
+      [src],
+    ),
+  ).rejects.toThrow();
+});
+
+test("one solicitation may hold many pursuit rows -- history is legal", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('append fixture', 1) RETURNING id`,
+  );
+  await dbRun(`INSERT INTO pursuit (solicitation_id, state) VALUES ($1, 'Interested')`, [sol]);
+  await dbRun(
+    `INSERT INTO pursuit (solicitation_id, state, reason) VALUES ($1, 'Not Interested', 'reversed')`,
+    [sol],
+  );
+  const rows = await all<{ state: string }>(
+    `SELECT state FROM pursuit WHERE solicitation_id = $1`,
+    [sol],
+  );
+  /* Both survive. The reversal IS the second row. */
+  expect(rows).toHaveLength(2);
+});
+
+test("pursuit_latest index exists, because every read depends on it", async () => {
+  const idx = await all<{ indexname: string }>(
+    `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = 'pursuit'`,
+    [SCHEMA],
+  );
+  expect(idx.map((i) => i.indexname)).toContain("pursuit_latest");
+});
