@@ -331,15 +331,23 @@ Split into three tests, none of which lies: the premise (the stale date really i
 
 ⚠️ **The typecheck, not the test run, caught a test that could not have asserted what it claimed** — `stub.mock.calls[0]?.[0]` against a stub declaring no parameters, so `calls` was a list of empty tuples.
 
-### ⏭ START HERE — the production deploy
+### ✅ DEPLOYED TO PRODUCTION — 2026-08-30
 
-**Pre-flighted read-only against production 2026-08-30**, before deciding anything: **0 documents, 0 member rows, 0 duplicate pairs**, migrations stop at **010**. So migration 011 applies cleanly there — the de-dup deletes nothing and the unique index builds against an empty set. Measured, not assumed.
+**Deployment `7wwFyW2DE6CbQgUacfAgpEM5JdAi`, status Ready**, holding the production alias `tenderfoot-tau.vercel.app`. Deployed from `sp4-fetch-extraction` @ `a0f289d` by CLI (`vercel deploy --prod`), which uploads the working tree rather than a git ref.
 
-**What the deploy carries:** migration 011 (a nullable column, a de-dup that matches nothing, a partial unique index), the two new endpoints, the two screen controls, and every fix from both review rounds.
+**Verified, in four separate ways rather than one:**
+- `/api/health` returns `ok` and lists **all eleven migrations, 011 included**.
+- ⚠️ **That only says a file was RECORDED as applied.** Checked read-only against production that the schema it describes actually EXISTS: `solicitation.attachments_checked_at` is `timestamptz NULL`, and `document_member_unique` exists with the exact partial predicate `WHERE (parent_document_id IS NOT NULL)`.
+- **Data intact**: 9,883 solicitations, 11,121 sightings, 0 documents, 0 extracted_fields — the zeroes are expected, discover has never run on production.
+- Both new endpoints are live and gated: `POST /api/admin/discover` and `/api/admin/extract` answer **401** with no secret.
 
-**Then merge to `main`**, which ends the standing oddity that production deploys from a slice branch.
+**Two things worth not re-deriving.** The first `vercel --prod` attempt failed `Not authorized`; passing `--scope koehler-partners` explicitly fixed it, even though `vercel whoami` already reported that account and the project's `orgId` **is** that team's id. And piping the deploy through `head` killed the local CLI with exit 134 — **the build was unaffected and completed server-side**, so the right response to a truncated deploy is to INSPECT the deployment, never to redeploy. ⚠️ The `list_deployments` MCP tool answers **403** for this project's token, matching what the runtime-log API already does; `vercel inspect` works.
 
-**Then the click-through on production** — the criterion's remaining bullet that is not deferred. Precedent: the 08-18 click-through found two defects the passing server half could not see.
+### ⏭ START HERE — merge, then the click-through
+
+1. **Merge `sp4-fetch-extraction` to `main` (`--no-ff`, the convention SP3.6 used).** This also ends the standing oddity that production deploys from a slice branch — though note the CLI deploy uploads the working tree, so the branch was never what production ran *from* so much as what it was built *out of*.
+2. **The click-through on production** — the criterion's one remaining non-deferred bullet. ⚠️ **The first Discover click on production will ask SAM.gov about live notices and write `document` rows into a database that currently has none.** Bounded by the screen's `?limit=10` and the clamp, but it is the first write of its kind there.
+3. **The deadline labelling worksheet** — 14 blocks, one per recall miss, built and waiting. The single highest-value thing a human can do on this slice: the 12.5% recall figure assumes every miss was ours, and a first skim suggests several are clean `NOT-IN-DOC`.
 
 **Parked, not scheduled — and the lead changed once it was measured.**
 
