@@ -222,7 +222,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 > `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
 > changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 426 tests / 58 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 430 tests / 58 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
 
 ### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
 
@@ -319,11 +319,27 @@ Split into three tests, none of which lies: the premise (the stale date really i
 
 **Three reviewer notes ruled and not fixed:** a 429 on the first document reads on screen as `processed 0, 0 failed, N remaining` — indistinguishable from an idle run, accepted as a real gap but it wants a contract change Task 12's readout is already carrying two of; `refreshed` is returned but never displayed; and `Candidate.value_cents` is typed `string` while the oid-20 parser makes it a number at runtime (harmless, `String()` masks it).
 
-### ⏭ START HERE — the production deploy, then merge
+### ✅ 2026-08-30 — REVIEW ROUND 2, and fix round 2
 
-1. **The production deploy** — Matt's, and the criterion's first bullet. ⚠️ **Migration 011 will run against production**: it adds a nullable column and a partial unique index. Both were applied to `test` by the gate's own build step and the index built cleanly against real data (0 duplicate members).
-2. **Then merge to `main`**, which also ends the standing oddity that production deploys from a slice branch.
-3. **A second review round** if wanted — the fix round changed six files and has not itself been reviewed.
+**`2e8bff7`.** Six findings on the fix round itself, **two Major — one of them a regression round 1 created.** All six correct on my own check. Gate **430 tests / 58 files**.
+
+**🔴 I BROKE SAME-NAMED BUNDLE MEMBERS (finding 2).** The unique index added to stop *duplicate* members made `filename` load-bearing — and `parseZip` flattens every entry to its basename. A bundle shipping `Volume 1/SOW.pdf` and `Volume 2/SOW.pdf` — **ordinary** in federal solicitations, which ship per-volume folders — produced two members with **one** name, so the second collided with the first and its bytes, text and fields were discarded with nothing recorded anywhere. Before the index, both files got their own row and both were read. **The fix meant to prevent duplicate rows was silently deleting real files.** Members now carry the full archive path: unique within an archive by construction, and a better record besides.
+
+**Migration 011 now de-duplicates before building that index (finding 1).** Its own comment asserts the duplicates it prevents have already been produced — and if any pair existed, `CREATE UNIQUE INDEX` raises 23505, **blocks the deploy permanently** (every retry hits the same rows), and takes the `ADD COLUMN` in the same migration down with it, leaving the newly deployed candidate query reading a column that does not exist.
+
+**The rest.** Excluding members from the queue opened a hole at the far end — a member left pending by a parent that failed mid-expansion was reachable by nothing and uncounted in `remaining`; a **reconciliation pass** at the top of `runExtract` surfaces it, chosen over a catch-local sweep because a platform kill runs no catch at all (3). `attachments_checked_at` gained a **bounded re-check window**, so a notice amended tomorrow with new attachments is asked again rather than retired forever (4). And the sort grew a **third key**: the second left the expired group ascending, and on 2026-08-30 *every* queued document was expired, so the live-first key selected nothing and the ordering collapsed to the one it had just replaced (5). Finding 6 accepted and largely dissolved by 4's fix.
+
+⚠️ **The typecheck, not the test run, caught a test that could not have asserted what it claimed** — `stub.mock.calls[0]?.[0]` against a stub declaring no parameters, so `calls` was a list of empty tuples.
+
+### ⏭ START HERE — the production deploy
+
+**Pre-flighted read-only against production 2026-08-30**, before deciding anything: **0 documents, 0 member rows, 0 duplicate pairs**, migrations stop at **010**. So migration 011 applies cleanly there — the de-dup deletes nothing and the unique index builds against an empty set. Measured, not assumed.
+
+**What the deploy carries:** migration 011 (a nullable column, a de-dup that matches nothing, a partial unique index), the two new endpoints, the two screen controls, and every fix from both review rounds.
+
+**Then merge to `main`**, which ends the standing oddity that production deploys from a slice branch.
+
+**Then the click-through on production** — the criterion's remaining bullet that is not deferred. Precedent: the 08-18 click-through found two defects the passing server half could not see.
 
 **Parked, not scheduled — and the lead changed once it was measured.**
 
