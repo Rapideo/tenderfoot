@@ -44,6 +44,11 @@ interface Doc {
   solicitation_id: number;
 }
 
+/* Written as an escape, never as the byte itself: a literal NUL in a source
+ * file is invisible in a diff, in a grep and in most editors -- which is a
+ * poor property for the one character this module exists to notice. */
+const NUL = "\u0000";
+
 const unsupported = (filename: string): string =>
   `unsupported type: ${filename.toLowerCase().split(".").pop() ?? "unknown"}`;
 
@@ -136,6 +141,33 @@ async function absorb(doc: Doc, bytes: Buffer, expand: boolean): Promise<boolean
     return true;
   }
 
+  /* THE STORAGE BOUNDARY, and it is here because of a real document.
+   *
+   * The first live run (2026-08-30, the `test` branch) hit
+   * `B3001G-Modernize Foyer Scope Drawings 3.13.26 - Copy.pdf`, a SAM.gov
+   * drawings PDF whose extracted text carries a NUL byte. Postgres `text`
+   * cannot hold one -- `invalid byte sequence for encoding "UTF8": 0x00`,
+   * SQLSTATE 22021 -- and it is the ONE character with that property: every
+   * other control character stores fine. unpdf is not doing anything wrong;
+   * PDFs carry NULs in their content streams and a text extractor that keeps
+   * every code point will pass them through.
+   *
+   * Removed, not replaced with a space and not truncated at the first one:
+   * the surrounding words are what a citation quotes, and a NUL sits between
+   * glyphs rather than between words. Removal happens BEFORE extractFields,
+   * so quotes -- which are slices of this same string -- are clean by
+   * construction rather than by a second pass that could be forgotten.
+   *
+   * RECORDED, not silent. A document altered on the way into the database is
+   * one nobody can audit afterwards; the note is how the alteration stays
+   * visible next to the text it changed. */
+  const nuls = parsed.text.split(NUL).length - 1;
+  const text = nuls === 0 ? parsed.text : parsed.text.replaceAll(NUL, "");
+  const notes =
+    nuls === 0
+      ? parsed.notes
+      : [...parsed.notes, `removed ${nuls} NUL byte(s): Postgres text cannot store them`];
+
   /* Parser notes describe the DOCUMENT, not any one field -- "cell B3 is a
    * cached formula", "this PDF has no table structure". They belong on the
    * document row. Putting them on extracted_field.note would collide with the
@@ -149,10 +181,10 @@ async function absorb(doc: Doc, bytes: Buffer, expand: boolean): Promise<boolean
         SET extracted_text = $2, extract_status = 'extracted',
             produced_by = 'mechanical', source_note = $3
       WHERE id = $1`,
-    [doc.id, parsed.text, parsed.notes.join(" | ") || null],
+    [doc.id, text, notes.join(" | ") || null],
   );
 
-  for (const f of extractFields(parsed.text)) {
+  for (const f of extractFields(text)) {
     await insert(
       `INSERT INTO extracted_field
          (solicitation_id, field_name, value_text, origin, document_id, quote, confidence, produced_by, note)
@@ -242,7 +274,29 @@ export async function runExtract(opts: {
       continue;
     }
 
-    if (await absorb(doc, bytes, true)) failed++;
+    /* THE WRITES ARE INSIDE THE TRY TOO, not only the parse.
+     *
+     * absorb() catches what parse() throws, but the UPDATE and INSERTs after
+     * it were unguarded until the first live run threw from one of them --
+     * `invalid byte sequence for encoding "UTF8": 0x00` -- which escaped
+     * runExtract entirely and took every remaining document in the batch
+     * with it. The NUL itself is handled at the storage boundary above; this
+     * is what makes the NEXT unforeseen write failure cost one document
+     * instead of the batch, which is the whole promise `extract_status` as a
+     * checkpoint is supposed to keep.
+     *
+     * A failure part-way through a bundle leaves its already-inserted
+     * members `pending` with no source_url. They are picked up by the
+     * stranded-member branch above, which says so, rather than being
+     * silently re-expanded into duplicates. */
+    let thisOneFailed: boolean;
+    try {
+      thisOneFailed = await absorb(doc, bytes, true);
+    } catch (err) {
+      await fail(doc.id, `write failed: ${(err as Error).message}`);
+      thisOneFailed = true;
+    }
+    if (thisOneFailed) failed++;
     processed++;
   }
 

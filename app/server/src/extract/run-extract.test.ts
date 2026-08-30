@@ -323,6 +323,76 @@ test("a download that never arrives is recorded as a download failure", async ()
   ).toEqual({ c: 0 });
 });
 
+/* A cell, no cached formula, so the only note this document can carry is the
+ * one the storage boundary adds. */
+function plainSheet(a1: string): Buffer {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, { A1: { t: "s", v: a1 }, "!ref": "A1:A1" } as XLSX.WorkSheet, "S");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+}
+
+/* FOUND BY THE FIRST LIVE RUN, 2026-08-30, and it killed the batch.
+ *
+ * A real SAM.gov drawings PDF parsed to text containing a NUL byte, and
+ * Postgres `text` cannot hold one: `invalid byte sequence for encoding
+ * "UTF8": 0x00`. The throw came from the UPDATE, which sits OUTSIDE the
+ * try/catch around parse(), so it escaped runExtract entirely and took every
+ * remaining document in the batch with it -- while "one bad document does
+ * not kill the batch" above stayed green, because its bad documents all fail
+ * at PARSE time and never reach a write.
+ *
+ * Two properties, one test, deliberately: the NUL is removed rather than
+ * fatal, AND a document that still cannot be written fails alone. Mutating
+ * away the sanitiser leaves the first document `failed` and the second
+ * `extracted` -- the batch survives, and this test says so. Mutating away
+ * both puts the pg error back through the caller. */
+test("a NUL byte in the text is removed, and does not take the batch with it", async () => {
+  await fresh();
+  const nul = String.fromCharCode(0);
+  const dirty = await pending("Drawings.xlsx", "2026-09-01");
+  const clean = await pending("Clean.xlsx", "2026-09-02");
+  const bodies = [
+    plainSheet(`Proposals are due September 15, 2026 ${nul} sheet 1 of 2`),
+    plainSheet("nothing of interest here"),
+  ];
+  let call = 0;
+  const serve = vi.fn(async () => {
+    const b = bodies[call++] ?? bodies[0]!;
+    return new Response(new Uint8Array(b), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const r = await runExtract({ limit: 5, budgetMs: 10_000, fetchImpl: serve });
+
+  expect(r).toEqual({ processed: 2, failed: 0, remaining: 0 });
+
+  const bad = await one<{ extract_status: string; extracted_text: string; source_note: string }>(
+    `SELECT extract_status, extracted_text, source_note FROM document WHERE id = $1`,
+    [dirty],
+  );
+  expect(bad?.extract_status).toBe("extracted");
+  expect(bad?.extracted_text).not.toContain(nul);
+  /* Removed, not truncated at the NUL: everything either side survives. */
+  expect(bad?.extracted_text).toContain("September 15, 2026");
+  expect(bad?.extracted_text).toContain("sheet 1 of 2");
+  /* Recorded, because a silently altered document is one nobody can audit. */
+  expect(bad?.source_note).toMatch(/NUL/i);
+
+  /* The fields come off the CLEANED text, so the date is still found. */
+  expect(
+    await one<{ value_text: string }>(
+      `SELECT value_text FROM extracted_field WHERE document_id = $1 AND field_name = 'closes_at'`,
+      [dirty],
+    ),
+  ).toEqual({ value_text: "2026-09-15" });
+
+  /* And the document after it in the batch ran at all. */
+  expect(
+    await one<{ extract_status: string }>(`SELECT extract_status FROM document WHERE id = $1`, [
+      clean,
+    ]),
+  ).toEqual({ extract_status: "extracted" });
+});
+
 /* Spec §4.3: nearest live deadline first. Ordering is the whole of what
  * makes the first batch the useful batch, and `limit` is what makes the
  * order observable -- with a limit above the queue size every ordering
