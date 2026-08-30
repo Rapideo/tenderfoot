@@ -222,7 +222,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 > `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
 > changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 417 tests / 58 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 426 tests / 58 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
 
 ### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
 
@@ -303,14 +303,27 @@ Split into three tests, none of which lies: the premise (the stale date really i
 
 **SP4 still passes bullets 1 and 4 on its own**, and both were run: nothing processed stays `pending`, and the accuracy query returns a number per field.
 
-### ⏭ START HERE — the reviews, then the merge
+### ✅ 2026-08-30 — THE REVIEW, and fix round 1
 
-**SP4's twelve tasks are built and its criterion is settled.** What is left before this branch can merge:
+**`f181aca`** (plus `221c1db` for the spec-conformance pass). The whole unreviewed range `3ce778d..HEAD` reviewed at once — Task 9's six post-review additions, the gate hygiene, and Tasks 10/11/12. **Seven findings, all seven correct** on my own check of the source. Gate **426 tests / 58 files**. Every fix written test-first, each watched red.
 
-1. **A fresh review of Task 9** — that diff carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh.
-2. **Reviews of Tasks 10, 11 and 12** — none has been reviewed. **D9 first** (a bundle's members are extracted in the parent's pass), then D10, then the NUL storage boundary and the batch guard.
-3. **The production deploy** — Matt's, and the criterion's first bullet.
-4. **Then merge to `main`**, which also ends the standing oddity that production deploys from a slice branch.
+**🔴 DISCOVERY COULD NOT ADVANCE (finding 2).** `NOT EXISTS (document)` was the only thing retiring a candidate, and a notice that legitimately carries no attachments never gets a document row — so it re-qualified on every run, forever. Ten such notices at the head of the queue stall the phase completely under the screen's `?limit=10`. ⚠️ **I had already seen this and misread it:** the click-through's *"0 document(s) from 10 solicitation(s), 0 skipped"* went into this file as the benign case when it was **also the stuck case**. `skipped: 0` proved the requests succeeded; nothing proved discovery could ever move on. **A number that answers one question is not evidence about a different one.** Migration 011 adds `attachments_checked_at`, stamped only after SAM.gov actually answers — the cheaper "retire once listing rows exist" would have retired notices whose request merely *timed out*, since those rows are written before the fetch. **Proven on real data: two consecutive runs now ask about different notices.**
+
+**🔴 REFRESH REPAIRED ONLY THE MOST-EXPIRED ROWS, FOREVER (finding 1).** It copied the candidate query's `ORDER BY closes_at ASC` but not its live filter, and ascending order over an unfiltered set puts the longest-closed notices first — so the listing rows for **live** solicitations, the only ones `accuracyByField` uses, were never repaired. **`run-extract`'s queue had the identical defect (finding 4), in reasoning I had defended at length.** Two-key sort in both: live first, nearest within.
+
+**🔴 FOUND WHILE FIXING FINDING 6, AND WORSE THAN IT — the queue is a SNAPSHOT.** A bundle and one of its own member rows could both be in one batch: the bundle expanded and correctly extracted the member, then the loop reached that same member as a stale entry, found no `source_url`, and **overwrote the good extraction with a failure.** Live, not latent. Members are now excluded from the fetch queue entirely — a member has no URL by construction and its parent is responsible for it.
+
+**The rest.** A partial unique index stops duplicate members after a platform kill (6). **The gate guard checked the variable the build discards** (3): `refuseToRunAgainstProduction` compared `DATABASE_URL` while the build step substitutes `DATABASE_URL_TEST` — so the value `migrate:deploy` connects to was never compared to anything. **Proven live**: with `DATABASE_URL_TEST` pointed at production for one command, the new guard exits 1 and names the endpoint. `/discover` gained the budget its handler comment already assumed (5), and `remaining` now shares the queue's predicate (7).
+
+**Also fixed before the review landed, from a spec-conformance pass:** design §7's **"a 429 stops the batch cleanly"** was missing entirely — the old code treated 429 as an ordinary failure and kept firing at a host that had just asked us to slow down, marking the document permanently `failed` when a 429 is the most transient failure there is. And §8's **resumability row** had no test: the budget test used `budgetMs: 0`, proving only the all-pending case, never the mixed one that 2026-08-27 got wrong.
+
+**Three reviewer notes ruled and not fixed:** a 429 on the first document reads on screen as `processed 0, 0 failed, N remaining` — indistinguishable from an idle run, accepted as a real gap but it wants a contract change Task 12's readout is already carrying two of; `refreshed` is returned but never displayed; and `Candidate.value_cents` is typed `string` while the oid-20 parser makes it a number at runtime (harmless, `String()` masks it).
+
+### ⏭ START HERE — the production deploy, then merge
+
+1. **The production deploy** — Matt's, and the criterion's first bullet. ⚠️ **Migration 011 will run against production**: it adds a nullable column and a partial unique index. Both were applied to `test` by the gate's own build step and the index built cleanly against real data (0 duplicate members).
+2. **Then merge to `main`**, which also ends the standing oddity that production deploys from a slice branch.
+3. **A second review round** if wanted — the fix round changed six files and has not itself been reviewed.
 
 **Parked, not scheduled — the strongest lead the slice produced.** `fields.ts` is blind to the label-above-value layout: a cue on one line and its date on the next falls outside the block-clamped lookback, which is why the FSSA cover pages' stale date is missed. Very likely a large share of the live run's **16 "a date was present but no cue placed it"** notes, and therefore of the 12.5% recall. Relaxing that clamp is a real design question (the clamp exists so padded schedule tables do not steal each other's cues), not a tweak.
 
