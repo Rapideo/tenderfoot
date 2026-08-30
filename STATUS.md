@@ -222,7 +222,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 > `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
 > changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 406 tests / 57 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 407 tests / 57 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
 
 ### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
 
@@ -268,7 +268,17 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ⚠️ **The two 401 tests pass "for free"** — an unmatched route under the gate 401s before it 404s. That is why they are worth having: what they actually pin is the mounting **order**, which is invisible at the call site. Mounted above `admin.use(requireAdminSecret)`, an unauthenticated POST to `/discover` answers 200 and scrapes a federal API from the app's IP. Three mutants, three killed.
 
-**Not done, deliberately: the live run.** Both endpoints are proved against fixtures only. The **53 pending documents on the `test` branch** are still waiting, and firing at SAM.gov for real is outward-facing and Matt's call.
+### ✅ 2026-08-30 — THE FIRST LIVE RUN, and the bug only it could find
+
+**`bbe0992`.** Ran against the Neon `test` branch — identified **by data** first (1,724 SAM.gov solicitations; production has 9,682) and by endpoint identity against `DATABASE_URL_PRODUCTION`. **The queue was 79 pending documents, not the 53 this block previously claimed.** Every one belonged to an already-CLOSED solicitation (deadlines 08-21 to 08-29) — **a live vindication of the §4.3 call**: with `closes_at >= now()` implemented, the whole queue would have been invisible and `remaining` would have sat at 79 forever.
+
+**🔴 A NUL BYTE KILLED THE WHOLE BATCH, and no fixture could have produced it.** `B3001G-Modernize Foyer Scope Drawings 3.13.26 - Copy.pdf`, a real SAM.gov drawings PDF, parses to text containing `0x00`. Postgres `text` cannot hold one — `invalid byte sequence for encoding "UTF8": 0x00` — and it is the **one** character with that property. **Two defects, not one:** the text was not sanitised, and the throw came from the `UPDATE`, which sat **outside** the try/catch around `parse()`, so it escaped `runExtract` and took every remaining document with it. ⚠️ **"One bad document does not kill the batch" stayed green throughout** — all of *its* bad documents fail at PARSE time and never reach a write. Both fixed, two mutants, both killed.
+
+**What the per-document commit was worth, measured:** the crashed batch left 6 extracted and 2 failed **committed**, 71 pending, and the document that threw still `pending` — consistent, resumable, retried successfully next run. **Nothing rolled back.** And the budget stop fired unprompted on real data: 32 documents in 125.9s against a 120s budget, then a clean stop reporting `remaining: 14`.
+
+**📊 FIRST LIVE ACCURACY READING — all 79 documents, 0 pending at the end.** `closes_at`: **agreed 2, disagreed 0, missed 14, opportunities 16** — **precision 100%, recall 12.5%.** Both hits match the portal exactly; the clearer quotes *"Proposals are due no later than: August 31, 2026 at 10:00 AM Central"*. **The misses are self-describing:** 53 of 69 rows carry no note (no date in the text — Q&A sheets, wage determinations, forms: clean true negatives) and **16 carry "a date was present but no cue placed it in this field"**. Those 16 are the actionable recall signal for `fields.ts`, and they are exactly what Task 7's note was built to make visible. **Not chased** — the instrument's job was to surface them, and it did. The other five fields do not appear at all: the `truth` CTE needs a STATED listing value and the listing states none of them either, so there is no opportunity to miss.
+
+**Three small things observed, not fixed:** a document with no extension fails with `unsupported type: current request for proposal` (the extension split returns the whole name when there is no dot) — honest but misleading; two documents failed `download failed: HTTP 400` from SAM.gov, uninvestigated; and an image-only `Sign In Sheet` failed `parsed but produced no text`, which is fail-closed behaving exactly as designed (OCR is out of scope).
 
 ### ⏭ START HERE — SP4 Task 12, the screen and the seam test
 
