@@ -51,6 +51,9 @@ import { checkSources } from "../health/check.js";
 import { one, run as dbRun } from "../db/index.js";
 import { importArtifact } from "../ingest/import-artifact.js";
 import { mergeSightings } from "../merge/merge.js";
+import { discoverAttachments } from "../extract/discover.js";
+import { runExtract } from "../extract/run-extract.js";
+import { batchLimit } from "../lib/batchLimit.js";
 
 /* MOVED 2026-08-28 to scrape/import-budget.ts, and DERIVED there rather
  * than written down. This used to read `const HANDLER_BUDGET_MS =
@@ -463,5 +466,53 @@ admin.post(
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  }),
+);
+
+/* ---- SP4: discover, then extract --------------------------------------
+ *
+ * Two phases of one pipeline, deliberately two endpoints. Discover asks
+ * SAM.gov what is attached to a notice and writes `pending` document rows;
+ * extract fetches those rows and reads them. Splitting them is what lets an
+ * operator see the queue before committing to downloading it -- and each
+ * phase is independently resumable, since `document.extract_status` is the
+ * checkpoint between them.
+ *
+ * Both inherit `admin.use(requireAdminSecret)` above; neither declares auth
+ * of its own, same as /scrape, /run and /health. Both are gated for FIX 3's
+ * reason and not merely by convention: /discover fetches a federal API from
+ * the app's IP, and /extract downloads whatever URL a document row carries.
+ *
+ * Neither is unattended. Ruled 2026-08-15: long ingestion runs on Vercel,
+ * invoked by hand, with the operator setting the scope. */
+
+/* THE SAME BUDGET /run's SCRAPE PHASE GETS, and the brief's reason for it was
+ * not quite right -- it said the work "after" the loop still has to fit,
+ * but writing text and fields happens INSIDE the loop, per document. The
+ * headroom is for something else, and it is real: `runExtract` checks the
+ * clock BEFORE each document and never inside one, so a document that starts
+ * at the last legal millisecond still has to download (bundles reach 21 MB),
+ * parse, and write before the platform's ceiling arrives. The 120s between
+ * this budget and CEILING_MS is what that last document spends. Reusing the
+ * constant keeps one number under one ceiling, which is the whole lesson of
+ * 2026-08-27; what changes here is only what the reservation is FOR. */
+admin.post(
+  "/discover",
+  asyncHandler(async (req, res) => {
+    const limit = batchLimit(req.query.limit);
+    const result = await discoverAttachments(limit);
+    /* The effective limit, echoed. An operator who asks for 99999 and gets 50
+     * should be told, not left to infer it from a batch that stopped early --
+     * and a clamp nobody can observe is a clamp no test can pin. */
+    res.json({ ...result, limit });
+  }),
+);
+
+admin.post(
+  "/extract",
+  asyncHandler(async (req, res) => {
+    const limit = batchLimit(req.query.limit);
+    const result = await runExtract({ limit, budgetMs: RUN_HANDLER_BUDGET_MS });
+    res.json({ ...result, limit });
   }),
 );
