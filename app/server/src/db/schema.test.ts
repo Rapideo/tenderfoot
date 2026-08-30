@@ -344,12 +344,18 @@ test("population_size cannot be left off a sample", async () => {
       `INSERT INTO triage_sample (source_id, seed, n_requested) VALUES ($1, 'seed-b', 10)`,
       [src],
     ),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ code: "23502" });
 });
 
-test("one solicitation may hold many pursuit rows -- history is legal", async () => {
+/* This property predates migration 012 (append-only history was already
+ * legal in the schema), so this test is not testing 012. It exists as a
+ * regression guard: if anyone adds a UNIQUE constraint on
+ * pursuit(solicitation_id) in the future, decisions recorded to the same
+ * solicitation would silently fail. This test catches that silently-broken
+ * invariant. */
+test("pursuit permits history -- a regression guard, not a test of 012", async () => {
   const sol = await insert(
-    `INSERT INTO solicitation (title, source_id) VALUES ('append fixture', 1) RETURNING id`,
+    `INSERT INTO solicitation (title, source_id) VALUES ('append fixture', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`,
   );
   await dbRun(`INSERT INTO pursuit (solicitation_id, state) VALUES ($1, 'Interested')`, [sol]);
   await dbRun(
