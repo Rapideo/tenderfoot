@@ -69,9 +69,29 @@ const CANDIDATES = `
    WHERE s.external_id IS NOT NULL
      AND src.name = $2
      AND (s.closes_at IS NULL OR left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD'))
+     AND s.attachments_checked_at IS NULL
      AND NOT EXISTS (SELECT 1 FROM document d WHERE d.solicitation_id = s.id)
    ORDER BY s.closes_at ASC NULLS LAST
    LIMIT $1`;
+
+/* REVIEW FINDING 1 (Major, 2026-08-30). ASCENDING ORDER OVER AN UNFILTERED
+ * SET PUTS THE LONGEST-EXPIRED ROW FIRST, which is the exact inverse of the
+ * rule REFRESH's own comment claims. CANDIDATES gets away with a bare
+ * `closes_at ASC` because it also FILTERS to live rows; REFRESH deliberately
+ * does not filter -- it exists to repair rows the main loop will never visit
+ * -- so it has to say what it means in the ORDER BY instead.
+ *
+ * The consequence was not cosmetic. With the screen's limit of ten, run one
+ * repaired the ten oldest closed notices, the `IS DISTINCT FROM` guard
+ * suppressed every later write, `refreshed` reported 0 forever, and the
+ * listing rows for LIVE solicitations -- the only ones accuracyByField can
+ * use -- were never repaired at all.
+ *
+ * A NULL closes_at makes the first key `false`, not NULL, because the
+ * `IS NOT NULL` conjunct is evaluated first: undated rows sort with the
+ * expired group and then last within it. */
+const LIVE_FIRST = `(s.closes_at IS NOT NULL AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')) DESC,
+            s.closes_at ASC NULLS LAST`;
 
 /* THE ROWS DISCOVER WOULD OTHERWISE NEVER LOOK AT AGAIN.
  *
@@ -90,9 +110,10 @@ const CANDIDATES = `
  * are separate operations over a corpus that keeps arriving.
  *
  * So instead of ordering them, this makes the order stop mattering. Whichever
- * ran last, a later discover repairs the copy. Bounded by the same `limit`
- * and ordered by the same nearest-deadline rule, so the ground truth that
- * gets refreshed first is the ground truth about to be used. */
+ * ran last, a later discover repairs the copy. Bounded by the same `limit`,
+ * and ordered LIVE FIRST -- see LIVE_FIRST above for why it cannot simply
+ * copy CANDIDATES' `closes_at ASC`, which only reads as "nearest deadline"
+ * because CANDIDATES also filters the expired rows out. */
 const REFRESH = `
   SELECT s.id, s.external_id, s.closes_at, s.set_aside, s.prebid_required, s.value_cents
     FROM solicitation s
@@ -100,7 +121,7 @@ const REFRESH = `
    WHERE src.name = $2
      AND EXISTS (SELECT 1 FROM extracted_field ef
                   WHERE ef.solicitation_id = s.id AND ef.origin = 'listing')
-   ORDER BY s.closes_at ASC NULLS LAST
+   ORDER BY ${LIVE_FIRST}
    LIMIT $1`;
 
 /* The six fields SP4 extracts (fields.ts's FieldDraft["field_name"]). The
@@ -196,10 +217,22 @@ async function writeListingRows(c: Candidate): Promise<number> {
   );
 }
 
+/* REVIEW FINDING 5 (Medium, 2026-08-30): this had NO time budget, while the
+ * handler comment about budgets sat directly above it in routes/admin.ts.
+ * Up to MAX_BATCH (50) sequential fetches with no clock check runs past
+ * Vercel's 300s ceiling on a slow day, and a killed request reports NOTHING
+ * -- the precise failure RUN_HANDLER_BUDGET_MS exists to prevent, and the
+ * one the extract phase already had a budget for.
+ *
+ * Defaulted generously rather than required, which is the shape scrape/run.ts
+ * established and STATUS records: "the CLI passes a generous budget, the HTTP
+ * handler one below 300s, and the same code serves both." */
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
+  budgetMs: number = Number.POSITIVE_INFINITY,
 ): Promise<{ solicitations: number; skipped: number; documents: number; refreshed: number }> {
+  const started = Date.now();
   /* BEFORE the main loop, deliberately. Run afterwards it would also re-visit
    * the solicitations this very call just wrote, which cannot be stale, and
    * `refreshed` would stop meaning "corrections to rows that were already
@@ -213,7 +246,10 @@ export async function discoverAttachments(
   let documents = 0;
   let skipped = 0;
 
+  let walked = 0;
   for (const s of rows) {
+    if (Date.now() - started >= budgetMs) break;
+    walked++;
     await writeListingRows(s);
 
     /* Fix round 1, item 4: a thrown fetch (network error) used to kill the
@@ -272,6 +308,29 @@ export async function discoverAttachments(
         documents++;
       }
     }
+
+    /* REVIEW FINDING 2 (Major, 2026-08-30). STAMPED HERE, AND ONLY HERE:
+     * after SAM.gov has actually answered. Until this column existed, the
+     * only thing that retired a candidate was the existence of a `document`
+     * row -- so a notice that legitimately carries NO attachments qualified
+     * again on every single run, forever, and discovery could not advance
+     * past it. Ten such notices at the head of the queue stall the phase
+     * completely under the screen's `?limit=10`.
+     *
+     * The 2026-08-30 click-through reported exactly that shape -- "0
+     * document(s) from 10 solicitation(s), 0 skipped" -- and it was read as
+     * the benign case when it was also the stuck one.
+     *
+     * Every `continue` above this line leaves the stamp NULL on purpose: a
+     * request that timed out, 502'd, or returned unparseable JSON has not
+     * answered anything, and retiring a notice on the strength of one bad
+     * minute would hide its attachments permanently. Only the path that got
+     * a real attachment list gets here. */
+    await run(`UPDATE solicitation SET attachments_checked_at = now() WHERE id = $1`, [s.id]);
   }
-  return { solicitations: rows.length, skipped, documents, refreshed };
+  /* WALKED, not selected. Reporting `rows.length` after a budget stop would
+   * claim work this call did not do -- and `solicitations` is the number an
+   * operator divides `skipped` against to tell "nothing to fetch" from
+   * "every request failed". */
+  return { solicitations: walked, skipped, documents, refreshed };
 }

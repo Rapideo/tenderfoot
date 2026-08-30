@@ -500,7 +500,11 @@ admin.post(
   "/discover",
   asyncHandler(async (req, res) => {
     const limit = batchLimit(req.query.limit);
-    const result = await discoverAttachments(limit);
+    /* REVIEW FINDING 5 (2026-08-30): this call had NO budget, while the
+     * comment above reasoned about one. Up to MAX_BATCH sequential fetches
+     * with no clock check runs past the ceiling on a slow day, and a killed
+     * request reports nothing at all. */
+    const result = await discoverAttachments(limit, undefined, RUN_HANDLER_BUDGET_MS);
     /* The effective limit, echoed. An operator who asks for 99999 and gets 50
      * should be told, not left to infer it from a batch that stopped early --
      * and a clamp nobody can observe is a clamp no test can pin. */

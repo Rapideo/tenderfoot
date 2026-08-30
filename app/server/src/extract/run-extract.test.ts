@@ -580,6 +580,115 @@ test("a download failure records the reason the server gave, not just the code",
   expect(row?.source_note).toMatch(/resource has been deleted/i);
 });
 
+/* REVIEW FINDING 4 (2026-08-30), and it lands squarely on my own reasoning.
+ * Dropping §4.3's `closes_at >= now()` filter was right -- it keeps
+ * `remaining` honest -- but I then claimed plain `ORDER BY closes_at ASC`
+ * still delivered "nearest live deadline first". Over an UNFILTERED set it
+ * delivers the exact opposite: the longest-expired solicitations sort to the
+ * front, so the first batch is the least useful one. Measured, not
+ * theoretical -- every document in the 2026-08-30 live run belonged to an
+ * already-closed solicitation and was processed oldest-first.
+ *
+ * A two-key sort restores the intent without excluding anything: live rows
+ * first, nearest deadline within them. */
+test("takes the nearest LIVE deadline first, ahead of anything already closed", async () => {
+  await fresh();
+  await pending("long-closed.pptx", "2020-01-01");
+  await pending("closes-soon.pptx", "2099-01-02");
+  await pending("closes-later.pptx", "2099-06-01");
+
+  const r = await runExtract({ limit: 1, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
+
+  expect(r.processed).toBe(1);
+  const done = await one<{ filename: string }>(
+    `SELECT filename FROM document WHERE extract_status = 'failed'`,
+  );
+  expect(done?.filename).toBe("closes-soon.pptx");
+});
+
+/* REVIEW FINDING 7 (2026-08-30). `remaining` counted every pending row while
+ * NEXT inner-joins `solicitation` -- and `document.solicitation_id` is
+ * nullable, because a document may belong to a `contract` instead. Such a row
+ * is invisible to the queue but visible to the counter, so the Extract button
+ * would report a `remaining` that never decreases and an operator's "click
+ * until zero" loop would never end. Latent today (nothing creates one), which
+ * is exactly when it is cheap to close. */
+test("remaining counts only what the queue can actually return", async () => {
+  await fresh();
+  await pending("real.pptx");
+  /* A contract-attached document: legal per the schema, invisible to NEXT. */
+  await insert(
+    `INSERT INTO document (solicitation_id, filename, source_url, extract_status)
+     VALUES (NULL, 'orphan.pdf', 'https://example.test/f', 'pending') RETURNING id`,
+  );
+
+  const r = await runExtract({ limit: 5, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
+
+  expect(r.processed).toBe(1);
+  /* Not 1: the orphan is not work this loop can ever do, so counting it as
+   * outstanding is a promise the button cannot keep. */
+  expect(r.remaining).toBe(0);
+});
+
+/* REVIEW FINDING 6 (2026-08-30). D9 marks the parent `extracted` only AFTER
+ * its members, so a run killed mid-expansion leaves the parent `pending` and
+ * the next run redoes it -- deliberate. The cost is a second copy of every
+ * member already inserted, and I had claimed the stranded-member branch
+ * covered it. It does not: that branch only catches the WRITE-FAILURE path,
+ * not a platform kill, and nothing in the schema stopped the duplicate.
+ *
+ * This reproduces the killed state directly -- a pending parent with one
+ * member already under it -- because a real platform kill cannot be staged. */
+test("re-expanding a bundle after a kill does not duplicate its members", async () => {
+  await fresh();
+  const parent = await pending("bundle.zip");
+  const sol = await one<{ solicitation_id: number }>(
+    `SELECT solicitation_id FROM document WHERE id = $1`,
+    [parent],
+  );
+  await insert(
+    `INSERT INTO document (solicitation_id, filename, parent_document_id, extract_status)
+     VALUES ($1, 'Pricing.xlsx', $2, 'pending') RETURNING id`,
+    [sol?.solicitation_id, parent],
+  );
+
+  const z = new JSZip();
+  z.file("Pricing.xlsx", workbook());
+  z.file("Second.xlsx", workbook());
+  await runExtract({
+    limit: 5,
+    budgetMs: 10_000,
+    fetchImpl: bytes(await z.generateAsync({ type: "nodebuffer" })),
+  });
+
+  expect(
+    await one<{ c: number }>(
+      `SELECT count(*) AS c FROM document WHERE parent_document_id = $1 AND filename = 'Pricing.xlsx'`,
+      [parent],
+    ),
+  ).toEqual({ c: 1 });
+  /* AND the pre-existing member is EXTRACTED, not failed. Before members were
+   * removed from the fetch queue this row was clobbered: the bundle expanded
+   * and extracted it correctly, then the loop reached the same row as a stale
+   * snapshot entry, found no source_url, and overwrote the good extraction
+   * with "expand its parent bundle again". */
+  expect(
+    await one<{ extract_status: string }>(
+      `SELECT extract_status FROM document WHERE parent_document_id = $1 AND filename = 'Pricing.xlsx'`,
+      [parent],
+    ),
+  ).toEqual({ extract_status: "extracted" });
+
+  /* Both members end up read, and the pre-existing row is the one that was
+   * filled in rather than a second copy beside it. */
+  expect(
+    await one<{ c: number }>(
+      `SELECT count(*) AS c FROM document WHERE parent_document_id = $1 AND extract_status = 'extracted'`,
+      [parent],
+    ),
+  ).toEqual({ c: 2 });
+});
+
 /* Spec §4.3: nearest live deadline first. Ordering is the whole of what
  * makes the first batch the useful batch, and `limit` is what makes the
  * order observable -- with a limit above the queue size every ordering

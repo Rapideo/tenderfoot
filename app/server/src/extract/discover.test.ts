@@ -471,3 +471,141 @@ test("a refresh with nothing to correct writes nothing and reports nothing", asy
   expect(second.refreshed).toBe(0);
 });
 
+
+/* ---- REVIEW ROUND, 2026-08-30 ----------------------------------------- */
+
+/* REVIEW FINDING 2 (Major). `NOT EXISTS (document)` was the ONLY thing that
+ * retired a candidate, and a notice that legitimately carries no attachments
+ * never gets a document row -- so it qualified again on every run, forever,
+ * and discovery could not advance past it. With the screen's `?limit=10`,
+ * ten attachment-less notices at the head of the queue stall the phase
+ * completely.
+ *
+ * The 2026-08-30 click-through reported exactly this -- "0 document(s) from
+ * 10 solicitation(s), 0 skipped" -- and it was read as the benign case (no
+ * files on those notices) when it was also the STUCK case. `skipped: 0`
+ * proved the requests succeeded; nothing proved discovery could move on. */
+test("a notice with no attachments is asked once, not on every run", async () => {
+  await resetSchema();
+  await migrate(false);
+  await seed({
+    title: "no files",
+    externalId: "empty1",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  const empty = vi.fn(async () => new Response(JSON.stringify({ _embedded: {} }), { status: 200 }));
+
+  const first = await discoverAttachments(10, empty as unknown as typeof fetch);
+  const second = await discoverAttachments(10, empty as unknown as typeof fetch);
+
+  expect(first.solicitations).toBe(1);
+  expect(first.documents).toBe(0);
+  /* The whole point: the second run does not re-ask. */
+  expect(second.solicitations).toBe(0);
+  expect(empty).toHaveBeenCalledTimes(1);
+});
+
+/* THE OTHER HALF, and the reason the stamp is a column rather than a
+ * predicate over the listing rows discover already writes. `writeListingRows`
+ * runs BEFORE the fetch, so retiring on "listing rows exist" would retire a
+ * notice whose attachment request merely FAILED -- a timeout, a 502, the
+ * network -- permanently hiding its attachments on the strength of one bad
+ * minute. Only a successful answer counts. */
+test("a notice whose attachment request failed is asked again", async () => {
+  await resetSchema();
+  await migrate(false);
+  await seed({
+    title: "flaky",
+    externalId: "flaky1",
+    closesAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  const down = vi.fn(async () => new Response("nope", { status: 502 }));
+
+  const first = await discoverAttachments(10, down as unknown as typeof fetch);
+  const second = await discoverAttachments(10, down as unknown as typeof fetch);
+
+  expect(first.skipped).toBe(1);
+  expect(second.skipped).toBe(1);
+  expect(down).toHaveBeenCalledTimes(2);
+});
+
+/* REVIEW FINDING 1 (Major). REFRESH carried CANDIDATES' `ORDER BY closes_at
+ * ASC NULLS LAST` but NOT its live-deadline filter, so ascending order over
+ * an unfiltered set puts the LONGEST-EXPIRED solicitations first -- the exact
+ * inverse of the rule its own comment claims ("the ground truth that gets
+ * refreshed first is the ground truth about to be used"). With a limit of
+ * ten, run one repairs the ten oldest closed notices, the IS DISTINCT FROM
+ * guard suppresses every later write, and the listing rows for LIVE
+ * solicitations -- the only ones the accuracy measurement uses -- are never
+ * repaired at all.
+ *
+ * Both fixtures already carry a document, so neither is a candidate: this
+ * isolates REFRESH, which would otherwise be masked by the main loop
+ * rewriting the live row anyway. */
+test("refresh repairs a live solicitation before a long-closed one", async () => {
+  await resetSchema();
+  await migrate(false);
+  const live = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const closedId = await seed({ title: "closed", externalId: "c1", closesAt: "2020-01-01" });
+  const liveId = await seed({ title: "live", externalId: "l1", closesAt: live });
+
+  for (const id of [closedId, liveId]) {
+    await insert(
+      `INSERT INTO document (solicitation_id, filename, source_url, extract_status)
+       VALUES ($1, 'x.pdf', 'https://example.test/f', 'extracted') RETURNING id`,
+      [id],
+    );
+    /* Ground truth written back when the portal carried no deadline -- the
+     * real shape of the stale rows, since closes-at.ts only began reading
+     * SAM deadlines on 2026-08-29. */
+    await insert(
+      `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+       VALUES ($1, 'closes_at', NULL, 'listing', 1.0, 'mechanical') RETURNING id`,
+      [id],
+    );
+  }
+
+  const stub = vi.fn(async () => new Response("{}", { status: 200 }));
+  await discoverAttachments(1, stub as unknown as typeof fetch);
+
+  const value = async (id: number) =>
+    (
+      await all<{ value_text: string | null }>(
+        `SELECT value_text FROM extracted_field
+          WHERE solicitation_id = $1 AND origin = 'listing' AND field_name = 'closes_at'`,
+        [id],
+      )
+    )[0]?.value_text ?? null;
+
+  expect(await value(liveId)).toBe(live);
+  expect(await value(closedId)).toBeNull();
+});
+
+/* REVIEW FINDING 5 (Medium). `/discover` had no time budget at all, while
+ * the handler comment about budgets sat directly above it. Up to MAX_BATCH
+ * (50) sequential fetches with no clock check runs past Vercel's 300s
+ * ceiling on a slow day, and a killed request reports NOTHING -- the exact
+ * failure RUN_HANDLER_BUDGET_MS exists to prevent, and the one the extract
+ * phase was given a budget for. */
+test("discover stops on its budget and reports only what it walked", async () => {
+  await resetSchema();
+  await migrate(false);
+  for (let i = 0; i < 3; i++) {
+    await seed({
+      title: `s${i}`,
+      externalId: `b${i}`,
+      closesAt: new Date(Date.now() + (i + 1) * 86_400_000).toISOString(),
+    });
+  }
+  const slow = vi.fn(async () => {
+    await new Promise((r) => setTimeout(r, 4000));
+    return new Response(JSON.stringify({ _embedded: {} }), { status: 200 });
+  });
+
+  const r = await discoverAttachments(10, slow as unknown as typeof fetch, 3000);
+
+  expect(slow).toHaveBeenCalledTimes(1);
+  /* `solicitations` counts what was WALKED, not what the query selected --
+   * otherwise a budget stop reports work it did not do. */
+  expect(r.solicitations).toBe(1);
+});

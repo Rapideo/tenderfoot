@@ -18,9 +18,34 @@ import { extractFields } from "./fields.js";
  * closes-at.ts started reading one on 2026-08-29. And a permanent filter
  * makes `remaining` a lie: documents attached to a since-closed solicitation
  * would sit `pending` forever while the operator watches a counter that never
- * reaches zero. Ordering alone delivers what §4.3 is actually for. Postgres
- * sorts NULLs last under ASC, so an undated solicitation goes to the back
- * rather than the front.
+ * reaches zero.
+ *
+ * REVIEW FINDING 4 (2026-08-30) CORRECTED THE SENTENCE THAT USED TO FOLLOW.
+ * It claimed "ordering alone delivers what §4.3 is actually for" -- and a
+ * plain `closes_at ASC` over an UNFILTERED set delivers the exact opposite,
+ * sorting the longest-expired solicitations to the FRONT so the first batch
+ * is the least useful one. Measured, not theoretical: every document in the
+ * first live run belonged to an already-closed solicitation and was taken
+ * oldest-first. Dropping the filter was right; keeping the naive ORDER BY
+ * beside it was not. The two-key sort restores the intent without excluding
+ * anything -- live rows first, nearest deadline within them, undated last.
+ *
+ * MEMBERS ARE NOT IN THIS QUEUE, and that is a correctness fix rather than a
+ * tidy-up (found while fixing review finding 6, 2026-08-30). The queue is a
+ * SNAPSHOT taken before the loop runs. A bundle and one of its own member
+ * rows could both be in it; the bundle would expand and correctly extract the
+ * member, and then the loop would reach that same member as a stale entry,
+ * find it has no source_url, and OVERWRITE the good extraction with a
+ * failure. Measured, not theorised -- it is what the re-expansion test hit.
+ *
+ * A member has no source_url by construction: its bytes came from inside an
+ * archive. It is never independently fetchable, so it has no business in a
+ * queue whose job is downloading. Its parent is responsible for it, which is
+ * exactly what D9 made true.
+ *
+ * The stranded-member branch below is NOT dead as a result: nothing
+ * constrains a TOP-LEVEL document to carry a source_url, and one that does
+ * not still reaches it.
  *
  * The JOIN is what makes the ordering possible, and it is an inner join on a
  * nullable column: `document.solicitation_id` has no NOT NULL constraint (a
@@ -34,7 +59,9 @@ const NEXT = `
     FROM document d
     JOIN solicitation s ON s.id = d.solicitation_id
    WHERE d.extract_status = 'pending'
-   ORDER BY s.closes_at ASC
+     AND d.parent_document_id IS NULL
+   ORDER BY (s.closes_at IS NOT NULL AND left(s.closes_at, 10) >= to_char(now(), 'YYYY-MM-DD')) DESC,
+            s.closes_at ASC NULLS LAST
    LIMIT $1`;
 
 interface Doc {
@@ -153,11 +180,43 @@ async function absorb(doc: Doc, bytes: Buffer, expand: boolean): Promise<boolean
 
   if (parsed.kind === "members") {
     for (const m of parsed.members) {
-      const childId = await insert(
+      /* REVIEW FINDING 6 (2026-08-30). The parent is marked `extracted` only
+       * AFTER its members (D9, deliberate), so a run killed mid-expansion
+       * leaves it `pending` and the next run redoes the whole bundle. The
+       * cost is a second copy of every member already inserted -- and the
+       * claim that the stranded-member branch covered it was wrong: that
+       * branch catches a WRITE FAILURE, not a platform kill, and nothing in
+       * the schema stopped the duplicate. Migration 011 adds the partial
+       * unique index this leans on.
+       *
+       * DO UPDATE rather than DO NOTHING because DO NOTHING returns no row,
+       * and this needs the id either way. The SET is a deliberate no-op: the
+       * point is to read the row back, never to overwrite a status. */
+      const child = await one<{ id: number; extract_status: string }>(
         `INSERT INTO document (solicitation_id, filename, parent_document_id, extract_status)
-         VALUES ($1, $2, $3, 'pending') RETURNING id`,
+         VALUES ($1, $2, $3, 'pending')
+         ON CONFLICT (parent_document_id, filename) WHERE parent_document_id IS NOT NULL
+         DO UPDATE SET filename = EXCLUDED.filename
+         RETURNING id, extract_status`,
         [doc.solicitation_id, m.filename, doc.id],
       );
+      if (!child) throw new Error(`member insert returned no row: ${m.filename}`);
+      /* A member the killed run had already EXTRACTED is not redone: that
+       * would write a second set of extracted_field rows for one document,
+       * and the accuracy instrument would count one document's opinion
+       * twice.
+       *
+       * `failed` is deliberately NOT skipped, and the reason is a real
+       * sequence rather than caution. A stranded member sits in the queue as
+       * an ordinary pending row, so the loop reaches it BEFORE its parent is
+       * re-expanded, finds no source_url, and fails it with "expand its
+       * parent bundle again to recover this member". Skipping every
+       * non-pending member would make that message a lie -- the parent would
+       * re-expand and step straight over the row it was telling the operator
+       * to expect back. It carries no extracted_field rows either, having
+       * never been read, so redoing it duplicates nothing. */
+      if (child.extract_status === "extracted") continue;
+      const childId = child.id;
       /* D9 -- THE MEMBER IS EXTRACTED HERE, NOT LEFT FOR A LATER BATCH.
        * A member has no `source_url`: its bytes came from inside an archive,
        * and ruling 1 keeps no bytes anywhere. A child row marked `pending`
@@ -386,8 +445,19 @@ export async function runExtract(opts: {
     processed++;
   }
 
+  /* REVIEW FINDING 7 (2026-08-30): the SAME join NEXT uses, not a bare count.
+   * `document.solicitation_id` is nullable -- a document may belong to a
+   * `contract` -- and such a row is invisible to the queue while being
+   * perfectly visible to a naive count. The button would then report a
+   * `remaining` that never decreases, and an operator clicking until zero
+   * would never finish. Latent today; the counter and the queue should not
+   * be able to disagree about what is outstanding. */
   const left = await one<{ c: string }>(
-    `SELECT count(*) AS c FROM document WHERE extract_status = 'pending'`,
+    `SELECT count(*) AS c
+       FROM document d
+       JOIN solicitation s ON s.id = d.solicitation_id
+      WHERE d.extract_status = 'pending'
+        AND d.parent_document_id IS NULL`,
   );
   return { processed, failed, remaining: Number(left?.c ?? 0) };
 }

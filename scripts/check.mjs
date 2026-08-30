@@ -89,9 +89,32 @@ function databaseIdentity(url) {
   }
 }
 
+/* REVIEW FINDING 3 (Medium, 2026-08-30): this used to check DATABASE_URL
+ * ONLY -- and DATABASE_URL is not the value that reaches the migrating build.
+ * The build step below runs `run("build", { ...process.env, DATABASE_URL:
+ * process.env.DATABASE_URL_TEST })`, so DATABASE_URL_TEST is what
+ * `migrate:deploy` actually connects to, and nothing compared it against
+ * anything. Point DATABASE_URL_TEST at the production branch -- the same
+ * `vercel env pull` accident this guard's own comment describes, one variable
+ * over -- and the gate printed "OK  DATABASE_URL is not production" and then
+ * migrated production. A guard that checks the variable the code discards is
+ * not a guard. */
 function refuseToRunAgainstProduction() {
   const dev = databaseIdentity(process.env.DATABASE_URL);
+  const test = databaseIdentity(process.env.DATABASE_URL_TEST);
   const prod = databaseIdentity(process.env.DATABASE_URL_PRODUCTION);
+
+  if (test && prod && test === prod) {
+    console.error(
+      `FAIL   DATABASE_URL_TEST names the PRODUCTION database (${prod}).\n` +
+        `       That is the value this gate's build step SUBSTITUTES for DATABASE_URL,\n` +
+        `       so it is what 'migrate:deploy' would actually connect to -- checking\n` +
+        `       DATABASE_URL alone would have let this through.\n` +
+        `       Point DATABASE_URL_TEST back at the test or staging branch; production\n` +
+        `       is reached through DATABASE_URL_PRODUCTION and migrated by deploying.`,
+    );
+    process.exit(1);
+  }
 
   if (dev && prod && dev === prod) {
     console.error(
