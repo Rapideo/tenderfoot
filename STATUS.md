@@ -217,6 +217,65 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-08-30
 
+## ☑️ TOMORROW — 2026-08-31. READ THIS FIRST; IT IS THE ONLY OPEN TASK.
+
+**Matt is hand-labelling `docs/2026-08-30-deadline-labelling.md`.** Fourteen blocks, one per
+solicitation the accuracy instrument scored as a `closes_at` recall miss. He sets each `VERDICT`
+to `IN-DOC` / `NOT-IN-DOC` / `UNSURE`, and pastes the phrasing wherever a document really does
+state a deadline. **He may have finished, part-finished, or not started — check the file before
+assuming.**
+
+### What it is for, in one line
+The reported **recall of 12.5%** (`agreed 2, disagreed 0, missed 14, opportunities 16`) assumes
+**every one of the fourteen misses was ours**. Nobody has checked whether those documents state a
+deadline at all, and no query can: the instrument cannot tell "we failed to read it" from "it was
+never there". `IN-DOC ÷ 14` is the real number.
+
+### What to do with the results
+1. **Recount.** If most are `NOT-IN-DOC`, the honest recall is `2 ÷ (2 + IN-DOC count)`, and
+   **STATUS, the SP4 slice row and the ledger all currently report the pessimistic figure** — they
+   need correcting together, not one of them.
+2. **Widen the cue vocabulary — the cheap, high-yield fix.** `CUES` in
+   `app/server/src/extract/fields.ts` is `due | deadline | closing | submitted by | received by`.
+   Two known misses say *"must be returned **no later than**"*, which is not in it. Every
+   `IN-DOC` phrasing Matt writes down is a candidate. **Test-first, and mutate**, per the file's
+   own history: `fields.ts` took three fix rounds in Task 7.
+3. **Re-run and re-measure** against the `test` branch, then report old and new side by side.
+
+### ⚠️ Five things a fresh session will otherwise get wrong
+- **The data lives on the Neon `test` branch.** `.env`'s `DATABASE_URL` and `DATABASE_URL_TEST`
+  are the SAME string, both `test`; **production holds 9,883 solicitations and 0 documents**, so
+  re-running extraction against production measures nothing and writes for the first time.
+- **Do NOT repeat the cover-page theory.** `fields.ts` really is blind to a cue on one line and
+  its date on the next (the FSSA bundle proves it) — but **measured against the sixteen live
+  unplaced-date notes it explains 0 of them.** I wrote that claim into three files before checking
+  it. Relaxing the block clamp is a separate and expensive question; the clamp exists so padded
+  schedule tables do not steal each other's cues.
+- **`accuracyByField()` lives in `extract/precedence.ts`**, not in a script. `missed`/
+  `opportunities` count SOLICITATIONS; `agreed`/`disagreed` count document STATEMENTS. **They do
+  not sum.**
+- **The seam test is deliberately in three parts** (`extract/seam.test.ts`). It does **not** pin
+  the absence of a conflict — that is today's accident, and pinning it would make a future
+  `fields.ts` improvement look like a regression. If widening the cues makes the FSSA documents
+  start stating `2026-08-26`, that is **expected**, and precedence is what keeps it harmless.
+- **Full reasoning is in `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/progress.md`**, which
+  is gitignored and local-only. Read it before re-deriving anything.
+
+### Also outstanding, neither blocking nor urgent
+- **The production click-through** — SP4's one non-deferred criterion bullet still unrun.
+  ⚠️ The first Discover click there writes `document` rows into a database that has none.
+- **Matt's, unchanged:** whether Vercel's build should fail on type errors; the staging-branch
+  decision; deleting the abandoned `preview/sp3-federal-ingestion` Neon branch **from the console,
+  not the MCP**. **Now actionable:** the accuracy threshold spec §9 deferred until a real number
+  existed — there is one, and the labelling may change it before it is set.
+
+### Then: SP6 — Triage + record, the GO / NO-GO gate
+It also carries **two bullets of SP4's demo criterion**, deferred to it because they need a record
+view SP6 owns. `specs/2026-08-28-sp4-fetch-extraction-design.md` §10.1 names what that costs.
+
+---
+
+
 > ✅ **SP4 IS MERGED TO `main`, 2026-08-30** (`cc8babe`, `--no-ff`, sixty-one commits), and
 > **deployed to production and verified**. The working tree is on `main`; `sp4-fetch-extraction`
 > still exists and is fully merged. The long-standing warning that lived here — *you are on a
