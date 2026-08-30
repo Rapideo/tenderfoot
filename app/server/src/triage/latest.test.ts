@@ -5,8 +5,24 @@ useTestSchema("test_latest");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { close, insert, run } = await import("../db/index.js");
+const { close, insert, run, all, pool } = await import("../db/index.js");
 const { latestPursuitFor } = await import("./latest.js");
+
+/* Counts every statement that reaches Postgres, by wrapping each client the
+ * pool opens. A spy, not a stub: the real query still runs. Attached at
+ * module level because `pool.on("connect")` fires at client CREATION and
+ * beforeAll's migrate() creates the first one -- a listener registered
+ * inside a test would observe nothing and count zero, which is
+ * indistinguishable from a passing fix. */
+const statements: string[] = [];
+pool.on("connect", (client) => {
+  const c = client as unknown as { query: (...a: any[]) => any };
+  const orig = c.query.bind(c);
+  c.query = (...a: any[]) => {
+    statements.push(typeof a[0] === "string" ? a[0] : (a[0]?.text ?? ""));
+    return orig(...a);
+  };
+});
 
 beforeAll(async () => {
   await migrate(false);
@@ -39,6 +55,13 @@ test("the latest row wins, and the earlier ones still exist", async () => {
   expect(latest).toHaveLength(1);
   expect(latest[0]!.state).toBe("Not Interested");
   expect(latest[0]!.reason).toBe("on second look");
+
+  // Verify append-only invariant: both rows still exist in the database
+  const allStates = await all<{ state: string }>(
+    `SELECT state FROM pursuit WHERE solicitation_id = $1 ORDER BY id`,
+    [sol],
+  );
+  expect(allStates.map((r) => r.state)).toEqual(["Interested", "Not Interested"]);
 });
 
 /* Two decisions inside the same millisecond are not hypothetical: an undo
@@ -66,5 +89,11 @@ test("a solicitation with no pursuit row returns nothing, not a fabricated New",
 });
 
 test("an empty id list issues no query and returns nothing", async () => {
-  expect(await latestPursuitFor([])).toEqual([]);
+  const statementsBefore = statements.length;
+  const result = await latestPursuitFor([]);
+  const statementsAfter = statements.length;
+
+  expect(result).toEqual([]);
+  // Assert zero statements were issued -- the guard prevents the query entirely
+  expect(statementsAfter - statementsBefore).toBe(0);
 });
