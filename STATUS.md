@@ -215,15 +215,28 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-29
+## 🔖 RESUME HERE — updated 2026-08-30
 
-> ⚠️ **YOU ARE ON `sp4-fetch-extraction`, NOT `main`, AND THIS BRANCH HAS NEVER BEEN PUSHED.**
-> The only remote branch is `origin/main`. Every SP4 commit — tasks 1–9 plus the nine from the
-> night of 08-28/29 — exists **on one laptop and nowhere else**, and **production is deployed
-> from it**. `git push -u origin sp4-fetch-extraction` is the one-line fix and it is the single
-> highest-value thing to do before anything else.
+> ✅ **THE BRANCH IS PUSHED, 2026-08-30.** `origin/sp4-fetch-extraction` exists and tracks. Every
+> SP4 commit — tasks 1–10 — is off the one laptop it used to live on. ⚠️ You are still ON
+> `sp4-fetch-extraction`, not `main`, and **production is still deployed from it**; that has not
+> changed and is not a defect, but it is the thing to know before reading a deploy.
 
-**Working tree CLEAN. Gate green at 382 tests / 55 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+**Working tree CLEAN. Gate green at 392 tests / 56 files, `npm run check` exit 0.** Production is deployed and healthy (`/api/health` returns `ok`, migrations 001–010). **The pinned block above has no outstanding rulings** — read it first, then this.
+
+### ✅ 2026-08-30 — SP4 Task 10 built, and the brief could not run as written
+
+**`4d60d81`.** `extract/run-extract.ts` walks pending documents nearest-deadline first, fetches, parses, writes fields, and records every failure with a reason naming the step that failed. No transaction around the batch — `extract_status` is already the checkpoint, and 2026-08-27 proved what wrapping it costs.
+
+**Two parts of the brief were stale.** Its fixture inserted `INSERT INTO solicitation (title, closes_at)` — illegal since migration 010, written later the same night as the brief, made `source_id` NOT NULL. Its imports were static, which hoists them ahead of `useTestSchema()` and builds the pool from an ambient `DATABASE_URL` that `npm run check` deliberately strips.
+
+**🔴 D9 — THE ONE CHANGE OF SUBSTANCE, and it is the same failure shape as Task 9's.** The brief expanded a `.zip` into child rows marked `pending` for a later batch. **A member row can never be fetched by a later batch**: its bytes came from inside an archive, so it has no `source_url`, and ruling 1 keeps no bytes anywhere. As briefed, all 86 of the spike's members become rows the next pass fetches from `null`, fails, and stamps **`download failed`** — the network blamed for a design gap, one paragraph up the same code path from D8, which exists to stop exactly that. Members are now absorbed inside the parent's iteration, by the same function that handles a top-level document. The spec is *silent* on how a member gets its bytes, so this is the smallest thing that keeps its stated shape, numbered rather than debated. `docs/admin-deviations.md` D9.
+
+**The brief's own three tests never reached the success path** — all three feed the orchestrator a file no parser can read, so `extractFields`, the `extracted_field` rows, `produced_by` and the parser notes were entirely unpinned. Seven tests added; **six mutants, six killed.** The most instructive: removing the `!res.ok` guard makes a 404 report `parse failed: The PDF file is empty` — blaming the extractor for a document that never arrived, which is precisely what `opportunities` cannot survive.
+
+⚠️ **`WHERE closes_at >= now()` is NOT implemented, though design §4.3 words it that way.** The `ORDER BY` is kept and is what §4.3 is for. The filter is not: a comparison against a NULL `closes_at` yields NULL and WHERE reads NULL as false (Task 9's Critical (b), verbatim), and a permanent filter makes the returned `remaining` a lie — documents on a since-closed solicitation would sit `pending` forever under a counter that never reaches zero, on the screen Task 12 builds.
+
+**The 53 pending documents on the `test` branch are untouched.** Task 10 was proved against fixtures; a live run belongs with Task 11's endpoint.
 
 ### ✅ THE NIGHT OF 2026-08-28/29 — SP4 Task 9 closed, and the slice's premise nearly did not survive
 
@@ -247,15 +260,15 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **PRODUCTION IS CAUGHT UP, both halves.** `mergeSightings` ran against production after a pre-flight that measured the blast radius (0 unlinked sightings ⇒ no inserts, no links possible): result `{created:0, updated:0, linked:0, orgsAttached:0, deadlinesSet:7644}`. SAM.gov **0 → 7,644 dated**. Then deployed — migrations 007 → 010 applied, `source_id` backfilled 9,682/140/61 with zero NULLs.
 
-### ⏭ START HERE — SP4 Task 10, the extract orchestrator
+### ⏭ START HERE — SP4 Task 11, the two admin endpoints
 
-**Brief: `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/task-10-brief.md`.** Walks the pending `document` rows, fetches each, extracts fields, records failures. **53 pending documents and live ground truth are waiting on the `test` branch** — the smoke runs left real state in `public` there, deliberately.
+**Brief: `.superpowers/sdd/2026-08-28-sp4-fetch-extraction/task-11-brief.md`.** Two time-budgeted endpoints over `discoverAttachments` and `runExtract`, bounded by `RUN_HANDLER_BUDGET_MS` against `CEILING_MS`. **53 pending documents and live ground truth are waiting on the `test` branch** — the smoke runs left real state in `public` there, deliberately, and this is the task that should finally run against them.
 
-⚠️ **`extract_status` transitions now carry weight they did not before.** `opportunities` counts only solicitations with a document in `extracted` or `absent` — a `failed` document is a missed FETCH, not a missed extraction, and conflating them blames the extractor for the network.
+⚠️ **`extract_status` transitions carry weight.** `opportunities` counts only solicitations with a document in `extracted` or `absent` — a `failed` document is a missed FETCH, not a missed extraction, and conflating them blames the extractor for the network. Task 10 pins that distinction with a test; the endpoint must not undo it by collapsing the counts it returns.
 
-**Then Task 11** (the two admin endpoints, time-budgeted) **and Task 12** (the screen + the seam test, which is the regression test for the FSSA near-miss). **Then a fresh review of Task 9** — that diff now carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh.
+**Then Task 12** (the screen + the seam test, which is the regression test for the FSSA near-miss). **Then a fresh review of Task 9** — that diff now carries SIX things the original review never saw: the source filter, migration 010, the miss counts, the api typecheck, the closes-at reader, and the ground-truth refresh. **Task 10 wants a review of its own**, D9 first.
 
-**Open, and Matt's:** ① push this branch (see the warning at the top); ② whether Vercel's build should fail on type errors; ③ the staging-branch decision — `.env`'s `DATABASE_URL` and `DATABASE_URL_TEST` are currently the SAME string, both pointing at `test`, which ci.yml mirrors deliberately; ④ delete the abandoned `preview/sp3-federal-ingestion` Neon branch from the console, **not** through the MCP. **Standing:** execute the slice sequence in order, no shortcuts (ruled 2026-08-29).
+**Open, and Matt's:** ~~① push this branch~~ ✅ **done 2026-08-30**; ② whether Vercel's build should fail on type errors; ③ the staging-branch decision — `.env`'s `DATABASE_URL` and `DATABASE_URL_TEST` are currently the SAME string, both pointing at `test`, which ci.yml mirrors deliberately; ④ delete the abandoned `preview/sp3-federal-ingestion` Neon branch from the console, **not** through the MCP. **Standing:** execute the slice sequence in order, no shortcuts (ruled 2026-08-29).
 
 **What changed on 2026-08-28, in one line each.** The admin gate went live (§1). The demo criterion was met (§2). Run was clicked in a browser on production for the first time ever, and the 2026-08-27 failure was diagnosed as a 30-second `maxDuration` every budget in the codebase had been reasoning past — now 300, and tied to `vercel.json` by a test (§3). Local development was repointed off production (§4). Production was ruled public by decision (§5). Production holds **9,883 solicitations** after two real ingests, up from 788.
 
