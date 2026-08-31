@@ -3524,7 +3524,7 @@ Confirm a field shows **value, confidence and the quoted passage** (bullet 5), a
 curl -sS "$BASE/api/triage/metrics"
 ```
 
-Record volume per source per week, Interested-per-hundred per source, and **`excluded_no_posted_at`**. Quote the rate only alongside `population_size`, `drawn` and `decided`.
+Record volume per source per week, Interested-per-hundred per source, and **`excluded_unparseable_posted_at`** (renamed from `excluded_no_posted_at` in the fix wave; the API no longer returns the old name). Quote the rate only alongside `population_size`, `drawn` and `decided`.
 
 - [ ] **Step 7: Write the result into STATUS.md and commit**
 
