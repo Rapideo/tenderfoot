@@ -219,7 +219,17 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## ▶️ NEXT SESSION — SP6's thirteen build tasks are DONE and reviewed. Task 14 (this docs pass) just landed. What is left is the final whole-branch review, then Task 15 — the demo criterion, run for real.
 
-> ### ⏹ 2026-08-31 — the branch is COMPLETE and unmerged. One decision is outstanding, and it is Matt's.
+> ### ✅ 2026-08-31 — SP6 IS MERGED, DEPLOYED, AND ITS CRITERION IS FULLY MET, ON PRODUCTION.
+>
+> Merge `19688be` (`--no-ff`), pushed `fda6f07..19688be`, deploy landed via the Git integration — verified by `/api/queue` answering `200` on production, a route that exists only in SP6. ⚠️ The Vercel MCP returned **403** (no permission to list deployments), so the deploy was confirmed by **behaviour** rather than by the deployments list. That is the right way round regardless: §1 of this file already records that the deployments list is not evidence of what the runtime holds.
+>
+> **PRODUCTION NOW HAS DOCUMENTS — the first in its history.** Discover was run deliberately small first (limit 3 → 6 documents, 0.69s), then wider (limit 25 → 32 documents, 1.6s); extract processed 6 then 32, with 3 and 10 format-related failures. **This discharges SP4's one unrun, non-deferred criterion bullet, open since that slice.**
+>
+> **The production click-through, in a real browser over CDP.** Queue at `/`: card *"300 FW Goose Creek Farm Lease"*, counter **8008**, status bar *"7 SOURCES · 0 DEGRADED · 0 ROT SUSPECTED"*. **No score strip (D13 live). Cost panel empty with its note (D15 live).** Record 2148: `qa_closes_at` **2026-09-30, origin document, 60%**, quoting *"Question: If the September 30, 2026 delivery date canno…"* — **bullet 5**; and beneath its winner, *"2026-08-24 — document 60% | 'Questions related to this RFQ shall be received by … Monday, August 24, 2026'"* — **bullet 6**. Four fields read *absent from bundle*, so the three states are distinguishable. Two documents, **no inline viewer** (D12 live).
+>
+> **So SP4 §10.1's deferral is fully discharged: a citation is no longer merely stored, it is readable — by a person, on production.**
+>
+> **Two things the live run surfaced, neither a defect in this slice:** the same Q&A sentence conflicts *two* fields and renders as two identical-looking rows with nothing saying which field each belongs to (cosmetic, real); and that same sentence being offered as a conflict for `closes_at` is live evidence that `fields.ts`'s cue vocabulary is imprecise — the widening work already parked with the labelling task. The precedence rule itself behaved exactly right: the listing won, the loser stayed visible.
 >
 > **1. ~~This docs pass was never reviewed.~~ ✅ IT WAS — the review landed moments after this block was first written, and it is CLEAN.** Task 14's first reviewer stalled without a verdict; its replacement returned **Spec ✅ / Approved**, having verified all ten claims *against the repository* rather than against the diff's prose. Confirmed true: D1–D16 strictly sequential with no duplicate or skip; the score strip genuinely absent from `Queue.tsx`; the cost panel genuinely `note`-only with no children; the record's documents section genuinely `<pre>` + external link with no embed; `ORDER BY s.closes_at ASC NULLS LAST`; `ScoreBar`'s `number | null` empty state; **SP4 §10.1's original text intact — the hunk is pure addition, zero deleted lines**; the route table; the gate figure cross-checked against an independent file count of 68; and the zero-documents warning stated plainly under its own heading. It also confirmed nothing was improperly deleted — the old production-click-through warning was *relocated and expanded*, not lost, and the vestigial-score claim was struck through in place per convention. **This block is no longer unverified; the sentence above was true for about ten minutes.**
 >
@@ -239,7 +249,7 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 >
 > **Bullets 5 and 6 landed on a real conflict rather than a fixture** — record 459, *Building 333 - Roof Repair*: `prebid_at` **2026-08-17 at 60%** quoting *"To move the Site Visit day and time…"*, with **2026-08-13** preserved beneath it, origin `document`, quoting *"Site Visit: A site visit is scheduled for August 13, 2026 at 1:00 PM Central"*. An original date and the amendment moving it, both kept, the disagreement shown. **That is the FSSA near-miss shape occurring in live data — seen by a person for the first time.**
 >
-> **The branch is NOT merged.** `sp6-triage-record` is 34 commits ahead of `main` at `34c0035`; `main` is untouched and production is unaffected by anything in this slice.
+> **Merged and live.** `sp6-triage-record` is fully merged into `main` (`19688be`, `--no-ff`) and pushed; the branch is kept, as `sp4-fetch-extraction` was. Production runs SP6.
 >
 > **The full session ledger — every ruling, every deferred finding, and the eleven defects the implementers found in my own briefs — is at `.superpowers/sdd/2026-08-30-sp6-triage-record/progress.md`.** It is git-ignored scratch, so `git clean -fdx` will destroy it; the commits it names survive in `git log` either way.
 
