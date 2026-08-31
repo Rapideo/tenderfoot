@@ -4,7 +4,8 @@ import { Shell } from "../shell/Shell";
 import {
   Button, Callout, Card, Chip, FactPanel, Keycap, MicroLabel, ShortcutCard,
 } from "../primitives";
-import { adminHeaders, getAdminSecret } from "../admin/adminSecret";
+import { adminHeaders, clearAdminSecret, getAdminSecret } from "../admin/adminSecret";
+import { getDecidedBy } from "./decidedBy";
 import { useQueueKeys } from "./useQueueKeys";
 import "./Queue.css";
 
@@ -26,6 +27,10 @@ interface QueueItem {
   documents: number;
   sightings: number;
   deadline_conflict: DeadlineConflict[];
+  /* SAMPLE MODE ONLY, spec §10: a drawn item whose deadline passed mid-
+   * session stays in the sample and reaches the queue, marked closed,
+   * rather than becoming unreachable. Always false outside sample mode. */
+  closed: boolean;
 }
 interface SampleHeader {
   id: number;
@@ -89,12 +94,23 @@ export function Queue() {
       }
       const secret = getAdminSecret();
       if (!secret) return;
+      /* Spec §5.3: "decided_by is set once per session and stored on every
+       * row. Two people scoring cannot be merged into one ground truth
+       * without knowing whose is whose." Same prompt-once shape as the
+       * admin secret above -- see decidedBy.ts. */
+      const decidedBy = getDecidedBy();
+      if (!decidedBy) return;
       const res = await fetch(`/api/solicitations/${id}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...adminHeaders(secret) },
-        body: JSON.stringify({ state, reason: reason.trim() || null }),
+        body: JSON.stringify({ state, reason: reason.trim() || null, decided_by: decidedBy }),
       });
       if (!res.ok) {
+        /* adminSecret.ts's own rule: "Call on a 401 -- a wrong secret must
+         * not silently break every later click." Admin.tsx already honours
+         * it in five places; this screen did not, and a mistyped secret
+         * bricked the whole session with no in-app recovery. */
+        if (res.status === 401) clearAdminSecret();
         setError(((await res.json()) as any).error ?? "Decision failed.");
         return;
       }
@@ -129,12 +145,27 @@ export function Queue() {
       <Shell reduced queueCount={0}>
         <div className="queue__cleared">
           <h2>Queue cleared</h2>
-          {/* D14. The SVRC calls this content undesigned; this is the
-            * smallest thing that keeps the session alive rather than
-            * dead-ending it. */}
-          <ShortcutCard title="Draw another sample" description="Measure a different source." />
-          <ShortcutCard title="Metrics" description="Volume and Interested-per-hundred." />
-          <ShortcutCard title="Admin" description="Sources, health, and runs." />
+          {/* D14, corrected: the original three cards had no onClick at all,
+            * inside a reduced Shell that hides the nav chrome -- nothing on
+            * this screen did anything. "Draw another sample" is removed
+            * rather than wired, because there is no draw-a-sample UI
+            * anywhere in the product to send it to; a sample is drawn via
+            * POST /api/triage/samples, stated here plainly instead of
+            * promising a button that does not exist. The other two go
+            * where the product actually has something to show. */}
+          <Callout>
+            A new sample is drawn via <code>POST /api/triage/samples</code>.
+          </Callout>
+          <ShortcutCard
+            title="Metrics"
+            description="Volume and Interested-per-hundred."
+            onClick={() => navigate("/admin")}
+          />
+          <ShortcutCard
+            title="Admin"
+            description="Sources, health, and runs."
+            onClick={() => navigate("/admin")}
+          />
         </div>
       </Shell>
     );
@@ -160,6 +191,16 @@ export function Queue() {
           <span>{money(item.value_cents)}</span>
           {item.kind && <Chip tone="neutral">{item.kind}</Chip>}
         </div>
+
+        {/* SAMPLE MODE ONLY, spec §10: the deadline passed mid-session but
+          * the item stays in the sample and reachable here -- marked so a
+          * reader can tell "closed, still decidable" from "still open". */}
+        {item.closed && (
+          <Callout>
+            <MicroLabel>CLOSED</MicroLabel>
+            <span> The deadline has passed. Still part of the sample and still decidable.</span>
+          </Callout>
+        )}
 
         {item.deadline_conflict.length > 0 && (
           <Callout>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { Queue } from "./Queue";
 
 const ITEM = {
@@ -17,6 +17,7 @@ const ITEM = {
   documents: 3,
   sightings: 2,
   deadline_conflict: [],
+  closed: false,
 };
 
 function page(over: Record<string, unknown> = {}) {
@@ -107,6 +108,23 @@ test("the pursuit-cost panel renders, empty and labelled", async () => {
   expect(screen.getByText(/not yet extracted/i)).toBeTruthy();
 });
 
+/* IMPORTANT fix. Spec §10: a drawn item whose deadline passes mid-session
+ * stays in the sample and reachable, marked closed. The card must show
+ * that, and must not show it for an ordinary open item. */
+test("a closed drawn item is marked closed on the card", async () => {
+  stub(page({ items: [{ ...ITEM, closed: true }] }));
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+  expect(screen.getByText(/^CLOSED$/)).toBeTruthy();
+});
+
+test("an open item is not marked closed on the card", async () => {
+  stub(page());
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+  expect(screen.queryByText(/^CLOSED$/)).toBeNull();
+});
+
 test("sample mode announces itself and its denominator", async () => {
   stub(
     page({
@@ -141,11 +159,114 @@ test("Pass is blocked until a reason is given", async () => {
   expect(posts).toHaveLength(0);
 });
 
-test("an empty queue offers somewhere to go", async () => {
+/* CRITICAL fix. The server accepts and stores decided_by (routes/triage.ts,
+ * triage/decide.ts) and it is tested there -- but nothing on the client sent
+ * it, so every row the gate counts would have been written with
+ * decided_by = NULL, and that cannot be backfilled. Spec §5.3: "decided_by
+ * is set once per session and stored on every row." */
+test("the decision POST carries decided_by", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /interested/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.decided_by).toBe("matt");
+});
+
+test("a seeded decided_by is used without prompting", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  const promptSpy = vi.spyOn(window, "prompt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /interested/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+  expect(promptSpy).not.toHaveBeenCalled();
+});
+
+/* IMPORTANT fix. adminSecret.ts's own comment: "Call on a 401 -- a wrong
+ * secret must not silently break every later click." Admin.tsx honours this
+ * in five places; Queue.tsx's decide() did not, which would brick the whole
+ * triage session on one mistyped secret with no in-app recovery. */
+test("a 401 on decide clears the stored admin secret", async () => {
+  sessionStorage.setItem("tenderfoot.adminSecret", "wrong-secret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify({ error: "bad secret" }), { status: 401 });
+    }
+    return new Response(
+      JSON.stringify(String(url).includes("/api/sources") ? [] : page()),
+      { status: 200 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+  screen.getByRole("button", { name: /interested/i }).click();
+
+  await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
+});
+
+test("an empty queue offers somewhere to go, and states how a new sample is drawn", async () => {
   stub(page({ total: 0, remaining: 0, items: [] }));
   renderQueue();
   await waitFor(() => expect(screen.getByText(/queue cleared/i)).toBeTruthy());
-  expect(screen.getByText(/draw another sample/i)).toBeTruthy();
+  /* D14, corrected: "Draw another sample" is gone -- there is no
+   * draw-a-sample UI anywhere in the product. The screen states the fact
+   * plainly instead of promising a button that does not exist. */
+  expect(screen.queryByText(/draw another sample/i)).toBeNull();
+  expect(screen.getByText(/drawn via/i)).toBeTruthy();
+  expect(screen.getByText(/POST \/api\/triage\/samples/)).toBeTruthy();
+});
+
+/* D14, corrected: both remaining cards must actually navigate -- the
+ * original defect was that neither had an onClick at all. There is no
+ * separate metrics view in the product, so both land on /admin. */
+test("Metrics and Admin both navigate away from the dead end", async () => {
+  stub(page({ total: 0, remaining: 0, items: [] }));
+  render(
+    <MemoryRouter initialEntries={["/"]}>
+      <Routes>
+        <Route path="/" element={<Queue />} />
+        <Route path="/admin" element={<div>ADMIN SCREEN MARKER</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByText(/queue cleared/i)).toBeTruthy());
+
+  screen.getByText("Metrics").closest("button")!.click();
+  await waitFor(() => expect(screen.getByText(/ADMIN SCREEN MARKER/)).toBeTruthy());
+});
+
+test("the Admin card navigates to /admin", async () => {
+  stub(page({ total: 0, remaining: 0, items: [] }));
+  render(
+    <MemoryRouter initialEntries={["/"]}>
+      <Routes>
+        <Route path="/" element={<Queue />} />
+        <Route path="/admin" element={<div>ADMIN SCREEN MARKER</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByText(/queue cleared/i)).toBeTruthy());
+
+  screen.getByText("Admin").closest("button")!.click();
+  await waitFor(() => expect(screen.getByText(/ADMIN SCREEN MARKER/)).toBeTruthy());
 });
 
 /* Decisions are APPEND-ONLY (spec §5.1): undo does not edit or delete the
@@ -155,6 +276,7 @@ test("an empty queue offers somewhere to go", async () => {
 test("undo appends a return to New rather than deleting", async () => {
   const fetchMock = stub(page());
   sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
 
