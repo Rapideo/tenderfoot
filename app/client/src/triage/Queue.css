@@ -162,5 +162,15 @@
   outline: none;
 }
 
+/* Restored: this rule existed before the fidelity rewrite and was dropped in
+ * it, so the undo hint rendered at body size instead of as a micro-label. */
+.queue__keys {
+  font: var(--type-microlabel-cmd);
+  letter-spacing: var(--tracking-hint);
+  color: var(--text7);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
 .queue__sample-banner { padding: 10px 2px; }
 .queue__cleared { display: grid; gap: 14px; padding: 24px; max-width: 1080px; }

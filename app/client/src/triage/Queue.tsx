@@ -219,6 +219,12 @@ export function Queue() {
   const item = current!;
   return (
     <Shell reduced queueCount={page.remaining}>
+      {/* THE PAGE FRAME. The bundle centres a 1080px column on --app with
+        * padding:26px 24px 40px; without it the card spans the viewport and
+        * the whole composition reads wrong. The CSS was written in the same
+        * pass that rebuilt this screen and the markup never used it. */}
+      <div className="queue">
+       <div className="queue__inner">
       {page.mode === "sample" && page.sample && (
         <div className="queue__sample-banner">
           <MicroLabel>
@@ -417,6 +423,8 @@ export function Queue() {
           </div>
         )}
       </Card>
+       </div>
+      </div>
     </Shell>
   );
 }
