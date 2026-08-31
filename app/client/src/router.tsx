@@ -7,14 +7,8 @@ import {
 } from "react-router-dom";
 import { Health } from "./Health";
 import { Admin } from "./admin/Admin";
-import { Shell } from "./shell/Shell";
 import { Queue } from "./triage/Queue";
-
-/* Placeholder -- the route move (root -> Queue) and the shell are one
- * reviewable unit; Task 11 replaced Queue with the real screen above. Task
- * 13 replaces Record. Still obviously provisional: no data, no behaviour,
- * just enough to prove the route wiring and the shell render together. */
-const Record = () => <Shell>Record lands in Task 13.</Shell>;
+import { Record } from "./record/Record";
 
 /* The gallery is a DEV-ONLY route. It exists so every primitive can be seen
  * and signed off before any feature is built on it (plan of action §6, SP2's
