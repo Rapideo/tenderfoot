@@ -119,6 +119,8 @@ export function Record() {
             ) : (
               <span>{d.filename}</span>
             )}
+            {/* D12: named as rendered, and until this fix was not. */}
+            {d.media_type && <span className="record__doc-type">{d.media_type}</span>}
             <span className="record__doc-status">{d.extract_status}</span>
             {d.extracted_text && <pre className="record__text">{d.extracted_text}</pre>}
           </div>

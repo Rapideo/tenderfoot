@@ -124,6 +124,13 @@ test("a document links out and shows its extracted text", async () => {
   expect(screen.getByText(/The deadline is September 17, 2026/)).toBeTruthy();
 });
 
+/* D12, fixed: media_type was declared on Doc and never rendered. */
+test("a document shows its media type", async () => {
+  renderRecord();
+  await waitFor(() => expect(screen.getByText(/SCOPE OF WORK.docx/)).toBeTruthy());
+  expect(screen.getByText("docx")).toBeTruthy();
+});
+
 test("the timeline shows what the documents did and what the system decided", async () => {
   renderRecord();
   await waitFor(() => expect(screen.getByText(/Seen in SAM.gov/)).toBeTruthy());

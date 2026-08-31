@@ -7,5 +7,6 @@
 .record__conflict { padding-left: 18px; }
 .record__quote, .record__conflict blockquote { margin: 0; font: var(--type-body-citation); }
 .record__doc { padding: 10px 0; }
+.record__doc-type { font: var(--type-microlabel); margin-left: 8px; }
 .record__text { white-space: pre-wrap; max-height: 12rem; overflow: auto; }
 .record__event { display: flex; gap: 14px; }
