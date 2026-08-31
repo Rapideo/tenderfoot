@@ -9,13 +9,31 @@ await resetSchema();
  * is too tight for tests that do live network round trips against the
  * shared Neon test-branch compute: a cold start alone measures ~1.1s, and
  * several agents can be running the suite concurrently against the same
- * compute (each gets its own SCHEMA -- SP1.5 Ruling 3 -- but they still
- * contend for the one compute's connections). corpus.test.ts already
- * carries a 120000ms hook timeout for the exact same underlying reason
- * (~200 rows, each several round trips); 30000ms here is the equivalent
- * margin sized to this file's much smaller workload -- generous enough to
- * absorb contention, not so high that a genuine hang would pass for a slow
- * test. */
+ * compute, all genuinely contending for its connections.
+ *
+ * CORRECTED (SP6 final review). This comment used to add, as settled fact,
+ * "(each gets its own SCHEMA -- SP1.5 Ruling 3 -- but they still contend for
+ * the one compute's connections)". That parenthetical was FALSE for two
+ * concurrent LOCAL runs: runSuffix() (testdb.ts) folded in GITHUB_RUN_ID,
+ * defaulting to the literal string "local" when unset -- which it always was
+ * outside CI -- so two local `npm run check` processes resolved to the SAME
+ * schema name, and one's resetSchema() could DROP SCHEMA ... CASCADE the
+ * other's tables mid-run. That is what actually produced the flaky,
+ * file-varying test failures two review rounds saw from concurrent local
+ * runs, and it is why this false claim mattered: it is what sent the first
+ * diagnosis to connection contention instead -- contention predicts
+ * connection errors, not a single wrong assertion inside an otherwise-
+ * passing file. Fixed by scripts/check.mjs minting a TENDERFOOT_RUN_ID
+ * (randomUUID()) per invocation, with runSuffix() now reading
+ * GITHUB_RUN_ID ?? TENDERFOOT_RUN_ID ?? "local", so concurrent local runs
+ * are schema-isolated the same way concurrent CI runs already were. What
+ * remains true, and is this hook's actual justification, is the connection
+ * contention named above: schema isolation does not create more connections
+ * on the one shared compute. corpus.test.ts already carries a 120000ms hook
+ * timeout for the exact same underlying reason (~200 rows, each several
+ * round trips); 30000ms here is the equivalent margin sized to this file's
+ * much smaller workload -- generous enough to absorb contention, not so high
+ * that a genuine hang would pass for a slow test. */
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("./migrate.js");

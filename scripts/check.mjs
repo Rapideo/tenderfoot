@@ -45,6 +45,26 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+
+/* THE FLAKY-GATE FIX (SP6 final review). testdb.ts's runSuffix() folds
+ * GITHUB_RUN_ID into every test schema name so a CI run cannot DROP SCHEMA
+ * ... CASCADE another CI run's tables mid-suite (SP1.5 Ruling 3) -- but it
+ * fell back to the LITERAL STRING "local" when GITHUB_RUN_ID is unset, which
+ * it always is outside CI. Two concurrent local `npm run check` runs both
+ * resolved to the SAME schema name, and each test file's own resetSchema()
+ * could drop the other's tables mid-run -- not a clean failure, a single
+ * wrong assertion in an otherwise-passing file, which is exactly the shape
+ * two review rounds misdiagnosed as Neon pool contention.
+ *
+ * TENDERFOOT_RUN_ID is this invocation's local equivalent of GITHUB_RUN_ID --
+ * minted once, here, before any child process spawns, and set on
+ * process.env so every spawnSync below (typecheck, test, build) inherits it
+ * without each call site needing to know it exists. testdb.ts's runSuffix()
+ * reads GITHUB_RUN_ID ?? TENDERFOOT_RUN_ID ?? "local", so CI is unaffected
+ * (GITHUB_RUN_ID still wins) and two concurrent local runs now get distinct
+ * schemas the same way two concurrent CI runs already did. */
+process.env.TENDERFOOT_RUN_ID = randomUUID();
 
 /* THE INVARIANT THE OVERRIDES BELOW REST ON, CHECKED RATHER THAN ASSUMED.
  *
