@@ -1,34 +1,166 @@
-.queue__title { font: var(--type-heading-hero); margin: 0 0 10px; }
-.queue__facts { display: flex; flex-wrap: wrap; gap: 14px; }
-.queue__facts span { font: var(--type-body-buyer); }
-/* WRAPS. The first cut was a single non-wrapping flex row, so on a 1440px
- * viewport "Open record" and the undo hint were pushed past the right edge and
- * clipped -- visible in the first production screenshot. The reason box takes
- * the slack, the controls keep their intrinsic width, and the row wraps rather
- * than overflowing when it runs out. */
+/* View 1.1 — The Queue, matched against the V1.2 bundle's triage screen per
+ * the fidelity mandate (design spec §7.10). Declarations are copied from the
+ * bundle rather than approximated; where a token exists for a value, the token
+ * is used, because tokens.css is verified byte-identical to the prototype.
+ *
+ * Bundle page frame: background:var(--app); padding:26px 24px 40px;
+ *                    flex column, centred, card max-width:1080px */
+
+.queue {
+  min-height: 100%;
+  background: var(--app);
+  padding: 26px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.queue__inner { width: 100%; max-width: 1080px; }
+
+/* ── progress · order · keyboard legend ─────────────────────────────────── */
+.queue__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+.queue__meta-left { display: flex; align-items: baseline; gap: 12px; }
+.queue__progress {
+  font: var(--type-microlabel-queue);
+  letter-spacing: var(--tracking-label-wide);
+  color: var(--text5);
+}
+.queue__order,
+.queue__legend {
+  font: var(--type-microlabel-cmd);
+  letter-spacing: var(--tracking-hint);
+  color: var(--text7);
+}
+
+/* ── card header ────────────────────────────────────────────────────────── */
+.queue__head { padding: 26px 30px 22px; border-bottom: 1px solid var(--brdsoft); }
+
+.queue__chips { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.queue__chip,
+.queue__chip-source {
+  font: var(--type-microlabel-source);
+  letter-spacing: var(--tracking-label-tight);
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+/* The bundle distinguishes the SOURCE chip (accent) from ordinary tags. */
+.queue__chip-source { color: var(--acc); background: var(--accbg); }
+.queue__chip { color: var(--text4); background: var(--chip); }
+
+.queue__title {
+  margin: 0 0 8px;
+  font: var(--type-heading-hero);
+  letter-spacing: var(--tracking-heading-tight);
+  max-width: 24ch;
+  text-wrap: pretty;
+}
+.queue__buyer { font: var(--type-body-buyer); color: var(--text4); }
+
+/* The bundle's buyerNote treatment, reused for the closed-in-sample notice. */
+.queue__note {
+  margin-top: 6px;
+  font: var(--type-body-note);
+  color: var(--warntx);
+  background: var(--warnbg);
+  border: 1px solid var(--warnbrd);
+  border-radius: 5px;
+  padding: 6px 9px;
+  display: inline-block;
+}
+
+/* ── the three-up fact panel ────────────────────────────────────────────── */
+.queue__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--brdsoft);
+  border: 1px solid var(--brdsoft);
+  border-radius: 8px;
+  margin-top: 20px;
+  overflow: hidden;
+}
+.queue__fact { background: var(--surface); padding: 13px 15px; }
+.queue__fact-label {
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-wide);
+  color: var(--text7);
+  margin-bottom: 7px;
+}
+.queue__fact-value { font: var(--type-metric-field); }
+.queue__fact-sub {
+  font: var(--type-body-caveat);
+  color: var(--text5);
+  margin-top: 4px;
+  min-height: 1em;
+}
+
+/* ── deadline disagreement, two-up ──────────────────────────────────────── */
+.queue__conflict {
+  margin-top: 10px;
+  border: 1px solid var(--badbrd);
+  background: var(--badbg);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.queue__conflict-head {
+  font: var(--type-microlabel-alert);
+  letter-spacing: var(--tracking-label);
+  color: var(--bad);
+  margin-bottom: 9px;
+}
+.queue__conflict-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.queue__conflict-cell {
+  background: var(--surface);
+  border: 1px solid var(--badbrd2);
+  border-radius: 6px;
+  padding: 9px 11px;
+}
+.queue__conflict-value { font: var(--type-metric-conflict); }
+.queue__conflict-src {
+  font: var(--type-body-caveat);
+  color: var(--text5);
+  margin-top: 3px;
+}
+
+/* ── decision bar ───────────────────────────────────────────────────────── */
 .queue__decision {
+  border-top: 1px solid var(--brdsoft);
+  background: var(--surface4);
+  padding: 16px 30px;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-start;
-  margin-top: 20px;
+  gap: 12px;
+  align-items: center;
 }
-.queue__decision textarea {
-  flex: 1 1 320px;
+/* The bundle's reason step is a MODE, not a permanently-visible box: pressing
+ * Pass swaps the bar for this panel. Chips are parked for V1 (SVRC ratified
+ * free text only), so the chip row is deliberately absent -- the two-state
+ * shape is not a chip decision. */
+.queue__reason { padding: 18px 30px 20px; }
+.queue__reason-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.queue__reason-prompt {
+  font: var(--type-microlabel-alert);
+  letter-spacing: var(--tracking-label);
+  color: var(--bad);
+}
+.queue__reason-help { font: var(--type-body-help); color: var(--text6); }
+.queue__reason-row { display: flex; gap: 10px; align-items: center; }
+.queue__reason-row input {
+  flex: 1;
   min-width: 0;
-  min-height: 3rem;
-  font: var(--type-body-plain);
   border: 1px solid var(--brdctl);
-  border-radius: 7px;
-  padding: 9px 11px;
   background: var(--surface);
+  border-radius: 7px;
+  padding: 11px 13px;
+  font: var(--type-body-decision);
   color: var(--text);
+  outline: none;
 }
-.queue__keys {
-  font: var(--type-microlabel-cmd);
-  color: var(--text7);
-  align-self: center;
-  white-space: nowrap;
-}
-.queue__sample-banner { padding: 10px 18px; }
-.queue__cleared { display: grid; gap: 14px; padding: 24px; }
+
+.queue__sample-banner { padding: 10px 2px; }
+.queue__cleared { display: grid; gap: 14px; padding: 24px; max-width: 1080px; }

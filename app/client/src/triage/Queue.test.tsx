@@ -10,6 +10,7 @@ const ITEM = {
   org_name: "Indiana FSSA",
   jurisdiction: "IN",
   closes_at: "2026-09-17",
+  posted_at: "2026-07-14",
   value_cents: 45000000,
   kind: "RFP",
   set_aside: null,
@@ -115,7 +116,11 @@ test("a closed drawn item is marked closed on the card", async () => {
   stub(page({ items: [{ ...ITEM, closed: true }] }));
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
-  expect(screen.getByText(/^CLOSED$/)).toBeTruthy();
+  /* The bundle's buyerNote treatment carries this, not a CLOSED microlabel.
+   * The property under test is unchanged: a drawn item whose deadline passed
+   * is still reachable AND is visibly marked. */
+  expect(screen.getByText(/deadline has passed/i)).toBeTruthy();
+  expect(screen.getByText(/still decidable/i)).toBeTruthy();
 });
 
 test("an open item is not marked closed on the card", async () => {
@@ -143,7 +148,11 @@ test("sample mode announces itself and its denominator", async () => {
   renderQueue();
   await waitFor(() => expect(screen.getByText(/sample/i)).toBeTruthy());
   expect(screen.getByText(/4,812/)).toBeTruthy();
-  expect(screen.getByText(/SAM\.gov/)).toBeTruthy();
+  /* getAllByText, not getByText: "SAM.gov" now renders TWICE -- once in the
+   * sample banner and once in the source chip the bundle puts on the card.
+   * A single-match query would fail for a reason unrelated to what this test
+   * is about. */
+  expect(screen.getAllByText(/SAM\.gov/).length).toBeGreaterThanOrEqual(1);
 });
 
 test("Pass is blocked until a reason is given", async () => {
@@ -152,9 +161,17 @@ test("Pass is blocked until a reason is given", async () => {
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
 
+  /* THE DECISION BAR IS TWO-STATE, as the bundle has it: Pass opens the reason
+   * step, and the decision is only recorded on confirm. So the property is
+   * asserted where it can actually be violated -- confirming with an empty
+   * reason -- rather than at the first click. */
   screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+
+  screen.getByRole("button", { name: /confirm pass/i }).click();
   await waitFor(() => expect(screen.getByText(/reason is required/i)).toBeTruthy());
 
+  /* The assertion that matters, unchanged: no decision reached the server. */
   const posts = fetchMock.mock.calls.filter((c) => (c[1] as any)?.method === "POST");
   expect(posts).toHaveLength(0);
 });
@@ -310,4 +327,64 @@ test("undo appends a return to New rather than deleting", async () => {
       .map((c) => JSON.parse((c[1] as any).body));
     expect(bodies.some((b) => b.state === "New")).toBe(true);
   });
+});
+
+/* THE THREE-UP FACT PANEL -- the bundle's spine for this card, and the largest
+ * gap the 2026-08-31 fidelity audit found. The SVRC calls these "the four
+ * facts that decide most items without anything else being read". */
+test("the card shows DEADLINE, EST. VALUE and POSTED as a labelled fact panel", async () => {
+  stub(page());
+  const { container } = renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  expect(screen.getByText("DEADLINE")).toBeTruthy();
+  expect(screen.getByText("EST. VALUE")).toBeTruthy();
+  expect(screen.getByText("POSTED")).toBeTruthy();
+
+  /* Three cells, each carrying its own value -- not three labels over one
+   * blob. A layout regression that collapsed them would fail here. */
+  const cells = container.querySelectorAll(".queue__fact");
+  expect(cells).toHaveLength(3);
+  expect(screen.getByText("2026-09-17")).toBeTruthy();
+  expect(screen.getByText("2026-07-14")).toBeTruthy();
+  expect(screen.getByText(/450,000/)).toBeTruthy();
+});
+
+/* The deadline is coloured by urgency in the bundle, and the interval beneath
+ * it is what tells a reader whether "2026-09-17" is soon. */
+test("the deadline carries a human interval, not just a date", async () => {
+  stub(page());
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+  expect(screen.getByText(/days out|closes today|closed \d+ days ago/)).toBeTruthy();
+});
+
+/* THE DISAGREEMENT PANEL. This display currently carries the FSSA near-miss
+ * risk ALONE, because Region 1.1.5's Gated Items Drawer is parked -- so it has
+ * to show BOTH values with their sources and resolve nothing. */
+test("a deadline disagreement shows both values side by side, unresolved", async () => {
+  stub(
+    page({
+      items: [
+        {
+          ...ITEM,
+          deadline_conflict: [
+            { value_text: "2026-08-26", origin: "document", quote: "proposals due August 26" },
+          ],
+        },
+      ],
+    }),
+  );
+  const { container } = renderQueue();
+  await waitFor(() => expect(screen.getByText(/NOT RESOLVED/)).toBeTruthy());
+
+  /* TWO cells: the listing's value and the document's. Showing only the loser
+   * -- or only the winner -- would fail here, and either would be the exact
+   * silent-resolution failure this panel exists to prevent. */
+  const cells = container.querySelectorAll(".queue__conflict-cell");
+  expect(cells).toHaveLength(2);
+  const text = Array.from(cells).map((c) => c.textContent).join(" | ");
+  expect(text).toContain("2026-09-17");
+  expect(text).toContain("2026-08-26");
+  expect(text).toContain("document");
 });

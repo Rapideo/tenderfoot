@@ -15,6 +15,7 @@ export interface QueueItem {
   org_name: string | null;
   jurisdiction: string | null;
   closes_at: string | null;
+  posted_at: string | null;
   /* bigint column, but db/index.ts:20 parses OID 20 (bigint) to Number
    * centrally via pg.types.setTypeParser -- so this arrives as a number,
    * not the string a bare pg client would hand back. */
@@ -121,7 +122,7 @@ export async function queuePage(
    * what the constancy test in queue.test.ts pins. */
   const items = await all<QueueItem>(
     `SELECT s.id, s.title, o.name AS org_name, o.jurisdiction,
-            s.closes_at, s.value_cents, s.kind, s.set_aside,
+            s.closes_at, s.posted_at, s.value_cents, s.kind, s.set_aside,
             src.name AS source_name,
             (SELECT count(*)::int FROM document d WHERE d.solicitation_id = s.id) AS documents,
             (SELECT count(*)::int FROM sighting g WHERE g.solicitation_id = s.id) AS sightings,
