@@ -114,6 +114,42 @@ test("an item whose deadline passes stays in the sample", async () => {
   expect(items.map((i) => i.solicitation_id)).toContain(doomed);
 });
 
+/* IMPORTANT fix. Before this fix, queue.ts applied ELIGIBLE (which excludes
+ * closed rows) INSIDE sample-mode membership too -- so a drawn item whose
+ * deadline passed became unreachable even though its triage_sample_item row
+ * (asserted above) survived. Spec §10: "An item's deadline passes mid-
+ * session -> Stays in the sample, marked closed." This proves the item
+ * itself, not just its sample row, stays reachable -- and that an item
+ * still open in the SAME sample is not wrongly marked closed too. */
+test("a drawn item whose deadline passed still appears in sample mode, marked closed", async () => {
+  const doomed = await sol("closes mid-session, still in the sample");
+  const stillOpen = await sol("stays open, same sample");
+  const sample = await drawSample({ sourceId: source, n: 200, seed: "closed-in-sample" });
+
+  await run(`UPDATE solicitation SET closes_at = '2020-01-01' WHERE id = $1`, [doomed]);
+
+  const page = await queuePage({ sampleId: sample.id, limit: 200 });
+  const doomedItem = page.items.find((i) => i.id === doomed);
+  const openItem = page.items.find((i) => i.id === stillOpen);
+
+  expect(doomedItem, "closed item must still be reachable in sample mode").toBeDefined();
+  expect(doomedItem!.closed).toBe(true);
+  expect(openItem, "the still-open item must also be reachable").toBeDefined();
+  expect(openItem!.closed).toBe(false);
+});
+
+/* The other half of the same fix: ordinary (non-sample) queue membership is
+ * UNCHANGED -- a closed item, drawn or not, must still not appear there. */
+test("a drawn item whose deadline passed still does not appear in the ordinary (non-sample) queue", async () => {
+  const doomed = await sol("closes mid-session, ordinary queue");
+  await drawSample({ sourceId: source, n: 200, seed: "closed-ordinary" });
+
+  await run(`UPDATE solicitation SET closes_at = '2020-01-01' WHERE id = $1`, [doomed]);
+
+  const page = await queuePage({ limit: 200 });
+  expect(page.items.map((i) => i.id)).not.toContain(doomed);
+});
+
 test("the queue in sample mode says so, and carries the denominator", async () => {
   const sample = await drawSample({ sourceId: source, n: 5, seed: "mode" });
   const page = await queuePage({ sampleId: sample.id });
