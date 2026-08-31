@@ -23,7 +23,7 @@
   > ⚠️ **This constraint said the exact opposite until 2026-08-30, and the correction is Task 3's implementer's, not mine.** It read *"arrives as a STRING… no setTypeParser is configured in this repo"*, which is false — the parser has been there since the Postgres port, with a comment explaining why. The error was not cosmetic: Task 11's `money()` was written to call `.slice()` on the value, which throws on a number, while its test fixture used a quoted string and passed. **A green test over a browser crash — the exact failure shape SP3.6 was bitten by.** Everywhere this plan still says a count comes back as a string, it is wrong; the `Number(...)` wrappers left in place are harmless no-ops kept as belt-and-braces.
 - **Test isolation is schema-per-file.** `useTestSchema("test_<name>")` then `await resetSchema()` at module top, BEFORE the dynamic imports that open a pool.
 - **No network in tests.** Every fixture is inserted directly.
-- **Deviations go in `docs/admin-deviations.md`**, the continuous series. D10 is current; this plan adds **D11–D15**.
+- **Deviations go in `docs/admin-deviations.md`**, the continuous series. ⚠️ D11 was taken during Task 9 by the StatusBar health-vocabulary deviation, so this plan adds **D12–D16**.
 
 ---
 
@@ -2573,7 +2573,7 @@ test("a deadline disagreement is shown, not resolved away", async () => {
   expect(screen.getByText(/proposals due August 26/)).toBeTruthy();
 });
 
-/* D12. The strip is built and lives on /dev/gallery; it does not render
+/* D13. The strip is built and lives on /dev/gallery; it does not render
  * here. A panel captioned "MACHINE SCORES" showing four dashes reads as
  * "the machine scored this and found nothing". */
 test("no score strip appears on the card", async () => {
@@ -2584,7 +2584,7 @@ test("no score strip appears on the card", async () => {
   expect(screen.queryByText(/machine scores/i)).toBeNull();
 });
 
-/* D14. None of the panel's four facts are extracted. It says so rather than
+/* D15. None of the panel's four facts are extracted. It says so rather than
  * being quietly dropped -- if the session repeatedly wants a fact this
  * panel cannot give, that is a finding the gate should produce. */
 test("the pursuit-cost panel renders, empty and labelled", async () => {
@@ -2757,7 +2757,7 @@ export function Queue() {
       <Shell reduced queueCount={0}>
         <div className="queue__cleared">
           <h2>Queue cleared</h2>
-          {/* D13. The SVRC calls this content undesigned; this is the
+          {/* D14. The SVRC calls this content undesigned; this is the
             * smallest thing that keeps the session alive rather than
             * dead-ending it. */}
           <ShortcutCard title="Draw another sample" description="Measure a different source." />
@@ -2801,7 +2801,7 @@ export function Queue() {
           </Callout>
         )}
 
-        {/* D14: Region 1.1.3 renders and says what it does not have. */}
+        {/* D15: Region 1.1.3 renders and says what it does not have. */}
         <FactPanel
           title="PURSUIT COST"
           note="Required forms, conference, references and notarization are not yet extracted."
@@ -3211,7 +3211,7 @@ test("absent and never-looked-for read differently", async () => {
   expect(screen.getByText(/not yet looked for/i)).toBeTruthy();
 });
 
-/* D11. The bytes were discarded by SP4's ruling, so the link out is the
+/* D12. The bytes were discarded by SP4's ruling, so the link out is the
  * only route back to the original. */
 test("a document links out and shows its extracted text", async () => {
   renderRecord();
@@ -3344,7 +3344,7 @@ export function Record() {
 
       <Section recessed>
         <MicroLabel>DOCUMENTS</MicroLabel>
-        {/* D11: the bytes were discarded by SP4's ruling, so what is here is
+        {/* D12: the bytes were discarded by SP4's ruling, so what is here is
           * the stored text and a link back to the original. */}
         <Callout>
           Documents are parsed and discarded — a citation quotes the extracted
@@ -3435,15 +3435,15 @@ git commit -m "The record: fields with their citations, conflicts kept visible, 
 - Consumes: everything above
 - Produces: documentation only. No code.
 
-- [ ] **Step 1: Write D11–D15**
+- [ ] **Step 1: Write D12–D16**
 
 Append to `docs/admin-deviations.md`, following the existing entry format (each carries what the reference says, what was built, and why):
 
-- **D11** — `View 2.4` shows stored `extracted_text` and a link to `source_url`, not the bundle inline. Migration 008 discarded the bytes by SP4's ruling; there is nothing to render inline.
-- **D12** — the score strip does not render on the composed queue card. Records both dated rulings (SVRC `Region 1.1.2`, 2026-08-11 vs STATUS, 2026-08-13), Matt's resolution on 2026-08-30, and the correction that the vestigial look was NOT undesigned — `ScoreBar`'s null branch was built at SP2.
-- **D13** — `View 1.3 : Queue Cleared` content, invented because the SVRC calls it undesigned. Three `ShortcutCard`s.
-- **D14** — `Region 1.1.3` renders empty and states that its four facts are unextracted.
-- **D15** — default order is deadline-soonest-first; the ratified `AMBIGUITY FIRST` default needs a scorer and cannot ship. Note that the SVRC's answer returns intact when qualification is designed.
+- **D12** — `View 2.4` shows stored `extracted_text` and a link to `source_url`, not the bundle inline. Migration 008 discarded the bytes by SP4's ruling; there is nothing to render inline.
+- **D13** — the score strip does not render on the composed queue card. Records both dated rulings (SVRC `Region 1.1.2`, 2026-08-11 vs STATUS, 2026-08-13), Matt's resolution on 2026-08-30, and the correction that the vestigial look was NOT undesigned — `ScoreBar`'s null branch was built at SP2.
+- **D14** — `View 1.3 : Queue Cleared` content, invented because the SVRC calls it undesigned. Three `ShortcutCard`s.
+- **D15** — `Region 1.1.3` renders empty and states that its four facts are unextracted.
+- **D16** — default order is deadline-soonest-first; the ratified `AMBIGUITY FIRST` default needs a scorer and cannot ship. Note that the SVRC's answer returns intact when qualification is designed.
 
 - [ ] **Step 2: Discharge SP4's deferred bullets**
 
@@ -3466,7 +3466,7 @@ Expected: exit 0.
 
 ```bash
 git add docs STATUS.md
-git commit -m "Deviations D11-D15, and the docs brought up to what SP6 actually built"
+git commit -m "Deviations D12-D16, and the docs brought up to what SP6 actually built"
 ```
 
 ---
