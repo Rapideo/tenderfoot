@@ -147,3 +147,45 @@ test("an empty queue offers somewhere to go", async () => {
   await waitFor(() => expect(screen.getByText(/queue cleared/i)).toBeTruthy());
   expect(screen.getByText(/draw another sample/i)).toBeTruthy();
 });
+
+/* Decisions are APPEND-ONLY (spec §5.1): undo does not edit or delete the
+ * first decision -- it decides the row back to "New", appending a third
+ * row, and both earlier rows survive. This asserts the actual POST body
+ * undo sends, not just that a second POST happened. */
+test("undo appends a return to New rather than deleting", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /interested/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+
+  /* DEFECT FOUND HERE (Task 12): dispatching "u" right after that waitFor
+   * resolves is a real race, not a hypothetical one -- both the POST and the
+   * reload GET (fired by decide()'s `await load()`) settle via microtasks
+   * that finish before the outer waitFor's very first synchronous check
+   * even runs, since that check is already true the instant it is called
+   * (the POST call was already recorded by the synchronous portion of the
+   * click handler). React's own commit -- which reruns useQueueKeys's
+   * effect and rebinds `undo` with the fresh `lastDecided` -- is scheduled
+   * on a macrotask, so it has NOT happened yet at that point. Verified with
+   * temporary logging: "decide load done" printed before "undo called,
+   * lastDecided= null". A real user could never press "u" fast enough to
+   * hit this -- network latency alone gives React ample time to commit --
+   * so this is a test-timing gap, not a production bug. Forcing one real
+   * macrotask tick lets the pending commit (and effect rerun) happen before
+   * "u" is dispatched. */
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "u", bubbles: true }));
+
+  await waitFor(() => {
+    const bodies = fetchMock.mock.calls
+      .filter((c) => (c[1] as any)?.method === "POST")
+      .map((c) => JSON.parse((c[1] as any).body));
+    expect(bodies.some((b) => b.state === "New")).toBe(true);
+  });
+});

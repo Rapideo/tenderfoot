@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import {
-  Button, Callout, Card, Chip, FactPanel, MicroLabel, ShortcutCard,
+  Button, Callout, Card, Chip, FactPanel, Keycap, MicroLabel, ShortcutCard,
 } from "../primitives";
 import { adminHeaders, getAdminSecret } from "../admin/adminSecret";
+import { useQueueKeys } from "./useQueueKeys";
 import "./Queue.css";
 
 interface DeadlineConflict {
@@ -59,6 +60,7 @@ export function Queue() {
   const [page, setPage] = useState<QueuePage | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [lastDecided, setLastDecided] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const sampleId = new URLSearchParams(window.location.search).get("sample");
@@ -98,10 +100,27 @@ export function Queue() {
       }
       setReason("");
       setError(null);
+      setLastDecided(id);
       await load();
     },
     [current, reason, load],
   );
+
+  /* UNDO IS AN APPEND, not a delete: it decides the row back to New, and
+   * both rows survive (spec §5.1). No time limit -- it is simply
+   * "decide it again". */
+  const undo = useCallback(async () => {
+    if (lastDecided === null) return;
+    await decide("New", lastDecided);
+    setLastDecided(null);
+  }, [lastDecided, decide]);
+
+  useQueueKeys({
+    onInterested: () => void decide("Interested"),
+    onPass: () => void decide("Not Interested"),
+    onUndo: () => void undo(),
+    onOpen: () => current && navigate(`/solicitation/${current.id}`),
+  });
 
   if (!page) return <Shell reduced>Loading…</Shell>;
 
@@ -197,6 +216,12 @@ export function Queue() {
           >
             Open record
           </Button>
+          {/* Undo has no button -- it is keyboard-only -- so it is the one
+            * shortcut that needs a visible hint of its own; the other three
+            * already carry theirs via Button's keycap prop. */}
+          <span className="queue__keys">
+            <Keycap>U</Keycap> undo
+          </span>
         </div>
         {error && <Callout>{error}</Callout>}
       </Card>
