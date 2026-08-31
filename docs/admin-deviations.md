@@ -529,8 +529,22 @@ highlights pointing back into the source."* That is not buildable: migration
 DISCARDED — a citation quotes the extracted passage, so there are no bytes to
 keep"* — so there is nothing to render inline. `Record.tsx`'s Documents view
 renders, per document, the filename, media type, `extract_status`, a link out
-to `source_url`, and the stored `extracted_text` itself with its cited
-passages. Design spec §6.2.
+to `source_url`, and the stored `extracted_text` itself in a plain `<pre>`.
+Design spec §6.2.
+
+**CORRECTED, SP6 final review fix wave.** This entry used to claim the
+stored text rendered "with its cited passages" (plural), and `media_type`
+was declared on the client's `Doc` type but never actually rendered — two
+things this entry described that the code did not do. `media_type` is now
+rendered, which makes that half of the claim true. The other half is not:
+`extracted_text` renders as an undifferentiated block, with **no marking of
+which passage was cited** — nothing highlights, underlines or otherwise
+points at the quoted span inside the full stored text. That is a known gap,
+recorded here rather than built, because the citation itself is already
+readable where it needs to be: each field's own quote, in the fields section
+above. That is what the SVRC's "citation" requirement actually needs, and
+highlighting a passage inside the separately-rendered full document text is
+not attempted.
 
 ## D13 — the score strip does not render on the composed queue card
 
@@ -569,10 +583,25 @@ unbuilt look. Design spec §2.3.
 
 The SVRC's own words on the cleared state: *"'Nothing to review' is a dead
 end; something pointing at the radars, or at what is coming, keeps the
-session alive. Undesigned."* Built as three `ShortcutCard`s — **Draw another
-sample**, **Metrics**, **Admin** — the smallest thing that keeps the session
-alive rather than dead-ending it, which is the one instruction the SVRC does
-give. Design spec §7.
+session alive. Undesigned."* Design spec §7.
+
+**CORRECTED, SP6 final review fix wave.** The version of this entry that
+shipped described three `ShortcutCard`s that "kept the session alive rather
+than dead-ending it" — but all three carried no `onClick`, and the screen
+renders them inside `<Shell reduced>`, which hides the nav chrome. Nothing
+on the cleared screen did anything; it was the dead end the SVRC's line
+exists to prevent, with a claim of the opposite sitting next to it in this
+file.
+
+**What is actually built now:** two `ShortcutCard`s, both navigating to
+`/admin` — there is no separate metrics view in the product, so "Metrics"
+and "Admin" both land on the one screen that has something to show; a real
+metrics view is future work, not this fix. **Draw another sample** is
+removed rather than wired: there is no draw-a-sample UI anywhere in
+`app/client/src`, only `POST /api/triage/samples`, so a card promising one
+would be the same dead end reached from the other direction. The screen
+states that fact plainly instead — `A new sample is drawn via POST
+/api/triage/samples.`
 
 ## D15 — `Region 1.1.3` renders empty and states that its four facts are unextracted
 

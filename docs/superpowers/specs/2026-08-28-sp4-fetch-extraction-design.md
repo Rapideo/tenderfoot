@@ -258,7 +258,8 @@ that is SP6's to design when SP6 is designed.
 
 ---
 
-**✅ BUILT 2026-08-31, SP6 Task 13 — bullets 2 and 3 discharged.** The record
+**✅ BUILT 2026-08-31, SP6 Task 13 — bullets 2 and 3 built; click-through
+pending Task 15.** The record
 view this section deferred exists: `app/client/src/record/Record.tsx`, tested
 in `Record.test.tsx`. A field row shows its value, its confidence, and the
 quoted passage it came from (bullet 2); a conflict between listing and
