@@ -14,9 +14,10 @@ export interface QueueItem {
   org_name: string | null;
   jurisdiction: string | null;
   closes_at: string | null;
-  /* bigint. `pg` hands these back as STRINGS and no setTypeParser is
-   * configured in this repo -- formatted at the edge, never Number()'d. */
-  value_cents: string | null;
+  /* bigint column, but db/index.ts:20 parses OID 20 (bigint) to Number
+   * centrally via pg.types.setTypeParser -- so this arrives as a number,
+   * not the string a bare pg client would hand back. */
+  value_cents: number | null;
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
@@ -44,13 +45,15 @@ export async function queuePage(
   const offset = Math.max(0, opts.offset ?? 0);
   const today = NOW_ISO();
 
-  const counted = await one<{ total: string }>(
+  const counted = await one<{ total: number }>(
     `SELECT count(*) AS total
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
       WHERE ${ELIGIBLE}`,
     [today],
   );
+  // Number(...) stays even though setTypeParser already coerces OID 20 --
+  // harmless belt-and-braces, not a claim that the driver still hands back a string.
   const total = Number(counted?.total ?? 0);
 
   /* ONE statement for the page, whatever its size -- including the
@@ -81,8 +84,8 @@ export async function queuePage(
        LEFT JOIN source src ON src.id = s.source_id
       WHERE ${ELIGIBLE}
       ORDER BY s.closes_at ASC NULLS LAST, s.id ASC
-      LIMIT ${limit} OFFSET ${offset}`,
-    [today],
+      LIMIT $2 OFFSET $3`,
+    [today, limit, offset],
   );
 
   return { mode: "all", sample: null, total, remaining: Math.max(0, total - offset), items };

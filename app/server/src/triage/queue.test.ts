@@ -127,3 +127,88 @@ test("queue cost is CONSTANT in the number of items returned", async () => {
 
   expect(largeStatements).toBe(smallStatements);
 }, 120000);
+
+/* By this point in the file, many prior tests' rows share the same FUTURE
+ * closes_at and tie-break by id ASC -- the constancy test alone adds 30. A
+ * default-limit page would not necessarily contain a row created here, so
+ * every test below asks for the full population (limit 200, the function's
+ * own clamp) and finds its row by id rather than trusting default paging. */
+
+/* THE FSSA NEAR-MISS RISK LIVES HERE ALONE (spec: the Gated Items Drawer is
+ * parked, and the client only ever exercises this against a fixture) -- so
+ * this is the only place anything proves the server actually PRODUCES a
+ * conflict, not merely carries a column for one. */
+test("a document extraction that disagrees with the listing appears as a deadline conflict", async () => {
+  const id = await sol("deadline disagreement", "2027-06-01");
+  await run(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
+     VALUES ($1, 'closes_at', '2027-06-01', 'listing')`,
+    [id],
+  );
+  await run(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin, quote)
+     VALUES ($1, 'closes_at', '2027-07-15', 'document', 'response due July 15, 2027')`,
+    [id],
+  );
+
+  const page = await queuePage({ limit: 200 });
+  const item = page.items.find((i) => i.id === id);
+  expect(item).toBeDefined();
+  expect(item!.deadline_conflict).toHaveLength(1);
+  expect(item!.deadline_conflict[0]).toMatchObject({
+    value_text: "2027-07-15",
+    origin: "document",
+    quote: "response due July 15, 2027",
+  });
+});
+
+test("a document extraction that agrees with the listing is not a deadline conflict", async () => {
+  const id = await sol("deadline agreement", "2027-06-01");
+  await run(
+    `INSERT INTO extracted_field (solicitation_id, field_name, value_text, origin)
+     VALUES ($1, 'closes_at', '2027-06-01', 'document')`,
+    [id],
+  );
+
+  const page = await queuePage({ limit: 200 });
+  const item = page.items.find((i) => i.id === id);
+  expect(item).toBeDefined();
+  expect(item!.deadline_conflict).toEqual([]);
+});
+
+test("documents and sightings are counted, as numbers", async () => {
+  const id = await sol("has attachments and sightings", FUTURE);
+  await run(
+    `INSERT INTO document (solicitation_id, filename) VALUES ($1, 'a.pdf'), ($1, 'b.pdf')`,
+    [id],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, external_id) VALUES (1, $1, 'ext-count-1')`,
+    [id],
+  );
+
+  const page = await queuePage({ limit: 200 });
+  const item = page.items.find((i) => i.id === id);
+  expect(item).toBeDefined();
+  expect(item!.documents).toBe(2);
+  expect(item!.sightings).toBe(1);
+  expect(typeof item!.documents).toBe("number");
+  expect(typeof item!.sightings).toBe("number");
+});
+
+/* total must reflect the ELIGIBLE population, not the page's own size --
+ * and remaining is total minus what offset has already skipped. Asserting
+ * that total moved by exactly the number of rows just added is what gives
+ * this teeth: a total that echoed items.length, or a hardcoded page size,
+ * would not track that delta. */
+test("total tracks the eligible population, and remaining follows offset", async () => {
+  const before = await queuePage({ limit: 1 });
+  const totalBefore = before.total;
+
+  const added = 3;
+  for (let i = 0; i < added; i++) await sol(`population-check ${i}`, FUTURE);
+
+  const after = await queuePage({ limit: 2, offset: 1 });
+  expect(after.total).toBe(totalBefore + added);
+  expect(after.remaining).toBe(after.total - 1);
+});
