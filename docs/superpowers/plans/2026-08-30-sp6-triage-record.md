@@ -1829,8 +1829,7 @@ test("a record carries its fields, each with value, confidence and quote", async
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const closes = body.fields.find((f: any) => f.field_name === "closes_at");
   expect(closes.value).toBe("2026-09-17");
   expect(closes.confidence).toBe(1);
@@ -1859,8 +1858,7 @@ test("a disagreement is shown beneath the winner, not resolved away", async () =
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const closes = body.fields.find((f: any) => f.field_name === "closes_at");
 
   expect(closes.value).toBe("2026-09-17");
@@ -1883,8 +1881,7 @@ test("absent and never-looked-for are different states", async () => {
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const looked = body.fields.find((f: any) => f.field_name === "value_cents");
   const never = body.fields.find((f: any) => f.field_name === "set_aside");
 
@@ -1907,8 +1904,7 @@ test("a record carries its sightings in order as a timeline", async () => {
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const sightings = body.timeline.filter((e: any) => e.kind === "sighting");
   expect(sightings).toHaveLength(2);
   expect(new Date(sightings[0].at).getTime()).toBeLessThan(
@@ -1917,8 +1913,7 @@ test("a record carries its sightings in order as a timeline", async () => {
 });
 
 test("the solicitation list is bounded", async () => {
-  const res = await get("/api/solicitations?limit=2");
-  const body = (await res.json()) as any;
+  const [, body] = await get("/solicitations?limit=2");
   expect(body.solicitations.length).toBeLessThanOrEqual(2);
 });
 
@@ -1926,26 +1921,18 @@ test("the solicitation list is bounded", async () => {
  * does not catch it. The test that let it through asserted only a 200 --
  * equally true with the clamp deleted. This one asserts the VALUE. */
 test("a negative limit does not become a negative LIMIT", async () => {
-  const res = await get("/api/solicitations?limit=-5");
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as any;
+  const [status, body] = await get("/solicitations?limit=-5");
+  expect(status).toBe(200);
   expect(body.solicitations.length).toBeGreaterThanOrEqual(1);
 });
 ```
 
-If `routes.test.ts` has no `get` helper, add this above the new tests:
-
-```ts
-async function get(path: string) {
-  const server = app.listen(0);
-  const port = (server.address() as any).port;
-  try {
-    return await fetch(`http://127.0.0.1:${port}${path}`);
-  } finally {
-    server.close();
-  }
-}
-```
+> **Controller correction, 2026-08-30 — this brief originally told you to ADD a `get` helper. Do not.** `routes.test.ts` already has one, and a second declaration is a TypeScript redeclaration error. Match the file as it actually is:
+>
+> - **`get` already exists** and returns a TUPLE, not a `Response`: `const get = (p: string): Promise<Res> => fetch(base + p).then(async r => [r.status, await r.json()] as Res)`. The tests above are written against that shape — `const [, body] = await get(...)`. Its comment explains why the body is typed rather than left `unknown`: an untyped body fails typecheck while vitest passes, "exactly the split that let a red gate through once already."
+> - **`base` already ends in `/api`**, so paths are `/solicitations/5`, never `/api/solicitations/5`.
+> - **The server is started once in `beforeAll` and closed in `afterAll`** — do not spin one up per call.
+> - **`insert` and `run` are NOT imported in this file yet.** The dynamic import currently reads `const { close } = await import("../db/index.js");` — extend it to `const { close, insert, run } = await import("../db/index.js");`. The fixtures above need both.
 
 - [ ] **Step 2: Run them and watch them fail**
 
