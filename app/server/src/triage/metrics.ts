@@ -1,0 +1,123 @@
+import { all, one } from "../db/index.js";
+import { LATEST_PURSUIT } from "./latest.js";
+
+export interface WeeklyVolume {
+  source_id: number;
+  source_name: string;
+  /** ISO date of the Monday that starts the week. */
+  week: string;
+  solicitations: number;
+}
+
+export interface VolumeReport {
+  weeks: WeeklyVolume[];
+  /** Never silently dropped: a series with an unstated exclusion is the same
+   *  class of error as a rate with the wrong denominator. */
+  excluded_no_posted_at: number;
+  total_rows: number;
+}
+
+/* posted_at is `text`, and nothing upstream constrains its shape (§8.4:
+ * listing metadata is displayed, not normalised). A regex that only checks
+ * DIGIT SHAPE -- ^\d{4}-\d{2}-\d{2} -- is not the same guarantee as "this
+ * will parse": "9999-99-99" matches that shape and then fails the ::date
+ * cast below with a Postgres error ("date/time field value out of range"),
+ * which does not exclude the one bad row -- it throws and takes the WHOLE
+ * report down, for every source, on account of one row. That is a strictly
+ * worse failure than the silent-drop this predicate exists to prevent.
+ *
+ * Fixed here by constraining month to 01-12 and day to 01-31, which rules
+ * out the realistic corruption this project actually produces (all-9s or
+ * all-0s placeholder dates, an out-of-range month from a parsing bug)
+ * without a second query or a PL/pgSQL helper. It does NOT catch a
+ * calendar-invalid-but-range-valid date (2026-02-30): that residual gap is
+ * accepted rather than closed with a stored function, per "smallest thing,
+ * numbered" -- if it ever fires in practice, the fix is a real DATE-parsing
+ * guard, not a wider regex. */
+const POSTED_AT_LOOKS_LIKE_A_DATE = String.raw`^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])`;
+
+/* VOLUME PER SOURCE PER WEEK, computed on posted_at and never on seen_at.
+ *
+ * sighting.seen_at is when WE saw a row. Nothing ingests unless a human
+ * asks it to, so sightings cluster on the days somebody ran a scrape. A
+ * weekly series built on seen_at measures OPERATOR BEHAVIOUR, and would
+ * show a source surging or dying when all that changed was who was at the
+ * laptop. */
+export async function volumePerSourcePerWeek(): Promise<VolumeReport> {
+  const weeks = await all<WeeklyVolume>(
+    `SELECT s.source_id,
+            src.name AS source_name,
+            to_char(date_trunc('week', s.posted_at::date), 'YYYY-MM-DD') AS week,
+            count(*)::int AS solicitations
+       FROM solicitation s
+       JOIN source src ON src.id = s.source_id
+      WHERE s.posted_at ~ $1
+      GROUP BY s.source_id, src.name, date_trunc('week', s.posted_at::date)
+      ORDER BY src.name, week`,
+    [POSTED_AT_LOOKS_LIKE_A_DATE],
+  );
+
+  const counts = await one<{ total: number; excluded: number }>(
+    `SELECT count(*) AS total,
+            count(*) FILTER (
+              WHERE posted_at IS NULL OR posted_at !~ $1
+            ) AS excluded
+       FROM solicitation`,
+    [POSTED_AT_LOOKS_LIKE_A_DATE],
+  );
+
+  return {
+    weeks,
+    excluded_no_posted_at: Number(counts?.excluded ?? 0),
+    total_rows: Number(counts?.total ?? 0),
+  };
+}
+
+export interface InterestedRate {
+  sample_id: number;
+  source_id: number;
+  source_name: string;
+  population_size: number;
+  drawn: number;
+  decided: number;
+  interested: number;
+  /** NULL when nothing has been decided. A rate over zero is UNKNOWN, not zero. */
+  interested_per_hundred: number | null;
+}
+
+/* INTERESTED-PER-HUNDRED, per source, against the materialised sample.
+ *
+ * Counts SOLICITATIONS at their LATEST state, not pursuit rows -- an
+ * Interested later reversed to Pass counts once, as Pass, and the reversal
+ * is still on the record.
+ *
+ * Three numbers ship together because any one alone misleads:
+ * population_size says what the sample represents, `drawn` how big it is,
+ * and `decided` how much of it has actually been read. A half-triaged
+ * sample then reads as a half-triaged sample rather than as a rate. */
+export async function interestedPerHundred(): Promise<InterestedRate[]> {
+  return all<InterestedRate>(
+    `WITH latest AS (${LATEST_PURSUIT}),
+     decided AS (
+       SELECT i.sample_id,
+              count(*)::int AS decided,
+              count(*) FILTER (WHERE l.state = 'Interested')::int AS interested
+         FROM triage_sample_item i
+         JOIN latest l ON l.solicitation_id = i.solicitation_id
+        WHERE l.state <> 'New'
+        GROUP BY i.sample_id
+     )
+     SELECT ts.id AS sample_id, ts.source_id, src.name AS source_name,
+            ts.population_size,
+            (SELECT count(*)::int FROM triage_sample_item i WHERE i.sample_id = ts.id) AS drawn,
+            COALESCE(d.decided, 0) AS decided,
+            COALESCE(d.interested, 0) AS interested,
+            CASE WHEN COALESCE(d.decided, 0) = 0 THEN NULL
+                 ELSE round(100.0 * d.interested / d.decided, 2)::float8
+            END AS interested_per_hundred
+       FROM triage_sample ts
+       JOIN source src ON src.id = ts.source_id
+       LEFT JOIN decided d ON d.sample_id = ts.id
+      ORDER BY ts.drawn_at DESC`,
+  );
+}
