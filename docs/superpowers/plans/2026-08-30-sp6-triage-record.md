@@ -2286,33 +2286,30 @@ Create `app/client/src/shell/Shell.css`:
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--ground);
+  background: var(--ground-canvas);
 }
 .shell__header {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: 18px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--brdsoft);
 }
-.shell__nav {
-  display: flex;
-  gap: var(--space-3);
-}
+.shell__nav { display: flex; gap: 14px; }
+.shell__nav a { font: var(--type-ui-link); }
 .shell__count {
   margin-left: auto;
-  font: var(--type-ui-action);
+  font: var(--type-metric-counter);
 }
-.shell__main {
-  flex: 1;
-  min-height: 0;
-}
-.shell--reduced .shell__header {
-  gap: var(--space-2);
-}
+.shell__main { flex: 1; min-height: 0; }
+.shell--reduced .shell__header { gap: 12px; }
 ```
 
-> If any token above is not defined in `tokens.css`, use the nearest one that is — `npm run tokens` fails the gate on an invented token. Check `app/client/src/tokens/` before guessing.
+> **Controller ruling, 2026-08-30 — spacing is LITERAL PIXELS, and that is deliberate.** An earlier draft of this CSS used `--space-1` … `--space-5`, `--ground` and `--type-heading`. **None of those exist.** There is no spacing scale in this project at all, and its absence is a recorded decision: STATUS says *"No spacing layer, no shadow layer — Accepted… Extract when the second consumer appears; sixteen primitives and zero composed screens cannot distinguish systematic spacing from incidental,"* and names the extraction a first move **inside** SP6, triggered by *"a composed screen showing which values are systematic."* Every existing primitive stylesheet uses literal px matched against the bundle.
+>
+> So use literal pixels here and invent no tokens. Extracting the scale comes **after** these three screens exist and the recurrence is visible — doing it now would invent a scale from a single instance, which is the exact thing the 3× recurrence bar exists to prevent.
+>
+> **Colour and type ARE tokenised, richly** — about ninety type tokens derived from the bundle. Use real ones and check `app/client/src/tokens/tokens.css` and `type.css` before writing any `var(--…)`. Useful ones here: `--type-heading-hero`, `--type-heading-panel`, `--type-body-buyer`, `--type-body-citation`, `--type-ui-link`, `--type-metric-counter`, `--type-microlabel-cmd`, `--ground-canvas`, `--ground-surface`, `--brdsoft`.
 
 - [ ] **Step 4: Move the routes**
 
@@ -2858,13 +2855,17 @@ export function Queue() {
 Create `app/client/src/triage/Queue.css` with layout only — no colours that are not tokens:
 
 ```css
-.queue__title { font: var(--type-heading); margin: 0 0 var(--space-2); }
-.queue__facts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.queue__decision { display: flex; gap: var(--space-2); align-items: flex-start; margin-top: var(--space-4); }
+.queue__title { font: var(--type-heading-hero); margin: 0 0 10px; }
+.queue__facts { display: flex; flex-wrap: wrap; gap: 14px; }
+.queue__facts span { font: var(--type-body-buyer); }
+.queue__decision { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; }
 .queue__decision textarea { flex: 1; min-height: 3rem; }
-.queue__sample-banner { padding: var(--space-2) var(--space-4); }
-.queue__cleared { display: grid; gap: var(--space-3); padding: var(--space-5); }
+.queue__keys { font: var(--type-microlabel-cmd); align-self: center; }
+.queue__sample-banner { padding: 10px 18px; }
+.queue__cleared { display: grid; gap: 14px; padding: 24px; }
 ```
+
+> Literal pixels, real type tokens — see the ruling in Task 9. There is no spacing scale in this project and inventing one here is explicitly out of scope.
 
 - [ ] **Step 4: Drop the placeholder**
 
@@ -3381,15 +3382,20 @@ export function Record() {
 Create `app/client/src/record/Record.css`:
 
 ```css
-.record__title { font: var(--type-heading); margin: var(--space-4) var(--space-4) 0; }
-.record__buyer { margin: 0 var(--space-4) var(--space-4); }
-.record__field { display: grid; gap: var(--space-1); padding: var(--space-2) 0; }
-.record__conflict { padding-left: var(--space-4); }
-.record__quote, .record__conflict blockquote { margin: 0; font-style: italic; }
-.record__doc { padding: var(--space-2) 0; }
+.record__title { font: var(--type-heading-hero); margin: 18px 18px 0; }
+.record__buyer { margin: 0 18px 18px; font: var(--type-body-buyer); }
+.record__field { display: grid; gap: 4px; padding: 10px 0; }
+.record__field-name { font: var(--type-microlabel); }
+.record__field-value { font: var(--type-data-value); }
+.record__field-conf { font: var(--type-data-conf); }
+.record__conflict { padding-left: 18px; }
+.record__quote, .record__conflict blockquote { margin: 0; font: var(--type-body-citation); }
+.record__doc { padding: 10px 0; }
 .record__text { white-space: pre-wrap; max-height: 12rem; overflow: auto; }
-.record__event { display: flex; gap: var(--space-3); }
+.record__event { display: flex; gap: 14px; }
 ```
+
+> Literal pixels, real type tokens — see the ruling in Task 9. `--type-data-conf` is the bundle's own confidence-figure token, which is exactly what the confidence column is.
 
 - [ ] **Step 4: Drop the placeholder**
 
