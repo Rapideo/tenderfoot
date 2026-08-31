@@ -255,3 +255,14 @@ costliest place to learn a citation is unreadable.
 
 **Not carried forward as a design.** Nothing here specifies the record view;
 that is SP6's to design when SP6 is designed.
+
+---
+
+**✅ BUILT 2026-08-31, SP6 Task 13 — bullets 2 and 3 discharged.** The record
+view this section deferred exists: `app/client/src/record/Record.tsx`, tested
+in `Record.test.tsx`. A field row shows its value, its confidence, and the
+quoted passage it came from (bullet 2); a conflict between listing and
+document values renders beneath the winning value rather than being resolved
+away (bullet 3). This line is appended rather than the section above being
+rewritten — what the deferral cost stays exactly as written, since that record
+is the point.

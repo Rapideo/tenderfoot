@@ -215,44 +215,90 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-30
+## 🔖 RESUME HERE — updated 2026-08-31
 
-## ▶️ NEXT SESSION — START SP6. Session ended 2026-08-30 at a clean stop.
+## ▶️ NEXT SESSION — SP6's thirteen build tasks are DONE and reviewed. Task 14 (this docs pass) just landed. What is left is the final whole-branch review, then Task 15 — the demo criterion, run for real.
 
-**SP4 is closed: merged (`cc8babe`), deployed to production, verified, docs current, tree clean,
-gate green at 430 tests / 58 files.** Nothing is half-done and nothing is waiting on a decision.
+**Branch `sp6-triage-record`, 24 commits before this one, branched from `main` at `34c0035`.**
+Working tree clean, gate green at **520 tests / 68 files** (baseline entering the slice was
+**430 / 58**), `npm run check` exit 0.
 
-**The next slice is SP6 — Triage + record.** It is the **GO / NO-GO gate**, and it is the first
-slice that produces screens a person outside the project would recognise. Two of SP4's demo
-criterion bullets were deferred into it (the citation display: value, confidence, and the quoted
-passage), so it is slightly larger than the original plan describes.
+### What SP6 built
+Migration **012** — `triage_sample`, `triage_sample_item`, and the `pursuit_latest` index (decisions
+are append-only; reads take latest-row-per-solicitation). New server modules:
+`triage/eligibility.ts`, `triage/latest.ts`, `triage/queue.ts`, `triage/sample.ts`,
+`triage/decide.ts`, `triage/metrics.ts`, `routes/triage.ts`. New client: `shell/Shell.tsx`,
+`triage/Queue.tsx`, `triage/useQueueKeys.ts`, `record/Record.tsx`; `Button` gained
+`onClick`/`ariaLabel`/`type="button"` (it shipped at SP2 with no click handler at all —
+Task 10). **Routes now:** `/` → the queue, `/solicitation/:id` → the record, `/health` → the old
+health page (moved off `/`), `/admin` unchanged. `GET /api/health` — what production
+verification actually calls — is untouched.
 
-### How to start it — design pass first, not screens
-This project's pattern is **spec → plan → task briefs**, and SP6 has not had its design pass.
-Do that before any code. Invoke the brainstorming skill first, per the standing rule for
-creative work; there is real input to work from rather than a blank page:
+### Where the design lives, and what deviated
+**Seven rulings, all made in one 2026-08-30 brainstorm with Matt** —
+`docs/superpowers/specs/2026-08-30-sp6-triage-record-design.md` §1: the gate triages a
+*materialised random sample*, never the queue itself, so the queue stays judgment-free; scope is
+queue + record only (`View 2.1 : Brief` and `View 1.2 : Saved Views` are out, §2.2); default
+order is deadline-soonest-first; decisions are append-only (undo writes a reversal, nothing is
+overwritten); the sample is materialised, migration 012, so its denominator outlives the session;
+the score strip does not compose onto the queue card; the pursuit-cost panel renders empty and
+says so. **Five deviations came out of it, `docs/admin-deviations.md` D12–D16** — D11 was already
+taken at Task 9 (the StatusBar "Failing"/"DEGRADED" health-vocabulary note), so this slice's five
+are D12–D16, not D11–D15 as the plan first numbered them before that collision was found.
 
-- **`reference/Tenderfoot SVRC.md`** specifies the views — `View 1.1 : The Queue`,
-  `2.1 Brief`, `2.3 Extracted Fields`, `2.4 Documents`, `2.5 Timeline`. ⚠️ **It is a frozen
-  reference.** Read `svrc-outline-format` conventions before writing against it, and where it is
-  silent, **build the smallest thing and number the deviation** — `docs/admin-deviations.md` is
-  the continuous series (D10 is the latest).
-- **Seventeen signed-off primitives** already exist on the dev-only `/dev/gallery` route. The
-  visual language is done; SP6 is **composition**, not design-from-scratch.
-- **Real data is behind it**: 9,883 solicitations and 7,644 deadlines on production, plus 79
-  extracted documents with cited fields on the `test` branch.
+### ✅ A stale claim is corrected, not just noted
+STATUS used to say *"how 'vestigial' should look is undesigned and stays that way until Matt
+specifies it."* **That is false — SP2 built it.** `ScoreBar` (`app/client/src/primitives/ScoreBar.tsx`)
+takes `value: number | null`, renders `—` with no fill under a `score-bar--empty` class, and its
+own comment records *"null is the V1 case (assessment table empty by design, spec §1.1)."*
+D13's actual ruling is narrower: the strip does not **compose** onto the queue card — a placement
+decision on top of a look that already existed, not an unbuilt look. Struck through and corrected
+in place at STATUS's own "Decided this week" entry rather than deleted.
 
-### ⚠️ Two things not to undo
-- **The labelling task is PARKED** (next block down). Do not restart it, and do not quote
-  **12.5% recall** as measured — it is an unvalidated lower bound.
-- **`docs/superpowers/specs/2026-08-28-sp4-fetch-extraction-design.md` §10.1** names what SP6
-  inherited and what the deferral cost. Read it before deciding what the record view must show.
+### ✅ SP4's deferred demo bullets are discharged
+`docs/superpowers/specs/2026-08-28-sp4-fetch-extraction-design.md` §10.1 deferred two demo-criterion
+bullets into SP6 — a field shows its value, confidence and the quoted passage; a conflict renders
+beneath the winner rather than being resolved away. **Both are built**, `app/client/src/record/Record.tsx`,
+tested in `Record.test.tsx`. A dated line was appended recording this; §10.1 itself is preserved
+exactly as written, because what the deferral cost is the point of keeping it.
+
+### ⚠️ The sequencing fact Task 15 cannot skip
+**Production holds ~9,883 solicitations and ZERO documents.** Discover has never run there — SP4's
+one unrun, non-deferred criterion bullet. The record view's citations (design spec §14 bullets 5
+and 6) have nothing to show against a production solicitation until Discover runs on production;
+the 79 extracted documents with cited fields that exist today sit on the `test` branch. **Task 15
+must do one of two things, and say which:** run Discover on production first, or take the record
+half of the demo on `test` and report it as a `test`-branch demo. **What must never happen: the
+demo taken on `test` and reported as production.** ⚠️ The first Discover click on production
+writes `document` rows into a database that currently has none.
+
+### ⚠️ The gate flaked twice under concurrent load — a caveat, not a fix
+During Task 13, two full `npm run check` runs each failed one unrelated test inside
+`app/server/src/extract/*` — a **different** test each time — while isolated re-runs of the same
+files passed clean and a third full run was clean. Reads as Neon test-branch connection-pool
+contention under full concurrent load, not anything this slice's own code touched, and it was not
+chased further. Recorded because this project's own standard has been *"green-on-CI means what
+green-on-laptop means"* since 2026-08-15, and an intermittently red gate is exactly the kind of
+thing that gets explained away twice and then trusted without evidence. **If a future full-gate
+run fails inside `extract/*` with no nearby code change, re-run it before treating it as a
+regression — but a recurrence is worth escalating, not re-running away indefinitely.**
+
+### Deferred minors, carried rather than lost in `progress.md`
+A dozen smaller findings accumulated across the thirteen tasks and are flagged in
+`.superpowers/sdd/2026-08-30-sp6-triage-record/progress.md` (search `minor (deferred)`) for the
+whole-branch review still to come: test-order fragility from shared fixtures across two files
+(Tasks 3, 6), an unbound `LIMIT` interpolation in `sample.ts` (Task 5, numerically clamped, no
+injection risk), thin mutation coverage in a couple of files (Tasks 11, 12), a stray-reason-text
+edge case in the undo flow (Task 12), and an untested DOM-order assumption in the timeline
+(Task 13). None of them block Task 15; triaging them is what the whole-branch review is for.
 
 ### Still Matt's, none blocking
 Whether Vercel's build should fail on type errors; the staging-branch decision; deleting the
-abandoned `preview/sp3-federal-ingestion` Neon branch **from the console, not the MCP**; and the
-production click-through, which is SP4's one unrun non-deferred criterion bullet.
-⚠️ **The first Discover click on production writes `document` rows into a database that has none.**
+abandoned `preview/sp3-federal-ingestion` Neon branch **from the console, not the MCP**.
+
+### ⚠️ One thing not to undo
+**The labelling task is still PARKED** (next block down). Do not restart it, and do not quote
+**12.5% recall** as measured — it is an unvalidated lower bound.
 
 ---
 
@@ -871,7 +917,7 @@ Named together so they cannot be rediscovered piecemeal. **None block the SP2 me
 - **Stack:** ideate/IDE8 — React 19, Vite, Zustand+Immer. Minus dnd-kit, plus a router
 - **Persistence and hosting, 2026-08-13 — reversed from the day before.** ~~better-sqlite3 local-first~~ → **Neon managed Postgres, hosted on Vercel.** Not two decisions: Vercel has no writable persistent filesystem, so a SQLite file cannot survive a request there. **Zero data lost** — `*.db` was gitignored from SP0 and the database is rebuilt from `corpus/` and the seed migrations. Cost is the code: ~600 lines, all in the merged slice
 - **Prototype is reference-only** and represents the finished product
-- **The intelligence chrome is BUILT, inert — decided 2026-08-13.** Score strips, AI-assessment panels, smart-filter controls and their settings are all constructed and rendered, none wired. A build that omitted them would not be a subset of the product but a different one, with holes where screens were composed around content. **Supersedes fidelity mandate §7.10 clause 2**, which said parked regions are not built. **Affects SP2 scope directly.** The guard that comes with it: *a rendered control may never become a live filter or score until qualification is designed* — same shape as the Capacity rule, artifact permitted, data flow forbidden. **How "vestigial" should look is undesigned and stays that way until Matt specifies it**
+- **The intelligence chrome is BUILT, inert — decided 2026-08-13.** Score strips, AI-assessment panels, smart-filter controls and their settings are all constructed and rendered, none wired. A build that omitted them would not be a subset of the product but a different one, with holes where screens were composed around content. **Supersedes fidelity mandate §7.10 clause 2**, which said parked regions are not built. **Affects SP2 scope directly.** The guard that comes with it: *a rendered control may never become a live filter or score until qualification is designed* — same shape as the Capacity rule, artifact permitted, data flow forbidden. ~~**How "vestigial" should look is undesigned and stays that way until Matt specifies it**~~ **CORRECTED 2026-08-30/31, SP6 T14: it was already built, at SP2.** `ScoreBar` (`app/client/src/primitives/ScoreBar.tsx`) takes `value: number | null`, renders `—` with no fill under a `score-bar--empty` class, and its own comment records *"null is the V1 case (assessment table empty by design, spec §1.1)."* What SP6 ruled is narrower and different: the strip still does not **compose** onto the queue card (`docs/admin-deviations.md` D13) — a placement decision made on top of a look that already existed, not an unbuilt look
 - **Legal posture rule:** ambiguous terms default a source to `out`; documented permission moves it `in`
 - **Sources:** Illinois `in` and backtest-capable (2,155 closed to 2018) · Michigan + Kentucky `in`, current-only · Ohio `manual-only`
 
