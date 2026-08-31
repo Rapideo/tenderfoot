@@ -219,6 +219,18 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## ▶️ NEXT SESSION — SP6's thirteen build tasks are DONE and reviewed. Task 14 (this docs pass) just landed. What is left is the final whole-branch review, then Task 15 — the demo criterion, run for real.
 
+> ### ⏹ SESSION ENDED HERE — 2026-08-31. Three things are NOT done, and one of them is that this very block is unverified.
+>
+> **1. This docs pass was never reviewed.** Every other task in the slice passed a task review; Task 14's reviewer **stalled without returning a verdict** and its replacement was still running when the session ended. So the D12–D16 entries, the §10.1 discharge line, and this RESUME block itself are **written but unchecked**. Re-run that review first — it was scoped to verify each claim against the repository rather than against the diff's prose, which is the check this project keeps needing.
+>
+> **2. The final whole-branch review has not run.** Twenty-five commits, no whole-branch pass yet. A list of deferred minor findings is waiting for it in `.superpowers/sdd/2026-08-30-sp6-triage-record/progress.md` (grep `minor (deferred)`), including one that deserves weight: **the gate flaked twice** under concurrent load — a different unrelated test in `app/server/src/extract/*` each time, isolated re-runs clean, hypothesised as Neon connection-pool contention. This project's standard is that a green gate means something, and an intermittently red one erodes exactly that.
+>
+> **3. Task 15 — the demo criterion — has not been run at all.** SP6 is the GO / NO-GO gate, so until it runs, the slice has built the instrument but taken no measurement. Its first decision is the sequencing one below: production holds solicitations but **zero documents**, so either Discover runs on production first, or the record half of the demo is taken on `test` **and the record says which**.
+>
+> **The branch is NOT merged.** `sp6-triage-record` is 25 commits ahead of `main` at `34c0035`; `main` is untouched and production is unaffected by anything in this slice.
+>
+> **The full session ledger — every ruling, every deferred finding, and the eleven defects the implementers found in my own briefs — is at `.superpowers/sdd/2026-08-30-sp6-triage-record/progress.md`.** It is git-ignored scratch, so `git clean -fdx` will destroy it; the commits it names survive in `git log` either way.
+
 **Branch `sp6-triage-record`, 24 commits before this one, branched from `main` at `34c0035`.**
 Working tree clean, gate green at **520 tests / 68 files** (baseline entering the slice was
 **430 / 58**), `npm run check` exit 0.
