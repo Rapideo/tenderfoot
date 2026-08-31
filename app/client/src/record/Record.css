@@ -1,12 +1,85 @@
-.record__title { font: var(--type-heading-hero); margin: 18px 18px 0; }
-.record__buyer { margin: 0 18px 18px; font: var(--type-body-buyer); }
-.record__field { display: grid; gap: 4px; padding: 10px 0; }
-.record__field-name { font: var(--type-microlabel); }
-.record__field-value { font: var(--type-data-value); }
-.record__field-conf { font: var(--type-data-conf); }
-.record__conflict { padding-left: 18px; }
-.record__quote, .record__conflict blockquote { margin: 0; font: var(--type-body-citation); }
+/* View 2.3 — Extracted Fields, matched against the V1.2 bundle's tabFields
+ * panel per the fidelity mandate (design spec §7.10).
+ *
+ * The bundle's declarations, copied rather than approximated:
+ *   container  border:1px solid var(--brdmid); border-radius:9px; overflow:hidden
+ *   header     padding:11px 16px; background:var(--surface2);
+ *              border-bottom:1px solid var(--brdsoft2);
+ *              font:500 9.5px/1 'IBM Plex Mono'; letter-spacing:.1em; color:var(--text7)
+ *   row        padding:12px 16px; border-bottom:1px solid var(--brdrow)
+ *   label      font:400 12.5px/1.4 'IBM Plex Sans'; color:var(--text4)
+ *   value      font:500 13px/1.45 'IBM Plex Sans'; color:var(--text)
+ *   confidence font:500 11.5px/1 'IBM Plex Mono'; colour varies
+ *   source     font:400 10.5px/1.3 'IBM Plex Mono'; color:var(--text7)
+ *
+ * Every font resolves to a token SP2 extracted FOR this panel; the token
+ * comments name this use case ("field label paired with a value",
+ * "confidence / relative-time value", "source field"). Column geometry and
+ * gap live on TableRow, which takes the template as its interface. */
+
+.record__title { font: var(--type-heading-hero); margin: 18px 18px 6px; }
+.record__buyer { margin: 0 18px 18px; font: var(--type-body-buyer); color: var(--text4); }
+
+.record__table {
+  border: 1px solid var(--brdmid);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.record__th {
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-tight);
+  color: var(--text7);
+}
+
+/* The bundle separates rows with --brdrow. The group wrapper carries it so a
+ * field and its conflict rows read as one block. */
+.record__fieldgroup { border-bottom: 1px solid var(--brdrow); }
+.record__fieldgroup:last-child { border-bottom: none; }
+
+.record__field-name  { font: var(--type-body-label); color: var(--text4); }
+.record__field-value { font: var(--type-subhead-field); color: var(--text); }
+.record__field-conf  { font: var(--type-data-conf); }
+.record__field-state { font: var(--type-data-source); color: var(--text7); }
+
+/* A quote is evidence, not chrome: indented to the VALUE column so it reads
+ * as belonging to the value above it rather than to the row's label. */
+.record__quote {
+  margin: 0;
+  padding: 0 16px 11px 206px;
+  font: var(--type-body-citation);
+  color: var(--text5);
+  background: inherit;
+}
+
+.record__conflict-tag {
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-tight);
+  color: var(--bad);
+}
+.record__conflict .record__quote { background: var(--badbg2); }
+
+.record__note {
+  display: block;
+  padding: 0 16px 10px 206px;
+  font: var(--type-body-note);
+  color: var(--text7);
+}
+
 .record__doc { padding: 10px 0; }
-.record__doc-type { font: var(--type-microlabel); margin-left: 8px; }
-.record__text { white-space: pre-wrap; max-height: 12rem; overflow: auto; }
-.record__event { display: flex; gap: 14px; }
+.record__doc-type { font: var(--type-microlabel); color: var(--text7); margin-left: 8px; }
+.record__doc-status { font: var(--type-data-source); color: var(--text7); margin-left: 8px; }
+.record__text {
+  white-space: pre-wrap;
+  max-height: 12rem;
+  overflow: auto;
+  font: var(--type-body-citation);
+  color: var(--text5);
+  background: var(--surface3);
+  border-radius: 7px;
+  padding: 10px 12px;
+  margin-top: 6px;
+}
+
+.record__event { display: flex; gap: 14px; padding: 7px 0; }
+.record__event-at { font: var(--type-data-source); color: var(--text7); }

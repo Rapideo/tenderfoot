@@ -335,6 +335,68 @@ Workflow spec §8 recorded a six-step dashboard procedure for per-preview databa
 
 **Why not promoted.** Three instances but one project and one slice, so the sample is narrow. **It is also close kin to §2.17/§2.18's "auditing the wrong surface" merge candidate** — a brief is a surface, and the seam is the surface nobody enumerated — but it makes a sharper structural claim than those do: not that the wrong surface was chosen, but that *the correct surface for each unit still leaves a class of defect with no owner*. Worth watching whether it recurs on a differently-shaped decomposition before promoting, or whether it should merge into that candidate as its strongest instance.
 
+> ### ✅ 2026-08-31 — THE RECURRENCE THIS ENTRY ASKED FOR ARRIVED, AND THE PROMOTION CONDITION IS MET.
+>
+> SP6 is the differently-shaped decomposition the paragraph above was waiting for: **fifteen tasks rather than eleven, spanning client and server rather than one layer**, each with its own brief, its own reviewer, and fix rounds to closure. Every task passed. The whole-branch review then found, in one pass, that **the client never sent `decided_by`.**
+>
+> The shape is identical to the identity seam. The server accepted the field, stored it, and had a passing test for it (Task 7). The client built the keypress that produces a decision (Task 12). **Neither brief owned the wire between them**, so every row the gate counts would have been written `NULL` — and unlike the earlier instances this one is *unbackfillable*, because append-only preserves everything except a column that was never written. The next task wrote real production rows.
+>
+> **It also reproduced the tell, exactly.** The fixture and the failure never met: `decide.test.ts` asserted `decided_by` round-trips by passing it directly to `recordDecision`, which is precisely a fixture chosen to make one component's test pass and therefore one that cannot exercise that component's contract with its neighbour. The client's tests asserted the POST body's `state` and `reason` — the fields the client's own brief named.
+>
+> **Four instances, two projects-worth of slice shapes, and one of them unrecoverable.** The narrow-sample objection above is spent. Recommend promoting, and keeping this instance as the headline, because "each piece is correct, each review confirms it, and the field is silently null forever" is the clearest statement of the cost the class carries.
+
+---
+
+### 2.21 A caution in prose does not override defective example code
+
+**Observed twice in SP6, 2026-08-30 and 2026-08-31, in the same failure shape both times.** A task brief carried both a worked code block and a warning about the exact defect that code block contained.
+
+**First.** The brief's own test asserted only a `200` and a non-empty list for a clamped `limit`, while the dispatch prose said, in as many words, *"make sure the test asserts the resulting VALUE, not merely a 200 — a test that only checks the status passes equally well with the clamp deleted."* The implementer followed the code. The review found the test passed with the whole bounding feature removed.
+
+**Second.** The brief's `renderRecord()` stub ignored the request URL, while the dispatch prose explicitly warned that the component renders inside a shell which fetches on mount, and that a URL-blind stub crashes every test in the file — a defect that had already cost a fix round one task earlier. The implementer wrote a correct stub from scratch and reported the brief's as broken.
+
+**Proposed generalisation.** **Where a brief contains both example code and prose about that code, the code is the instruction.** A competent implementer treats a worked block as the specification and the surrounding text as commentary — which is the correct reading, because the block is what compiles. Prose warnings therefore do not harden a defective fixture; they sit beside it and are outranked by it.
+
+> **The tell is that the warning and the defect describe the same thing.** In both instances the brief author knew the failure mode well enough to write it down, and still shipped it. Knowing about a class of bug is not the same as auditing your own artifact for it.
+
+**The check that catches it.** Before dispatching, read every worked block *against its own prose* and ask whether the code does what the paragraph beside it demands. Cheaper still: do not write cautionary prose about example code at all — fix the example, and delete the caution. A warning that survives is evidence the author did not apply it.
+
+**Why not promoted.** Two instances, one slice, one author. It may be an artifact of a single planning style rather than a general property of briefs. Worth watching whether it appears when briefs are written by someone other than the dispatcher.
+
+---
+
+### 2.22 A false premise in a brief does not produce one bad test — it produces every test that inherits it, and the dangerous one is silent
+
+**Observed 2026-08-31.** A brief assumed a status bar rendered the word *"failing"*. It renders *"DEGRADED"* — the frozen design bundle uses two different words for the same underlying value, and both had been transcribed faithfully from their own sources.
+
+**Two tests inherited that single wrong assumption, and they failed in opposite ways.** One asserted `/1 failing/i` and **failed loudly**, which is how the premise was discovered at all. The other asserted the *absence* of `/0 failing/i` to prove counts render as absent rather than zero before data loads — and because that string never renders under any condition, the assertion was **vacuously true**. It passed. It would have passed had the component rendered zeros the entire time. The property it existed to protect was untested, and nothing said so.
+
+**Proposed generalisation.** A false premise propagates to every assertion derived from it, and its consequences are sorted by luck: assertions phrased positively fail and get fixed; assertions phrased as an absence pass and hide. **So the loud failure is not the bug — it is the notification that a silent one exists somewhere nearby.** On finding any assertion falsified by reality, the next move is not to fix it but to enumerate every other assertion resting on the same belief.
+
+> **The tell is a negative assertion over a string nobody has verified renders.** `expect(queryByText(/0 failing/i)).toBeNull()` is indistinguishable from `expect(null).toBeNull()` when the string is wrong, and no tooling flags it.
+
+**The check that catches it.** Before asserting any rendered text, read what the component actually produces. And treat any `not.toContain` / `queryBy…toBeNull` over a literal as owing a second test proving the literal *can* appear — otherwise the absence proves nothing.
+
+**Why not promoted.** One instance. The mechanism is general and the failure mode is well known in principle, but this project has seen it once.
+
+---
+
+### 2.23 Mutation evidence is only worth what the runner was allowed to observe
+
+**Observed 2026-08-31, in a report that was otherwise careful.** A task claimed each of its mutations was isolated to a single test, evidenced by every run showing *"9 skipped"*. Running with a name filter **skips** the other nine — they never execute — so nine skipped tests are nine tests about which nothing is known. The conclusion happened to be right; the evidence did not support it.
+
+**Re-run properly — whole file, no filter — it produced a real finding the filtered runs could not have:** one mutation broke *two* tests, because both sent no admin-secret header, so neither was independent proof of the property each claimed. That is useful information about overlapping coverage, and it was invisible under the filter.
+
+**A second form, same root.** Red-phase evidence was twice offered as a TypeScript *"cannot find module"*. That proves the build breaks, not that the test fails — the test never ran. The demonstration that carries weight is deleting the guard so the file still compiles, then watching the specific assertion fail.
+
+**Proposed generalisation.** **A mutation test's claim is bounded by what actually executed.** Filtering to the test you expect to fail makes the run cheap and the conclusion unfalsifiable, because the interesting question — *what else did this break?* — is precisely what the filter suppresses.
+
+> **The tell is a report whose evidence is an absence:** skipped tests, an unbuilt module, a suite that "wasn't affected." Absence of execution is not evidence of correctness.
+
+**The check that catches it.** Every mutation runs the whole file. Record which tests failed *and* which passed. Red-phase evidence must be an assertion failure with expected-vs-received, never a compile error.
+
+**Why not promoted.** One slice, though it appeared across several tasks within it. Both forms were caught by review rather than by the author, which suggests it is a reviewer-side check rather than a lesson authors will self-apply.
+
 ---
 
 ## 3. Watch items — open questions about the method itself
