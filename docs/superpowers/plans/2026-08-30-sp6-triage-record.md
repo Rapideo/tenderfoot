@@ -18,7 +18,9 @@
 - **No judgment, anywhere.** Nothing in this slice scores, ranks, filters or gates. Sampling selects what a human reads in order to measure; it never changes what the product returns. Design spec §1.1.
 - **Writes are gated, reads are not.** Every `POST` here sits behind `requireAdminSecret` from `lib/adminSecret.js`. Every `GET` stays open, so screens load without turning a shared secret into a login.
 - **Decisions are append-only.** Never `UPDATE` a `pursuit` row and never `DELETE` one. Undo is an `INSERT`.
-- **`value_cents` is a `bigint` and arrives from `pg` as a STRING.** No `setTypeParser` is configured in this repo. Type it as `string | null` and format at the edge; never `Number()` it into a float.
+- **`value_cents` and every `count(*)` arrive from `pg` as JavaScript NUMBERS, not strings.** `db/index.ts:20` runs `pg.types.setTypeParser(20, …)`, which parses bigint (OID 20) to `Number` once, centrally, so no call site has to. Type these `number | null` and format from a number.
+
+  > ⚠️ **This constraint said the exact opposite until 2026-08-30, and the correction is Task 3's implementer's, not mine.** It read *"arrives as a STRING… no setTypeParser is configured in this repo"*, which is false — the parser has been there since the Postgres port, with a comment explaining why. The error was not cosmetic: Task 11's `money()` was written to call `.slice()` on the value, which throws on a number, while its test fixture used a quoted string and passed. **A green test over a browser crash — the exact failure shape SP3.6 was bitten by.** Everywhere this plan still says a count comes back as a string, it is wrong; the `Number(...)` wrappers left in place are harmless no-ops kept as belt-and-braces.
 - **Test isolation is schema-per-file.** `useTestSchema("test_<name>")` then `await resetSchema()` at module top, BEFORE the dynamic imports that open a pool.
 - **No network in tests.** Every fixture is inserted directly.
 - **Deviations go in `docs/admin-deviations.md`**, the continuous series. D10 is current; this plan adds **D11–D15**.
@@ -196,7 +198,9 @@ git commit -m "Migration 012: the sample store, and an index for append-only dec
 - Consumes: `db/index.js` (`all`)
 - Produces:
   - `LATEST_PURSUIT: string` — a SQL fragment, one row per solicitation that has any pursuit row
-  - `interface LatestPursuit { pursuit_id: number; solicitation_id: number; state: PursuitState; reason: string | null; decided_by: string | null; created_at: string }`
+  - `interface LatestPursuit { pursuit_id: number; solicitation_id: number; state: PursuitState; reason: string |  /* bigint. db/index.ts:20 parses OID 20 to Number centrally, so this is a
+   * NUMBER here, not a string. Formatted at the edge. */
+  value_cents: number | null; decided_by: string | null; created_at: string }`
   - `type PursuitState = "New" | "Triaged" | "Interested" | "Not Interested"`
   - `latestPursuitFor(ids: number[]): Promise<LatestPursuit[]>`
 
@@ -548,9 +552,10 @@ export interface QueueItem {
   org_name: string | null;
   jurisdiction: string | null;
   closes_at: string | null;
-  /* bigint. `pg` hands these back as STRINGS and no setTypeParser is
-   * configured in this repo -- formatted at the edge, never Number()'d. */
-  value_cents: string | null;
+  /* bigint. db/index.ts:20 parses OID 20 to Number centrally -- "parsed
+   * here, once, rather than at fourteen call sites" -- so this is a NUMBER,
+   * not a string. Formatted at the edge. */
+  value_cents: number | null;
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
@@ -578,7 +583,7 @@ export async function queuePage(
   const offset = Math.max(0, opts.offset ?? 0);
   const today = NOW_ISO();
 
-  const counted = await one<{ total: string }>(
+  const counted = await one<{ total: number }>(
     `SELECT count(*) AS total
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
@@ -1070,7 +1075,7 @@ export async function drawSample(opts: {
   const today = TODAY();
 
   const id = await tx(async (q) => {
-    const pop = await q.one<{ total: string }>(
+    const pop = await q.one<{ total: number }>(
       `SELECT count(*) AS total
          FROM solicitation s
          LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
@@ -1165,7 +1170,7 @@ export async function queuePage(
         SELECT 1 FROM triage_sample_item i
          WHERE i.sample_id = ${sample.id} AND i.solicitation_id = s.id)` : "";
 
-  const counted = await one<{ total: string }>(
+  const counted = await one<{ total: number }>(
     `SELECT count(*) AS total
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
@@ -1416,7 +1421,7 @@ export async function volumePerSourcePerWeek(): Promise<VolumeReport> {
       ORDER BY src.name, week`,
   );
 
-  const counts = await one<{ total: string; excluded: string }>(
+  const counts = await one<{ total: number; excluded: number }>(
     `SELECT count(*) AS total,
             count(*) FILTER (
               WHERE posted_at IS NULL OR posted_at !~ '^\\d{4}-\\d{2}-\\d{2}'
@@ -2523,7 +2528,7 @@ const ITEM = {
   org_name: "Indiana FSSA",
   jurisdiction: "IN",
   closes_at: "2026-09-17",
-  value_cents: "45000000",
+  value_cents: 45000000,
   kind: "RFP",
   set_aside: null,
   source_name: "SAM.gov",
@@ -2677,7 +2682,7 @@ interface QueueItem {
   org_name: string | null;
   jurisdiction: string | null;
   closes_at: string | null;
-  value_cents: string | null;
+  value_cents: number | null;
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
@@ -2702,12 +2707,15 @@ interface QueuePage {
   items: QueueItem[];
 }
 
-/* value_cents is a bigint and arrives as a STRING. Never Number() it into a
- * float -- format the digits. */
-function money(cents: string | null): string {
-  if (!cents) return "—";
-  const whole = cents.length > 2 ? cents.slice(0, -2) : "0";
-  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+/* value_cents is a bigint, and db/index.ts:20 parses OID 20 to Number
+ * centrally -- so this arrives as a NUMBER over JSON, not a string.
+ *
+ * ⚠️ This function previously called .slice() on it, which throws on a
+ * number. It passed its test only because the fixture quoted the value.
+ * That is a green test over a browser crash -- keep the fixture a number. */
+function money(cents: number | null): string {
+  if (cents === null || cents === undefined) return "—";
+  return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 }
 
 export function Queue() {
