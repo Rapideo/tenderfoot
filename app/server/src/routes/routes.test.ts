@@ -8,7 +8,7 @@ useTestSchema("test_routes");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { close } = await import("../db/index.js");
+const { close, insert, run } = await import("../db/index.js");
 const { api } = await import("./index.js");
 
 let base = "";
@@ -281,4 +281,239 @@ test("reads remain open: /sources and /profile need no secret", async () => {
   const [pStatus] = await fetch(base + "/profile").then(async (r) => [r.status] as const);
   expect(sStatus).toBe(200);
   expect(pStatus).toBe(200);
+});
+
+/* ---- 2026-08-30: the record endpoint (SP6 Task 8) -----------------------
+ * SP4's demo criteria deferred until a record view existed to prove a
+ * citation is READABLE, not merely stored. This is that view's endpoint. */
+
+test("a record carries its fields, each with value, confidence and quote", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('cited record', 1, '2026-09-17') RETURNING id`,
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, quote, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', NULL, 1.0, 'mechanical')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const closes = body.fields.find((f: any) => f.field_name === "closes_at");
+  expect(closes.value).toBe("2026-09-17");
+  expect(closes.confidence).toBe(1);
+  expect(closes.state).toBe("found");
+});
+
+/* THE FSSA NEAR-MISS, made visible. The listing wins, and the losing value
+ * is still there with its quote -- a rejection you cannot inspect is a bug
+ * you will never find. */
+test("a disagreement is shown beneath the winner, not resolved away", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('conflicted record', 1, '2026-09-17') RETURNING id`,
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 1.0, 'mechanical')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, quote, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-08-26', 'document',
+             'proposals due August 26, 2026', 0.72, 'mechanical')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const closes = body.fields.find((f: any) => f.field_name === "closes_at");
+
+  expect(closes.value).toBe("2026-09-17");
+  expect(closes.conflicts).toHaveLength(1);
+  expect(closes.conflicts[0].value_text).toBe("2026-08-26");
+  expect(closes.conflicts[0].quote).toContain("August 26");
+});
+
+/* Three states, not two. "We looked and it is not there" is a different
+ * fact from "we never looked", and collapsing them is how a missing ceiling
+ * quietly becomes a guessed one. */
+test("absent and never-looked-for are different states", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('sparse record', 1) RETURNING id`,
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'value_cents', NULL, 'document', 'mechanical')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const looked = body.fields.find((f: any) => f.field_name === "value_cents");
+  const never = body.fields.find((f: any) => f.field_name === "set_aside");
+
+  expect(looked.state).toBe("absent");
+  expect(never.state).toBe("not_looked_for");
+});
+
+test("a record carries its sightings in order as a timeline", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('timeline record', 1) RETURNING id`,
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES (1, $1, '2026-08-20T00:00:00Z')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES (1, $1, '2026-08-10T00:00:00Z')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const sightings = body.timeline.filter((e: any) => e.kind === "sighting");
+  expect(sightings).toHaveLength(2);
+  expect(new Date(sightings[0].at).getTime()).toBeLessThan(
+    new Date(sightings[1].at).getTime(),
+  );
+});
+
+test("the solicitation list is bounded", async () => {
+  const [, body] = await get("/solicitations?limit=2");
+  expect(body.solicitations.length).toBeLessThanOrEqual(2);
+});
+
+/* SP4's Task 11 shipped `Number(x) || 10`, where -5 is truthy and Math.min
+ * does not catch it. The test that let it through asserted only a 200 --
+ * equally true with the clamp deleted. This one asserts the VALUE.
+ *
+ * 2026-08-30 fix-round: the ORIGINAL version of this test still asserted
+ * only a 200 and a non-empty list -- true whether or not bounding exists
+ * at all, since the unbounded query also returns >=1 row and a 200. The
+ * echoed `limit` in the response body is what actually pins the clamp. */
+test("a negative limit does not become a negative LIMIT", async () => {
+  const [status, body] = await get("/solicitations?limit=-5");
+  expect(status).toBe(200);
+  expect(body.limit).toBe(1);
+  expect(body.solicitations.length).toBeGreaterThanOrEqual(1);
+});
+
+/* ---- 2026-08-30 fix round: four gaps the review found -------------------
+ * (1) above closes the vacuous negative-limit test. The rest are new. */
+
+/* The timeline test above never sets org_id, so `row.org_name` stays null
+ * and the RESOLUTION branch never executes -- the JS .sort() has nothing to
+ * prove itself against, because the two sightings already arrive from SQL
+ * in ascending seen_at order. This test forces the resolution event's
+ * timestamp BETWEEN two sighting timestamps, so a correct sort visibly
+ * reorders it into the middle and a missing sort visibly does not. */
+test("the timeline interleaves a resolution event between sightings, sorted by time", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: timeline source') RETURNING id`,
+  );
+  const org = await insert(
+    `INSERT INTO organization (name) VALUES ('Timeline Resolution Org') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, org_id, created_at)
+     VALUES ('interleaved record', $1, $2, '2026-08-15T00:00:00Z') RETURNING id`,
+    [source, org],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES ($1, $2, '2026-08-10T00:00:00Z')`,
+    [source, sol],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES ($1, $2, '2026-08-20T00:00:00Z')`,
+    [source, sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  expect(body.timeline.map((e: any) => e.kind)).toEqual([
+    "sighting",
+    "resolution",
+    "sighting",
+  ]);
+  expect(body.timeline[1].detail).toContain("Timeline Resolution Org");
+});
+
+/* The upper half of bounding: an offset that never moves the window would
+ * pass the earlier "bounded" test just as easily as a correct one, since
+ * that test only checks the COUNT returned, never WHICH rows. This checks
+ * both the echoed offset and that offset actually walks the page. */
+test("offset skips into the ordered list rather than being ignored", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: offset source') RETURNING id`,
+  );
+  const first = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('offset record A', $1, '2020-01-01') RETURNING id`,
+    [source],
+  );
+  const second = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('offset record B', $1, '2020-01-02') RETURNING id`,
+    [source],
+  );
+
+  const [, page0] = await get("/solicitations?limit=1&offset=0");
+  const [, page1] = await get("/solicitations?limit=1&offset=1");
+
+  expect(page0.offset).toBe(0);
+  expect(page1.offset).toBe(1);
+  expect(page0.solicitations[0].id).toBe(first);
+  expect(page1.solicitations[0].id).toBe(second);
+});
+
+/* The other half: a limit above the ceiling must clamp to it rather than
+ * being honoured -- an unclamped upper bound is the same 9,883-row risk
+ * this whole feature exists to close, just requiring a bigger number. */
+test("a limit above the ceiling clamps to 1000, not the caller's value", async () => {
+  const [, body] = await get("/solicitations?limit=5000");
+  expect(body.limit).toBe(1000);
+});
+
+/* Task 13's client consumes `decision` directly. Two pursuit rows, oldest
+ * first, so this proves LATEST wins rather than merely "a pursuit row
+ * exists" -- the same distinction latestPursuitFor's own DISTINCT ON
+ * exists to guarantee. */
+test("a solicitation's decision reflects its latest pursuit row, not just any pursuit row", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: decision source A') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('decided record', $1) RETURNING id`,
+    [source],
+  );
+  await run(`INSERT INTO pursuit (solicitation_id, state) VALUES ($1, 'New')`, [sol]);
+  await run(
+    `INSERT INTO pursuit (solicitation_id, state, reason, decided_by)
+     VALUES ($1, 'Interested', 'Strong fit', 'M. Smith')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  expect(body.decision.state).toBe("Interested");
+});
+
+/* A solicitation nobody has triaged must read as decision: null -- never
+ * undefined (which JSON.stringify would silently drop from the body) and
+ * never a fabricated 'New', which would claim a decision nobody made. */
+test("a solicitation with no pursuit row returns decision: null", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: decision source B') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('undecided record', $1) RETURNING id`,
+    [source],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  expect(body.decision).toBeNull();
 });

@@ -9,13 +9,31 @@ await resetSchema();
  * is too tight for tests that do live network round trips against the
  * shared Neon test-branch compute: a cold start alone measures ~1.1s, and
  * several agents can be running the suite concurrently against the same
- * compute (each gets its own SCHEMA -- SP1.5 Ruling 3 -- but they still
- * contend for the one compute's connections). corpus.test.ts already
- * carries a 120000ms hook timeout for the exact same underlying reason
- * (~200 rows, each several round trips); 30000ms here is the equivalent
- * margin sized to this file's much smaller workload -- generous enough to
- * absorb contention, not so high that a genuine hang would pass for a slow
- * test. */
+ * compute, all genuinely contending for its connections.
+ *
+ * CORRECTED (SP6 final review). This comment used to add, as settled fact,
+ * "(each gets its own SCHEMA -- SP1.5 Ruling 3 -- but they still contend for
+ * the one compute's connections)". That parenthetical was FALSE for two
+ * concurrent LOCAL runs: runSuffix() (testdb.ts) folded in GITHUB_RUN_ID,
+ * defaulting to the literal string "local" when unset -- which it always was
+ * outside CI -- so two local `npm run check` processes resolved to the SAME
+ * schema name, and one's resetSchema() could DROP SCHEMA ... CASCADE the
+ * other's tables mid-run. That is what actually produced the flaky,
+ * file-varying test failures two review rounds saw from concurrent local
+ * runs, and it is why this false claim mattered: it is what sent the first
+ * diagnosis to connection contention instead -- contention predicts
+ * connection errors, not a single wrong assertion inside an otherwise-
+ * passing file. Fixed by scripts/check.mjs minting a TENDERFOOT_RUN_ID
+ * (randomUUID()) per invocation, with runSuffix() now reading
+ * GITHUB_RUN_ID ?? TENDERFOOT_RUN_ID ?? "local", so concurrent local runs
+ * are schema-isolated the same way concurrent CI runs already were. What
+ * remains true, and is this hook's actual justification, is the connection
+ * contention named above: schema isolation does not create more connections
+ * on the one shared compute. corpus.test.ts already carries a 120000ms hook
+ * timeout for the exact same underlying reason (~200 rows, each several
+ * round trips); 30000ms here is the equivalent margin sized to this file's
+ * much smaller workload -- generous enough to absorb contention, not so high
+ * that a genuine hang would pass for a slow test. */
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
 const { migrate } = await import("./migrate.js");
@@ -318,4 +336,62 @@ test("a field may have many document rows but only one listing row", async () =>
       [sol],
     ),
   ).rejects.toMatchObject({ code: "23505" });
+});
+
+test("triage_sample records the population it drew from", async () => {
+  const src = await insert(`INSERT INTO source (name) VALUES ('sample fixture') RETURNING id`);
+  const sample = await insert(
+    `INSERT INTO triage_sample (source_id, seed, n_requested, population_size)
+     VALUES ($1, 'seed-a', 100, 4812) RETURNING id`,
+    [src],
+  );
+  const row = await one<{ population_size: number; n_requested: number }>(
+    `SELECT population_size, n_requested FROM triage_sample WHERE id = $1`,
+    [sample],
+  );
+  /* Both, separately. A source with 40 eligible rows and n=100 draws 40,
+   * and one number cannot carry both facts. */
+  expect(row?.population_size).toBe(4812);
+  expect(row?.n_requested).toBe(100);
+});
+
+test("population_size cannot be left off a sample", async () => {
+  const src = await insert(`INSERT INTO source (name) VALUES ('no denominator') RETURNING id`);
+  await expect(
+    dbRun(
+      `INSERT INTO triage_sample (source_id, seed, n_requested) VALUES ($1, 'seed-b', 10)`,
+      [src],
+    ),
+  ).rejects.toMatchObject({ code: "23502" });
+});
+
+/* This property predates migration 012 (append-only history was already
+ * legal in the schema), so this test is not testing 012. It exists as a
+ * regression guard: if anyone adds a UNIQUE constraint on
+ * pursuit(solicitation_id) in the future, decisions recorded to the same
+ * solicitation would silently fail. This test catches that silently-broken
+ * invariant. */
+test("pursuit permits history -- a regression guard, not a test of 012", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('append fixture', (SELECT id FROM source WHERE name = 'SAM.gov')) RETURNING id`,
+  );
+  await dbRun(`INSERT INTO pursuit (solicitation_id, state) VALUES ($1, 'Interested')`, [sol]);
+  await dbRun(
+    `INSERT INTO pursuit (solicitation_id, state, reason) VALUES ($1, 'Not Interested', 'reversed')`,
+    [sol],
+  );
+  const rows = await all<{ state: string }>(
+    `SELECT state FROM pursuit WHERE solicitation_id = $1`,
+    [sol],
+  );
+  /* Both survive. The reversal IS the second row. */
+  expect(rows).toHaveLength(2);
+});
+
+test("pursuit_latest index exists, because every read depends on it", async () => {
+  const idx = await all<{ indexname: string }>(
+    `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = 'pursuit'`,
+    [SCHEMA],
+  );
+  expect(idx.map((i) => i.indexname)).toContain("pursuit_latest");
 });

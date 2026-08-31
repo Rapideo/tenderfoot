@@ -45,6 +45,26 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+
+/* THE FLAKY-GATE FIX (SP6 final review). testdb.ts's runSuffix() folds
+ * GITHUB_RUN_ID into every test schema name so a CI run cannot DROP SCHEMA
+ * ... CASCADE another CI run's tables mid-suite (SP1.5 Ruling 3) -- but it
+ * fell back to the LITERAL STRING "local" when GITHUB_RUN_ID is unset, which
+ * it always is outside CI. Two concurrent local `npm run check` runs both
+ * resolved to the SAME schema name, and each test file's own resetSchema()
+ * could drop the other's tables mid-run -- not a clean failure, a single
+ * wrong assertion in an otherwise-passing file, which is exactly the shape
+ * two review rounds misdiagnosed as Neon pool contention.
+ *
+ * TENDERFOOT_RUN_ID is this invocation's local equivalent of GITHUB_RUN_ID --
+ * minted once, here, before any child process spawns, and set on
+ * process.env so every spawnSync below (typecheck, test, build) inherits it
+ * without each call site needing to know it exists. testdb.ts's runSuffix()
+ * reads GITHUB_RUN_ID ?? TENDERFOOT_RUN_ID ?? "local", so CI is unaffected
+ * (GITHUB_RUN_ID still wins) and two concurrent local runs now get distinct
+ * schemas the same way two concurrent CI runs already did. */
+process.env.TENDERFOOT_RUN_ID = randomUUID();
 
 /* THE INVARIANT THE OVERRIDES BELOW REST ON, CHECKED RATHER THAN ASSUMED.
  *
@@ -293,7 +313,45 @@ run("typecheck");
  * Do not "fix" this by putting DATABASE_URL back into testEnv -- that is
  * the bug this block exists to close. */
 const { DATABASE_URL: _keptOutOfTestEnvOnPurpose, ...testEnv } = process.env;
-run("test", testEnv);
+const testResult = spawnSync("npm run test", { stdio: "inherit", shell: true, env: testEnv });
+
+/* THE LOCAL-CLEANUP FIX (SP6 residual re-review, 2026-08-31). scripts/
+ * clean-test-schemas.mjs computes runSuffix() in ITS OWN process. Run as a
+ * separate `npm run test:clean` invocation AFTER this script exits, that
+ * process has no TENDERFOOT_RUN_ID -- only THIS process, which minted the id
+ * above, ever has it -- so runSuffix() there fell back to the literal string
+ * "local" and matched none of the schemas this run actually created. Default
+ * mode became a silent no-op locally, and every local gate went back to
+ * leaking ~one schema per test file into the shared Neon `test` branch --
+ * exactly the 106-schema backlog clean-test-schemas.mjs's own header
+ * documents as having already caused a gate flake once.
+ *
+ * Fixed by running cleanup HERE, inheriting process.env (TENDERFOOT_RUN_ID
+ * included), instead of leaving it to a separate command that can't see it.
+ * Two options were on the table: run it here, or persist the id to a file a
+ * later `test:clean` could read. The file approach was rejected -- two
+ * concurrent local gates would each overwrite a shared file with their own
+ * id, so a THIRD process reading it back could target a still-running gate's
+ * live schemas, which is precisely the concurrency hazard the run suffix
+ * exists to prevent. Running it here has no such window: default mode only
+ * ever drops schemas suffixed with THIS process's own freshly-minted
+ * TENDERFOOT_RUN_ID, which no other run can share.
+ *
+ * Runs whether or not the suite passed -- mirrors ci.yml's `if: always()`
+ * step, and for the same reason: a failed run leaks exactly as much as a
+ * passing one, and the failing run is the one someone reruns repeatedly,
+ * compounding the leak. `run()` isn't used here because it exits
+ * immediately on failure; the exit is deferred below so cleanup always gets
+ * a chance to run first, and the test result -- the more informative
+ * failure -- still wins if both fail. */
+const cleanResult = spawnSync("npm run test:clean", { stdio: "inherit", shell: true, env: process.env });
+
+if (testResult.status !== 0) {
+  process.exit(testResult.status ?? 1);
+}
+if (cleanResult.status !== 0) {
+  process.exit(cleanResult.status ?? 1);
+}
 
 /* No redundant "is DATABASE_URL_TEST set" check here: `test` above already
  * requires it (useTestSchema() throws a named error the moment any test

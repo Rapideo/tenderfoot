@@ -1,0 +1,8 @@
+.queue__title { font: var(--type-heading-hero); margin: 0 0 10px; }
+.queue__facts { display: flex; flex-wrap: wrap; gap: 14px; }
+.queue__facts span { font: var(--type-body-buyer); }
+.queue__decision { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; }
+.queue__decision textarea { flex: 1; min-height: 3rem; }
+.queue__keys { font: var(--type-microlabel-cmd); align-self: center; }
+.queue__sample-banner { padding: 10px 18px; }
+.queue__cleared { display: grid; gap: 14px; padding: 24px; }

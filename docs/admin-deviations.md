@@ -482,3 +482,151 @@ returns `processed`/`failed`/`remaining`; discover returns
 data.documents ?? 0` into one sentence, which prints a zero for a key the
 endpoint never sends — a number an operator cannot tell from a real zero.
 The presence of `remaining` selects the wording instead.
+
+## D11 — the bundle uses two different words for one health value, and this screen surfaces the one that doesn't say "failing"
+
+*(SP6 T14 may renumber this if D11 collides with a number assigned elsewhere first.)*
+
+`health: "failing"` is one database value, but the frozen V1.2 bundle names it
+two different ways in two different places: the Source Registry row (via
+`StatusDot`) reads "Failing" verbatim, while the persistent footer chrome
+(`StatusBar`, index ~617384, the control SP6's `Shell` wires up) reads "N
+DEGRADED" verbatim. Both were transcribed faithfully from their own bundle
+location in SP2 (`StatusDot.tsx`, `StatusBar.tsx`) — this is not a case of two
+words carrying different meanings, and it is not a deliberate semantic
+distinction. It is the frozen bundle itself being inconsistent, and SP2's
+"copy is specification" discipline preserved that inconsistency rather than
+inventing a resolution for it.
+
+SP6 T9's `Shell` composes `StatusBar` into the product's persistent chrome,
+which means the word a user actually sees for this fault is "DEGRADED," not
+"failing" — even though the health enum, the API, and the Source Registry row
+all call it `failing`. `Shell.test.tsx` briefly asserted the word "failing"
+would appear in `Shell`'s rendered output (an unverified assumption caught in
+review); the test was corrected to assert the bundle copy `StatusBar` actually
+renders instead of inventing a `Shell`-level translation to make that
+assumption true. No production markup was added to reconcile the two words.
+
+Harmonising "Failing" and "DEGRADED" into one word is a copy decision, not an
+implementation one — it belongs to Matt, not to this slice.
+
+---
+
+# Ruled before it was built — SP6 design spec, 2026-08-30
+
+**Same shape as H1–H3: five deviations decided in the SP6 design brainstorm
+before a line of `triage`/`record` code existed**
+(`docs/superpowers/specs/2026-08-30-sp6-triage-record-design.md` §1 names four
+of them among the session's seven rulings), not found by building the screens
+and hitting a mismatch. D11 (immediately above, SP6 Task 9) is this file's
+most recent entry, so these continue the series as **D12–D16**.
+
+## D12 — `View 2.4` shows stored text and a link out, not the bundle inline
+
+The SVRC specifies the documents view as *"the bundle inline, with extraction
+highlights pointing back into the source."* That is not buildable: migration
+008 discarded the document bytes by SP4's own ruling — *"fetched, parsed and
+DISCARDED — a citation quotes the extracted passage, so there are no bytes to
+keep"* — so there is nothing to render inline. `Record.tsx`'s Documents view
+renders, per document, the filename, media type, `extract_status`, a link out
+to `source_url`, and the stored `extracted_text` itself in a plain `<pre>`.
+Design spec §6.2.
+
+**CORRECTED, SP6 final review fix wave.** This entry used to claim the
+stored text rendered "with its cited passages" (plural), and `media_type`
+was declared on the client's `Doc` type but never actually rendered — two
+things this entry described that the code did not do. `media_type` is now
+rendered, which makes that half of the claim true. The other half is not:
+`extracted_text` renders as an undifferentiated block, with **no marking of
+which passage was cited** — nothing highlights, underlines or otherwise
+points at the quoted span inside the full stored text. That is a known gap,
+recorded here rather than built, because the citation itself is already
+readable where it needs to be: each field's own quote, in the fields section
+above. That is what the SVRC's "citation" requirement actually needs, and
+highlighting a passage inside the separately-rendered full document text is
+not attempted.
+
+## D13 — the score strip does not render on the composed queue card
+
+Two dated rulings disagreed, and the disagreement would have surfaced the
+moment a card was composed:
+
+- **SVRC `Region 1.1.2` (2026-08-11):** *"V1 has no scores, so this region
+  does not render… Nothing takes its place in the card… The row is shorter in
+  V1, which is the honest consequence."*
+- **STATUS (2026-08-13):** the intelligence chrome is *"constructed and
+  rendered, none wired,"* because a build that omitted it *"would not be a
+  subset of the product but a different one, with holes where screens were
+  composed around content."*
+
+**Matt ruled for the SVRC, 2026-08-30: the strip does not render on
+`Queue.tsx`'s card.** The 08-13 ruling's own stated reason — holes where
+screens were composed around content — does not apply here, because the SVRC
+says explicitly that nothing takes the strip's place and the row is simply
+shorter: there is no hole to leave. A panel captioned **MACHINE SCORES — A
+READING AID** showing four dashes reads worse than absence during a
+ten-second triage decision — it reads as *the machine scored this and found
+nothing*, not as *this has not been scored*.
+
+**A correction that matters, because it was gotten wrong once and caught in
+review.** STATUS's line *"how 'vestigial' should look is undesigned and stays
+that way until Matt specifies it"* is false, and STATUS has been corrected in
+place rather than silently — see its own "Decided this week" entry. **SP2
+built it.** `ScoreBar` takes `value: number | null`, renders `—` with no fill
+under a `score-bar--empty` class, and its own comment records *"null is the
+V1 case (assessment table empty by design, spec §1.1)."* The primitive is
+fully built and stays on `/dev/gallery`; this deviation is only about it not
+being **composed** into the queue card — a placement decision, not an
+unbuilt look. Design spec §2.3.
+
+## D14 — `View 1.3 : Queue Cleared` content, invented because the SVRC calls it undesigned
+
+The SVRC's own words on the cleared state: *"'Nothing to review' is a dead
+end; something pointing at the radars, or at what is coming, keeps the
+session alive. Undesigned."* Design spec §7.
+
+**CORRECTED, SP6 final review fix wave.** The version of this entry that
+shipped described three `ShortcutCard`s that "kept the session alive rather
+than dead-ending it" — but all three carried no `onClick`, and the screen
+renders them inside `<Shell reduced>`, which hides the nav chrome. Nothing
+on the cleared screen did anything; it was the dead end the SVRC's line
+exists to prevent, with a claim of the opposite sitting next to it in this
+file.
+
+**What is actually built now:** two `ShortcutCard`s, both navigating to
+`/admin` — there is no separate metrics view in the product, so "Metrics"
+and "Admin" both land on the one screen that has something to show; a real
+metrics view is future work, not this fix. **Draw another sample** is
+removed rather than wired: there is no draw-a-sample UI anywhere in
+`app/client/src`, only `POST /api/triage/samples`, so a card promising one
+would be the same dead end reached from the other direction. The screen
+states that fact plainly instead — `A new sample is drawn via POST
+/api/triage/samples.`
+
+## D15 — `Region 1.1.3` renders empty and states that its four facts are unextracted
+
+The SVRC names four countable facts for the pursuit-cost panel: number of
+required forms, whether a pre-proposal conference is mandatory, how many
+references are demanded, whether anything needs notarizing. SP4 extracts six
+fields, and `prebid_required`, `set_aside` and `value_cents` sit in
+`fields.ts`'s `NOT_EXTRACTED` with no extraction logic at all — **zero of the
+panel's four facts exist today.** `FactPanel` already carries a
+populated/empty split; the empty state here reads *"Required forms,
+conference, references and notarization are not yet extracted"* — the same
+*we looked / we have not looked* distinction `View 2.3` enforces on fields,
+rather than a blank panel or an invented value. Extending extraction to
+produce these facts was considered and rejected for this slice: it reopens
+SP4's cue-vocabulary work, which is parked with the labelling task. Design
+spec §2.4.
+
+## D16 — default order is deadline-soonest-first; the ratified `AMBIGUITY FIRST` default needs a scorer and cannot ship
+
+The SVRC closed its ordering gap on 2026-08-12 by ratifying
+`ORDER · AMBIGUITY FIRST` as the default, switchable between *ambiguity
+first / score, highest first / deadline, soonest first*. **Two of the three
+orderings require a scorer.** Ambiguity is a property of a borderline score,
+and with the assessment table empty by design (§1.1) there is no ambiguity
+signal to sort on. Only *deadline, soonest first* survives, so `queue.ts`
+orders `closes_at ASC NULLS LAST`, and the switch has nothing left to switch
+between. **When qualification is designed, the SVRC's ratified answer returns
+intact** — nothing here argues against it. Design spec §4.2.

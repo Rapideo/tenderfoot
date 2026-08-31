@@ -150,7 +150,9 @@ interface Candidate {
   closes_at: string | null;
   set_aside: string | null;
   prebid_required: boolean | null;
-  value_cents: string | null;
+  // bigint column; db/index.ts:20 parses OID 20 (bigint) to Number
+  // centrally, so this arrives as a number, not a string.
+  value_cents: number | null;
 }
 
 interface AttachmentsResponse {

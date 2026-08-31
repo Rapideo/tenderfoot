@@ -24,7 +24,20 @@ import pg from "pg";
  * RUN the schema name doesn't otherwise carry. Callers are unaffected: they
  * keep passing the plain logical name, and the suffixing happens here. */
 export function runSuffix(): string {
-  const raw = process.env.GITHUB_RUN_ID ?? "local";
+  /* FIXED (SP6 final review): this used to read GITHUB_RUN_ID ?? "local" --
+   * so EVERY local run fell back to the literal string "local", and two
+   * concurrent local `npm run check` invocations resolved to the SAME schema
+   * name, letting one's resetSchema() DROP SCHEMA ... CASCADE the other's
+   * tables mid-run. Ruling 3's own comment above only ever closed this for
+   * CI, where GITHUB_RUN_ID is distinct per run; it did nothing locally.
+   * scripts/check.mjs now mints a TENDERFOOT_RUN_ID (randomUUID()) once per
+   * invocation and sets it on the environment every child process inherits --
+   * the local equivalent of GITHUB_RUN_ID. GITHUB_RUN_ID still wins when
+   * both are set (CI never sets TENDERFOOT_RUN_ID, so this is never a real
+   * conflict), and "local" remains the fallback only for a test file run
+   * completely outside npm run check (e.g. `npx vitest run some.test.ts`
+   * directly), which was never this bug's failure mode. */
+  const raw = process.env.GITHUB_RUN_ID ?? process.env.TENDERFOOT_RUN_ID ?? "local";
   // Interpolated directly into DDL below (CREATE/DROP SCHEMA takes no
   // parameters), so anything outside [a-z0-9_] is replaced rather than
   // trusted -- this must stay a legal, unquoted Postgres identifier.

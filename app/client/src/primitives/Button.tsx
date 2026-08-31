@@ -31,17 +31,34 @@ export function Button({
   size = "default",
   keycap,
   disabled,
+  onClick,
+  ariaLabel,
   children,
 }: {
   variant: ButtonVariant;
   size?: ButtonSize;
   keycap?: string;
   disabled?: boolean;
+  /* ADDED AT SP6. SP2 built this primitive inert on purpose -- the gallery
+   * proved it looked right and nothing was wired. This slice is the first
+   * to compose a real screen, which is the trigger STATUS named. */
+  onClick?: () => void;
+  /* The keycap renders inside the button, so its letter joins the
+   * accessible name. An explicit label keeps the control targetable. */
+  ariaLabel?: string;
   children: ReactNode;
 }) {
   const sizeClass = size === "sm" ? " btn--sm" : "";
   return (
-    <button className={`btn btn--${variant}${sizeClass}`} disabled={disabled}>
+    <button
+      /* Default is "submit": inside a form, an un-typed decision button
+       * submits and reloads instead of deciding. */
+      type="button"
+      className={`btn btn--${variant}${sizeClass}`}
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={ariaLabel}
+    >
       {children}
       {keycap && <Keycap>{keycap}</Keycap>}
     </button>

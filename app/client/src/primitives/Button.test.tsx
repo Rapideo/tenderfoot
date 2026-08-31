@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Button } from "./Button";
 import type { ButtonVariant } from "./Button";
@@ -112,5 +112,51 @@ test("size defaults to 'default' (no btn--sm class) when omitted", () => {
   const { unmount } = render(<Button variant="primary">Interested</Button>);
   const btn = screen.getByRole("button", { name: "Interested" });
   expect(btn.className).not.toMatch(/btn--sm/);
+  unmount();
+});
+
+test("a button can be pressed", () => {
+  const onClick = vi.fn();
+  const { unmount } = render(
+    <Button variant="primary" onClick={onClick}>
+      Interested
+    </Button>,
+  );
+  screen.getByRole("button", { name: "Interested" }).click();
+  expect(onClick).toHaveBeenCalledOnce();
+  unmount();
+});
+
+test("a disabled button does not fire", () => {
+  const onClick = vi.fn();
+  const { unmount } = render(
+    <Button variant="primary" onClick={onClick} disabled>
+      Interested
+    </Button>,
+  );
+  screen.getByRole("button", { name: "Interested" }).click();
+  expect(onClick).not.toHaveBeenCalled();
+  unmount();
+});
+
+/* The keycap is INSIDE the button, so its letter joins the accessible name
+ * -- "Interested I" rather than "Interested". An explicit label keeps a
+ * control targetable by automation, which is how SP3.6's buttons were
+ * finally proved to work. */
+test("an explicit label survives a keycap", () => {
+  const { unmount } = render(
+    <Button variant="primary" keycap="I" ariaLabel="Interested">
+      Interested
+    </Button>,
+  );
+  expect(screen.getByRole("button", { name: "Interested" })).toBeTruthy();
+  unmount();
+});
+
+/* Default type is "submit". Inside a form, an un-typed decision button
+ * submits the form and reloads the page instead of deciding. */
+test("it is type=button, not an accidental submit", () => {
+  const { unmount } = render(<Button variant="primary">Interested</Button>);
+  expect(screen.getByRole("button").getAttribute("type")).toBe("button");
   unmount();
 });

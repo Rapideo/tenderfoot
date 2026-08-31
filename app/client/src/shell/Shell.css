@@ -1,0 +1,21 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--ground-canvas);
+}
+.shell__header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--brdsoft);
+}
+.shell__nav { display: flex; gap: 14px; }
+.shell__nav a { font: var(--type-ui-link); }
+.shell__count {
+  margin-left: auto;
+  font: var(--type-metric-counter);
+}
+.shell__main { flex: 1; min-height: 0; }
+.shell--reduced .shell__header { gap: 12px; }

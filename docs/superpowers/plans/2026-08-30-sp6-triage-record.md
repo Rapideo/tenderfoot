@@ -18,10 +18,12 @@
 - **No judgment, anywhere.** Nothing in this slice scores, ranks, filters or gates. Sampling selects what a human reads in order to measure; it never changes what the product returns. Design spec §1.1.
 - **Writes are gated, reads are not.** Every `POST` here sits behind `requireAdminSecret` from `lib/adminSecret.js`. Every `GET` stays open, so screens load without turning a shared secret into a login.
 - **Decisions are append-only.** Never `UPDATE` a `pursuit` row and never `DELETE` one. Undo is an `INSERT`.
-- **`value_cents` is a `bigint` and arrives from `pg` as a STRING.** No `setTypeParser` is configured in this repo. Type it as `string | null` and format at the edge; never `Number()` it into a float.
+- **`value_cents` and every `count(*)` arrive from `pg` as JavaScript NUMBERS, not strings.** `db/index.ts:20` runs `pg.types.setTypeParser(20, …)`, which parses bigint (OID 20) to `Number` once, centrally, so no call site has to. Type these `number | null` and format from a number.
+
+  > ⚠️ **This constraint said the exact opposite until 2026-08-30, and the correction is Task 3's implementer's, not mine.** It read *"arrives as a STRING… no setTypeParser is configured in this repo"*, which is false — the parser has been there since the Postgres port, with a comment explaining why. The error was not cosmetic: Task 11's `money()` was written to call `.slice()` on the value, which throws on a number, while its test fixture used a quoted string and passed. **A green test over a browser crash — the exact failure shape SP3.6 was bitten by.** Everywhere this plan still says a count comes back as a string, it is wrong; the `Number(...)` wrappers left in place are harmless no-ops kept as belt-and-braces.
 - **Test isolation is schema-per-file.** `useTestSchema("test_<name>")` then `await resetSchema()` at module top, BEFORE the dynamic imports that open a pool.
 - **No network in tests.** Every fixture is inserted directly.
-- **Deviations go in `docs/admin-deviations.md`**, the continuous series. D10 is current; this plan adds **D11–D15**.
+- **Deviations go in `docs/admin-deviations.md`**, the continuous series. ⚠️ D11 was taken during Task 9 by the StatusBar health-vocabulary deviation, so this plan adds **D12–D16**.
 
 ---
 
@@ -31,6 +33,7 @@
 |---|---|
 | `app/server/migrations/012_triage.sql` | `triage_sample`, `triage_sample_item`, the `pursuit_latest` index |
 | `app/server/src/triage/latest.ts` | The `DISTINCT ON` current-state query and its reusable SQL fragment |
+| `app/server/src/triage/eligibility.ts` | The membership predicate, alone, so `queue.ts` and `sample.ts` need not import each other |
 | `app/server/src/triage/queue.ts` | Queue membership, ordering, paging, and the deadline-conflict flag |
 | `app/server/src/triage/sample.ts` | Drawing, reading and listing materialised samples |
 | `app/server/src/triage/decide.ts` | Appending a decision; mandatory-on-Pass |
@@ -195,7 +198,9 @@ git commit -m "Migration 012: the sample store, and an index for append-only dec
 - Consumes: `db/index.js` (`all`)
 - Produces:
   - `LATEST_PURSUIT: string` — a SQL fragment, one row per solicitation that has any pursuit row
-  - `interface LatestPursuit { pursuit_id: number; solicitation_id: number; state: PursuitState; reason: string | null; decided_by: string | null; created_at: string }`
+  - `interface LatestPursuit { pursuit_id: number; solicitation_id: number; state: PursuitState; reason: string |  /* bigint. db/index.ts:20 parses OID 20 to Number centrally, so this is a
+   * NUMBER here, not a string. Formatted at the edge. */
+  value_cents: number | null; decided_by: string | null; created_at: string }`
   - `type PursuitState = "New" | "Triaged" | "Interested" | "Not Interested"`
   - `latestPursuitFor(ids: number[]): Promise<LatestPursuit[]>`
 
@@ -344,8 +349,11 @@ git commit -m "The latest-decision query, defined once so the queue and metrics 
 ## Task 3: `triage/queue.ts` — membership, order, and constant cost
 
 **Files:**
+- Create: `app/server/src/triage/eligibility.ts`
 - Create: `app/server/src/triage/queue.ts`
 - Test: `app/server/src/triage/queue.test.ts`
+
+> **Controller ruling (pre-flight, 2026-08-30): `ELIGIBLE` lives in its own module, not in `queue.ts`.** As first drafted, `queue.ts` imported `getSample` from `sample.ts` (Task 5) while `sample.ts` imported `ELIGIBLE` back from `queue.ts` — a genuine ESM cycle. It would happen to work, because both uses sit inside function bodies and resolve lazily, but it breaks the moment either is used at module top level. A one-export module with one responsibility costs four lines.
 
 **Interfaces:**
 - Consumes: `LATEST_PURSUIT` from `./latest.js`
@@ -353,7 +361,7 @@ git commit -m "The latest-decision query, defined once so the queue and metrics 
   - `interface QueueItem { id, title, org_name, jurisdiction, closes_at, value_cents, kind, set_aside, source_name, documents, sightings, deadline_conflict }`
   - `interface QueuePage { mode: "all" | "sample"; sample: null; total: number; remaining: number; items: QueueItem[] }`
   - `queuePage(opts?: { limit?: number; offset?: number }): Promise<QueuePage>`
-  - `ELIGIBLE: string` — the membership predicate, exported for reuse by `sample.ts`
+  - `ELIGIBLE: string` from `./eligibility.js` — the membership predicate, imported by both `queue.ts` and `sample.ts`
 
 **Note on `sample` and `mode`:** this task always returns `mode: "all"` and `sample: null`. Task 5 adds sample mode. The fields exist from the start so the client's shape never changes.
 
@@ -500,11 +508,37 @@ Expected: FAIL — cannot resolve `./queue.js`.
 
 - [ ] **Step 3: Implement**
 
+Create `app/server/src/triage/eligibility.ts`:
+
+```ts
+/* MEMBERSHIP. Undecided, and not closed.
+ *
+ * "Undecided" is: no pursuit row at all, OR a latest row still in 'New'.
+ * 'New' is migration 002's default and means untouched -- treating any
+ * pursuit row as a decision would empty the queue for anything the system
+ * had merely written a placeholder for.
+ *
+ * closes_at is `text` holding ISO dates, so a string comparison against a
+ * bound ISO date is the correct ordering. NULL is included deliberately:
+ * a missing deadline is not a reason to hide an opportunity.
+ *
+ * IT LIVES IN ITS OWN MODULE so queue.ts and sample.ts can both use it
+ * without importing each other -- queue.ts needs sample.ts's getSample, and
+ * a mutual import is a cycle waiting to bite.
+ *
+ * Expects the caller to bind today's ISO date as $1, and to have joined
+ * the latest-pursuit view as `lp` and the solicitation as `s`. */
+export const ELIGIBLE = `
+      (lp.state IS NULL OR lp.state = 'New')
+  AND (s.closes_at IS NULL OR s.closes_at >= $1)`;
+```
+
 Create `app/server/src/triage/queue.ts`:
 
 ```ts
 import { all, one } from "../db/index.js";
 import { LATEST_PURSUIT } from "./latest.js";
+import { ELIGIBLE } from "./eligibility.js";
 
 export interface DeadlineConflict {
   value_text: string;
@@ -518,9 +552,10 @@ export interface QueueItem {
   org_name: string | null;
   jurisdiction: string | null;
   closes_at: string | null;
-  /* bigint. `pg` hands these back as STRINGS and no setTypeParser is
-   * configured in this repo -- formatted at the edge, never Number()'d. */
-  value_cents: string | null;
+  /* bigint. db/index.ts:20 parses OID 20 to Number centrally -- "parsed
+   * here, once, rather than at fourteen call sites" -- so this is a NUMBER,
+   * not a string. Formatted at the edge. */
+  value_cents: number | null;
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
@@ -539,20 +574,6 @@ export interface QueuePage {
   items: QueueItem[];
 }
 
-/* MEMBERSHIP. Undecided, and not closed.
- *
- * "Undecided" is: no pursuit row at all, OR a latest row still in 'New'.
- * 'New' is migration 002's default and means untouched -- treating any
- * pursuit row as a decision would empty the queue for anything the system
- * had merely written a placeholder for.
- *
- * closes_at is `text` holding ISO dates, so a string comparison against a
- * bound ISO date is the correct ordering. NULL is included deliberately:
- * a missing deadline is not a reason to hide an opportunity. */
-export const ELIGIBLE = `
-      (lp.state IS NULL OR lp.state = 'New')
-  AND (s.closes_at IS NULL OR s.closes_at >= $1)`;
-
 const NOW_ISO = () => new Date().toISOString().slice(0, 10);
 
 export async function queuePage(
@@ -562,7 +583,7 @@ export async function queuePage(
   const offset = Math.max(0, opts.offset ?? 0);
   const today = NOW_ISO();
 
-  const counted = await one<{ total: string }>(
+  const counted = await one<{ total: number }>(
     `SELECT count(*) AS total
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
@@ -838,11 +859,11 @@ git commit -m "Decisions are appended, never overwritten -- and Pass carries a r
 
 **Files:**
 - Create: `app/server/src/triage/sample.ts`
-- Modify: `app/server/src/triage/queue.ts` (add `sampleId` support)
+- Modify: `app/server/src/triage/queue.ts` (add `sampleId` support — it imports `ELIGIBLE` from `./eligibility.js`, created in Task 3)
 - Test: `app/server/src/triage/sample.test.ts`
 
 **Interfaces:**
-- Consumes: `ELIGIBLE` from `./queue.js`
+- Consumes: `ELIGIBLE` from `./eligibility.js`
 - Produces:
   - `interface SampleHeader { id, source_id, source_name, drawn_at, seed, n_requested, population_size, drawn, decided, note }`
   - `drawSample(opts: { sourceId: number; n: number; seed?: string; note?: string }): Promise<SampleHeader>`
@@ -1001,7 +1022,7 @@ Create `app/server/src/triage/sample.ts`:
 
 ```ts
 import { all, one, tx } from "../db/index.js";
-import { ELIGIBLE } from "./queue.js";
+import { ELIGIBLE } from "./eligibility.js";
 import { LATEST_PURSUIT } from "./latest.js";
 
 export interface SampleHeader {
@@ -1054,7 +1075,7 @@ export async function drawSample(opts: {
   const today = TODAY();
 
   const id = await tx(async (q) => {
-    const pop = await q.one<{ total: string }>(
+    const pop = await q.one<{ total: number }>(
       `SELECT count(*) AS total
          FROM solicitation s
          LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
@@ -1149,7 +1170,7 @@ export async function queuePage(
         SELECT 1 FROM triage_sample_item i
          WHERE i.sample_id = ${sample.id} AND i.solicitation_id = s.id)` : "";
 
-  const counted = await one<{ total: string }>(
+  const counted = await one<{ total: number }>(
     `SELECT count(*) AS total
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
@@ -1400,7 +1421,7 @@ export async function volumePerSourcePerWeek(): Promise<VolumeReport> {
       ORDER BY src.name, week`,
   );
 
-  const counts = await one<{ total: string; excluded: string }>(
+  const counts = await one<{ total: number; excluded: number }>(
     `SELECT count(*) AS total,
             count(*) FILTER (
               WHERE posted_at IS NULL OR posted_at !~ '^\\d{4}-\\d{2}-\\d{2}'
@@ -1808,8 +1829,7 @@ test("a record carries its fields, each with value, confidence and quote", async
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const closes = body.fields.find((f: any) => f.field_name === "closes_at");
   expect(closes.value).toBe("2026-09-17");
   expect(closes.confidence).toBe(1);
@@ -1838,8 +1858,7 @@ test("a disagreement is shown beneath the winner, not resolved away", async () =
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const closes = body.fields.find((f: any) => f.field_name === "closes_at");
 
   expect(closes.value).toBe("2026-09-17");
@@ -1862,8 +1881,7 @@ test("absent and never-looked-for are different states", async () => {
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const looked = body.fields.find((f: any) => f.field_name === "value_cents");
   const never = body.fields.find((f: any) => f.field_name === "set_aside");
 
@@ -1886,8 +1904,7 @@ test("a record carries its sightings in order as a timeline", async () => {
     [sol],
   );
 
-  const res = await get(`/api/solicitations/${sol}`);
-  const body = (await res.json()) as any;
+  const [, body] = await get(`/solicitations/${sol}`);
   const sightings = body.timeline.filter((e: any) => e.kind === "sighting");
   expect(sightings).toHaveLength(2);
   expect(new Date(sightings[0].at).getTime()).toBeLessThan(
@@ -1896,8 +1913,7 @@ test("a record carries its sightings in order as a timeline", async () => {
 });
 
 test("the solicitation list is bounded", async () => {
-  const res = await get("/api/solicitations?limit=2");
-  const body = (await res.json()) as any;
+  const [, body] = await get("/solicitations?limit=2");
   expect(body.solicitations.length).toBeLessThanOrEqual(2);
 });
 
@@ -1905,26 +1921,18 @@ test("the solicitation list is bounded", async () => {
  * does not catch it. The test that let it through asserted only a 200 --
  * equally true with the clamp deleted. This one asserts the VALUE. */
 test("a negative limit does not become a negative LIMIT", async () => {
-  const res = await get("/api/solicitations?limit=-5");
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as any;
+  const [status, body] = await get("/solicitations?limit=-5");
+  expect(status).toBe(200);
   expect(body.solicitations.length).toBeGreaterThanOrEqual(1);
 });
 ```
 
-If `routes.test.ts` has no `get` helper, add this above the new tests:
-
-```ts
-async function get(path: string) {
-  const server = app.listen(0);
-  const port = (server.address() as any).port;
-  try {
-    return await fetch(`http://127.0.0.1:${port}${path}`);
-  } finally {
-    server.close();
-  }
-}
-```
+> **Controller correction, 2026-08-30 — this brief originally told you to ADD a `get` helper. Do not.** `routes.test.ts` already has one, and a second declaration is a TypeScript redeclaration error. Match the file as it actually is:
+>
+> - **`get` already exists** and returns a TUPLE, not a `Response`: `const get = (p: string): Promise<Res> => fetch(base + p).then(async r => [r.status, await r.json()] as Res)`. The tests above are written against that shape — `const [, body] = await get(...)`. Its comment explains why the body is typed rather than left `unknown`: an untyped body fails typecheck while vitest passes, "exactly the split that let a red gate through once already."
+> - **`base` already ends in `/api`**, so paths are `/solicitations/5`, never `/api/solicitations/5`.
+> - **The server is started once in `beforeAll` and closed in `afterAll`** — do not spin one up per call.
+> - **`insert` and `run` are NOT imported in this file yet.** The dynamic import currently reads `const { close } = await import("../db/index.js");` — extend it to `const { close, insert, run } = await import("../db/index.js");`. The fixtures above need both.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -2095,8 +2103,16 @@ Create `app/client/src/shell/Shell.test.tsx`:
 ```tsx
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
 import { Shell } from "./Shell";
+
+/* CONTROLLER RULING (pre-flight, 2026-08-30): every Shell render is wrapped.
+ * Shell's nav renders <Link to="/">, and <Link> outside a Router THROWS --
+ * so four of the five tests below would have failed for a reason that has
+ * nothing to do with what they assert. */
+const render = (ui: ReactNode) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
 
 const SOURCES = [
   { id: 1, name: "SAM.gov", health: "ok", enabled: true, last_run_at: "2026-08-28T04:03:59Z" },
@@ -2270,33 +2286,30 @@ Create `app/client/src/shell/Shell.css`:
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--ground);
+  background: var(--ground-canvas);
 }
 .shell__header {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: 18px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--brdsoft);
 }
-.shell__nav {
-  display: flex;
-  gap: var(--space-3);
-}
+.shell__nav { display: flex; gap: 14px; }
+.shell__nav a { font: var(--type-ui-link); }
 .shell__count {
   margin-left: auto;
-  font: var(--type-ui-action);
+  font: var(--type-metric-counter);
 }
-.shell__main {
-  flex: 1;
-  min-height: 0;
-}
-.shell--reduced .shell__header {
-  gap: var(--space-2);
-}
+.shell__main { flex: 1; min-height: 0; }
+.shell--reduced .shell__header { gap: 12px; }
 ```
 
-> If any token above is not defined in `tokens.css`, use the nearest one that is — `npm run tokens` fails the gate on an invented token. Check `app/client/src/tokens/` before guessing.
+> **Controller ruling, 2026-08-30 — spacing is LITERAL PIXELS, and that is deliberate.** An earlier draft of this CSS used `--space-1` … `--space-5`, `--ground` and `--type-heading`. **None of those exist.** There is no spacing scale in this project at all, and its absence is a recorded decision: STATUS says *"No spacing layer, no shadow layer — Accepted… Extract when the second consumer appears; sixteen primitives and zero composed screens cannot distinguish systematic spacing from incidental,"* and names the extraction a first move **inside** SP6, triggered by *"a composed screen showing which values are systematic."* Every existing primitive stylesheet uses literal px matched against the bundle.
+>
+> So use literal pixels here and invent no tokens. Extracting the scale comes **after** these three screens exist and the recurrence is visible — doing it now would invent a scale from a single instance, which is the exact thing the 3× recurrence bar exists to prevent.
+>
+> **Colour and type ARE tokenised, richly** — about ninety type tokens derived from the bundle. Use real ones and check `app/client/src/tokens/tokens.css` and `type.css` before writing any `var(--…)`. Useful ones here: `--type-heading-hero`, `--type-heading-panel`, `--type-body-buyer`, `--type-body-citation`, `--type-ui-link`, `--type-metric-counter`, `--type-microlabel-cmd`, `--ground-canvas`, `--ground-surface`, `--brdsoft`.
 
 - [ ] **Step 4: Move the routes**
 
@@ -2499,7 +2512,7 @@ const ITEM = {
   org_name: "Indiana FSSA",
   jurisdiction: "IN",
   closes_at: "2026-09-17",
-  value_cents: "45000000",
+  value_cents: 45000000,
   kind: "RFP",
   set_aside: null,
   source_name: "SAM.gov",
@@ -2560,7 +2573,7 @@ test("a deadline disagreement is shown, not resolved away", async () => {
   expect(screen.getByText(/proposals due August 26/)).toBeTruthy();
 });
 
-/* D12. The strip is built and lives on /dev/gallery; it does not render
+/* D13. The strip is built and lives on /dev/gallery; it does not render
  * here. A panel captioned "MACHINE SCORES" showing four dashes reads as
  * "the machine scored this and found nothing". */
 test("no score strip appears on the card", async () => {
@@ -2571,7 +2584,7 @@ test("no score strip appears on the card", async () => {
   expect(screen.queryByText(/machine scores/i)).toBeNull();
 });
 
-/* D14. None of the panel's four facts are extracted. It says so rather than
+/* D15. None of the panel's four facts are extracted. It says so rather than
  * being quietly dropped -- if the session repeatedly wants a fact this
  * panel cannot give, that is a finding the gate should produce. */
 test("the pursuit-cost panel renders, empty and labelled", async () => {
@@ -2653,7 +2666,7 @@ interface QueueItem {
   org_name: string | null;
   jurisdiction: string | null;
   closes_at: string | null;
-  value_cents: string | null;
+  value_cents: number | null;
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
@@ -2678,12 +2691,15 @@ interface QueuePage {
   items: QueueItem[];
 }
 
-/* value_cents is a bigint and arrives as a STRING. Never Number() it into a
- * float -- format the digits. */
-function money(cents: string | null): string {
-  if (!cents) return "—";
-  const whole = cents.length > 2 ? cents.slice(0, -2) : "0";
-  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+/* value_cents is a bigint, and db/index.ts:20 parses OID 20 to Number
+ * centrally -- so this arrives as a NUMBER over JSON, not a string.
+ *
+ * ⚠️ This function previously called .slice() on it, which throws on a
+ * number. It passed its test only because the fixture quoted the value.
+ * That is a green test over a browser crash -- keep the fixture a number. */
+function money(cents: number | null): string {
+  if (cents === null || cents === undefined) return "—";
+  return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 }
 
 export function Queue() {
@@ -2741,7 +2757,7 @@ export function Queue() {
       <Shell reduced queueCount={0}>
         <div className="queue__cleared">
           <h2>Queue cleared</h2>
-          {/* D13. The SVRC calls this content undesigned; this is the
+          {/* D14. The SVRC calls this content undesigned; this is the
             * smallest thing that keeps the session alive rather than
             * dead-ending it. */}
           <ShortcutCard title="Draw another sample" description="Measure a different source." />
@@ -2785,7 +2801,7 @@ export function Queue() {
           </Callout>
         )}
 
-        {/* D14: Region 1.1.3 renders and says what it does not have. */}
+        {/* D15: Region 1.1.3 renders and says what it does not have. */}
         <FactPanel
           title="PURSUIT COST"
           note="Required forms, conference, references and notarization are not yet extracted."
@@ -2839,13 +2855,17 @@ export function Queue() {
 Create `app/client/src/triage/Queue.css` with layout only — no colours that are not tokens:
 
 ```css
-.queue__title { font: var(--type-heading); margin: 0 0 var(--space-2); }
-.queue__facts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.queue__decision { display: flex; gap: var(--space-2); align-items: flex-start; margin-top: var(--space-4); }
+.queue__title { font: var(--type-heading-hero); margin: 0 0 10px; }
+.queue__facts { display: flex; flex-wrap: wrap; gap: 14px; }
+.queue__facts span { font: var(--type-body-buyer); }
+.queue__decision { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; }
 .queue__decision textarea { flex: 1; min-height: 3rem; }
-.queue__sample-banner { padding: var(--space-2) var(--space-4); }
-.queue__cleared { display: grid; gap: var(--space-3); padding: var(--space-5); }
+.queue__keys { font: var(--type-microlabel-cmd); align-self: center; }
+.queue__sample-banner { padding: 10px 18px; }
+.queue__cleared { display: grid; gap: 14px; padding: 24px; }
 ```
+
+> Literal pixels, real type tokens — see the ruling in Task 9. There is no spacing scale in this project and inventing one here is explicitly out of scope.
 
 - [ ] **Step 4: Drop the placeholder**
 
@@ -3191,7 +3211,7 @@ test("absent and never-looked-for read differently", async () => {
   expect(screen.getByText(/not yet looked for/i)).toBeTruthy();
 });
 
-/* D11. The bytes were discarded by SP4's ruling, so the link out is the
+/* D12. The bytes were discarded by SP4's ruling, so the link out is the
  * only route back to the original. */
 test("a document links out and shows its extracted text", async () => {
   renderRecord();
@@ -3324,7 +3344,7 @@ export function Record() {
 
       <Section recessed>
         <MicroLabel>DOCUMENTS</MicroLabel>
-        {/* D11: the bytes were discarded by SP4's ruling, so what is here is
+        {/* D12: the bytes were discarded by SP4's ruling, so what is here is
           * the stored text and a link back to the original. */}
         <Callout>
           Documents are parsed and discarded — a citation quotes the extracted
@@ -3362,15 +3382,20 @@ export function Record() {
 Create `app/client/src/record/Record.css`:
 
 ```css
-.record__title { font: var(--type-heading); margin: var(--space-4) var(--space-4) 0; }
-.record__buyer { margin: 0 var(--space-4) var(--space-4); }
-.record__field { display: grid; gap: var(--space-1); padding: var(--space-2) 0; }
-.record__conflict { padding-left: var(--space-4); }
-.record__quote, .record__conflict blockquote { margin: 0; font-style: italic; }
-.record__doc { padding: var(--space-2) 0; }
+.record__title { font: var(--type-heading-hero); margin: 18px 18px 0; }
+.record__buyer { margin: 0 18px 18px; font: var(--type-body-buyer); }
+.record__field { display: grid; gap: 4px; padding: 10px 0; }
+.record__field-name { font: var(--type-microlabel); }
+.record__field-value { font: var(--type-data-value); }
+.record__field-conf { font: var(--type-data-conf); }
+.record__conflict { padding-left: 18px; }
+.record__quote, .record__conflict blockquote { margin: 0; font: var(--type-body-citation); }
+.record__doc { padding: 10px 0; }
 .record__text { white-space: pre-wrap; max-height: 12rem; overflow: auto; }
-.record__event { display: flex; gap: var(--space-3); }
+.record__event { display: flex; gap: 14px; }
 ```
+
+> Literal pixels, real type tokens — see the ruling in Task 9. `--type-data-conf` is the bundle's own confidence-figure token, which is exactly what the confidence column is.
 
 - [ ] **Step 4: Drop the placeholder**
 
@@ -3410,15 +3435,15 @@ git commit -m "The record: fields with their citations, conflicts kept visible, 
 - Consumes: everything above
 - Produces: documentation only. No code.
 
-- [ ] **Step 1: Write D11–D15**
+- [ ] **Step 1: Write D12–D16**
 
 Append to `docs/admin-deviations.md`, following the existing entry format (each carries what the reference says, what was built, and why):
 
-- **D11** — `View 2.4` shows stored `extracted_text` and a link to `source_url`, not the bundle inline. Migration 008 discarded the bytes by SP4's ruling; there is nothing to render inline.
-- **D12** — the score strip does not render on the composed queue card. Records both dated rulings (SVRC `Region 1.1.2`, 2026-08-11 vs STATUS, 2026-08-13), Matt's resolution on 2026-08-30, and the correction that the vestigial look was NOT undesigned — `ScoreBar`'s null branch was built at SP2.
-- **D13** — `View 1.3 : Queue Cleared` content, invented because the SVRC calls it undesigned. Three `ShortcutCard`s.
-- **D14** — `Region 1.1.3` renders empty and states that its four facts are unextracted.
-- **D15** — default order is deadline-soonest-first; the ratified `AMBIGUITY FIRST` default needs a scorer and cannot ship. Note that the SVRC's answer returns intact when qualification is designed.
+- **D12** — `View 2.4` shows stored `extracted_text` and a link to `source_url`, not the bundle inline. Migration 008 discarded the bytes by SP4's ruling; there is nothing to render inline.
+- **D13** — the score strip does not render on the composed queue card. Records both dated rulings (SVRC `Region 1.1.2`, 2026-08-11 vs STATUS, 2026-08-13), Matt's resolution on 2026-08-30, and the correction that the vestigial look was NOT undesigned — `ScoreBar`'s null branch was built at SP2.
+- **D14** — `View 1.3 : Queue Cleared` content, invented because the SVRC calls it undesigned. Three `ShortcutCard`s.
+- **D15** — `Region 1.1.3` renders empty and states that its four facts are unextracted.
+- **D16** — default order is deadline-soonest-first; the ratified `AMBIGUITY FIRST` default needs a scorer and cannot ship. Note that the SVRC's answer returns intact when qualification is designed.
 
 - [ ] **Step 2: Discharge SP4's deferred bullets**
 
@@ -3441,7 +3466,7 @@ Expected: exit 0.
 
 ```bash
 git add docs STATUS.md
-git commit -m "Deviations D11-D15, and the docs brought up to what SP6 actually built"
+git commit -m "Deviations D12-D16, and the docs brought up to what SP6 actually built"
 ```
 
 ---
@@ -3499,7 +3524,7 @@ Confirm a field shows **value, confidence and the quoted passage** (bullet 5), a
 curl -sS "$BASE/api/triage/metrics"
 ```
 
-Record volume per source per week, Interested-per-hundred per source, and **`excluded_no_posted_at`**. Quote the rate only alongside `population_size`, `drawn` and `decided`.
+Record volume per source per week, Interested-per-hundred per source, and **`excluded_unparseable_posted_at`** (renamed from `excluded_no_posted_at` in the fix wave; the API no longer returns the old name). Quote the rate only alongside `population_size`, `drawn` and `decided`.
 
 - [ ] **Step 7: Write the result into STATUS.md and commit**
 

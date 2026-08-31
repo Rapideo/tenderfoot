@@ -7,6 +7,8 @@ import {
 } from "react-router-dom";
 import { Health } from "./Health";
 import { Admin } from "./admin/Admin";
+import { Queue } from "./triage/Queue";
+import { Record } from "./record/Record";
 
 /* The gallery is a DEV-ONLY route. It exists so every primitive can be seen
  * and signed off before any feature is built on it (plan of action §6, SP2's
@@ -56,7 +58,12 @@ if (import.meta.env.DEV) {
 const router = createBrowserRouter(
   createRoutesFromElements(
     <>
-      <Route path="/" element={<Health />} />
+      {/* The queue is the daily driver and takes the root. The Health page
+        * moves to /health; `GET /api/health` -- the endpoint production
+        * verification actually calls -- is untouched by this. */}
+      <Route path="/" element={<Queue />} />
+      <Route path="/solicitation/:id" element={<Record />} />
+      <Route path="/health" element={<Health />} />
       {/* NOT dev-only, unlike the gallery above, and that is a departure
         * from SP1's plan text ("a dev-only route ...").
         *
