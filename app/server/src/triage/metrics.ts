@@ -29,11 +29,31 @@ export interface VolumeReport {
  * Fixed here by constraining month to 01-12 and day to 01-31, which rules
  * out the realistic corruption this project actually produces (all-9s or
  * all-0s placeholder dates, an out-of-range month from a parsing bug)
- * without a second query or a PL/pgSQL helper. It does NOT catch a
- * calendar-invalid-but-range-valid date (2026-02-30): that residual gap is
- * accepted rather than closed with a stored function, per "smallest thing,
- * numbered" -- if it ever fires in practice, the fix is a real DATE-parsing
- * guard, not a wider regex. */
+ * without a second query or a PL/pgSQL helper.
+ *
+ * DELIBERATELY UN-ANCHORED at the end. This is a prefix check, not a full
+ * validation, and that is load-bearing: posted_at legitimately holds full
+ * ISO timestamps ("2026-03-04T12:00:00Z"), and a `$`-anchored regex would
+ * exclude every one of those real, castable rows from the gate's own
+ * volume series -- wrongly discarding good data is a worse error than the
+ * one this predicate exists to catch. The un-anchored end is why the CAST
+ * below reads only substring(posted_at, 1, 10), never posted_at::date
+ * directly: a trailing-garbage value like "2026-01-01 (TBD)" matches this
+ * regex on its first ten characters (a valid date) and would otherwise
+ * still reach an unconstrained ::date cast on the FULL string and crash it
+ * -- the exact "9999-99-99" failure shape, recurring through the gap this
+ * regex's own permissiveness leaves open. Constraining the cast's input to
+ * the ten characters the regex actually validated closes that class, not
+ * just the instance: the cast can now never see anything the regex did not
+ * already range-check.
+ *
+ * Residual gap, still open and still accepted rather than closed with a
+ * stored function ("smallest thing, numbered"): a calendar-invalid but
+ * range-valid first-ten-characters date, e.g. "2026-02-30...", still
+ * matches this regex (month 02, day 30 both pass the 01-12/01-31 range
+ * check) and still crashes substring(posted_at,1,10)::date. If that ever
+ * fires in practice, the fix is a real DATE-parsing guard, not a wider
+ * regex. */
 const POSTED_AT_LOOKS_LIKE_A_DATE = String.raw`^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])`;
 
 /* VOLUME PER SOURCE PER WEEK, computed on posted_at and never on seen_at.
@@ -47,12 +67,12 @@ export async function volumePerSourcePerWeek(): Promise<VolumeReport> {
   const weeks = await all<WeeklyVolume>(
     `SELECT s.source_id,
             src.name AS source_name,
-            to_char(date_trunc('week', s.posted_at::date), 'YYYY-MM-DD') AS week,
+            to_char(date_trunc('week', substring(s.posted_at, 1, 10)::date), 'YYYY-MM-DD') AS week,
             count(*)::int AS solicitations
        FROM solicitation s
        JOIN source src ON src.id = s.source_id
       WHERE s.posted_at ~ $1
-      GROUP BY s.source_id, src.name, date_trunc('week', s.posted_at::date)
+      GROUP BY s.source_id, src.name, date_trunc('week', substring(s.posted_at, 1, 10)::date)
       ORDER BY src.name, week`,
     [POSTED_AT_LOOKS_LIKE_A_DATE],
   );

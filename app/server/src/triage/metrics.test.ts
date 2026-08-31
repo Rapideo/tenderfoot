@@ -105,6 +105,71 @@ test("a posted_at that looks like a date but is not a valid one is excluded, not
   expect(after.excluded_no_posted_at).toBe(before.excluded_no_posted_at + 1);
 });
 
+/* SECOND ROUND, SAME FAILURE CLASS. Code review (2026-08-30) found that
+ * POSTED_AT_LOOKS_LIKE_A_DATE has no end anchor -- deliberately, because
+ * anchoring with `$` would exclude legitimate ISO timestamps such as
+ * "2026-03-04T12:00:00Z" (real, castable rows the gate's own volume series
+ * must count -- see the next test). But un-anchored means a value like
+ * "2026-01-01 (TBD)" -- valid ten-character date prefix, trailing garbage
+ * -- ALSO matches, is NOT excluded, and previously reached an unconstrained
+ * `posted_at::date` cast on the FULL string, which Postgres rejects. Same
+ * crash shape as "9999-99-99", one substring narrower.
+ *
+ * This row is not an exclusion: its first ten characters ARE a valid date
+ * (2026-01-01, Monday-of-week 2025-12-29), so it belongs in that week's
+ * count. The fix -- casting substring(posted_at, 1, 10) rather than
+ * posted_at -- makes the cast see only what the regex already
+ * range-validated, so trailing content after those ten characters can
+ * never reach it.
+ *
+ * Uses its OWN source, not the shared `source`: `source` is still eligible
+ * (undecided) population for the sampling tests further down this file,
+ * whose seeded draws (`drawSample({ ..., seed: "rate-seed" })`) depend on
+ * EXACTLY which ids are eligible at draw time. Adding rows to `source`
+ * here would shift that seeded permutation and could silently drop one of
+ * the specific ids those later tests decide on out of the drawn sample --
+ * discovered by running into it directly: two extra `source` rows here
+ * were enough to do exactly that to the very next test in the file. */
+test("trailing garbage after a valid date prefix does not crash the report, and the row is counted", async () => {
+  const trailingSource = await insert(`INSERT INTO source (name) VALUES ('trailing garbage source') RETURNING id`);
+  await insert(
+    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
+     VALUES ('date with trailing junk', $1, '2026-01-01 (TBD)', '2027-06-01') RETURNING id`,
+    [trailingSource],
+  );
+
+  const report = await volumePerSourcePerWeek();
+
+  // Not an exclusion: the first ten characters ARE a valid date.
+  const mine = report.weeks.filter((w) => w.source_id === trailingSource);
+  const week = mine.find((w) => w.week === "2025-12-29");
+  expect(week).toBeDefined();
+  expect(week!.solicitations).toBe(1);
+});
+
+/* THE OTHER HALF OF THE SAME FIX: a real ISO timestamp must still be
+ * counted, in the correct week -- this is exactly what an end-anchored
+ * regex would have wrongly excluded, and exactly why the fix reaches for
+ * substring() on the CAST rather than tightening the regex's end.
+ *
+ * Own source, same reason as the test above. */
+test("a full ISO timestamp still lands in the correct week bucket", async () => {
+  const isoSource = await insert(`INSERT INTO source (name) VALUES ('iso timestamp source') RETURNING id`);
+  await insert(
+    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
+     VALUES ('posted with a timestamp', $1, '2026-03-04T12:00:00Z', '2027-06-01') RETURNING id`,
+    [isoSource],
+  );
+
+  const report = await volumePerSourcePerWeek();
+  const mine = report.weeks.filter((w) => w.source_id === isoSource);
+
+  // Monday-of-week for 2026-03-04 is 2026-03-02.
+  const week = mine.find((w) => w.week === "2026-03-02");
+  expect(week).toBeDefined();
+  expect(week!.solicitations).toBe(1);
+});
+
 test("Interested-per-hundred reports what it was measured over", async () => {
   const ids: number[] = [];
   for (let i = 0; i < 10; i++) ids.push(await sol(`rate ${i}`, "2026-08-01"));
