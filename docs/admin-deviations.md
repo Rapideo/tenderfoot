@@ -482,3 +482,30 @@ returns `processed`/`failed`/`remaining`; discover returns
 data.documents ?? 0` into one sentence, which prints a zero for a key the
 endpoint never sends — a number an operator cannot tell from a real zero.
 The presence of `remaining` selects the wording instead.
+
+## D11 — the bundle uses two different words for one health value, and this screen surfaces the one that doesn't say "failing"
+
+*(SP6 T14 may renumber this if D11 collides with a number assigned elsewhere first.)*
+
+`health: "failing"` is one database value, but the frozen V1.2 bundle names it
+two different ways in two different places: the Source Registry row (via
+`StatusDot`) reads "Failing" verbatim, while the persistent footer chrome
+(`StatusBar`, index ~617384, the control SP6's `Shell` wires up) reads "N
+DEGRADED" verbatim. Both were transcribed faithfully from their own bundle
+location in SP2 (`StatusDot.tsx`, `StatusBar.tsx`) — this is not a case of two
+words carrying different meanings, and it is not a deliberate semantic
+distinction. It is the frozen bundle itself being inconsistent, and SP2's
+"copy is specification" discipline preserved that inconsistency rather than
+inventing a resolution for it.
+
+SP6 T9's `Shell` composes `StatusBar` into the product's persistent chrome,
+which means the word a user actually sees for this fault is "DEGRADED," not
+"failing" — even though the health enum, the API, and the Source Registry row
+all call it `failing`. `Shell.test.tsx` briefly asserted the word "failing"
+would appear in `Shell`'s rendered output (an unverified assumption caught in
+review); the test was corrected to assert the bundle copy `StatusBar` actually
+renders instead of inventing a `Shell`-level translation to make that
+assumption true. No production markup was added to reconcile the two words.
+
+Harmonising "Failing" and "DEGRADED" into one word is a copy decision, not an
+implementation one — it belongs to Matt, not to this slice.

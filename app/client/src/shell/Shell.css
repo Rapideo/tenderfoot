@@ -19,18 +19,3 @@
 }
 .shell__main { flex: 1; min-height: 0; }
 .shell--reduced .shell__header { gap: 12px; }
-
-/* See Shell.tsx's DEVIATION comment: the domain words "failing"/"rot" have
- * an accessible home here, separate from StatusBar's bundle-matched visible
- * copy ("DEGRADED"), which this task does not touch. */
-.shell__health-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}

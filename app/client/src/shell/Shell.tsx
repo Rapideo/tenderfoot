@@ -80,30 +80,12 @@ export function Shell({
         * renders zeros while the request is in flight says "all clear"
         * before it knows anything. */}
       {summary && (
-        <>
-          {/* DEVIATION (task-9, RED phase): StatusBar's own copy is the
-            * bundle's display string verbatim -- "N DEGRADED", not "N
-            * failing" -- locked byte-for-byte by StatusBar.test.tsx
-            * ("renders the counts in the bundle's exact separator
-            * format"), which this task must not touch: that copy was
-            * transcribed and signed off in task 8 ("copy is
-            * specification"). `rot` needs no supplement -- StatusBar's own
-            * "N ROT SUSPECTED" already contains the word "rot" -- but
-            * `failing` is the actual database health value (migration
-            * 006's enum) and a reader relying on assistive tech should not
-            * have to know that this product's display word for it is
-            * "DEGRADED". This visually-hidden line gives that one domain
-            * word an accessible home without rewriting the bundle-matched
-            * visible copy or duplicating "rot" into a second, ambiguous
-            * match. */}
-          <span className="shell__health-sr">{`${summary.failing} failing`}</span>
-          <StatusBar
-            sources={summary.sources}
-            failing={summary.failing}
-            rotSuspected={summary.rotSuspected}
-            lastRun={summary.lastRun}
-          />
-        </>
+        <StatusBar
+          sources={summary.sources}
+          failing={summary.failing}
+          rotSuspected={summary.rotSuspected}
+          lastRun={summary.lastRun}
+        />
       )}
     </div>
   );
