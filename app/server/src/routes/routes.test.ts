@@ -8,7 +8,7 @@ useTestSchema("test_routes");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { close } = await import("../db/index.js");
+const { close, insert, run } = await import("../db/index.js");
 const { api } = await import("./index.js");
 
 let base = "";
@@ -281,4 +281,117 @@ test("reads remain open: /sources and /profile need no secret", async () => {
   const [pStatus] = await fetch(base + "/profile").then(async (r) => [r.status] as const);
   expect(sStatus).toBe(200);
   expect(pStatus).toBe(200);
+});
+
+/* ---- 2026-08-30: the record endpoint (SP6 Task 8) -----------------------
+ * SP4's demo criteria deferred until a record view existed to prove a
+ * citation is READABLE, not merely stored. This is that view's endpoint. */
+
+test("a record carries its fields, each with value, confidence and quote", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('cited record', 1, '2026-09-17') RETURNING id`,
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, quote, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', NULL, 1.0, 'mechanical')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const closes = body.fields.find((f: any) => f.field_name === "closes_at");
+  expect(closes.value).toBe("2026-09-17");
+  expect(closes.confidence).toBe(1);
+  expect(closes.state).toBe("found");
+});
+
+/* THE FSSA NEAR-MISS, made visible. The listing wins, and the losing value
+ * is still there with its quote -- a rejection you cannot inspect is a bug
+ * you will never find. */
+test("a disagreement is shown beneath the winner, not resolved away", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('conflicted record', 1, '2026-09-17') RETURNING id`,
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-09-17', 'listing', 1.0, 'mechanical')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, quote, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-08-26', 'document',
+             'proposals due August 26, 2026', 0.72, 'mechanical')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const closes = body.fields.find((f: any) => f.field_name === "closes_at");
+
+  expect(closes.value).toBe("2026-09-17");
+  expect(closes.conflicts).toHaveLength(1);
+  expect(closes.conflicts[0].value_text).toBe("2026-08-26");
+  expect(closes.conflicts[0].quote).toContain("August 26");
+});
+
+/* Three states, not two. "We looked and it is not there" is a different
+ * fact from "we never looked", and collapsing them is how a missing ceiling
+ * quietly becomes a guessed one. */
+test("absent and never-looked-for are different states", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('sparse record', 1) RETURNING id`,
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, produced_by)
+     VALUES ($1, 'value_cents', NULL, 'document', 'mechanical')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const looked = body.fields.find((f: any) => f.field_name === "value_cents");
+  const never = body.fields.find((f: any) => f.field_name === "set_aside");
+
+  expect(looked.state).toBe("absent");
+  expect(never.state).toBe("not_looked_for");
+});
+
+test("a record carries its sightings in order as a timeline", async () => {
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('timeline record', 1) RETURNING id`,
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES (1, $1, '2026-08-20T00:00:00Z')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES (1, $1, '2026-08-10T00:00:00Z')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const sightings = body.timeline.filter((e: any) => e.kind === "sighting");
+  expect(sightings).toHaveLength(2);
+  expect(new Date(sightings[0].at).getTime()).toBeLessThan(
+    new Date(sightings[1].at).getTime(),
+  );
+});
+
+test("the solicitation list is bounded", async () => {
+  const [, body] = await get("/solicitations?limit=2");
+  expect(body.solicitations.length).toBeLessThanOrEqual(2);
+});
+
+/* SP4's Task 11 shipped `Number(x) || 10`, where -5 is truthy and Math.min
+ * does not catch it. The test that let it through asserted only a 200 --
+ * equally true with the clamp deleted. This one asserts the VALUE. */
+test("a negative limit does not become a negative LIMIT", async () => {
+  const [status, body] = await get("/solicitations?limit=-5");
+  expect(status).toBe(200);
+  expect(body.solicitations.length).toBeGreaterThanOrEqual(1);
 });

@@ -2,6 +2,8 @@ import { Router } from "express";
 import { all, one, run, tx } from "../db/index.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
 import { requireAdminSecret } from "../lib/adminSecret.js";
+import { resolveField, type FieldRow } from "../extract/precedence.js";
+import { latestPursuitFor } from "../triage/latest.js";
 
 /* SP1 T5-T8. The API surface is deliberately small: read and edit the two
  * configuration objects, and read what has been collected. No scoring, no
@@ -220,15 +222,27 @@ api.get(
   "/solicitations",
   asyncHandler(async (req, res) => {
     const order = req.query.order === "newest" ? "posted_at DESC" : "closes_at ASC";
+    /* BOUNDED. This returned every row -- 9,883 on a deliberately-public
+     * production. Validate before clamping: `Number(x) || 200` accepts a
+     * negative, because -5 is truthy and Math.min does not catch it. */
+    const asInt = (raw: unknown, fallback: number, min: number, max: number) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(min, Math.min(Math.trunc(n), max));
+    };
+    const limit = asInt(req.query.limit, 200, 1, 1000);
+    const offset = asInt(req.query.offset, 0, 0, 2 ** 31 - 1);
+
     const rows = await all(
       `SELECT s.*, o.name AS org_name, o.jurisdiction,
               (SELECT count(*) FROM sighting g WHERE g.solicitation_id = s.id) AS sightings,
               (SELECT count(*) FROM document d WHERE d.solicitation_id = s.id) AS documents
          FROM solicitation s
     LEFT JOIN organization o ON o.id = s.org_id
-     ORDER BY ${order}`,
+     ORDER BY ${order}
+        LIMIT ${limit} OFFSET ${offset}`,
     );
-    res.json({ count: rows.length, order, solicitations: rows });
+    res.json({ count: rows.length, order, limit, offset, solicitations: rows });
   }),
 );
 
@@ -246,15 +260,82 @@ api.get(
 
     /* Sightings joined, because a solicitation is the canonical record produced
      * by merging them (§4.4) and the merge should be inspectable. */
-    res.json({
-      ...row,
-      sightings: await all(
-        `SELECT g.*, src.name AS source_name
-           FROM sighting g JOIN source src ON src.id = g.source_id
-          WHERE g.solicitation_id = $1 ORDER BY g.seen_at`,
-        [id],
-      ),
-      documents: await all("SELECT * FROM document WHERE solicitation_id = $1", [id]),
+    const documents = await all("SELECT * FROM document WHERE solicitation_id = $1", [id]);
+    const sightings = await all<{ id: number; seen_at: string; source_name: string }>(
+      `SELECT g.*, src.name AS source_name
+         FROM sighting g JOIN source src ON src.id = g.source_id
+        WHERE g.solicitation_id = $1 ORDER BY g.seen_at`,
+      [id],
+    );
+
+    /* SIX FIELDS, ALWAYS. A field with no row at all is "never looked for",
+     * which is a different fact from a row with a NULL value ("looked and it
+     * is not there"). Rendering only the rows that exist would collapse the
+     * two, which SVRC View 2.3 forbids in as many words. */
+    const FIELDS = [
+      "closes_at", "qa_closes_at", "prebid_at", "prebid_required", "set_aside", "value_cents",
+    ] as const;
+
+    const raw = await all<
+      FieldRow & { field_name: string; confidence: number | null; note: string | null }
+    >(
+      `SELECT field_name, value_text, origin, quote, document_id, confidence, note
+         FROM extracted_field WHERE solicitation_id = $1`,
+      [id],
+    );
+
+    const fields = FIELDS.map((name) => {
+      const rows = raw.filter((r) => r.field_name === name);
+      if (rows.length === 0) {
+        return {
+          field_name: name, value: null, origin: null, confidence: null,
+          quote: null, note: null, state: "not_looked_for" as const, conflicts: [],
+        };
+      }
+      const resolved = resolveField(rows);
+      const winner = rows.find(
+        (r) => r.value_text === resolved.value && r.origin === resolved.origin,
+      );
+      return {
+        field_name: name,
+        value: resolved.value,
+        origin: resolved.origin,
+        confidence: winner?.confidence ?? null,
+        quote: winner?.quote ?? null,
+        note: winner?.note ?? null,
+        state: resolved.value === null ? ("absent" as const) : ("found" as const),
+        conflicts: resolved.conflicts.map((c) => ({
+          value_text: c.value_text as string,
+          origin: c.origin,
+          quote: c.quote,
+          confidence: (c as { confidence?: number | null }).confidence ?? null,
+        })),
+      };
     });
+
+    /* The timeline records what the DOCUMENTS did and what the SYSTEM
+     * decided. Entity resolution is the least visible thing this system
+     * does and the easiest to get silently wrong (SVRC View 2.5); this is
+     * the only place a person watches it happen. */
+    const timeline = [
+      ...sightings.map((g) => ({
+        kind: "sighting" as const,
+        at: g.seen_at,
+        source_name: g.source_name,
+        detail: `Seen in ${g.source_name}`,
+      })),
+      ...(row.org_name
+        ? [{
+            kind: "resolution" as const,
+            at: row.created_at as string,
+            source_name: null,
+            detail: `Buyer resolved to ${row.org_name}`,
+          }]
+        : []),
+    ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+    const [decision] = await latestPursuitFor([id]);
+
+    res.json({ ...row, sightings, documents, fields, timeline, decision: decision ?? null });
   }),
 );
