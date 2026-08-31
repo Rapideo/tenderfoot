@@ -120,16 +120,24 @@ Columns `190px minmax(0,1fr) 110px 150px`, header on `--surface2` with `--type-m
 
 ## Summary — what to fix, in the order I would do it
 
-**Buildable now, no new data, no rulings needed:**
-1. **B.2** three-up DEADLINE / EST. VALUE / POSTED fact panel *(largest gap, highest-priority screen)*
-2. **B.3** deadline-disagreement two-up panel *(carries the FSSA risk alone)*
-3. **B.6** two-state decision bar
-4. **D.1** Screen 2 tabs, breadcrumb, subtitle, card wrapper
-5. **B.1** progress/order line, keyboard legend, source chip, card shadow, `max-width:1080px`
-6. **B.5** the `Open full detail →` button — the only visible route to the record
-7. **D.2** document-attributed SOURCE column
+### ✅ DONE 2026-08-31 — items 1–6, both screens deployed and screenshotted
+
+1. ✅ **B.2** three-up DEADLINE / EST. VALUE / POSTED fact panel. `posted_at` threaded through the queue query to feed the third cell; deadline coloured by urgency with a human interval beneath it.
+2. ✅ **B.3** deadline-disagreement two-up panel, header and all, on `--badbg` with `--badbrd2` cells. Both values with their sources, resolving nothing.
+3. ✅ **B.6** two-state decision bar. Pass opens the reason step; chips stay parked, the mode does not.
+4. ✅ **D.1** Screen 2 frame: `max-width:1180px`, `← BACK TO QUEUE` / `ALL OPPORTUNITIES` crumbs, card wrapper, `buyer · source · closes date` subtitle, and the five tabs. Two are parked and **disclose the parking rather than inventing content** — see the note below.
+5. ✅ **B.1** progress/`ORDER` line, keyboard legend, source and tag chips, `max-width:1080px` page frame, buyer-note treatment.
+6. ✅ **B.5** the `Open full detail →` label on the route to the record.
+
+⚠️ **Two defects the first screenshot caught, both introduced by the fix itself and both since corrected:** the `.queue`/`.queue__inner` frame was written into the stylesheet and never wrapped around the markup, so the card spanned the viewport; and `.queue__keys` was silently dropped when `Queue.css` was rewritten wholesale, so the undo hint lost its type. **Neither had a failure mode — a dropped CSS rule degrades rather than errors, and no test would have caught either.** Only the screenshot did.
+
+⚖️ **New conflict raised by item 4, for Matt.** The bundle shows five tabs; two of them (`Brief`, `Scores & Evidence`) are parked for V1. They are currently rendered and state plainly that they are parked. The alternative is to omit them, which would diverge from the bundle's tab bar. Recorded, not resolved.
+
+**Still buildable now, no new data, no rulings:**
+7. **D.2** document-attributed SOURCE column (`Scope.pdf §3` rather than `document`) — `extracted_field.document_id` already exists
 8. **A.1.3** queue counter treatment; **A.1** triage "nav collapsed" affordance
-9. **B.1** buyer-note callout *(entity resolution, surfaced on the card)*
+9. **B.1** buyer-note callout for entity resolution *(the treatment now exists; the data is not yet wired to it)*
+10. **B.6** the decision bar does not yet sit on `--surface4` behind its own top border as a distinct band
 
 **Needs Matt's ruling:**
 - **B.4** score strip: bundle renders it, D13 says no

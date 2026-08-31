@@ -8,6 +8,7 @@ const RECORD = {
   id: 7,
   title: "Care-management workflow redesign",
   org_name: "Indiana FSSA",
+  source_name: "SAM.gov",
   closes_at: "2026-09-17",
   fields: [
     {
@@ -56,6 +57,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/* Screen 2 is TABBED, as the bundle has it. Extracted Fields is the default;
+ * Documents and Timeline need their tab. */
+async function openTab(name: RegExp) {
+  screen.getByRole("tab", { name }).click();
+  await waitFor(() => expect(screen.getByRole("tab", { name })).toHaveProperty("ariaSelected", "true"));
+}
+
 function renderRecord(body: unknown = RECORD) {
   vi.stubGlobal(
     "fetch",
@@ -88,7 +96,11 @@ function renderRecord(body: unknown = RECORD) {
  * confirmed by re-running the same mutation, which now fails this test. */
 test("a field shows its value, its confidence, and its quoted passage", async () => {
   renderRecord();
-  await waitFor(() => expect(screen.getByText(/2026-09-17/)).toBeTruthy());
+  /* getAllByText: "2026-09-17" now renders TWICE -- in the field's VALUE cell
+   * and in the card subtitle ("… · closes 2026-09-17"), which the bundle puts
+   * there. A single-match query would fail for a reason unrelated to what
+   * this test is about. */
+  await waitFor(() => expect(screen.getAllByText(/2026-09-17/).length).toBeGreaterThan(0));
   expect(screen.getByText(/100%/)).toBeTruthy();
   /* The near-miss conflict's own confidence and quote -- both are absent
    * from the winning field itself (a listing-origin value has no extracted
@@ -118,7 +130,8 @@ test("absent and never-looked-for read differently", async () => {
  * only route back to the original. */
 test("a document links out and shows its extracted text", async () => {
   renderRecord();
-  await waitFor(() => expect(screen.getByText(/SCOPE OF WORK.docx/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
   const link = screen.getByRole("link", { name: /SCOPE OF WORK.docx/i });
   expect(link.getAttribute("href")).toBe("https://sam.gov/a.docx");
   expect(screen.getByText(/The deadline is September 17, 2026/)).toBeTruthy();
@@ -127,12 +140,63 @@ test("a document links out and shows its extracted text", async () => {
 /* D12, fixed: media_type was declared on Doc and never rendered. */
 test("a document shows its media type", async () => {
   renderRecord();
-  await waitFor(() => expect(screen.getByText(/SCOPE OF WORK.docx/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
   expect(screen.getByText("docx")).toBeTruthy();
 });
 
 test("the timeline shows what the documents did and what the system decided", async () => {
   renderRecord();
-  await waitFor(() => expect(screen.getByText(/Seen in SAM.gov/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole("tab", { name: /timeline/i })).toBeTruthy());
+  await openTab(/timeline/i);
+  expect(screen.getByText(/Seen in SAM.gov/)).toBeTruthy();
   expect(screen.getByText(/Buyer resolved to Indiana FSSA/)).toBeTruthy();
+});
+
+/* SCREEN 2 IS TABBED -- that is the bundle's organising principle for this
+ * screen, and stacking every section down one page was the structural gap the
+ * 2026-08-31 fidelity audit found. */
+test("the record is tabbed, defaulting to Extracted Fields", async () => {
+  renderRecord();
+  await waitFor(() => expect(screen.getByRole("tab", { name: /extracted fields/i })).toBeTruthy());
+
+  const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+  expect(tabs).toEqual([
+    "Extracted Fields", "Documents", "Timeline", "Brief", "Scores & Evidence",
+  ]);
+  expect(screen.getByRole("tab", { name: /extracted fields/i })).toHaveProperty(
+    "ariaSelected", "true",
+  );
+
+  /* One tab's content at a time -- the timeline must NOT be on screen while
+   * Fields is selected, or the tabs are decoration over a stacked page. */
+  expect(screen.queryByText(/Seen in SAM.gov/)).toBeNull();
+});
+
+/* The two parked tabs disclose the parking rather than inventing content --
+ * the Brief's live half is qualification, and View 2.2 is parked with scoring. */
+test("the parked tabs say they are parked, and invent nothing", async () => {
+  renderRecord();
+  await waitFor(() => expect(screen.getByRole("tab", { name: /^brief$/i })).toBeTruthy());
+
+  await openTab(/^brief$/i);
+  expect(screen.getByText(/parked for V1/i)).toBeTruthy();
+  expect(screen.getByText(/qualification is\s+undesigned|undesigned by decision/i)).toBeTruthy();
+
+  await openTab(/scores & evidence/i);
+  expect(screen.getByText(/no scores to cite/i)).toBeTruthy();
+});
+
+/* The bundle puts a route back to the queue on this screen; ours had none but
+ * the browser button. */
+test("there is a way back to the queue", async () => {
+  renderRecord();
+  await waitFor(() => expect(screen.getByRole("button", { name: /back to queue/i })).toBeTruthy());
+  expect(screen.getByRole("button", { name: /all opportunities/i })).toBeTruthy();
+});
+
+/* The bundle's subtitle is "buyer · source · closes date", not the buyer alone. */
+test("the subtitle names the buyer, the source and the closing date", async () => {
+  renderRecord();
+  await waitFor(() => expect(screen.getByText(/Indiana FSSA · SAM.gov · closes 2026-09-17/)).toBeTruthy());
 });

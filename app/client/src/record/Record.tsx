@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import { Callout, MicroLabel, Section, TableRow } from "../primitives";
 import "./Record.css";
@@ -38,6 +38,8 @@ interface RecordBody {
   id: number;
   title: string;
   org_name: string | null;
+  source_name: string | null;
+  closes_at: string | null;
   fields: Field[];
   documents: Doc[];
   timeline: Event[];
@@ -88,9 +90,30 @@ function stateLabel(f: Field): string {
   return f.origin ?? "";
 }
 
+/* The bundle's five tabs, in its order and with its labels. Two of them
+ * (Brief, Scores & Evidence) are PARKED for V1 -- the Brief's live half is
+ * qualification and View 2.2 is parked with scoring -- so they render the
+ * parking rather than inventing content. The TAB STRUCTURE is the bundle's
+ * and is what Screen 2 is organised around; hiding the tabs entirely would
+ * have been a second, unrecorded divergence.
+ * ⚠️ If Matt would rather parked tabs be absent than disclosed, that is a
+ * prototype-versus-spec call under CLAUDE.md §1 and this is where it lands. */
+const TABS = [
+  ["fields", "Extracted Fields"],
+  ["docs", "Documents"],
+  ["timeline", "Timeline"],
+  ["brief", "Brief"],
+  ["scores", "Scores & Evidence"],
+] as const;
+type TabKey = (typeof TABS)[number][0];
+
 export function Record() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [body, setBody] = useState<RecordBody | null>(null);
+  /* Extracted Fields is the default: it is the tab that carries SP4's two
+   * deferred criterion bullets, and the only one with a citation to read. */
+  const [tab, setTab] = useState<TabKey>("fields");
 
   useEffect(() => {
     let live = true;
@@ -107,9 +130,53 @@ export function Record() {
 
   return (
     <Shell>
-      <h1 className="record__title">{body.title}</h1>
-      <p className="record__buyer">{body.org_name ?? "Buyer unknown"}</p>
+      {/* SCREEN 2's FRAME, matched to the bundle:
+        *   page   max-width:1180px; margin:0 auto; padding:26px 24px 48px
+        *   crumbs flex gap:16px; mono 500 11px ls .08em --text5
+        *   card   --surface / --brd / radius 10 / overflow hidden
+        *   head   padding:24px 28px 0
+        *   h1     600 24px/1.25 Sans ls -.01em max-width:30ch
+        *   sub    400 13.5px/1.5 Sans --text4, "buyer · source · closes date"
+        *   tabs   flex gap:2px; margin-top:20px; border-bottom 1px --brdmid
+        * Note the page is 1180px here, wider than the triage screen's 1080. */}
+      <div className="record">
+        <div className="record__crumbs">
+          <button type="button" className="record__crumb" onClick={() => navigate("/")}>
+            ← BACK TO QUEUE
+          </button>
+          <button type="button" className="record__crumb" onClick={() => navigate("/")}>
+            ALL OPPORTUNITIES
+          </button>
+        </div>
 
+        <div className="record__card">
+          <div className="record__head">
+            <h1 className="record__title">{body.title}</h1>
+            <div className="record__sub">
+              {[body.org_name ?? "Buyer unknown", body.source_name, body.closes_at && `closes ${body.closes_at}`]
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
+
+            <div className="record__tabs" role="tablist">
+              {TABS.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  className={`record__tab${tab === key ? " record__tab--active" : ""}`}
+                  onClick={() => setTab(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="record__body">
+
+      {tab === "fields" && (
       <Section>
         <MicroLabel>EXTRACTED FIELDS</MicroLabel>
 
@@ -180,6 +247,9 @@ export function Record() {
         </div>
       </Section>
 
+      )}
+
+      {tab === "docs" && (
       <Section recessed>
         <MicroLabel>DOCUMENTS</MicroLabel>
         {/* D12: the bytes were discarded by SP4's ruling, so what is here is
@@ -205,6 +275,9 @@ export function Record() {
         ))}
       </Section>
 
+      )}
+
+      {tab === "timeline" && (
       <Section>
         <MicroLabel>TIMELINE</MicroLabel>
         {body.timeline.map((e) => (
@@ -214,6 +287,33 @@ export function Record() {
           </div>
         ))}
       </Section>
+      )}
+
+      {/* PARKED, disclosed rather than faked. View 2.1's live half ("why it
+        * fits", "recommended posture") is qualification against the Firm
+        * Profile, and View 2.2 is parked with scoring outright. Inventing
+        * either would be the back-door reintroduction §6 warns against. */}
+      {tab === "brief" && (
+        <Callout>
+          <strong>The Brief is parked for V1.</strong> Its live half — why this fits, and a
+          recommended posture — is a judgement against the Firm Profile, and qualification is
+          undesigned by decision (design spec §1.1). What remains of it is already carried by the
+          card, the extracted fields and the timeline.
+        </Callout>
+      )}
+
+      {tab === "scores" && (
+        <Callout>
+          <strong>Scores &amp; Evidence is parked for V1.</strong> There are no scores to cite:
+          the assessment table is empty by design. The principle it enforced — a value without a
+          citation is an assertion — moved down a layer to Extracted Fields, which is where a
+          quoted passage now sits beside every value.
+        </Callout>
+      )}
+
+          </div>
+        </div>
+      </div>
     </Shell>
   );
 }

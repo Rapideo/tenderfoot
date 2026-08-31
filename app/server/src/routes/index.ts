@@ -251,8 +251,10 @@ api.get(
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const row = await one(
-      `SELECT s.*, o.name AS org_name, o.jurisdiction
-         FROM solicitation s LEFT JOIN organization o ON o.id = s.org_id
+      `SELECT s.*, o.name AS org_name, o.jurisdiction, src.name AS source_name
+         FROM solicitation s
+         LEFT JOIN organization o ON o.id = s.org_id
+         LEFT JOIN source src ON src.id = s.source_id
         WHERE s.id = $1`,
       [id],
     );

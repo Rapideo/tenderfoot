@@ -17,8 +17,70 @@
  * "confidence / relative-time value", "source field"). Column geometry and
  * gap live on TableRow, which takes the template as its interface. */
 
-.record__title { font: var(--type-heading-hero); margin: 18px 18px 6px; }
-.record__buyer { margin: 0 18px 18px; font: var(--type-body-buyer); color: var(--text4); }
+/* ── Screen 2 frame, matched to the bundle ──────────────────────────────────
+ *   page   max-width:1180px; margin:0 auto; padding:26px 24px 48px
+ *          (wider than the triage screen's 1080px -- the bundle differs)
+ *   crumbs flex gap:16px; margin-bottom:14px
+ *   crumb  border:none; background:none; padding:0;
+ *          font:500 11px/1 Mono; letter-spacing:.08em; color:var(--text5)
+ *   card   --surface / 1px --brd / radius 10 / overflow hidden
+ *   head   padding:24px 28px 0
+ *   h1     600 24px/1.25 Sans; ls -.01em; max-width:30ch
+ *   sub    400 13.5px/1.5 Sans; color:var(--text4)
+ *   tabs   flex; gap:2px; margin-top:20px; border-bottom 1px var(--brdmid)
+ *   tab    padding:11px 14px; 500 12.5px/1 Sans;
+ *          border-bottom:2px solid (--acc when active, else transparent);
+ *          color (--text when active, else --text5); margin-bottom:-1px
+ *   body   padding:24px 28px 30px                                          */
+
+.record { max-width: 1180px; margin: 0 auto; padding: 26px 24px 48px; }
+
+.record__crumbs { display: flex; gap: 16px; margin-bottom: 14px; }
+.record__crumb {
+  border: none;
+  background: none;
+  padding: 0;
+  font: var(--type-microlabel-cmd);
+  letter-spacing: var(--tracking-hint);
+  color: var(--text5);
+  cursor: pointer;
+}
+
+.record__card {
+  background: var(--surface);
+  border: 1px solid var(--brd);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.record__head { padding: 24px 28px 0; }
+.record__sub { font: var(--type-body-brief); color: var(--text4); }
+
+.record__tabs {
+  display: flex;
+  gap: 2px;
+  margin-top: 20px;
+  border-bottom: 1px solid var(--brdmid);
+}
+.record__tab {
+  border: none;
+  background: none;
+  padding: 11px 14px;
+  font: var(--type-ui-view);
+  border-bottom: 2px solid transparent;
+  color: var(--text5);
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.record__tab--active { border-bottom-color: var(--acc); color: var(--text); }
+
+.record__body { padding: 24px 28px 30px; }
+
+.record__title {
+  margin: 0 0 6px;
+  font: var(--type-heading-entity);
+  letter-spacing: var(--tracking-heading);
+  max-width: 30ch;
+}
 
 .record__table {
   border: 1px solid var(--brdmid);
