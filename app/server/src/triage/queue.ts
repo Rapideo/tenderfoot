@@ -1,6 +1,7 @@
 import { all, one } from "../db/index.js";
 import { LATEST_PURSUIT } from "./latest.js";
 import { ELIGIBLE } from "./eligibility.js";
+import { getSample, type SampleHeader } from "./sample.js";
 
 export interface DeadlineConflict {
   value_text: string;
@@ -30,7 +31,7 @@ export interface QueueItem {
 
 export interface QueuePage {
   mode: "all" | "sample";
-  sample: null;
+  sample: SampleHeader | null;
   total: number;
   remaining: number;
   items: QueueItem[];
@@ -39,22 +40,47 @@ export interface QueuePage {
 const NOW_ISO = () => new Date().toISOString().slice(0, 10);
 
 export async function queuePage(
-  opts: { limit?: number; offset?: number } = {},
+  opts: { limit?: number; offset?: number; sampleId?: number } = {},
 ): Promise<QueuePage> {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
   const offset = Math.max(0, opts.offset ?? 0);
   const today = NOW_ISO();
 
+  const sample = opts.sampleId ? await getSample(opts.sampleId) : null;
+  if (opts.sampleId && !sample) throw new Error(`No sample ${opts.sampleId}.`);
+
+  /* In sample mode the population is the DRAWN SET, so membership is
+   * restricted to it -- but eligibility still applies within it, because a
+   * drawn row that has since been decided has left the queue. It has NOT
+   * left the sample: the denominator does not move.
+   *
+   * sample.id is bound rather than interpolated, same discipline as
+   * limit/offset below: it is round-tripped from getSample() (an
+   * IDENTITY column, genuinely a number by the time it is here), but there
+   * is no reason for this query to be the one place in the file that goes
+   * back to string-building a value into SQL. */
+  const scope = (param: number) =>
+    sample
+      ? `AND EXISTS (
+        SELECT 1 FROM triage_sample_item i
+         WHERE i.sample_id = $${param} AND i.solicitation_id = s.id)`
+      : "";
+
+  const countParams: unknown[] = sample ? [today, sample.id] : [today];
   const counted = await one<{ total: number }>(
     `SELECT count(*) AS total
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
-      WHERE ${ELIGIBLE}`,
-    [today],
+      WHERE ${ELIGIBLE} ${scope(2)}`,
+    countParams,
   );
   // Number(...) stays even though setTypeParser already coerces OID 20 --
   // harmless belt-and-braces, not a claim that the driver still hands back a string.
   const total = Number(counted?.total ?? 0);
+
+  const itemsParams: unknown[] = sample
+    ? [today, limit, offset, sample.id]
+    : [today, limit, offset];
 
   /* ONE statement for the page, whatever its size -- including the
    * per-item document counts, sighting counts and deadline conflicts,
@@ -82,11 +108,17 @@ export async function queuePage(
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
        LEFT JOIN organization o ON o.id = s.org_id
        LEFT JOIN source src ON src.id = s.source_id
-      WHERE ${ELIGIBLE}
+      WHERE ${ELIGIBLE} ${scope(4)}
       ORDER BY s.closes_at ASC NULLS LAST, s.id ASC
       LIMIT $2 OFFSET $3`,
-    [today, limit, offset],
+    itemsParams,
   );
 
-  return { mode: "all", sample: null, total, remaining: Math.max(0, total - offset), items };
+  return {
+    mode: sample ? "sample" : "all",
+    sample,
+    total,
+    remaining: Math.max(0, total - offset),
+    items,
+  };
 }
