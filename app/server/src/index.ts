@@ -8,6 +8,7 @@ import { appliedMigrations, migrate } from "./db/migrate.js";
 import { asyncHandler } from "./lib/asyncHandler.js";
 import { api } from "./routes/index.js";
 import { admin } from "./routes/admin.js";
+import { triage } from "./routes/triage.js";
 
 const PORT = Number(process.env.PORT ?? 3003);
 
@@ -17,6 +18,13 @@ app.use(express.json());
 
 /* SP1: profile, source registry, solicitations. */
 app.use("/api", api);
+
+/* SP6: the triage queue, samples, decisions and gate metrics. Mounted
+ * beside `api` rather than merged into it, same reasoning as `admin` below
+ * for a different router -- reads open (queue, samples list, metrics),
+ * writes gated (drawing a sample, recording a decision), and the gate is
+ * per-route inside routes/triage.ts itself, not `triage.use(...)`. */
+app.use("/api", triage);
 
 /* SP3 Task 9: the hand-invoked scrape trigger. Mounted beside /api rather
  * than merged into it -- operator-scoped ingestion is a different surface
