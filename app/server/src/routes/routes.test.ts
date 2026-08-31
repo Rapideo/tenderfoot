@@ -389,9 +389,131 @@ test("the solicitation list is bounded", async () => {
 
 /* SP4's Task 11 shipped `Number(x) || 10`, where -5 is truthy and Math.min
  * does not catch it. The test that let it through asserted only a 200 --
- * equally true with the clamp deleted. This one asserts the VALUE. */
+ * equally true with the clamp deleted. This one asserts the VALUE.
+ *
+ * 2026-08-30 fix-round: the ORIGINAL version of this test still asserted
+ * only a 200 and a non-empty list -- true whether or not bounding exists
+ * at all, since the unbounded query also returns >=1 row and a 200. The
+ * echoed `limit` in the response body is what actually pins the clamp. */
 test("a negative limit does not become a negative LIMIT", async () => {
   const [status, body] = await get("/solicitations?limit=-5");
   expect(status).toBe(200);
+  expect(body.limit).toBe(1);
   expect(body.solicitations.length).toBeGreaterThanOrEqual(1);
+});
+
+/* ---- 2026-08-30 fix round: four gaps the review found -------------------
+ * (1) above closes the vacuous negative-limit test. The rest are new. */
+
+/* The timeline test above never sets org_id, so `row.org_name` stays null
+ * and the RESOLUTION branch never executes -- the JS .sort() has nothing to
+ * prove itself against, because the two sightings already arrive from SQL
+ * in ascending seen_at order. This test forces the resolution event's
+ * timestamp BETWEEN two sighting timestamps, so a correct sort visibly
+ * reorders it into the middle and a missing sort visibly does not. */
+test("the timeline interleaves a resolution event between sightings, sorted by time", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: timeline source') RETURNING id`,
+  );
+  const org = await insert(
+    `INSERT INTO organization (name) VALUES ('Timeline Resolution Org') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, org_id, created_at)
+     VALUES ('interleaved record', $1, $2, '2026-08-15T00:00:00Z') RETURNING id`,
+    [source, org],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES ($1, $2, '2026-08-10T00:00:00Z')`,
+    [source, sol],
+  );
+  await run(
+    `INSERT INTO sighting (source_id, solicitation_id, seen_at)
+     VALUES ($1, $2, '2026-08-20T00:00:00Z')`,
+    [source, sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  expect(body.timeline.map((e: any) => e.kind)).toEqual([
+    "sighting",
+    "resolution",
+    "sighting",
+  ]);
+  expect(body.timeline[1].detail).toContain("Timeline Resolution Org");
+});
+
+/* The upper half of bounding: an offset that never moves the window would
+ * pass the earlier "bounded" test just as easily as a correct one, since
+ * that test only checks the COUNT returned, never WHICH rows. This checks
+ * both the echoed offset and that offset actually walks the page. */
+test("offset skips into the ordered list rather than being ignored", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: offset source') RETURNING id`,
+  );
+  const first = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('offset record A', $1, '2020-01-01') RETURNING id`,
+    [source],
+  );
+  const second = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('offset record B', $1, '2020-01-02') RETURNING id`,
+    [source],
+  );
+
+  const [, page0] = await get("/solicitations?limit=1&offset=0");
+  const [, page1] = await get("/solicitations?limit=1&offset=1");
+
+  expect(page0.offset).toBe(0);
+  expect(page1.offset).toBe(1);
+  expect(page0.solicitations[0].id).toBe(first);
+  expect(page1.solicitations[0].id).toBe(second);
+});
+
+/* The other half: a limit above the ceiling must clamp to it rather than
+ * being honoured -- an unclamped upper bound is the same 9,883-row risk
+ * this whole feature exists to close, just requiring a bigger number. */
+test("a limit above the ceiling clamps to 1000, not the caller's value", async () => {
+  const [, body] = await get("/solicitations?limit=5000");
+  expect(body.limit).toBe(1000);
+});
+
+/* Task 13's client consumes `decision` directly. Two pursuit rows, oldest
+ * first, so this proves LATEST wins rather than merely "a pursuit row
+ * exists" -- the same distinction latestPursuitFor's own DISTINCT ON
+ * exists to guarantee. */
+test("a solicitation's decision reflects its latest pursuit row, not just any pursuit row", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: decision source A') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('decided record', $1) RETURNING id`,
+    [source],
+  );
+  await run(`INSERT INTO pursuit (solicitation_id, state) VALUES ($1, 'New')`, [sol]);
+  await run(
+    `INSERT INTO pursuit (solicitation_id, state, reason, decided_by)
+     VALUES ($1, 'Interested', 'Strong fit', 'M. Smith')`,
+    [sol],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  expect(body.decision.state).toBe("Interested");
+});
+
+/* A solicitation nobody has triaged must read as decision: null -- never
+ * undefined (which JSON.stringify would silently drop from the body) and
+ * never a fabricated 'New', which would claim a decision nobody made. */
+test("a solicitation with no pursuit row returns decision: null", async () => {
+  const source = await insert(
+    `INSERT INTO source (name) VALUES ('T8 fix: decision source B') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('undecided record', $1) RETURNING id`,
+    [source],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  expect(body.decision).toBeNull();
 });
