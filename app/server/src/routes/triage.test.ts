@@ -73,6 +73,17 @@ test("the queue for an unknown sample is a 404, not a 500", async () => {
   expect(res.status).toBe(404);
 });
 
+/* MINOR fix. A non-numeric sample id used to fall through clampInt's
+ * NaN-fallback-to-0 and silently degrade to mode: "all" -- no error, no
+ * sample, the whole queue. An operator who typos the id would triage the
+ * firehose believing it is bounded. */
+test("a non-numeric sample id is a 400, not a silent fallback to the whole queue", async () => {
+  const res = await call("GET", "/api/queue?sample=abc", undefined, {});
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as any;
+  expect(body.field).toBe("sample");
+});
+
 test("drawing a sample without the secret is refused", async () => {
   const res = await call("POST", "/api/triage/samples", { source_id: source, n: 5 }, {});
   expect(res.status).toBe(401);
@@ -137,6 +148,6 @@ test("metrics report both numbers and the exclusion", async () => {
   const res = await call("GET", "/api/triage/metrics", undefined, {});
   expect(res.status).toBe(200);
   const body = (await res.json()) as any;
-  expect(body.volume).toHaveProperty("excluded_no_posted_at");
+  expect(body.volume).toHaveProperty("excluded_unparseable_posted_at");
   expect(Array.isArray(body.interested)).toBe(true);
 });

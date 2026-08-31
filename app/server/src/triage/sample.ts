@@ -68,14 +68,20 @@ export async function drawSample(opts: {
     );
     const sampleId = header!.id;
 
+    /* LIMIT bound as $4, not interpolated (MINOR fix, SP6 final review). n
+     * was already clamped above, so this was never exploitable -- but this
+     * branch's own commit 01aa5c2 argued for closing the class of "value
+     * built into SQL text" rather than relying on the instance being safe
+     * every time. Every other bound value in this file already goes
+     * through a placeholder; this was the one exception. */
     const picked = await q.all<{ id: number }>(
       `SELECT s.id
          FROM solicitation s
          LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
         WHERE s.source_id = $2 AND ${ELIGIBLE}
         ORDER BY md5(s.id::text || $3)
-        LIMIT ${n}`,
-      [today, opts.sourceId, seed],
+        LIMIT $4`,
+      [today, opts.sourceId, seed, n],
     );
 
     /* UNNEST, not a row per INSERT and not a VALUES list -- the established

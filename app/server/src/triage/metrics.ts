@@ -12,8 +12,15 @@ export interface WeeklyVolume {
 export interface VolumeReport {
   weeks: WeeklyVolume[];
   /** Never silently dropped: a series with an unstated exclusion is the same
-   *  class of error as a rate with the wrong denominator. */
-  excluded_no_posted_at: number;
+   *  class of error as a rate with the wrong denominator.
+   *
+   *  MINOR fix, SP6 final review: renamed from excluded_no_posted_at. The
+   *  old name was a misnomer -- this also counts rows that DO have a
+   *  posted_at, just a malformed one (POSTED_AT_LOOKS_LIKE_A_DATE below
+   *  excludes NULL *or* unparseable, not merely absent). At a gate where
+   *  this exclusion is deliberately reported, the label has to match the
+   *  behaviour. */
+  excluded_unparseable_posted_at: number;
   total_rows: number;
 }
 
@@ -88,7 +95,7 @@ export async function volumePerSourcePerWeek(): Promise<VolumeReport> {
 
   return {
     weeks,
-    excluded_no_posted_at: Number(counts?.excluded ?? 0),
+    excluded_unparseable_posted_at: Number(counts?.excluded ?? 0),
     total_rows: Number(counts?.total ?? 0),
   };
 }
@@ -114,7 +121,17 @@ export interface InterestedRate {
  * Three numbers ship together because any one alone misleads:
  * population_size says what the sample represents, `drawn` how big it is,
  * and `decided` how much of it has actually been read. A half-triaged
- * sample then reads as a half-triaged sample rather than as a rate. */
+ * sample then reads as a half-triaged sample rather than as a rate.
+ *
+ * ONE ROW PER SAMPLE, deliberately, not aggregated per source (MINOR fix,
+ * SP6 final review -- protecting a correct decision that had no comment).
+ * Two draws against the same source carry two different `population_size`
+ * values -- the eligible count moves between draws -- so summing their
+ * `interested`/`decided` into one per-source row would recreate exactly the
+ * denominator error migration 012's materialised sample exists to prevent.
+ * Do not "fix" this into a GROUP BY source_id. A reader who wants one number
+ * per source should read the LATEST sample_id for that source, never a sum
+ * across sample_ids. */
 export async function interestedPerHundred(): Promise<InterestedRate[]> {
   return all<InterestedRate>(
     `WITH latest AS (${LATEST_PURSUIT}),

@@ -39,6 +39,21 @@ const clampInt = (raw: unknown, fallback: number, min: number, max: number): num
 triage.get(
   "/queue",
   asyncHandler(async (req, res) => {
+    /* MINOR fix (SP6 final review). clampInt's fallback-on-NaN design is
+     * right for limit/offset -- an unparseable page size should just take
+     * the default page -- but wrong here: clampInt(req.query.sample, ...)
+     * falls back to 0 for anything non-numeric, `if (sampleId)` then reads
+     * that 0 as falsy, and the request silently degrades to mode: "all",
+     * the whole queue, with no error. `?sample=999999` correctly 404s (the
+     * getSample() check below), but `?sample=abc` did not -- an operator
+     * who typos the id would triage the firehose believing it is a bounded
+     * sample. Checked BEFORE clampInt runs, so a non-numeric sample never
+     * reaches it. */
+    if (req.query.sample !== undefined && !Number.isFinite(Number(req.query.sample))) {
+      return res
+        .status(400)
+        .json({ error: `Invalid sample id: ${String(req.query.sample)}.`, field: "sample" });
+    }
     const sampleId = req.query.sample ? clampInt(req.query.sample, 0, 1, 2 ** 31 - 1) : undefined;
     if (sampleId) {
       const sample = await getSample(sampleId);

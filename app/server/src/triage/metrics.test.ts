@@ -79,8 +79,8 @@ test("volume is bucketed by when the buyer posted, not by when we scraped", asyn
 test("rows with no posted_at are excluded, and the exclusion is reported", async () => {
   await sol("no posting date", null);
   const report = await volumePerSourcePerWeek();
-  expect(report.excluded_no_posted_at).toBeGreaterThanOrEqual(1);
-  expect(report.total_rows).toBeGreaterThan(report.excluded_no_posted_at);
+  expect(report.excluded_unparseable_posted_at).toBeGreaterThanOrEqual(1);
+  expect(report.total_rows).toBeGreaterThan(report.excluded_unparseable_posted_at);
 });
 
 /* REAL DEFECT FOUND IN THE BRIEF (not transcribed): its exclusion regex,
@@ -102,7 +102,7 @@ test("a posted_at that looks like a date but is not a valid one is excluded, not
   const after = await volumePerSourcePerWeek();
 
   expect(after.total_rows).toBe(before.total_rows + 1);
-  expect(after.excluded_no_posted_at).toBe(before.excluded_no_posted_at + 1);
+  expect(after.excluded_unparseable_posted_at).toBe(before.excluded_unparseable_posted_at + 1);
 });
 
 /* SECOND ROUND, SAME FAILURE CLASS. Code review (2026-08-30) found that
@@ -170,10 +170,18 @@ test("a full ISO timestamp still lands in the correct week bucket", async () => 
   expect(week!.solicitations).toBe(1);
 });
 
+/* FLAKY TEST FIXED (SP6 final review). This used to draw n: 10 from ~14
+ * eligible rows -- a coin flip whether ids[0] and ids[1], decided on below,
+ * happened to land in that partial draw. It passed only because md5 said
+ * so, not because the assertions held for any run. n: 200 (the same "draw
+ * everything" shape the very next test already uses) makes the draw a
+ * superset of the whole eligible population, so ids[0] and ids[1] are
+ * guaranteed members regardless of the seeded permutation -- every
+ * assertion below stays true, and the coin flip is gone. */
 test("Interested-per-hundred reports what it was measured over", async () => {
   const ids: number[] = [];
   for (let i = 0; i < 10; i++) ids.push(await sol(`rate ${i}`, "2026-08-01"));
-  const sample = await drawSample({ sourceId: source, n: 10, seed: "rate-seed" });
+  const sample = await drawSample({ sourceId: source, n: 200, seed: "rate-seed" });
 
   await recordDecision({ solicitationId: ids[0]!, state: "Interested" });
   await recordDecision({
