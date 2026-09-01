@@ -141,7 +141,81 @@
   color: var(--text7);
 }
 
-.record__doc { padding: 10px 0; }
+/* ── Documents: two panes, per the bundle ──────────────────────────────────
+ *   grid   300px minmax(0,1fr); gap:20px
+ *   list   1px --brdmid; radius 9; overflow hidden; align-self:start
+ *   head   11px 14px on --surface2; 1px --brdsoft2 beneath
+ *   row    flex; gap:10px; padding:10px 14px; 1px --brdrow beneath
+ *   ext    500 9px Mono on the tag colour, --surface text, radius 3
+ *   name   400 12px Sans, ellipsised
+ *   reader 1px --brdmid; radius 9; --surface3; padding 22px; min-height 420 */
+.record__docs { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; }
+
+.record__doclist {
+  border: 1px solid var(--brdmid);
+  border-radius: 9px;
+  overflow: hidden;
+  align-self: start;
+}
+.record__doclist-head {
+  padding: 11px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--brdsoft2);
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-tight);
+  color: var(--text5);
+}
+.record__docrow {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--brdrow);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.record__docrow--on { background: var(--accbg2); }
+.record__ext {
+  font: var(--type-data-badge-sm);
+  color: var(--surface);
+  padding: 4px 5px;
+  border-radius: 3px;
+  flex: none;
+}
+.record__docname {
+  font: var(--type-body-compact);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record__reader {
+  border: 1px solid var(--brdmid);
+  border-radius: 9px;
+  background: var(--surface3);
+  padding: 22px;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.record__reader-head {
+  font: var(--type-microlabel-source);
+  letter-spacing: var(--tracking-label-tight);
+  color: var(--text7);
+}
+.record__reader-link { font: var(--type-body-compact); }
+.record__reader-empty { font: var(--type-body-note); color: var(--text6); }
+.record__reader-note { margin-top: 8px; font: var(--type-body-caveat); color: var(--text7); }
+
+/* ── Timeline: the bundle's rail ───────────────────────────────────────────
+ *   row  112px 20px minmax(0,1fr); gap:14px; align-items:flex-start
+ *   date 500 11.5px/1.6 Mono --text5, right-aligned, padding-top 14
+ *   dot  9x9 round, margin-top 17; line 1px --brdctl2 filling the rest    */
+.record__timeline { display: flex; flex-direction: column; }
 .record__doc-type { font: var(--type-microlabel); color: var(--text7); margin-left: 8px; }
 .record__doc-status { font: var(--type-data-source); color: var(--text7); margin-left: 8px; }
 .record__text {
@@ -156,5 +230,21 @@
   margin-top: 6px;
 }
 
-.record__event { display: flex; gap: 14px; padding: 7px 0; }
-.record__event-at { font: var(--type-data-source); color: var(--text7); }
+.record__event {
+  display: grid;
+  grid-template-columns: 112px 20px minmax(0, 1fr);
+  gap: 14px;
+  align-items: flex-start;
+}
+.record__event-at {
+  font: var(--type-data-conf);
+  color: var(--text5);
+  text-align: right;
+  padding-top: 14px;
+}
+.record__rail { display: flex; flex-direction: column; align-items: center; height: 100%; }
+.record__dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 17px; flex: none; }
+.record__railline { width: 1px; flex: 1; background: var(--brdctl2); }
+.record__event-body { padding: 10px 0 20px; }
+.record__event-title { font: var(--type-subhead-field); }
+.record__event-sub { font: var(--type-body-compact); color: var(--text4); margin-top: 4px; }

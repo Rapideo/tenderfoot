@@ -142,7 +142,10 @@ test("a document shows its media type", async () => {
   renderRecord();
   await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
   await openTab(/documents/i);
-  expect(screen.getByText("docx")).toBeTruthy();
+  /* The bundle tags each file with an UPPERCASE extension chip on a colour --
+   * PDF red, DOCX accent, XLSX green. The property is unchanged: the media
+   * type is shown. Its presentation is now the bundle's. */
+  expect(screen.getByText("DOCX")).toBeTruthy();
 });
 
 test("the timeline shows what the documents did and what the system decided", async () => {
@@ -219,4 +222,55 @@ test("a truncated SOURCE still carries its full filename", async () => {
   });
   await waitFor(() => expect(screen.getByText(long)).toBeTruthy());
   expect(screen.getByText(long).getAttribute("title")).toBe(long);
+});
+
+/* THE DOCUMENTS TAB IS TWO PANES, as the bundle has it: a 300px file list
+ * beside a reader. Selecting a file changes what the reader shows -- a flat
+ * list of every file's text, which is what shipped first, is a different
+ * screen. */
+test("documents are a file list beside a reader, and selecting changes the reader", async () => {
+  renderRecord({
+    ...RECORD,
+    documents: [
+      { id: 1, filename: "SCOPE OF WORK.docx", media_type: "docx",
+        extract_status: "extracted", source_url: "https://sam.gov/a.docx",
+        extracted_text: "The deadline is September 17, 2026." },
+      { id: 2, filename: "Pricing.xlsx", media_type: "xlsx",
+        extract_status: "extracted", source_url: null,
+        extracted_text: "Unit price schedule, sheet 1 of 2." },
+    ],
+  });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+
+  expect(screen.getByText(/BUNDLE — 2 FILES/)).toBeTruthy();
+  expect(screen.getByText("DOCX")).toBeTruthy();
+  expect(screen.getByText("XLSX")).toBeTruthy();
+
+  /* The reader shows the FIRST file, not all of them. */
+  expect(screen.getByText(/deadline is September 17/)).toBeTruthy();
+  expect(screen.queryByText(/Unit price schedule/)).toBeNull();
+
+  /* Selecting the second swaps the reader. */
+  screen.getByText("Pricing.xlsx").closest("button")!.click();
+  await waitFor(() => expect(screen.getByText(/Unit price schedule/)).toBeTruthy());
+  expect(screen.queryByText(/deadline is September 17/)).toBeNull();
+});
+
+/* The bundle's timeline is a RAIL -- a dot per event over a connecting line --
+ * and the dot colour separates what the DOCUMENTS did from what the SYSTEM
+ * decided. Ours was a flat date-and-text row. */
+test("the timeline is a rail, and distinguishes a system decision from a sighting", async () => {
+  const { container } = renderRecord();
+  await waitFor(() => expect(screen.getByRole("tab", { name: /timeline/i })).toBeTruthy());
+  await openTab(/timeline/i);
+
+  expect(container.querySelectorAll(".record__dot")).toHaveLength(2);
+  expect(container.querySelectorAll(".record__railline")).toHaveLength(2);
+
+  /* Entity resolution is "the least visible thing the system does and the
+   * easiest to get silently wrong" -- so it must read differently from a
+   * sighting, not just sit in the same list. */
+  expect(screen.getByText(/System decision/)).toBeTruthy();
+  expect(screen.getByText(/Sighting — carried by SAM.gov/)).toBeTruthy();
 });

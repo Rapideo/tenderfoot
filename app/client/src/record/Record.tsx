@@ -84,6 +84,19 @@ function confColour(f: Field): string {
   return "var(--bad)";
 }
 
+/* The bundle tags each file with a coloured extension chip: PDF red, DOCX
+ * accent, XLSX green, ZIP grey, PPTX amber. Taken from its own docs fixture. */
+function extColour(mediaType: string | null): string {
+  switch ((mediaType ?? "").toLowerCase()) {
+    case "pdf": return "var(--bad)";
+    case "docx": return "var(--acc)";
+    case "xlsx": return "var(--ok)";
+    case "pptx": return "var(--warn)";
+    case "zip": return "var(--text4)";
+    default: return "var(--text6)";
+  }
+}
+
 const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%`);
 
 /* THREE STATES, NOT TWO. "We looked and it is not there" is a different fact
@@ -119,6 +132,7 @@ export function Record() {
   /* Extracted Fields is the default: it is the tab that carries SP4's two
    * deferred criterion bullets, and the only one with a citation to read. */
   const [tab, setTab] = useState<TabKey>("fields");
+  const [openDoc, setOpenDoc] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -130,6 +144,9 @@ export function Record() {
       live = false;
     };
   }, [id]);
+
+  const selected =
+    body?.documents.find((d) => d.id === openDoc) ?? body?.documents[0] ?? null;
 
   if (!body) return <Shell>Loading…</Shell>;
 
@@ -257,42 +274,109 @@ export function Record() {
       )}
 
       {tab === "docs" && (
-      <Section recessed>
-        <MicroLabel>DOCUMENTS</MicroLabel>
-        {/* D12: the bytes were discarded by SP4's ruling, so what is here is
-          * the stored text and a link back to the original. */}
-        <Callout>
-          Documents are parsed and discarded — a citation quotes the extracted
-          passage. The link opens the original at its source.
-        </Callout>
-        {body.documents.map((d) => (
-          <div key={d.id} className="record__doc">
-            {d.source_url ? (
-              <a href={d.source_url} target="_blank" rel="noreferrer">
-                {d.filename}
-              </a>
-            ) : (
-              <span>{d.filename}</span>
-            )}
-            {/* D12: named as rendered, and until this fix was not. */}
-            {d.media_type && <span className="record__doc-type">{d.media_type}</span>}
-            <span className="record__doc-status">{d.extract_status}</span>
-            {d.extracted_text && <pre className="record__text">{d.extracted_text}</pre>}
+      <Section>
+        {/* TWO PANES, as the bundle has it: a 300px file list beside the
+          * reader. `grid-template-columns:300px minmax(0,1fr); gap:20px`.
+          *
+          * D12 governs the right-hand pane, and the bundle agrees with us
+          * more than it looks: ITS viewer is a placeholder reading "DOCUMENT
+          * RENDER — PLACEHOLDER … whether .docx / .xlsx render inline or
+          * download is undecided". SP4 then ruled the bytes are discarded, so
+          * there is nothing to render — and the stored extracted text goes
+          * where the prototype left a hatched rectangle. */}
+        <div className="record__docs">
+          <div className="record__doclist">
+            <div className="record__doclist-head">
+              {`BUNDLE — ${body.documents.length} FILE${body.documents.length === 1 ? "" : "S"}`}
+            </div>
+            {body.documents.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                className={`record__docrow${d.id === openDoc ? " record__docrow--on" : ""}`}
+                onClick={() => setOpenDoc(d.id)}
+              >
+                <span className="record__ext" style={{ background: extColour(d.media_type) }}>
+                  {(d.media_type ?? "?").toUpperCase()}
+                </span>
+                <span className="record__docname" title={d.filename}>
+                  {d.filename}
+                </span>
+              </button>
+            ))}
           </div>
-        ))}
-      </Section>
 
+          <div className="record__reader">
+            <div className="record__reader-head">
+              {selected
+                ? `EXTRACTED TEXT — ${selected.filename}`
+                : "EXTRACTED TEXT"}
+            </div>
+            {selected?.source_url && (
+              <a
+                className="record__reader-link"
+                href={selected.source_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {selected.filename}
+              </a>
+            )}
+            {selected?.extracted_text ? (
+              <pre className="record__text">{selected.extracted_text}</pre>
+            ) : (
+              <div className="record__reader-empty">
+                {selected
+                  ? `Nothing extracted from this file — status: ${selected.extract_status}.`
+                  : "Select a file."}
+                <div className="record__reader-note">
+                  Documents are fetched, parsed and discarded; a citation quotes the extracted
+                  passage rather than opening the original. The link above opens it at its source.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Section>
       )}
 
       {tab === "timeline" && (
       <Section>
-        <MicroLabel>TIMELINE</MicroLabel>
-        {body.timeline.map((e) => (
-          <div key={`${e.kind}-${e.at}-${e.detail}`} className="record__event">
-            <span className="record__event-at">{e.at}</span>
-            <span>{e.detail}</span>
-          </div>
-        ))}
+        {/* THE BUNDLE'S TIMELINE RAIL: `112px 20px minmax(0,1fr)` -- a
+          * right-aligned mono date, a dot over a connecting line, then the
+          * event. Ours was a flat date-and-text row with no rail at all.
+          *
+          * The dot colour carries the SVRC's own distinction: what the
+          * DOCUMENTS did (a sighting) against what the SYSTEM decided (entity
+          * resolution) -- "the least visible thing the system does and the
+          * easiest to get silently wrong".
+          *
+          * ⚠️ The bundle also has a `diff` block on --badbg for an addendum's
+          * real changes. NOT built: nothing in this system diffs addenda yet
+          * (SVRC View 2.5's known gap), and rendering an empty container for
+          * absent data would promise something we cannot deliver. */}
+        <div className="record__timeline">
+          {body.timeline.map((e) => (
+            <div key={`${e.kind}-${e.at}-${e.detail}`} className="record__event">
+              <span className="record__event-at">{String(e.at).slice(0, 10)}</span>
+              <span className="record__rail">
+                <span
+                  className="record__dot"
+                  style={{ background: e.kind === "resolution" ? "var(--warn)" : "var(--acc)" }}
+                />
+                <span className="record__railline" />
+              </span>
+              <div className="record__event-body">
+                <div className="record__event-title">{e.detail}</div>
+                <div className="record__event-sub">
+                  {e.kind === "resolution"
+                    ? "System decision — the merge resolved this record's organisation."
+                    : `Sighting${e.source_name ? ` — carried by ${e.source_name}` : ""}.`}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </Section>
       )}
 

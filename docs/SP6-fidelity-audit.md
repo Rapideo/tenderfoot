@@ -112,9 +112,21 @@ Columns `190px minmax(0,1fr) 110px 150px`, header on `--surface2` with `--type-m
 
 ⚖️ And the standing conflict: the bundle puts a conflict **inline in the value cell**; SP6 §6.1 puts it **beneath with its own origin and quote**. Currently built the spec's way with the bundle's colours. **Matt's ruling.**
 
-### D.3 `View 2.4` Documents / `D.4` `View 2.5` Timeline
+### D.3 `View 2.4` Documents — ✅ **AUDITED AND REBUILT 2026-08-31**
 
-**Not audited in this pass.** D12 already records that the bundle's inline viewer is unbuildable (SP4 discards bytes), but the *list* treatment and the timeline's own bundle declaration were not compared. **Outstanding.**
+Bundle: **two panes**, `grid-template-columns:300px minmax(0,1fr); gap:20px`. Left, a bordered list (`--brdmid`, radius 9, `align-self:start`) headed `BUNDLE — N FILES` on `--surface2`, each row `flex; gap:10px; padding:10px 14px` over `--brdrow`, carrying a **coloured uppercase extension tag** (`500 9px Mono`, `--surface` text on the tag colour, radius 3) beside an ellipsised filename. Right, a reader on `--surface3`, `padding:22px; min-height:420px`.
+
+**Shipped first as a flat vertical list** of every file's text at once. Now two panes, with selection driving the reader.
+
+💡 **The bundle agrees with D12 more than it looked.** Its own right pane is a **placeholder** — *"DOCUMENT RENDER — PLACEHOLDER … Whether .docx / .xlsx render inline or download is undecided and materially changes effort."* The prototype declines to design the viewer; SP4 then ruled the bytes are discarded. So the stored extracted text goes exactly where the prototype left a hatched rectangle, and the deviation is smaller than D12 implies.
+
+### D.4 `View 2.5` Timeline — ✅ **AUDITED AND REBUILT 2026-08-31**
+
+Bundle: `grid-template-columns:112px 20px minmax(0,1fr); gap:14px` — a right-aligned mono date, then a **rail** (a 9px dot over a 1px `--brdctl2` connector), then a title/body pair.
+
+**Shipped first as a flat `date | text` flex row.** Now the rail, with the dot colour carrying the SVRC's own distinction: `--acc` for a sighting (what the documents did) against `--warn` for entity resolution (what the *system* decided — "the least visible thing the system does and the easiest to get silently wrong").
+
+⚠️ **NOT built, deliberately: the bundle's `diff` block** (`--badbg`, mono, for an addendum's real changes). SVRC View 2.5's own known gap records that *"the timeline shows a diff, not a summary-of-changes, and the diffing does not exist yet"* — it still does not. Rendering the container for data nothing produces would promise something the system cannot deliver. **Build it the day anything diffs addenda.**
 
 ---
 
