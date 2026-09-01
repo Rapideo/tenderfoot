@@ -41,6 +41,7 @@
 import { all, tx } from "../db/index.js";
 import { orgChain } from "./org-chain.js";
 import { closesAt } from "./closes-at.js";
+import { postedAt } from "./posted-at.js";
 
 export interface MergeResult {
   created: number;
@@ -53,6 +54,12 @@ export interface MergeResult {
    * including ones merged earlier while nothing read the deadline out of the
    * payload -- which, before closes-at.ts existed, was every one of them. */
   deadlinesSet: number;
+  /** Solicitations whose `posted_at` was written or corrected on this run.
+   * Same shape and same history as `deadlinesSet`: before posted-at.ts, this
+   * was every live-ingested row, because merge never wrote the column at
+   * all -- and volume per source per week, half of what Plan of Action §6
+   * requires the gate to produce, was uncomputable as a result. */
+  postedSet: number;
 }
 
 interface Group {
@@ -159,6 +166,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     title: string;
     source_id: number;
     closes_at: string | null;
+    posted_at: string | null;
   }[] = [];
   /* Keyed by solicitation id so a later group wins, exactly as sequential
    * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
@@ -170,6 +178,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * later group wins, deterministically, rather than the planner choosing
    * among duplicate keys. */
   const deadlineUpdates = new Map<number, string>();
+  const postedUpdates = new Map<number, string>();
   const links: { external_id: string; solId: number }[] = [];
   /* external_id -> the chain for it. Collected for new groups and for any
    * existing solicitation still missing an organisation, so a re-run repairs
@@ -211,6 +220,19 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       deadlineUpdates.set(g.solicitation_id, closes);
     }
 
+    /* THE POSTING DATE, for exactly the reasons the deadline above is
+     * collected -- and the rows that need it are, again, the ones merged
+     * before this existed: every branch below skips a group that has an
+     * organisation and nothing unlinked. Measured when this landed: 1,724 of
+     * 1,724 SAM.gov solicitations had a null posted_at while their stored
+     * payloads carried the date all along. Volume per source per week, half
+     * of what Plan of Action §6 requires this gate to produce, could not be
+     * computed for a single live-ingested row. */
+    const posted = postedAt(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && posted !== null) {
+      postedUpdates.set(g.solicitation_id, posted);
+    }
+
     if (g.solicitation_id === null) {
       /* Migration 010: the solicitation records the source whose payload it
        * reflects, and `latest_source_id` IS that source -- the same one `raw`
@@ -221,6 +243,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
         title,
         source_id: g.latest_source_id,
         closes_at: closes,
+        posted_at: posted,
       });
       if (chain.length) chains.set(g.external_id, chain);
     } else if (Number(g.unlinked) > 0) {
@@ -255,16 +278,17 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * unnest preserving row order. */
     const inserted = inserts.length
       ? await q.all<{ id: number; external_id: string }>(
-          `INSERT INTO solicitation (external_id, title, source_id, closes_at)
-           SELECT u.external_id, u.title, u.source_id, u.closes_at
-             FROM unnest($1::text[], $2::text[], $3::int[], $4::text[])
-               AS u(external_id, title, source_id, closes_at)
+          `INSERT INTO solicitation (external_id, title, source_id, closes_at, posted_at)
+           SELECT u.external_id, u.title, u.source_id, u.closes_at, u.posted_at
+             FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[])
+               AS u(external_id, title, source_id, closes_at, posted_at)
            RETURNING id, external_id`,
           [
             inserts.map((i) => i.external_id),
             inserts.map((i) => i.title),
             inserts.map((i) => i.source_id),
             inserts.map((i) => i.closes_at),
+            inserts.map((i) => i.posted_at),
           ],
         )
       : [];
@@ -292,6 +316,17 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
              FROM unnest($1::int[], $2::text[]) AS u(id, closes_at)
             WHERE s.id = u.id AND s.closes_at IS DISTINCT FROM u.closes_at`,
           [[...deadlineUpdates.keys()], [...deadlineUpdates.values()]],
+        )
+      : 0;
+
+    /* Same guard as the deadline above: nothing is written when the payload
+     * already agrees with the column, so a steady-state re-run is free. */
+    const postedSet = postedUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET posted_at = u.posted_at
+             FROM unnest($1::int[], $2::text[]) AS u(id, posted_at)
+            WHERE s.id = u.id AND s.posted_at IS DISTINCT FROM u.posted_at`,
+          [[...postedUpdates.keys()], [...postedUpdates.values()]],
         )
       : 0;
 
@@ -379,6 +414,6 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       }
     }
 
-    return { created: inserted.length, updated, linked, orgsAttached, deadlinesSet };
+    return { created: inserted.length, updated, linked, orgsAttached, deadlinesSet, postedSet };
   });
 }

@@ -351,3 +351,56 @@ test("a source with no readable deadline never clears one that exists", async ()
   expect(row?.closes_at).toBe("2027-01-15");
 });
 
+
+/* THE POSTING DATE. Second instance of the exact defect closes-at.ts was built
+ * for: merge wrote four columns and posted_at was not one of them, so no
+ * live-ingested row on any branch ever had one -- and volume per source per
+ * week, half of what Plan of Action §6 requires this gate to produce, could
+ * not be computed at all. */
+test("merge reads the posting date out of the payload, on insert and on backfill", async () => {
+  const raw = {
+    noticeId: "POSTED-1",
+    title: "Posting date fixture",
+    publishDate: "2026-08-18T21:07:27+00:00",
+    responseDateActual: "2026-09-01T23:59:00-04:00",
+  };
+  await sightRaw(sourceSam, "POSTED-1", raw, "2026-08-19T00:00:00Z");
+  await mergeSightings();
+
+  const row = await one<{ posted_at: string; closes_at: string }>(
+    `SELECT posted_at, closes_at FROM solicitation WHERE external_id = 'POSTED-1'`,
+  );
+  /* A bare YYYY-MM-DD, matching the column's existing shape. */
+  expect(row?.posted_at).toBe("2026-08-18");
+  expect(row?.closes_at).toBe("2026-09-01");
+
+  /* BACKFILL. The rows that need this most were merged before it existed --
+   * they have an organisation and nothing unlinked, so every other branch
+   * skips them. Null the column and re-merge: it must come back. */
+  await run(`UPDATE solicitation SET posted_at = NULL WHERE external_id = 'POSTED-1'`);
+  const again = await mergeSightings();
+  expect(again.postedSet).toBeGreaterThanOrEqual(1);
+
+  const back = await one<{ posted_at: string }>(
+    `SELECT posted_at FROM solicitation WHERE external_id = 'POSTED-1'`,
+  );
+  expect(back?.posted_at).toBe("2026-08-18");
+});
+
+/* A source with no posting date to read must be left alone, not given a
+ * plausible-looking one. USASpending reports AWARDS: action_date is when an
+ * award was made, and dressing that as a posting date would make a volume
+ * series measure two different things under one label. */
+test("a source with no posting date is left null rather than guessed at", async () => {
+  await sightRaw(
+    sourceA,
+    "NO-POSTED-1",
+    { title: "No posting date here", action_date: "2026-08-01" },
+    "2026-08-19T00:00:00Z",
+  );
+  await mergeSightings();
+  const row = await one<{ posted_at: string | null }>(
+    `SELECT posted_at FROM solicitation WHERE external_id = 'NO-POSTED-1'`,
+  );
+  expect(row?.posted_at).toBeNull();
+});
