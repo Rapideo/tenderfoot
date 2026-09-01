@@ -278,13 +278,35 @@ api.get(
       "closes_at", "qa_closes_at", "prebid_at", "prebid_required", "set_aside", "value_cents",
     ] as const;
 
+    /* SOURCE IS DOCUMENT-ATTRIBUTED. The bundle's SOURCE column names the file
+     * a value came from -- "Scope.pdf §3", "Terms.pdf §2", "listing metadata"
+     * -- not merely which KIND of source it was. `extracted_field.document_id`
+     * has been there since migration 008, so the filename costs one join and
+     * turns "document" into something a reader can actually go and check.
+     * (Section numbers are not extracted; the filename is the granularity we
+     * can state truthfully.) */
     const raw = await all<
-      FieldRow & { field_name: string; confidence: number | null; note: string | null }
+      FieldRow & {
+        field_name: string;
+        confidence: number | null;
+        note: string | null;
+        filename: string | null;
+      }
     >(
-      `SELECT field_name, value_text, origin, quote, document_id, confidence, note
-         FROM extracted_field WHERE solicitation_id = $1`,
+      `SELECT ef.field_name, ef.value_text, ef.origin, ef.quote, ef.document_id,
+              ef.confidence, ef.note, d.filename
+         FROM extracted_field ef
+         LEFT JOIN document d ON d.id = ef.document_id
+        WHERE ef.solicitation_id = $1`,
       [id],
     );
+
+    /* The bundle's own wording for a listing-sourced value. */
+    const sourceLabel = (origin: string | null, filename: string | null): string | null => {
+      if (origin === "listing") return "listing metadata";
+      if (origin === "document") return filename ?? "document";
+      return origin;
+    };
 
     const fields = FIELDS.map((name) => {
       const rows = raw.filter((r) => r.field_name === name);
@@ -303,12 +325,17 @@ api.get(
         value: resolved.value,
         origin: resolved.origin,
         confidence: winner?.confidence ?? null,
+        source_label: sourceLabel(resolved.origin, winner?.filename ?? null),
         quote: winner?.quote ?? null,
         note: winner?.note ?? null,
         state: resolved.value === null ? ("absent" as const) : ("found" as const),
         conflicts: resolved.conflicts.map((c) => ({
           value_text: c.value_text as string,
           origin: c.origin,
+          source_label: sourceLabel(
+            c.origin,
+            (c as { filename?: string | null }).filename ?? null,
+          ),
           quote: c.quote,
           confidence: (c as { confidence?: number | null }).confidence ?? null,
         })),

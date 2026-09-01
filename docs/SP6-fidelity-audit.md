@@ -108,7 +108,7 @@ Not audited against the bundle — D14 records that the SVRC calls its content u
 
 Columns `190px minmax(0,1fr) 110px 150px`, header on `--surface2` with `--type-microlabel` + `--tracking-label-tight`, rows `padding:12px 16px` separated by `--brdrow`, `--surface3` when absent, `--badbg2` when conflicted, confidence colour-coded, human labels. **Verified against the bundle and fixed.**
 
-⚠️ One residual: the bundle's SOURCE column is document-attributed — `Scope.pdf §3`, `Terms.pdf §2`, `listing metadata`. **Ours says `document` / `listing`.** `extracted_field.document_id` already exists, so the filename is available today. **Buildable now, and it materially improves a citation's usefulness.**
+✅ **RESOLVED 2026-08-31.** The SOURCE column is now document-attributed: the endpoint joins `document` on `extracted_field.document_id`, a document-sourced value names its file, and a listing-sourced one reads `listing metadata` as the bundle words it. Section anchors (`§3`) remain unavailable — nothing extracts them — so the filename is the honest granularity.
 
 ⚖️ And the standing conflict: the bundle puts a conflict **inline in the value cell**; SP6 §6.1 puts it **beneath with its own origin and quote**. Currently built the spec's way with the bundle's colours. **Matt's ruling.**
 
@@ -134,7 +134,7 @@ Columns `190px minmax(0,1fr) 110px 150px`, header on `--surface2` with `--type-m
 ⚖️ **New conflict raised by item 4, for Matt.** The bundle shows five tabs; two of them (`Brief`, `Scores & Evidence`) are parked for V1. They are currently rendered and state plainly that they are parked. The alternative is to omit them, which would diverge from the bundle's tab bar. Recorded, not resolved.
 
 **Still buildable now, no new data, no rulings:**
-7. **D.2** document-attributed SOURCE column (`Scope.pdf §3` rather than `document`) — `extracted_field.document_id` already exists
+7. ✅ **DONE 2026-08-31 — D.2** document-attributed SOURCE column. The record endpoint now joins `document` on `extracted_field.document_id`, so a value names the FILE it came from (`SCOPE OF WORK.docx`) rather than the bare word `document`, and a listing-sourced value uses the bundle's own wording, `listing metadata`. Section numbers (`§3`) are not extracted, so the filename is the granularity that can be stated truthfully. Mutation-proven: removing the attribution fails exactly one test, for the right reason.
 8. **A.1.3** queue counter treatment; **A.1** triage "nav collapsed" affordance
 9. **B.1** buyer-note callout for entity resolution *(the treatment now exists; the data is not yet wired to it)*
 10. **B.6** the decision bar does not yet sit on `--surface4` behind its own top border as a distinct band

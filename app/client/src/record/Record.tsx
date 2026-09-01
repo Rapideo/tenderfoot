@@ -7,6 +7,7 @@ import "./Record.css";
 interface Conflict {
   value_text: string;
   origin: string;
+  source_label: string | null;
   quote: string | null;
   confidence: number | null;
 }
@@ -14,6 +15,10 @@ interface Field {
   field_name: string;
   value: string | null;
   origin: string | null;
+  /* The bundle's SOURCE column names the FILE, not the kind of source:
+   * "Scope.pdf", "listing metadata". Falls back to the origin when a
+   * document row has somehow lost its filename. */
+  source_label: string | null;
   confidence: number | null;
   quote: string | null;
   note: string | null;
@@ -87,7 +92,7 @@ const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%
 function stateLabel(f: Field): string {
   if (f.state === "absent") return "absent from bundle";
   if (f.state === "not_looked_for") return "not yet looked for";
-  return f.origin ?? "";
+  return f.source_label ?? f.origin ?? "";
 }
 
 /* The bundle's five tabs, in its order and with its labels. Two of them
@@ -237,7 +242,7 @@ export function Record() {
                     <span className="record__field-conf" style={{ color: "var(--bad)" }}>
                       {pct(c.confidence)}
                     </span>
-                    <span className="record__field-state">{c.origin}</span>
+                    <span className="record__field-state">{c.source_label ?? c.origin}</span>
                   </TableRow>
                   {c.quote && <blockquote className="record__quote">“{c.quote}”</blockquote>}
                 </div>

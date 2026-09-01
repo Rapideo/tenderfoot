@@ -517,3 +517,42 @@ test("a solicitation with no pursuit row returns decision: null", async () => {
   const [, body] = await get(`/solicitations/${sol}`);
   expect(body.decision).toBeNull();
 });
+
+/* SOURCE IS DOCUMENT-ATTRIBUTED. The bundle's SOURCE column names the file a
+ * value came from, not merely which kind of source it was -- "document" tells
+ * a reader nothing they can go and check. */
+test("a field names the document it came from, and the listing by the bundle's words", async () => {
+  const src = await insert(
+    `INSERT INTO source (name) VALUES ('attribution fixture') RETURNING id`,
+  );
+  const sol = await insert(
+    `INSERT INTO solicitation (title, source_id, closes_at)
+     VALUES ('attributed record', $1, '2027-01-05') RETURNING id`,
+    [src],
+  );
+  const doc = await insert(
+    `INSERT INTO document (solicitation_id, filename, extract_status)
+     VALUES ($1, 'SCOPE OF WORK.docx', 'extracted') RETURNING id`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2027-01-05', 'listing', 1.0, 'mechanical')`,
+    [sol],
+  );
+  await run(
+    `INSERT INTO extracted_field
+       (solicitation_id, field_name, value_text, origin, document_id, quote, confidence, produced_by)
+     VALUES ($1, 'closes_at', '2026-12-01', 'document', $2, 'due 1 December', 0.6, 'mechanical')`,
+    [sol, doc],
+  );
+
+  const [, body] = await get(`/solicitations/${sol}`);
+  const closes = body.fields.find((f: any) => f.field_name === "closes_at");
+
+  /* The listing wins, and says so in the bundle's own words. */
+  expect(closes.source_label).toBe("listing metadata");
+  /* The loser names the FILE -- this is the whole point of the column. */
+  expect(closes.conflicts[0].source_label).toBe("SCOPE OF WORK.docx");
+});
