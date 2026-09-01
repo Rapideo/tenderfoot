@@ -227,7 +227,7 @@ Computed against the materialised sample, per source, counting solicitations at 
 
 **Three numbers ship together, because any one alone misleads:** `population_size` (what the sample represents), items **drawn**, and items **decided**. A half-triaged sample then reads as a half-triaged sample rather than as a rate.
 
-`perSourceYield()` in `merge/yield.ts` already computes sightings, canonical and unique-to-source per source, and is reused rather than reimplemented.
+`perSourceYield()` in `merge/yield.ts` computes sightings, canonical and unique-to-source per source. ⚠️ **Corrected 2026-08-31: this line claimed it "is reused rather than reimplemented" by the metrics work. It is not** — `triage/metrics.ts` imports nothing from it, and yield is printed only by `npm run merge`. The claim was written into this spec and never checked against the build. Whether the gate's numbers SHOULD draw on it is still worth deciding; what is recorded here is only that they do not.
 
 ---
 

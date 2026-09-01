@@ -215,7 +215,45 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-31
+## 🔖 RESUME HERE — updated 2026-08-31 (evening)
+
+## ▶️ NEXT SESSION — SP6 is MERGED, DEPLOYED and its criterion is MET. The work now is FIDELITY, and five rulings are waiting on Matt.
+
+**Branch `sp6-triage-record` merged to `main` and pushed. Production runs SP6. Working tree clean, `main` == `origin/main`, gate green at 550 tests / 69 files** (baseline entering the slice: 430 / 58).
+
+### ⚖️ FIVE RULINGS WAITING ON MATT — none of them block other work, all of them block "done"
+Recorded per `CLAUDE.md` §1: where the frozen prototype and a spec disagree, **Matt decides** — not me, and not silently in either direction.
+1. **The score strip.** The bundle renders `MACHINE SCORES — A READING AID` on the card; SP6's **D13** ruled it does not. `ScoreBar`'s empty branch already exists, so either way is cheap.
+2. **Conflicts: inline or beneath?** The bundle puts a disagreement *inside the value cell*; SP6 §6.1 puts the loser *beneath* with its own origin and quote. Currently built the spec's way, in the bundle's colours.
+3. **The nav: seven items or two?** The bundle shows Triage · Opportunities · Radars · Entities · Reports · Admin · Pipeline. We show Queue · Admin. Five lead to unbuilt screens.
+4. **Parked tabs: disclosed or absent?** Screen 2 renders all five of the bundle's tabs; `Brief` and `Scores & Evidence` state plainly that they are parked rather than faking a body.
+5. **⚠️ Does a flat `0.6` deserve the label `CONFIDENCE`?** `fields.ts` sets `confidence: value !== null ? 0.6 : 0` — **a constant**. Every document-extracted value shows `60%`. It means "found", not "how sure", and the record view presents it under a column heading a reader will believe. Same class as the parked score strip: a number that looks like a judgement and is not.
+
+### What is DONE, so nobody redoes it
+`docs/SP6-fidelity-audit.md` is the live checklist — audit items 1–7 plus the shell pair are complete. Both screens were rebuilt against the bundle and deployed: the triage card's three-up fact panel, the two-up deadline-disagreement panel, the two-state decision bar, the page frame and meta line; Screen 2's tabs, crumbs, subtitle and card; the document-attributed SOURCE column; Documents as two panes; the Timeline rail; the counter as a control; and the nav-collapsed affordance.
+
+### ⏭ BUILDABLE NEXT, no rulings and no new data
+The buyer-note callout wired to entity resolution; the decision bar's own `--surface4` band; and `View 1.3 : Queue Cleared`, which was never audited against the bundle at all.
+
+### 🔴 THE FINDINGS THAT OUTRANK FIDELITY — from the overview pass, all verified, none actioned
+These are about the instrument, not the paint, and they are the reason the gate's number is not yet trustworthy.
+- **`accuracyByField` has no surface.** No route, no CLI, no screen — its only caller is its own test file. SP4 §8.4's accuracy measurement cannot be run by anyone.
+- **`fields.ts` matches exactly ONE date format** — long-form `Month D, YYYY`. No ISO, no numeric, no day-first. This silently bounds every recall figure ever quoted, and is written down nowhere else.
+- **Nothing captures "had not otherwise seen".** That is the discovery half of the GO/NO-GO question the gate exists to answer. Value-weighting it is also impossible today (`value_cents` is null on every ingested row).
+- **The merge drops most of the payload.** `posted_at` was the second instance of this (fixed 2026-08-31); SAM also carries notice type, set-aside and PSC codes, all unread. **Assume a third instance exists until someone looks.**
+- **Parser dispatch covers pdf/docx/xlsx/xlsm/zip only.** `.doc`, `.xls` and `.pptx` are filed "unsupported" although the spike parsed them.
+- **The cleared-queue "Metrics" card navigates to `/admin`, which shows no metrics.**
+- **The flaky gate has a SECOND cause, still live.** The `runSuffix` collision was real and fixed; but four sequential runs on the merged tree went red twice with a connection-level signature, and sequential runs cannot collide. Green currently means "green if you do not run it twice quickly."
+
+### 🎯 AND THE THING THE SLICE EXISTS FOR
+**The real GO / NO-GO adjudication session has not happened.** Plan of Action §6 budgets a day. What exists is a mechanism proven end to end on production and a rate computed over **five decisions** — a shape, not a measurement. Volume per source per week became computable for the first time on 2026-08-31; Interested-per-hundred needs Matt triaging a real sample.
+
+### Where the record lives
+`docs/SP6-fidelity-audit.md` — the fidelity checklist and the three prototype/spec conflicts. `docs/Tenderfoot-Overview-2026-08-31.md` — 12,806 words, written to be listened to, ⚠️ predating the `posted_at` fix. `CLAUDE.md` — the fidelity mandate and the conflict-resolution rule. `.superpowers/sdd/2026-08-30-sp6-triage-record/progress.md` — the full SDD ledger, **gitignored scratch, so `git clean -fdx` destroys it**.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-08-31 (midday)
 
 ## ▶️ NEXT SESSION — SP6's thirteen build tasks are DONE and reviewed. Task 14 (this docs pass) just landed. What is left is the final whole-branch review, then Task 15 — the demo criterion, run for real.
 
