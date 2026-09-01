@@ -94,3 +94,46 @@ test("counts are absent, not zero, before the sources load", () => {
   render(<Shell queueCount={0}>content</Shell>);
   expect(screen.queryByText(/0 DEGRADED/i)).toBeNull();
 });
+
+/* THE REDUCED SHELL'S AFFORDANCE. The SVRC collapses the nav while triaging;
+ * we had implemented the EFFECT (hidden nav) and never the affordance, so
+ * nothing told the user the menu was gone or offered it back. */
+test("the reduced shell says the nav is collapsed and offers it back", async () => {
+  stubSources();
+  render(
+    <Shell queueCount={5} reduced>
+      content
+    </Shell>,
+  );
+  await waitFor(() => expect(screen.getByText(/NAV COLLAPSED/)).toBeTruthy());
+  expect(screen.queryByRole("navigation")).toBeNull();
+
+  screen.getByRole("button", { name: /show menu/i }).click();
+
+  /* The nav comes back, and the notice goes with it -- an affordance that
+   * does not restore anything is decoration. */
+  await waitFor(() => expect(screen.getByRole("navigation")).toBeTruthy());
+  expect(screen.queryByText(/NAV COLLAPSED/)).toBeNull();
+});
+
+/* The bundle's counter is a BUTTON with a stacked IN / QUEUE label, and it is
+ * the route back to triage from anywhere -- not a bare number. */
+test("the queue counter is a button carrying its own label", async () => {
+  stubSources();
+  render(<Shell queueCount={8008}>content</Shell>);
+  await waitFor(() => expect(screen.getByLabelText(/queue count/i)).toBeTruthy());
+
+  const counter = screen.getByLabelText(/queue count/i);
+  expect(counter.tagName).toBe("BUTTON");
+  expect(counter.textContent).toContain("8008");
+  expect(counter.textContent).toMatch(/IN\s*QUEUE/);
+});
+
+/* Clear and not-clear are different states in the bundle -- --ok against
+ * --acc -- so a cleared queue reads as an achievement rather than as work. */
+test("a cleared queue renders the counter differently", async () => {
+  stubSources();
+  const { container } = render(<Shell queueCount={0}>content</Shell>);
+  await waitFor(() => expect(screen.getByLabelText(/queue count/i)).toBeTruthy());
+  expect(container.querySelector(".shell__count--clear")).toBeTruthy();
+});

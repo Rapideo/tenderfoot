@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { HeaderLockup, StatusBar } from "../primitives";
 import "./Shell.css";
 
@@ -35,7 +35,7 @@ function summarise(sources: SourceRow[]) {
 
 export function Shell({
   queueCount,
-  reduced = false,
+  reduced: reducedProp = false,
   children,
 }: {
   queueCount?: number;
@@ -43,6 +43,11 @@ export function Shell({
   children: ReactNode;
 }) {
   const [sources, setSources] = useState<SourceRow[] | null>(null);
+  /* "Show menu" un-collapses the nav for the rest of the session, which is
+   * what the bundle's exitTriage does. */
+  const [forceNav, setForceNav] = useState(false);
+  const reduced = reducedProp && !forceNav;
+  const navigate = useNavigate();
 
   useEffect(() => {
     let live = true;
@@ -67,10 +72,45 @@ export function Shell({
             <Link to="/admin">Admin</Link>
           </nav>
         )}
+        {/* THE NAV-COLLAPSED AFFORDANCE. The SVRC's "reduced shell" has a
+          * designed expression in the bundle and we had implemented only its
+          * EFFECT (hiding the nav), never its affordance -- so nothing told a
+          * user the menu was gone or offered it back. Bundle:
+          *   pill   flex; gap:10px; padding:5px 8px 5px 14px; --ink; radius 6
+          *   label  500 10px Mono ls .14em --inktx2
+          *   button --ink3 / --inktx5, 500 11px Sans, 6px 9px, radius 4
+          *   key    9.5px Mono --inktx, 1px --ink5, radius 3, 3px 4px       */}
+        {reduced && (
+          <div className="shell__collapsed">
+            <span className="shell__collapsed-label">CLEARING QUEUE · NAV COLLAPSED</span>
+            <button
+              type="button"
+              className="shell__collapsed-btn"
+              onClick={() => setForceNav(true)}
+            >
+              Show menu <span className="shell__collapsed-key">ESC</span>
+            </button>
+          </div>
+        )}
+
+        {/* THE COUNTER IS A BUTTON in the bundle, not a bare number: a mono
+          * count beside a stacked IN / QUEUE label at .72 opacity, on --acc
+          * when there is work and --ok when the queue is clear. It is also
+          * the route back to triage from anywhere. */}
         {queueCount !== undefined && (
-          <span className="shell__count" aria-label="Queue count">
-            {queueCount}
-          </span>
+          <button
+            type="button"
+            className={`shell__count${queueCount === 0 ? " shell__count--clear" : ""}`}
+            aria-label="Queue count"
+            onClick={() => navigate("/")}
+          >
+            <span className="shell__count-n">{queueCount}</span>
+            <span className="shell__count-label">
+              IN
+              <br />
+              QUEUE
+            </span>
+          </button>
         )}
       </header>
 
