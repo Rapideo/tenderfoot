@@ -215,7 +215,7 @@ export function Record() {
                 <span className="record__field-conf" style={{ color: confColour(f) }}>
                   {f.state === "found" ? pct(f.confidence) : "—"}
                 </span>
-                <span className="record__field-state">{stateLabel(f)}</span>
+                <span className="record__field-state" title={stateLabel(f)}>{stateLabel(f)}</span>
               </TableRow>
 
               {f.quote && <blockquote className="record__quote">“{f.quote}”</blockquote>}
@@ -242,7 +242,9 @@ export function Record() {
                     <span className="record__field-conf" style={{ color: "var(--bad)" }}>
                       {pct(c.confidence)}
                     </span>
-                    <span className="record__field-state">{c.source_label ?? c.origin}</span>
+                    <span className="record__field-state" title={c.source_label ?? c.origin}>
+                      {c.source_label ?? c.origin}
+                    </span>
                   </TableRow>
                   {c.quote && <blockquote className="record__quote">“{c.quote}”</blockquote>}
                 </div>

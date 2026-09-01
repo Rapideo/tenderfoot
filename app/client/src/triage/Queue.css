@@ -37,6 +37,14 @@
   color: var(--text7);
 }
 
+/* The bundle's triage card has NO outer padding: it is `overflow:hidden` with
+ * full-bleed bands inside, each supplying its own. Card's generic 16px 18px
+ * therefore has to be neutralised here, or every band is inset twice and the
+ * ones that set their own end up misaligned against the ones that do not --
+ * which is exactly how the cost panel came to sit 30px out from the title. */
+.queue__inner .card { padding: 0; }
+.queue__cost { padding: 20px 30px 24px; }
+
 /* ── card header ────────────────────────────────────────────────────────── */
 .queue__head { padding: 26px 30px 22px; border-bottom: 1px solid var(--brdsoft); }
 

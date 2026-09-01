@@ -333,11 +333,18 @@ export function Queue() {
           )}
         </div>
 
-        {/* D15: Region 1.1.3 renders and says what it does not have. */}
+        {/* D15: Region 1.1.3 renders and says what it does not have.
+          * Wrapped in its own band because the bundle's triage card has NO
+          * outer padding -- each band supplies its own (26px 30px 22px for the
+          * header, 20px 30px 24px here, 16px 30px for the decision bar). The
+          * Card primitive's generic 16px 18px was leaving this panel outdented
+          * by 30px against the title, the fact panel and the buttons. */}
+        <div className="queue__cost">
         <FactPanel
           title="PURSUIT COST"
           note="Required forms, conference, references and notarization are not yet extracted."
         />
+        </div>
 
         {/* THE DECISION BAR IS A MODE MACHINE, as the bundle has it: the
           * default state offers Interested and Pass; pressing Pass SWAPS the

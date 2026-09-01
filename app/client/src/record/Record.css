@@ -102,7 +102,20 @@
 .record__field-name  { font: var(--type-body-label); color: var(--text4); }
 .record__field-value { font: var(--type-subhead-field); color: var(--text); }
 .record__field-conf  { font: var(--type-data-conf); }
-.record__field-state { font: var(--type-data-source); color: var(--text7); }
+/* SOURCE keeps the bundle's fixed 150px column. Its own examples are tidy
+ * ("Scope.pdf §3"); real SAM.gov filenames are not -- "Solicitation Amendment
+ * M6700126Q01350001 SF 30.pdf" wrapped to three lines, drove the row height
+ * out and clipped at the card edge. Truncating preserves the column geometry
+ * the mandate is about, and the full name is one hover away via title=, so
+ * nothing is actually lost. Matt's ruling, 2026-08-31. */
+.record__field-state {
+  font: var(--type-data-source);
+  color: var(--text7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 /* A quote is evidence, not chrome: indented to the VALUE column so it reads
  * as belonging to the value above it rather than to the row's label. */

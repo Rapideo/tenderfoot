@@ -200,3 +200,23 @@ test("the subtitle names the buyer, the source and the closing date", async () =
   renderRecord();
   await waitFor(() => expect(screen.getByText(/Indiana FSSA · SAM.gov · closes 2026-09-17/)).toBeTruthy());
 });
+
+/* The full filename must survive truncation -- it is truncated for LAYOUT, and
+ * a citation you cannot read in full is not a citation. Matt's ruling was to
+ * keep the bundle's 150px column and put the name on hover, so the title
+ * attribute IS the guarantee and needs a test of its own. */
+test("a truncated SOURCE still carries its full filename", async () => {
+  const long = "Solicitation Amendment M6700126Q01350001 SF 30.pdf";
+  renderRecord({
+    ...RECORD,
+    fields: [
+      {
+        field_name: "closes_at", value: "2026-09-17", origin: "document",
+        source_label: long, confidence: 0.6, quote: null, note: null,
+        state: "found", conflicts: [],
+      },
+    ],
+  });
+  await waitFor(() => expect(screen.getByText(long)).toBeTruthy());
+  expect(screen.getByText(long).getAttribute("title")).toBe(long);
+});
