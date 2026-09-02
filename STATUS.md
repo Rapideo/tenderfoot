@@ -219,6 +219,34 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## ▶️ NEXT SESSION — everything is built and the sample is drawn. **The next move is Matt triaging it**, and then IDOA.
 
+### ✅ THE SHAKEDOWN RUN HAPPENED, AND IT WORKED — 2026-09-02
+
+**Matt triaged 8 items on production and returned the guide's checklist.** This is the first time a person has made a decision in this product on production, and **8 of the 11 checks are confirmed by a human**, not by a test:
+
+| Confirmed | By |
+|---|---|
+| The banner names all three numbers · the counter moves | *"Counts all look good"* |
+| `I` opens a step rather than deciding | implied — the channel guard could not fire otherwise |
+| **Confirming with nothing picked refuses** | *"It does protect against having to select one of the channels before allowing you to advance"* |
+| The channel is single-select | **the data** — 7 decisions, exactly one channel each |
+| No chips on the Pass step | *"We do want chips in the pass step at some point but not now"* |
+| `U` restores the card and the count | *"Undo works with the shortcut"* |
+| The toast's UNDO undoes · no inert hint remains | *"Undo is working great now"* |
+
+**Still unconfirmed, and only the last needs a deliberate action:** `Back` clears the selection · the two confirms do not look alike · **the unsampled queue at `/` is still ~6,920** (sampling must not filter the product, spec §2.1).
+
+**The one defect it found was real and is fixed** — the undo affordance was a `<span>` dressed as a button. **D23.** No test could have caught it; an inert element has no behaviour to assert against.
+
+### 🔄 AND THE 8 DECISIONS WERE RETRACTED, BY RULING — sample 1 is clean again
+
+**They were test presses, and the shape says so:** 7 Interested out of 8, spread across **6 distinct channels**, with `indiana_email` joint-top on a *federal* sample. That is someone pressing each chip once, which is exactly what the guide asked for.
+
+**Left in place they would have poisoned the denominator.** The numbers they produced — **interested-per-hundred 87.5** and **discovery_rate 0** — are not measurements, and a `discovery_rate` of 0 is a NO-GO reading. Mixed in with real judgements later, nobody could have said which were which. That is the "denominator nobody can defend" failure the whole design exists to prevent.
+
+**Retracted the product's own way: 8 appends of `New`, through the API, one per item.** ⚠️ **Nothing was deleted** — `pursuit` is append-only (§5.1), the original rows survive with `decided_by: MS`, and `discoveryRate()` reads latest-per-solicitation so they simply stop counting. **The audit trail says a decision was made and taken back, which is the truth.**
+
+**After: `decided 0`, `interested_per_hundred null`, `discovery_rate null`** — `null` and not `0`, which is the correct reading of "nobody has answered yet". Script kept at `runs/retract-shakedown.mjs` (gitignored); it refuses any host that is not the production endpoint.
+
 ### 🎯 SAMPLE 1 IS DRAWN AND WAITING — production, 2026-09-02
 | | |
 |---|---|
