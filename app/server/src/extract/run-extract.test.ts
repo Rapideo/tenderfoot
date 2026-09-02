@@ -60,7 +60,37 @@ async function solicitation(closesAt: string | null): Promise<number> {
   return id;
 }
 
-async function pending(filename: string, closesAt: string | null = "2026-09-15"): Promise<number> {
+/* ⏰ A LIVE DEADLINE IS COMPUTED, NEVER HARDCODED, and this file is why.
+ *
+ * `runExtract`'s ORDER BY sorts LIVE solicitations first --
+ * `left(s.closes_at,10) >= to_char(now(),'YYYY-MM-DD')` -- then nearest-first
+ * within them, then everything already closed most-recent-first. Every
+ * ordering fixture below therefore needs two things and only two: that the
+ * row is live, and that it sorts before or after its neighbours. The literal
+ * date never mattered.
+ *
+ * FOUR TESTS IN THIS FILE HARDCODED `2026-09-01` AS "SOON" AND WENT RED ON
+ * 2026-09-01, at 20:00 EDT -- the moment a GMT database rolled over to
+ * 2026-09-02 and that date stopped being live. The rows did not fail; they
+ * SORTED DIFFERENTLY, which is worse, because the assertions that broke were
+ * about batch contents and document text rather than about ordering. The NUL
+ * -byte test served its two response bodies in call order and silently gave
+ * the first one to the wrong document.
+ *
+ * `now()` is evaluated by POSTGRES, so a JS fake clock cannot help here --
+ * vi.setSystemTime does not reach into the database. Relative fixtures are
+ * the fix. UTC throughout, matching the server, and offsets are days apart so
+ * no timezone skew can reorder two neighbours.
+ *
+ * ⚠️ Use a genuinely past literal for rows that must be CLOSED (2020-01-01
+ * below). Those cannot rot the way a future date can. */
+function daysOut(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+async function pending(filename: string, closesAt: string | null = daysOut(30)): Promise<number> {
   const sol = await solicitation(closesAt);
   return insert(
     `INSERT INTO document (solicitation_id, filename, source_url, extract_status)
@@ -141,8 +171,8 @@ test("stops on the budget and reports what remains", async () => {
  * would ever pick it up again. */
 test("a 429 stops the batch and leaves the document pending, not failed", async () => {
   await fresh();
-  const first = await pending("First.pdf", "2026-09-01");
-  await pending("Second.pdf", "2026-09-02");
+  const first = await pending("First.pdf", daysOut(10));
+  await pending("Second.pdf", daysOut(20));
   const limited = vi.fn(
     async () => new Response("slow down", { status: 429, headers: { "Retry-After": "60" } }),
   );
@@ -185,9 +215,9 @@ test("a 429 stops the batch and leaves the document pending, not failed", async 
  * number. */
 test("a batch stopped mid-way keeps what it finished and leaves the rest pending", async () => {
   await fresh();
-  const firstDoc = await pending("First.xlsx", "2026-09-01");
-  await pending("Second.xlsx", "2026-09-02");
-  await pending("Third.xlsx", "2026-09-03");
+  const firstDoc = await pending("First.xlsx", daysOut(10));
+  await pending("Second.xlsx", daysOut(20));
+  await pending("Third.xlsx", daysOut(30));
   const slow = vi.fn(async () => {
     await new Promise((r) => setTimeout(r, 4000));
     return new Response(new Uint8Array(workbook()), { status: 200 });
@@ -444,8 +474,8 @@ function plainSheet(a1: string): Buffer {
 test("a NUL byte in the text is removed, and does not take the batch with it", async () => {
   await fresh();
   const nul = String.fromCharCode(0);
-  const dirty = await pending("Drawings.xlsx", "2026-09-01");
-  const clean = await pending("Clean.xlsx", "2026-09-02");
+  const dirty = await pending("Drawings.xlsx", daysOut(10));
+  const clean = await pending("Clean.xlsx", daysOut(20));
   const bodies = [
     plainSheet(`Proposals are due September 15, 2026 ${nul} sheet 1 of 2`),
     plainSheet("nothing of interest here"),
@@ -594,8 +624,8 @@ test("a download failure records the reason the server gave, not just the code",
 test("takes the nearest LIVE deadline first, ahead of anything already closed", async () => {
   await fresh();
   await pending("long-closed.pptx", "2020-01-01");
-  await pending("closes-soon.pptx", "2099-01-02");
-  await pending("closes-later.pptx", "2099-06-01");
+  await pending("closes-soon.pptx", daysOut(10));
+  await pending("closes-later.pptx", daysOut(200));
 
   const r = await runExtract({ limit: 1, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
 
@@ -695,8 +725,8 @@ test("re-expanding a bundle after a kill does not duplicate its members", async 
  * passes. */
 test("takes the nearest deadline first", async () => {
   await fresh();
-  await pending("late.pptx", "2027-01-01");
-  await pending("soon.pptx", "2026-09-01");
+  await pending("late.pptx", daysOut(400));
+  await pending("soon.pptx", daysOut(10));
   await pending("undated.pptx", null);
 
   const r = await runExtract({ limit: 1, budgetMs: 10_000, fetchImpl: bytes(Buffer.from("x")) });
