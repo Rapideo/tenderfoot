@@ -22,6 +22,7 @@ export interface WindowedItem {
 export interface SnapshotItem {
   externalId: string;
   raw: unknown;
+  modifiedAt?: string;
 }
 
 interface PageBase {

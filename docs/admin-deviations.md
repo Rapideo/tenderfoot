@@ -1002,3 +1002,88 @@ than invented**, and D21 leans on that parking to justify the discovery
 channel's narrow override. This confirms the parking stands *and* that chips are
 wanted — the blocker is the hand-run, which sample 1 is the first opportunity to
 produce. **Do not invent a pass vocabulary in the meantime.**
+
+---
+
+## D24 — the description panel, which the bundle has no equivalent of
+
+**Found 2026-09-02 by Matt trying to use the product**, which is the only way this
+class of thing gets found:
+
+> *"There are no extracted fields. There are no questions due. None of those are
+> available. There's no document. There's no timeline… I think we at least need to
+> capture a summary of the posting or something we can get off that site. Until I
+> can get more context, I'm not really going to be able to make judgment calls."*
+
+### The bundle has nothing to be faithful to
+
+Searched before designing: **zero** occurrences of `description`, `synopsis` or
+`abstract`. The four `Summary` hits are `clearedSummary` (the queue-cleared line)
+and `oppsSummary` (a count of rows). **There is no per-solicitation prose anywhere
+in V1.2**, so this panel is an invention and takes a number rather than a parity
+claim.
+
+**Why the bundle could get away with it and we cannot.** Its five mock
+opportunities are hand-written and instantly legible — *"Care-management workflow
+redesign"*, *"External Quality Reviews for MCO Programs"*. Real SAM titles are
+`16--MAST,HEATER DRAIN` and `KEYSIGHT N8487A POWER SENSOR`. A card designed
+around titles a human wrote does not survive contact with titles a procurement
+system generated.
+
+### Placement — ruled by Matt
+
+> *"I want it to the right of our machine scores."*
+
+That is exactly where `COST TO PURSUE — FACTS, NOT A SCORE` sits in the bundle's
+two-up grid (`minmax(0,1.15fr) minmax(0,1fr)`). **So it STACKS ABOVE the cost
+panel rather than replacing it** — §7.10 clause 2 requires parked chrome to be
+built and left inert, not trimmed. A test pins the cost panel surviving beside
+it, because a regression that swapped them would still show the description and
+would silently drop the bundle's own chrome.
+
+### ⚠️ It is NOT called a summary, and that is the load-bearing half
+
+Matt asked for a *machine summary*, and ruled the same day that it is **labelled
+for what it holds until a model actually writes one**. Today the panel shows
+**SAM's own prose** — boilerplate-heavy, frequently opening *"This is a combined
+synopsis/solicitation for commercial items prepared in accordance with…"*.
+
+Heading that `MACHINE SUMMARY` would repeat **D20's** mistake exactly: a label
+claiming more than the data earns, under which a reader believes something a
+machine did not do. **A test asserts `MACHINE SUMMARY` is ABSENT**, so the rename
+cannot happen by accident before the summariser exists.
+
+`SUMMARISE` is built and **disabled**, per §7.10 clause 2 — the intelligence
+chrome is constructed and left non-functional until the thing behind it is
+designed. Disabled is the honest state; a live-looking control that does nothing
+is the D14 / D23 defect, which this project has now hit three times.
+
+### What the data actually supports, measured rather than assumed
+
+Backfilled on production 2026-09-02: **0 → 8,484 of 9,883** solicitations.
+
+**The remaining 1,399 are not a miss, and this was checked rather than shrugged
+at.** Of 400 sampled sightings behind SAM rows that still have no description,
+**zero** carried usable text in the payload — 369 have no `descriptions` key at
+all and 31 have an empty one. The other 201 are the two corpus imports, which
+never had descriptions. **SAM does not publish one for roughly 12% of notices.**
+Every row that has text got it.
+
+So the empty state — *"This source published no description."* — is a statement
+of fact that fires about one card in eight, and it says so rather than rendering
+a blank panel that reads as a bug.
+
+### The truncation is server-side, and that is a content decision
+
+Matt: *"a machine summary that summarizes in 200 words what the contract is."*
+The card truncates to ~200 words on a word boundary, preferring a nearby sentence
+end; the Brief tab carries the whole thing. **One stored column, two renderings**
+— a stored summary alongside a stored full text would be two columns that must
+agree, and the shorter would drift the first time anything regenerated it.
+
+### And the Brief is half-unparked
+
+Its **judgement** half — why this fits, a recommended posture — is a call against
+the Firm Profile and stays parked with qualification (design spec §1.1). What
+arrived is the source's own description, a **fact** rather than a judgement,
+which was never the parked part. The callout now says exactly that.
