@@ -215,7 +215,56 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-01 (late)
+## 🔖 RESUME HERE — updated 2026-09-02
+
+## ▶️ NEXT SESSION — the discovery capture is DONE and MERGED. Two things stand between here and a triage session, and one of them is Matt's to run.
+
+### 🔴 DO THIS FIRST: migration 013 has NOT been run on production
+`pursuit.discovery_channel` and its CHECK exist on **`test` only**. Production is unmigrated, so **the Interested button will 500 on production until it is run** — the server requires the column the moment the client sends it, and both halves are now live in `main`.
+
+Per §4, `DATABASE_URL` points at `test` by design, so migrating production is a **deliberate act**:
+
+```bash
+DATABASE_URL="$DATABASE_URL_PRODUCTION" node --env-file-if-exists=.env --import tsx app/server/src/db/migrate.ts
+```
+
+⚠️ **Deploy and migration are not the same thing**, and this project has paid for that confusion twice (`posted_at`, then the merge-layer fix). Pushing `main` deploys the code; it does not add the column.
+
+### ✅ WHAT LANDED TODAY — merged `07d216f` (`--no-ff`), gate **592 tests / 72 files**, exit 0
+**Branch `sp6-discovery-channel` is merged.** It had been held unmerged on purpose since 09-01: the server half REQUIRES `discovery_channel` on Interested, so landing it alone would have made the button answer 400 in the live app.
+
+**The bundle had more of this than STATUS credited.** The note read *"fidelity-POSITIVE, the bundle already has it"*, citing one line — `confirmLabel`. Behind it sits a **complete Interested branch**: `YES_CHIPS` (four fit chips), **`ANYTHING TO NOTE? — OPTIONAL`**, *"Skip it and the decision still records"*, and a `confirm()` that permits an empty answer. **A different question from ours, with a different vocabulary, and optional where ours is required.**
+
+**⚖️ Ruled by Matt 2026-09-02 as a gate question (CLAUDE.md §1): replace the question.** Seven single-select channels, required, `Save & next` and the accent confirm kept from the bundle. **D21** carries the argument, the cost (the bundle's note-capture affordance goes with it), and why the invented vocabulary may override SVRC 1.1.4's derive-don't-invent parking.
+
+**⚠️ AND THE PASS STEP HAD INVENTED ITS OWN COPY — unrecorded, since 08-31.** The fidelity audit logged the panel's *structure* ("prompt + help text") and never transcribed its *strings*, so four divergences passed review. Ruled and fixed: `WHY ARE YOU PASSING?` → **`WHY NOT? — REQUIRED`**, the help line, `Confirm pass` → **`Pass & next`**, and the placeholder's dropped **`(this is the training signal)`**. **An audit that checks shape and not strings will keep missing this class.**
+
+**`askReason` was a BOOLEAN where the bundle has a three-state field** — not a simplification, since **eight** rendered values branch off it. One of the four we had hardcoded to the Pass values was `reasonAccent`, a constant `--bad` that would have rendered the discovery prompt in the rejection colour.
+
+**Two new primitives-layer facts.** `ChoiceChip` is a **new** primitive, not a tone on `Chip` — `Chip` is the bundle's 4px mono *tag* pill, reason chips are 20px sans and interactive; reusing it would have rendered the control at 40% size. And `Button` gained **`danger`** (**D22**), defined at `size="sm"` only because the bundle draws it nowhere else — we had built only the accent half of the confirm ternary, so **a rejection looked exactly like a save at the moment of committing.**
+
+### 🔬 HOW IT WAS PROVEN, since a green server test has passed here with both buttons broken
+- **Four mutations, whole file each run.** Dropping the channel from the POST body kills 3 tests; removing the required guard kills 1; not clearing on Back kills 1; `danger`→`primary` kills 1.
+- **Real mouse clicks in Chrome.** `i` opens the step; seven chips on one row, 20px radius, `500 12.5px 'IBM Plex Sans'`; prompt renders `#1b6a8c` (`--acc`), not `--bad`; Portal-then-Nowhere leaves exactly one selected; **confirming with nothing picked shows the error and sends ZERO requests**; the button then sent `{"state":"Interested",…,"discovery_channel":"nowhere"}` verbatim. Pass branch live: `--bad` prompt, `--baddk` border on `--bad`, `Pass & next`, **zero discovery chips leaking across the mode**.
+- **End to end against `test`.** No channel → **400** `field: discovery_channel`; the browser's exact body → **201**; a value outside the vocabulary → **rejected by migration 013's CHECK**, not coerced; the metric then read **`discovery_rate 100 · {nowhere: 1}`**. **Retracted by APPENDING a `New`**, the way undo does it, so the audit trail survives and `test`'s measure is back to `null`.
+
+### 🔴 FOUND AND NOT FIXED — outside the ruling, both cheap
+- **`.queue__reason` has no band.** Measured live: `background rgba(0,0,0,0)`, `border-top 0px`, while `.queue__decision` carries `--surface4` and `--brdsoft`. **The band vanishes the moment either step opens**; the bundle keeps one band and swaps its contents. **Two declarations.** Audit item 10 was half stale and now says so.
+- **A bad channel answers 500, not 400.** Correct that it is not coerced — the CHECK is the authority — but a client-supplied bad value reads as a server fault. Unreachable from our UI, which only sends the seven.
+- **The reason input is `--type-body-decision` (12px); the bundle's is 13px.** No 13px token exists. Pre-existing, unrecorded until now.
+
+### 🟡 STILL OPEN, unchanged by today
+`accuracyByField` has no surface · `fields.ts` matches one date format · the merge may still drop SAM fields nobody has looked for · the cleared-queue Metrics card goes to `/admin` · **and the real GO/NO-GO adjudication still has not happened.**
+
+### 🗣️ AND THEN: IDOA, which Matt called next on 09-01
+**To discuss first — not designed, not started.** `Indiana IDOA solicitations` reads health `ok`, which makes it look like a switch. **It is not:** `scrape/adapters/registry.ts` imports exactly three adapters — `fake`, `sam`, `usaspending` — so **there is no IDOA adapter at all** (re-verified 2026-09-02). This is an adapter build, not a toggle. It does not improve the gate's measurement; it changes **what the gate is a gate ON**, which is bigger than a slice.
+
+### ⚠️ THE PRECONDITION STILL FAILS
+**Only SAM.gov has ever been ingested.** Any GO/NO-GO taken now is a verdict on **federal SAM.gov alone** and must say so in those words.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-09-01 (late)
 
 ## ▶️ NEXT SESSION — START HERE: finish the discovery capture's CLIENT half, then adjudicate.
 
