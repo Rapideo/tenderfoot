@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import {
-  Button, Callout, Card, Chip, ChoiceChip, FactPanel, Keycap, MicroLabel, ScoreStrip,
-  ShortcutCard,
+  Button, Callout, Card, Chip, ChoiceChip, FactPanel, MicroLabel, ScoreStrip, ShortcutCard,
 } from "../primitives";
 import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
 import { adminHeaders, clearAdminSecret, getAdminSecret } from "../admin/adminSecret";
@@ -166,6 +165,12 @@ export function Queue() {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [lastDecided, setLastDecided] = useState<number | null>(null);
+  /* THE BUNDLE'S `last`, which we had never built. It is the human sentence
+   * the toast shows -- "Interested · Nowhere" -- not the id. `lastDecided`
+   * above is the id undo targets; the two are different things and the
+   * bundle keeps both. */
+  const [lastLabel, setLastLabel] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /* The bundle's decision bar is a MODE machine, and both non-default modes
    * are now built: Pass opens the reason step, Interested opens the discovery
    * step. Until 2026-09-02 only the Pass branch existed. */
@@ -188,6 +193,12 @@ export function Queue() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* A pending toast timer outliving the screen would setState on an unmounted
+   * component. Cheap to get right, invisible when wrong. */
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
 
   const current = page?.items[0] ?? null;
 
@@ -245,6 +256,25 @@ export function Queue() {
         setError(((await res.json()) as any).error ?? "Decision failed.");
         return;
       }
+      /* The bundle's commit(): a label naming what just happened, cleared
+       * after 6000ms. Undo passes state "New" and clears it instead -- there
+       * is nothing to undo back to, and the bundle sets `last: null` there
+       * for the same reason. */
+      const note = reason.trim();
+      const parts =
+        state === "Interested"
+          ? ["Interested", channel ? CHANNEL_LABELS[channel] : null, note ? `“${note}”` : null]
+          : state === "Not Interested"
+            ? ["Passed", note ? `“${note}”` : null]
+            : [];
+      const label = parts.filter(Boolean).join(" · ");
+
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setLastLabel(label || null);
+      if (label) {
+        toastTimer.current = setTimeout(() => setLastLabel(null), 6000);
+      }
+
       setReason("");
       setChannel(null);
       setError(null);
@@ -284,6 +314,10 @@ export function Queue() {
     if (lastDecided === null) return;
     await decide("New", lastDecided);
     setLastDecided(null);
+    /* decide("New") already set the label to null via its empty `parts`;
+     * this is belt and braces for the case where the POST is refused and
+     * the toast would otherwise keep offering an undo that just failed. */
+    setLastLabel(null);
   }, [lastDecided, decide]);
 
   useQueueKeys({
@@ -631,15 +665,53 @@ export function Queue() {
             >
               Open full detail →
             </Button>
-            {/* Undo has no button -- it is keyboard-only -- so it is the one
-              * shortcut needing a visible hint of its own. */}
-            <span className="queue__keys">
-              <Keycap>U</Keycap> undo
-            </span>
             {error && <Callout>{error}</Callout>}
           </div>
         )}
       </Card>
+
+        {/* THE LAST-DECISION TOAST, and it is where the bundle's UNDO
+          * actually lives (V1.2 ~567748):
+          *
+          *   <div style="display:flex;align-items:center;gap:12px;
+          *        background:var(--ink);border-radius:7px;
+          *        padding:9px 11px 9px 14px;animation:tfup .2s ease both">
+          *     <span style="font:400 12px/1 Sans;color:var(--inktx4)">{{ lastDecision }}</span>
+          *     <button on-click="{{ undo }}" style="border:none;background:var(--ink3);
+          *        color:var(--inktx5);font:500 10px/1 Mono;letter-spacing:.08em;
+          *        padding:6px 8px;border-radius:4px">UNDO · U</button>
+          *   </div>
+          *
+          * ⚠️ WE HAD SHIPPED A `<span>` KEYCAP HINT IN THE DECISION BAR
+          * INSTEAD, and Matt found it on 2026-09-02 by clicking it: it reads
+          * as a button and is inert. The bundle has no such element. Its
+          * keyboard legend is the meta line at the top -- `I INTERESTED · P
+          * PASS · U UNDO`, which we already render verbatim -- so the hint
+          * was both a duplicate and a false affordance. Removed; this is the
+          * real control.
+          *
+          * --type-body-decision's own comment reads "last-decision toast
+          * text", 1 use in V1.2. This is that use. --ink-raised's reads
+          * "controls sitting on ink (Show menu, UNDO)". Both had been spent
+          * elsewhere or not at all.
+          *
+          * The bundle places this in a space-between row with the gated-items
+          * drawer toggle. That drawer is parked (Region 1.1.5), so the row
+          * holds only the toast and is right-aligned -- see Queue.css. */}
+        {lastLabel && (
+          <div className="queue__toast-row">
+            <div className="queue__toast" role="status" aria-live="polite">
+              <span className="queue__toast-text">{lastLabel}</span>
+              <button
+                type="button"
+                className="queue__toast-undo"
+                onClick={() => void undo()}
+              >
+                UNDO · U
+              </button>
+            </div>
+          </div>
+        )}
        </div>
       </div>
     </Shell>

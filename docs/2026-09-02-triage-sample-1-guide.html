@@ -435,6 +435,9 @@
       One hundred federal SAM.gov notices, drawn against a recorded population. Every
       Interested now asks a second question — <strong>where else would this have reached
       you?</strong> — and that answer is the only measure the GO/NO-GO gate has.
+      <br><br>
+      <strong>Updated 2026-09-02:</strong> undo is now a real button, on a toast that names the
+      decision it would reverse. The inert hint in the decision bar is gone.
     </p>
   </header>
 
@@ -520,9 +523,15 @@
       <div class="key-row">
         <span class="kc">U</span>
         <span class="key-what">
-          <b>Undo</b>
+          <b>Undo <span class="changed">FIXED 2026-09-02</span></b>
           <span>Appends a return to New; it never deletes. Both rows survive and the later one
-            wins. No time limit — it is simply deciding again.</span>
+            wins. <b>Plain <code>U</code> only</b> — modified combinations are deliberately
+            ignored so the browser keeps its own shortcuts, and <code>Ctrl+U</code> is Chrome's
+            view-source.</span>
+          <span>After each decision a dark toast appears bottom-right naming what you just did
+            — <em>Interested&nbsp;·&nbsp;Nowhere</em> — with a real <b>UNDO&nbsp;·&nbsp;U</b>
+            button on it. <b>It clears itself after six seconds</b>, so undo by button is a
+            short window; the key works whenever there is something to undo.</span>
         </span>
       </div>
       <div class="key-row">
@@ -694,6 +703,25 @@
       <div class="check">
         <span class="box"></span>
         <span class="check-body">
+          <b>The toast's UNDO button actually undoes</b>
+          <span>This is the one you found broken. Clicking <b>UNDO&nbsp;·&nbsp;U</b> should
+            restore the card and dismiss the toast. If a toast lingers still offering an undo
+            after you took it, say so — a second press would append a second row.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>Nothing in the decision bar looks clickable and isn't</b>
+          <span>The old <code>U undo</code> hint is gone. The keyboard legend at the top of the
+            page is the only reminder, and it is plainly text.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
           <b>Sampling did not filter the product</b>
           <span>Open <code>/</code> with no <code>?sample=1</code> in another tab: it should show
             a much larger queue, around 6,920. Sampling selects what <em>you</em> read, never
@@ -718,7 +746,11 @@
             already written up as audit item 10.</li>
           <li><b>A bad channel value answers 500, not 400.</b> Unreachable from the screen — the
             UI can only send the seven.</li>
-          <li><b>The reason input is 12px where the bundle is 13px.</b> No 13px token exists yet.</li>
+          <li><s>The reason input is 12px where the bundle is 13px.</s> <b>Fixed 2026-09-02</b>,
+            and the cause turned out to be this same undo bug: the input had borrowed
+            <code>--type-body-decision</code>, a token whose own comment reads <em>“last-decision
+            toast text”</em> and which has exactly one use in the bundle. It now belongs to the
+            toast, and the input uses the 13px token that existed all along.</li>
         </ul>
       </div>
 

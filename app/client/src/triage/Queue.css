@@ -220,20 +220,74 @@
   background: var(--surface);
   border-radius: 7px;
   padding: 11px 13px;
-  font: var(--type-body-decision);
+  /* --type-body-plain (400 13px/1 Sans), which is what the bundle's reason
+   * input actually uses. This was --type-body-decision, whose own comment
+   * reads "last-decision toast text" and which has exactly 1 use in V1.2 --
+   * now correctly spent on the toast above. Logged as a 12px-vs-13px
+   * discrepancy on 2026-09-02; the cause was a token borrowed from another
+   * control. */
+  font: var(--type-body-plain);
   color: var(--text);
   outline: none;
 }
 
-/* Restored: this rule existed before the fidelity rewrite and was dropped in
- * it, so the undo hint rendered at body size instead of as a micro-label. */
-.queue__keys {
-  font: var(--type-microlabel-cmd);
-  letter-spacing: var(--tracking-hint);
-  color: var(--text7);
-  white-space: nowrap;
-  margin-left: auto;
+/* ── the last-decision toast ─────────────────────────────────────────────────
+ * Matched against the bundle's own undo affordance (V1.2 ~567748). The
+ * decision-bar keycap hint that used to live here was removed on 2026-09-02:
+ * the bundle has no such element, the meta line already states `U UNDO`, and
+ * it rendered as a button that did nothing. See Queue.tsx.
+ *
+ * Right-aligned rather than space-between because the bundle's left-hand
+ * child is the gated-items drawer toggle, and that drawer is parked
+ * (Region 1.1.5). When it lands, this becomes space-between. */
+.queue__toast-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding: 0 2px;
 }
+.queue__toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ink);
+  border-radius: var(--radius-button);
+  padding: 9px 11px 9px 14px;
+  animation: tfup 0.2s ease both;
+}
+.queue__toast-text {
+  font: var(--type-body-decision);
+  color: var(--inktx4);
+}
+.queue__toast-undo {
+  border: none;
+  background: var(--ink3);
+  color: var(--inktx5);
+  font: var(--type-microlabel-queue);
+  letter-spacing: var(--tracking-hint);
+  padding: 6px 8px;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+
+/* The bundle's own keyframe, verbatim. */
+@keyframes tfup {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .queue__toast { animation: none; }
+}
+
+/* ~~.queue__keys~~ REMOVED 2026-09-02 with the element it styled.
+ *
+ * ⚠️ This rule was dropped once before, accidentally, in the fidelity
+ * rewrite -- the element stayed and silently lost its type, which is why the
+ * comment here used to read "Restored". THAT IS NOT WHAT IS HAPPENING NOW.
+ * The `<span class="queue__keys">U undo</span>` was a false affordance the
+ * bundle does not have; it is gone on purpose, so the rule has no consumer
+ * and keeping it would leave the next reader hunting for the markup.
+ * `grep queue__keys` returns nothing outside this comment. */
 
 .queue__sample-banner { padding: 10px 2px; }
 .queue__cleared { display: grid; gap: 14px; padding: 24px; max-width: 1080px; }

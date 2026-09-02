@@ -677,3 +677,119 @@ test("the prompt and help are the bundle's own copy, per branch", async () => {
     screen.getByText("WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED").className,
   ).toMatch(/--acc/);
 });
+
+
+/* ===========================================================================
+ * THE LAST-DECISION TOAST — 2026-09-02
+ * ===========================================================================
+ * FOUND BY MATT, BY CLICKING IT. The decision bar carried a `<span>` keycap
+ * hint reading "U undo". It looks like a button, it is not one, and the
+ * bundle has no such element at all — its undo is a real <button> inside a
+ * toast (V1.2 ~567748), and its keyboard legend is the meta line we already
+ * render.
+ *
+ * No test could have caught the old defect, because there was nothing to
+ * assert against: an inert span has no behaviour to be wrong. These pin the
+ * replacement, whose whole point is that clicking it does something.
+ */
+
+test("a decision raises a toast naming what just happened", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  expect(document.querySelector(".queue__toast")).toBeNull();
+
+  await markInterested("Indiana email");
+
+  /* The bundle's own label shape: kind, then what was chosen. Asserting the
+   * CHANNEL is in it matters -- a toast that just says "Interested" would
+   * not tell you which of seven answers you are about to undo. */
+  await waitFor(() =>
+    expect(screen.getByText("Interested · Indiana email")).toBeTruthy(),
+  );
+});
+
+test("the toast's UNDO is a real button, and clicking it undoes", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  await markInterested();
+  const undo = await waitFor(() => screen.getByRole("button", { name: "UNDO · U" }));
+
+  /* THE ASSERTION THE OLD HINT WOULD HAVE FAILED. It was a <span>, so
+   * getByRole("button") could not have found it at all. */
+  expect(undo.tagName).toBe("BUTTON");
+
+  undo.click();
+
+  await waitFor(() => {
+    const bodies = fetchMock.mock.calls
+      .filter((c) => (c[1] as any)?.method === "POST")
+      .map((c) => JSON.parse((c[1] as any).body));
+    expect(bodies.some((b) => b.state === "New")).toBe(true);
+  });
+});
+
+test("undoing dismisses the toast rather than leaving a stale offer", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  await markInterested();
+  const undo = await waitFor(() => screen.getByRole("button", { name: "UNDO · U" }));
+  undo.click();
+
+  /* A toast still offering UNDO after the undo would invite a second one,
+   * which appends a second "New" and reads as the button being broken. */
+  await waitFor(() => expect(document.querySelector(".queue__toast")).toBeNull());
+});
+
+test("a Pass toast names the reason, and carries the same control", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+
+  const input = screen.getByLabelText("Reason") as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )!.set!;
+  setter.call(input, "Out of geography");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+
+  screen.getByRole("button", { name: /confirm pass/i }).click();
+
+  await waitFor(() =>
+    expect(screen.getByText("Passed · “Out of geography”")).toBeTruthy(),
+  );
+  expect(screen.getByRole("button", { name: "UNDO · U" })).toBeTruthy();
+});
+
+test("the inert keycap hint is gone from the decision bar", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* The element Matt clicked. It must not come back: the bundle has no undo
+   * affordance in the decision bar, and anything that renders there and does
+   * nothing is the same defect again under a different class name. */
+  expect(document.querySelector(".queue__keys")).toBeNull();
+
+  /* And the legend that makes it unnecessary is still on screen -- verbatim
+   * from the bundle's meta line. */
+  expect(screen.getByText("I INTERESTED · P PASS · U UNDO")).toBeTruthy();
+});

@@ -929,3 +929,76 @@ one.
 It is a real step darker than `--bad`, verified in the browser
 (`rgb(140,50,38)` border on `rgb(163,58,46)` ground), so substituting `--bad`
 would have flattened a distinction the bundle drew deliberately.
+
+---
+
+## D23 — undo was a `<span>` dressed as a button, and the bundle's real control is a toast
+
+**Found by Matt on 2026-09-02, by clicking it.** *"The Undo button doesn't seem
+to do anything… I don't even know if it's really meant to be a button."*
+
+**He was right twice over.** It was not a button — `<span class="queue__keys">`
+with a `Keycap` inside — and it was not meant to be there at all.
+
+### What the bundle actually has
+
+Undo is a real `<button>`, and it lives in a **toast** that appears after each
+decision (V1.2 ~567748):
+
+```html
+<div style="display:flex;align-items:center;gap:12px;background:var(--ink);
+     border-radius:7px;padding:9px 11px 9px 14px;animation:tfup .2s ease both">
+  <span style="font:400 12px/1 Sans;color:var(--inktx4)">{{ lastDecision }}</span>
+  <button on-click="{{ undo }}" style="border:none;background:var(--ink3);
+     color:var(--inktx5);font:500 10px/1 Mono;letter-spacing:.08em;
+     padding:6px 8px;border-radius:4px">UNDO · U</button>
+</div>
+```
+
+It renders only while `lastDecision` is set, and `commit()` clears that after
+**6000ms**. The label is the sentence naming what just happened —
+`Interested · Nowhere` — so the control says what it would undo.
+
+### Two tokens were purpose-named for this and had been spent elsewhere or not at all
+
+- **`--ink-raised`**, whose own comment reads *"controls sitting on ink (Show
+  menu, **UNDO**)"*.
+- **`--type-body-decision`**, whose comment reads *"last-decision toast text"*
+  with **1 use in V1.2**. We had spent it on the reason step's input, which is
+  why that input measured 12px where the bundle is 13px — **logged as an
+  unexplained discrepancy earlier the same day, and this is the explanation.**
+  The input now uses `--type-body-plain` (400 13px/1 Sans), which is correct.
+
+### What was removed, and why it is not a repeat of an old mistake
+
+`.queue__keys` and its `<span>` are gone. **The bundle has no undo affordance in
+the decision bar**, and its keyboard legend is the meta line at the top of the
+page — `I INTERESTED · P PASS · U UNDO` — which we already render verbatim. So
+the hint was a duplicate *and* a false affordance.
+
+⚠️ **That CSS rule was dropped once before by accident**, in the fidelity
+rewrite, while the element stayed — the hint silently lost its type, and the
+rule was restored with a comment saying so. **This removal is the opposite
+case:** the element is gone on purpose, so the rule has no consumer.
+
+### The class of defect, stated plainly
+
+**A rendered control that does nothing is indistinguishable from a broken one.**
+This is the third instance in the project — D14's three `ShortcutCard`s with no
+`onClick`, SP3.6's Run button that had never worked in any browser, and now
+this. **No test could have caught it:** an inert `<span>` has no behaviour to
+assert against, which is exactly why it survived. It took a person clicking it.
+
+---
+
+## Not a deviation — pass chips, ruled 2026-09-02
+
+**Matt, on the Pass step's absent reason chips:** *"We do want chips in the pass
+step at some point but not now."*
+
+**Recorded so the parking is not mistaken for a decision against them.** SVRC
+1.1.4 parks the vocabulary as needing to be **derived from a hand-run rather
+than invented**, and D21 leans on that parking to justify the discovery
+channel's narrow override. This confirms the parking stands *and* that chips are
+wanted — the blocker is the hand-run, which sample 1 is the first opportunity to
+produce. **Do not invent a pass vocabulary in the meantime.**
