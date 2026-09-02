@@ -404,3 +404,85 @@ test("a source with no posting date is left null rather than guessed at", async 
   );
   expect(row?.posted_at).toBeNull();
 });
+
+/* THE THIRD INSTANCE, and the largest: five columns null on 1,724 of 1,724
+ * SAM.gov rows while the payload filling three of them sat unread in
+ * `sighting.raw`. STATUS predicted this one -- "assume a third instance exists
+ * until someone looks" -- and it was found on 2026-09-01 by looking.
+ *
+ * Insert AND backfill, exactly as the posting-date test above, because the
+ * rows that need it most have an organisation and nothing unlinked, so every
+ * other branch of the merge skips them. */
+test("merge reads kind, codes and set-aside out of the payload, on insert and on backfill", async () => {
+  const raw = {
+    noticeId: "FACTS-1",
+    title: "Listing facts fixture",
+    type: { code: "o", value: "Combined Synopsis/Solicitation" },
+    naics: [{ code: "541611" }],
+    psc: [{ code: "R410" }, { code: null }],
+    solicitation: { setAside: { code: "SBA" }, originalSetAside: { code: "NONE" } },
+  };
+  await sightRaw(sourceSam, "FACTS-1", raw, "2026-08-19T00:00:00Z");
+  await mergeSightings();
+
+  const row = await one<{ kind: string; codes: unknown; set_aside: string }>(
+    `SELECT kind, codes, set_aside FROM solicitation WHERE external_id = 'FACTS-1'`,
+  );
+  /* ⚖️ SAM's own word, per Matt's ruling 2026-09-01 -- NOT mapped to RFP. */
+  expect(row?.kind).toBe("Combined Synopsis/Solicitation");
+  /* The null psc code is dropped rather than carried as an entry. */
+  expect(row?.codes).toEqual({ naics: ["541611"], psc: ["R410"] });
+  /* The current set-aside, not the superseded originalSetAside. */
+  expect(row?.set_aside).toBe("SBA");
+
+  await run(
+    `UPDATE solicitation SET kind = NULL, codes = NULL, set_aside = NULL
+      WHERE external_id = 'FACTS-1'`,
+  );
+  const again = await mergeSightings();
+  expect(again.kindsSet).toBeGreaterThanOrEqual(1);
+  expect(again.codesSet).toBeGreaterThanOrEqual(1);
+  expect(again.setAsidesSet).toBeGreaterThanOrEqual(1);
+
+  const back = await one<{ kind: string; codes: unknown; set_aside: string }>(
+    `SELECT kind, codes, set_aside FROM solicitation WHERE external_id = 'FACTS-1'`,
+  );
+  expect(back?.kind).toBe("Combined Synopsis/Solicitation");
+  expect(back?.codes).toEqual({ naics: ["541611"], psc: ["R410"] });
+  expect(back?.set_aside).toBe("SBA");
+});
+
+/* ⚠️ THE TWO COLUMNS THAT STAY NULL, asserted so they cannot be quietly
+ * filled later without someone meeting the reasoning.
+ *
+ * `status` carries no information from this source: the adapter requests
+ * is_active=true, and isCanceled measured false on 1,724 of 1,724. A column
+ * holding one value forever is noise dressed as data.
+ *
+ * `value_cents` is NOT in the listing. SAM publishes `award.amount`, present
+ * on 361 rows -- tracking the 359 whose type is "Award Notice" almost exactly.
+ * It is what somebody ALREADY WON. Reading it into value_cents would put award
+ * amounts on solicitations and make every value-weighted number wrong
+ * invisibly. This test pins that it is not read. */
+test("status and value_cents are left null, even when the payload could tempt you", async () => {
+  const raw = {
+    noticeId: "FACTS-2",
+    title: "Award notice fixture",
+    type: { value: "Award Notice" },
+    isActive: true,
+    isCanceled: false,
+    award: { amount: "4100000", date: "2026-08-01", number: "W519-26-C-0001" },
+  };
+  await sightRaw(sourceSam, "FACTS-2", raw, "2026-08-19T00:00:00Z");
+  await mergeSightings();
+
+  const row = await one<{ status: string | null; value_cents: string | null; kind: string }>(
+    `SELECT status, value_cents, kind FROM solicitation WHERE external_id = 'FACTS-2'`,
+  );
+  expect(row?.status).toBeNull();
+  expect(row?.value_cents).toBeNull();
+  /* But the notice type IS read -- which is what makes an award notice
+   * identifiable in the queue at all. Ruled 2026-09-01: they are NOT
+   * filtered out (spec §1.1), so being able to see them is the whole point. */
+  expect(row?.kind).toBe("Award Notice");
+});

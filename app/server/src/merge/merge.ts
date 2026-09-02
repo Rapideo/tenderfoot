@@ -42,6 +42,7 @@ import { all, tx } from "../db/index.js";
 import { orgChain } from "./org-chain.js";
 import { closesAt } from "./closes-at.js";
 import { postedAt } from "./posted-at.js";
+import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
 
 export interface MergeResult {
   created: number;
@@ -60,6 +61,13 @@ export interface MergeResult {
    * all -- and volume per source per week, half of what Plan of Action §6
    * requires the gate to produce, was uncomputable as a result. */
   postedSet: number;
+  /* The three listing facts (listing-facts.ts). Reported separately rather
+   * than folded into one number because they have different availability in
+   * the payload -- kind 100%, codes ~98%, set_aside 56% of SAM rows -- so a
+   * single total would hide which of the three had stopped arriving. */
+  kindsSet: number;
+  codesSet: number;
+  setAsidesSet: number;
 }
 
 interface Group {
@@ -167,6 +175,9 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     source_id: number;
     closes_at: string | null;
     posted_at: string | null;
+    kind: string | null;
+    codes: string | null;
+    set_aside: string | null;
   }[] = [];
   /* Keyed by solicitation id so a later group wins, exactly as sequential
    * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
@@ -179,6 +190,12 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * among duplicate keys. */
   const deadlineUpdates = new Map<number, string>();
   const postedUpdates = new Map<number, string>();
+  /* The three listing facts (listing-facts.ts). Keyed and guarded exactly as
+   * the two above: a null never enters the map, so a source that states none
+   * of them can never clobber a populated column. */
+  const kindUpdates = new Map<number, string>();
+  const codesUpdates = new Map<number, string>();
+  const setAsideUpdates = new Map<number, string>();
   const links: { external_id: string; solId: number }[] = [];
   /* external_id -> the chain for it. Collected for new groups and for any
    * existing solicitation still missing an organisation, so a re-run repairs
@@ -233,6 +250,27 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       postedUpdates.set(g.solicitation_id, posted);
     }
 
+    /* THE THIRD INSTANCE of the closes_at / posted_at defect, and the largest:
+     * five columns null on 1,724 of 1,724 SAM.gov rows while the payload that
+     * fills three of them sat unread in `sighting.raw`. Collected for every
+     * group with a solicitation, for the same reason the two above are -- the
+     * rows that need this most were merged before this file existed, so they
+     * have an organisation and nothing unlinked and every branch below skips
+     * them. See listing-facts.ts for why `status` and `value_cents` are
+     * deliberately still not written. */
+    const kind = noticeKind(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && kind !== null) {
+      kindUpdates.set(g.solicitation_id, kind);
+    }
+    const codes = listingCodes(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && codes !== null) {
+      codesUpdates.set(g.solicitation_id, JSON.stringify(codes));
+    }
+    const setaside = setAside(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && setaside !== null) {
+      setAsideUpdates.set(g.solicitation_id, setaside);
+    }
+
     if (g.solicitation_id === null) {
       /* Migration 010: the solicitation records the source whose payload it
        * reflects, and `latest_source_id` IS that source -- the same one `raw`
@@ -242,6 +280,9 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
         external_id: g.external_id,
         title,
         source_id: g.latest_source_id,
+        kind,
+        codes: codes === null ? null : JSON.stringify(codes),
+        set_aside: setaside,
         closes_at: closes,
         posted_at: posted,
       });
@@ -278,10 +319,16 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * unnest preserving row order. */
     const inserted = inserts.length
       ? await q.all<{ id: number; external_id: string }>(
-          `INSERT INTO solicitation (external_id, title, source_id, closes_at, posted_at)
-           SELECT u.external_id, u.title, u.source_id, u.closes_at, u.posted_at
-             FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[])
-               AS u(external_id, title, source_id, closes_at, posted_at)
+          /* `codes` is jsonb, so its unnest column is text[] and cast per
+           * row -- a text[] of JSON strings is the only shape unnest can
+           * carry, and ::jsonb on the SELECT side is where it becomes the
+           * column's real type. */
+          `INSERT INTO solicitation (external_id, title, source_id, closes_at, posted_at, kind, codes, set_aside)
+           SELECT u.external_id, u.title, u.source_id, u.closes_at, u.posted_at,
+                  u.kind, u.codes::jsonb, u.set_aside
+             FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[],
+                         $6::text[], $7::text[], $8::text[])
+               AS u(external_id, title, source_id, closes_at, posted_at, kind, codes, set_aside)
            RETURNING id, external_id`,
           [
             inserts.map((i) => i.external_id),
@@ -289,6 +336,9 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
             inserts.map((i) => i.source_id),
             inserts.map((i) => i.closes_at),
             inserts.map((i) => i.posted_at),
+            inserts.map((i) => i.kind),
+            inserts.map((i) => i.codes),
+            inserts.map((i) => i.set_aside),
           ],
         )
       : [];
@@ -327,6 +377,37 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
              FROM unnest($1::int[], $2::text[]) AS u(id, posted_at)
             WHERE s.id = u.id AND s.posted_at IS DISTINCT FROM u.posted_at`,
           [[...postedUpdates.keys()], [...postedUpdates.values()]],
+        )
+      : 0;
+
+    /* The three listing facts. Same IS DISTINCT FROM guard as the two above,
+     * and for the same reason: the column being NULL is the entire case this
+     * repairs, and `<>` against NULL yields NULL, which WHERE reads as false
+     * -- a `<>` guard here would update nothing and look like it worked. */
+    const kindsSet = kindUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET kind = u.kind
+             FROM unnest($1::int[], $2::text[]) AS u(id, kind)
+            WHERE s.id = u.id AND s.kind IS DISTINCT FROM u.kind`,
+          [[...kindUpdates.keys()], [...kindUpdates.values()]],
+        )
+      : 0;
+
+    const codesSet = codesUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET codes = u.codes::jsonb
+             FROM unnest($1::int[], $2::text[]) AS u(id, codes)
+            WHERE s.id = u.id AND s.codes IS DISTINCT FROM u.codes::jsonb`,
+          [[...codesUpdates.keys()], [...codesUpdates.values()]],
+        )
+      : 0;
+
+    const setAsidesSet = setAsideUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET set_aside = u.set_aside
+             FROM unnest($1::int[], $2::text[]) AS u(id, set_aside)
+            WHERE s.id = u.id AND s.set_aside IS DISTINCT FROM u.set_aside`,
+          [[...setAsideUpdates.keys()], [...setAsideUpdates.values()]],
         )
       : 0;
 
@@ -414,6 +495,9 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       }
     }
 
-    return { created: inserted.length, updated, linked, orgsAttached, deadlinesSet, postedSet };
+    return {
+      created: inserted.length, updated, linked, orgsAttached,
+      deadlinesSet, postedSet, kindsSet, codesSet, setAsidesSet,
+    };
   });
 }
