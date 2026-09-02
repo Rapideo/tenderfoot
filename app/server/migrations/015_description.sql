@@ -1,0 +1,40 @@
+-- WHAT IS THIS CONTRACT, ACTUALLY? Nothing has ever stored the answer.
+--
+-- FOUND 2026-09-02, by Matt trying to use the product: "There are no extracted
+-- fields. There are no questions due... I think we at least need to capture a
+-- summary of the posting. Until I can get more context, I'm not really going to
+-- be able to make judgment calls."
+--
+-- He was right, and the cause is not a missing feature. Measured on production
+-- the same day: **298 of 300 sampled SAM.gov sightings (99.3%) carry
+-- `descriptions[0].content`**, a median of **511 characters** of real prose, and
+-- `solicitation` had no column to put it in. The text has arrived on every row
+-- since the first ingest and the merge has thrown it away every time.
+--
+-- THIS IS THE THIRD INSTANCE OF THE SAME DEFECT, and it is the one that
+-- mattered. closes-at.ts records the first ("the data was never missing; it was
+-- sitting unread in sighting.raw"), posted-at.ts the second, listing-facts.ts
+-- the third across five columns -- and STATUS carried the standing warning in
+-- these words: "Assume a third instance exists until someone looks." Someone
+-- looked, by trying to do the job the product exists for.
+--
+-- WHAT IT COST, stated precisely: the GO/NO-GO gate could not be run. Not
+-- "would have been harder" -- a triage card carrying a title, a buyer and two
+-- dates asks a person to judge "would KP pursue this" from the title alone, and
+-- an Interested-per-hundred measured that way records how good the operator is
+-- at guessing from titles. Sample 1 was drawn, and one hour of triage against
+-- this state would have produced a number nobody could defend.
+--
+-- WHY ONE COLUMN AND NOT TWO. The card shows a truncated view and the record
+-- shows the whole thing, but that is a rendering decision, not two facts. A
+-- stored "summary" alongside a stored "full text" would be two columns that must
+-- agree, and the shorter one would drift the first time anything regenerated it.
+-- Store the source's text once; truncate at the edge.
+--
+-- ⚠️ AND IT IS NOT A SUMMARY. Ruled by Matt 2026-09-02: the panel is labelled
+-- for what it holds until a model actually writes one. This column holds the
+-- SOURCE'S OWN WORDS -- boilerplate-heavy, frequently opening "This is a
+-- combined synopsis/solicitation for commercial items prepared in accordance
+-- with..." -- and calling that a machine summary would repeat D20's mistake: a
+-- heading claiming more than the data earns.
+ALTER TABLE solicitation ADD COLUMN description text;

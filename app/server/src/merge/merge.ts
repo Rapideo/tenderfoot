@@ -42,6 +42,7 @@ import { all, tx } from "../db/index.js";
 import { orgChain } from "./org-chain.js";
 import { closesAt } from "./closes-at.js";
 import { postedAt } from "./posted-at.js";
+import { description } from "./description.js";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
 
 export interface MergeResult {
@@ -61,6 +62,11 @@ export interface MergeResult {
    * all -- and volume per source per week, half of what Plan of Action §6
    * requires the gate to produce, was uncomputable as a result. */
   postedSet: number;
+  /** Solicitations whose `description` was written or corrected on this run.
+   * Reported separately because it is the field a HUMAN reads to decide -- if
+   * this number is 0 on a run that created rows, the triage card is back to a
+   * title and two dates and the gate cannot be run against it. */
+  descriptionsSet: number;
   /* The three listing facts (listing-facts.ts). Reported separately rather
    * than folded into one number because they have different availability in
    * the payload -- kind 100%, codes ~98%, set_aside 56% of SAM rows -- so a
@@ -190,6 +196,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * among duplicate keys. */
   const deadlineUpdates = new Map<number, string>();
   const postedUpdates = new Map<number, string>();
+  const descriptionUpdates = new Map<number, string>();
   /* The three listing facts (listing-facts.ts). Keyed and guarded exactly as
    * the two above: a null never enters the map, so a source that states none
    * of them can never clobber a populated column. */
@@ -248,6 +255,22 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     const posted = postedAt(src?.name ?? "", raw);
     if (g.solicitation_id !== null && posted !== null) {
       postedUpdates.set(g.solicitation_id, posted);
+    }
+
+    /* THE POSTING'S OWN WORDS -- the fourth instance of this same defect, and
+     * the one that stopped the gate rather than degrading it.
+     *
+     * Found 2026-09-02 by Matt trying to triage sample 1: a card carrying a
+     * title, a buyer and two dates asks a person to judge "would KP pursue
+     * this" from the title alone. Measured the same day: 298 of 300 sampled
+     * SAM.gov sightings (99.3%) carried `descriptions[0].content`, median 511
+     * characters, and `solicitation` had no column to put it in.
+     *
+     * Same null-skips-the-map shape as the three above, so USASpending and the
+     * corpus imports are untouched. See description.ts and migration 015. */
+    const desc = description(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && desc !== null) {
+      descriptionUpdates.set(g.solicitation_id, desc);
     }
 
     /* THE THIRD INSTANCE of the closes_at / posted_at defect, and the largest:
@@ -380,6 +403,20 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
         )
       : 0;
 
+    /* Same IS DISTINCT FROM guard as every sibling above, and for the same
+     * reason: the column being NULL is the entire case this repairs, and `<>`
+     * against NULL yields NULL, which WHERE reads as false -- a `<>` guard
+     * would update nothing and look like it worked. A steady-state re-run
+     * writes nothing. */
+    const descriptionsSet = descriptionUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET description = u.description
+             FROM unnest($1::int[], $2::text[]) AS u(id, description)
+            WHERE s.id = u.id AND s.description IS DISTINCT FROM u.description`,
+          [[...descriptionUpdates.keys()], [...descriptionUpdates.values()]],
+        )
+      : 0;
+
     /* The three listing facts. Same IS DISTINCT FROM guard as the two above,
      * and for the same reason: the column being NULL is the entire case this
      * repairs, and `<>` against NULL yields NULL, which WHERE reads as false
@@ -497,7 +534,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
     return {
       created: inserted.length, updated, linked, orgsAttached,
-      deadlinesSet, postedSet, kindsSet, codesSet, setAsidesSet,
+      deadlinesSet, postedSet, descriptionsSet, kindsSet, codesSet, setAsidesSet,
     };
   });
 }
