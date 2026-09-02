@@ -313,6 +313,40 @@ run("typecheck");
  * Do not "fix" this by putting DATABASE_URL back into testEnv -- that is
  * the bug this block exists to close. */
 const { DATABASE_URL: _keptOutOfTestEnvOnPurpose, ...testEnv } = process.env;
+/* REAP ORPHANED SCHEMAS BEFORE THE SUITE, NOT AFTER. Placement is the point.
+ *
+ * `test:clean` (below, after the tests) drops only THIS run's schemas, which is
+ * all it can safely do without knowing how old the others are. That leaves the
+ * orphan path open: a gate run that dies before it -- interrupted, crashed, a
+ * `git stash` in another window -- strands its twenty schemas permanently. Two
+ * such runs were found on 2026-09-01 inside a backlog of 87, with 11,052 rows
+ * in pg_class, the suite taking 174s instead of 107s, and the gate failing a
+ * DIFFERENT test on every run.
+ *
+ * ⚠️ THIS RUNS FIRST FOR TWO REASONS, and the second one is not obvious.
+ *
+ * It clears the backlog BEFORE the suite rather than after, so a run that
+ * inherits a slow branch is the run that fixes it, not the next one.
+ *
+ * And it CREATES THE REGISTRY that testdb.ts's resetSchema() writes to. That
+ * registration is deliberately best-effort -- it swallows failures so a
+ * developer running one test file against a branch with no registry never fails
+ * over bookkeeping -- so with this step placed after the tests, the first gate
+ * run in any fresh environment registered nothing at all, and any schema it
+ * stranded was invisible to `--reap` forever. Exactly the hole this whole
+ * mechanism exists to close, reopened by ordering alone.
+ *
+ * Non-fatal by design: a gate must not go red because bookkeeping failed. The
+ * cost of a skipped reap is a slower suite, not a wrong answer. */
+const reapResult = spawnSync("npm run test:clean -- --reap", {
+  stdio: "inherit",
+  shell: true,
+  env: process.env,
+});
+if (reapResult.status !== 0) {
+  console.warn("⚠️  schema reap failed -- not fatal, but the test branch may accumulate schemas");
+}
+
 const testResult = spawnSync("npm run test", { stdio: "inherit", shell: true, env: testEnv });
 
 /* THE LOCAL-CLEANUP FIX (SP6 residual re-review, 2026-08-31). scripts/
@@ -346,34 +380,6 @@ const testResult = spawnSync("npm run test", { stdio: "inherit", shell: true, en
  * failure -- still wins if both fail. */
 const cleanResult = spawnSync("npm run test:clean", { stdio: "inherit", shell: true, env: process.env });
 
-/* AND THEN REAP THE ORPHANS, which the step above cannot reach.
- *
- * `test:clean` drops only THIS run's schemas, and that is all it can safely do
- * without knowing how old the others are. The gap is real and measured: a gate
- * run that dies before the line above -- interrupted, crashed, a `git stash` in
- * another window -- orphans its twenty schemas permanently. Two such runs were
- * found on 2026-09-01 inside a backlog of 87, alongside 11,052 pg_class rows,
- * with the suite taking 174s and failing a DIFFERENT test on every run. Clearing
- * it took the gate to 107s and three consecutive greens.
- *
- * This is the second time that backlog has been fixed. The first fix (adding the
- * line above, 2026-08-16) closed the ordinary path and left the orphan path
- * open, so the leak restarted the moment a run was interrupted. `--reap` closes
- * the orphan path: it drops only schemas the registry records as older than
- * three hours, so a suite in flight -- schemas seconds old -- is untouched, and
- * running it unattended is safe in a way plain `--stale` never was.
- *
- * Non-fatal by design. A gate must not go red because bookkeeping failed; the
- * consequence of a skipped reap is a slower suite tomorrow, not a wrong answer
- * today. It is reported, so a persistent failure is visible rather than silent. */
-const reapResult = spawnSync("npm run test:clean -- --reap", {
-  stdio: "inherit",
-  shell: true,
-  env: process.env,
-});
-if (reapResult.status !== 0) {
-  console.warn("⚠️  schema reap failed -- not fatal, but the test branch may accumulate schemas");
-}
 
 if (testResult.status !== 0) {
   process.exit(testResult.status ?? 1);
