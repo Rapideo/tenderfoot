@@ -2,6 +2,7 @@ import { all, one } from "../db/index.js";
 import { LATEST_PURSUIT } from "./latest.js";
 import { ELIGIBLE, UNDECIDED, EFFECTIVE_CLOSES_AT, DEADLINE_UNRELIABLE } from "./eligibility.js";
 import { getSample, type SampleHeader } from "./sample.js";
+import { truncateWords } from "../merge/description.js";
 
 export interface DeadlineConflict {
   value_text: string;
@@ -23,6 +24,22 @@ export interface QueueItem {
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
+  /* THE POSTING'S OWN WORDS, truncated for the card.
+   *
+   * Added 2026-09-02, after Matt could not triage sample 1: a card carrying a
+   * title, a buyer and two dates asks a person to judge "would KP pursue this"
+   * from the title alone. The text was in `sighting.raw` on 99.3% of SAM rows
+   * all along and merge discarded it -- see merge/description.ts.
+   *
+   * TRUNCATED SERVER-SIDE on purpose. "About 200 words" is a content decision
+   * (Matt, 2026-09-02), not a layout one, so it is not the client's to make --
+   * and shipping the full text to a 25-row queue page would send a quarter of
+   * a megabyte of prose the card never renders. The record view fetches the
+   * whole thing separately. */
+  description: string | null;
+  /** True when `description` was cut, so the card can say so rather than
+   * ending mid-thought and reading as complete. */
+  description_truncated: boolean;
   documents: number;
   sightings: number;
   /* Region 1.1.1: show the disagreement rather than silently picking a
@@ -131,6 +148,7 @@ export async function queuePage(
   const items = await all<QueueItem>(
     `SELECT s.id, s.title, o.name AS org_name, o.jurisdiction,
             s.closes_at, s.posted_at, s.value_cents, s.kind, s.set_aside,
+            s.description,
             src.name AS source_name,
             (SELECT count(*)::int FROM document d WHERE d.solicitation_id = s.id) AS documents,
             (SELECT count(*)::int FROM sighting g WHERE g.solicitation_id = s.id) AS sightings,
@@ -167,11 +185,21 @@ export async function queuePage(
     itemsParams,
   );
 
+  /* Truncation happens HERE rather than in SQL: `truncateWords` cuts on a word
+   * boundary and prefers a nearby sentence end, which left(s.description, n)
+   * cannot do without clipping mid-word. The cost is carrying the full text
+   * for one page of rows, which is bounded by the page size. */
+  const pageItems = items.map((i) => {
+    if (i.description === null) return { ...i, description_truncated: false };
+    const { text, truncated } = truncateWords(i.description);
+    return { ...i, description: text, description_truncated: truncated };
+  });
+
   return {
     mode: sample ? "sample" : "all",
     sample,
     total,
     remaining: Math.max(0, total - offset),
-    items,
+    items: pageItems,
   };
 }

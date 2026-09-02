@@ -66,9 +66,63 @@
   border-right: 1px solid var(--brdsoft);
 }
 
+/* The right cell of the bundle's two-up band now holds TWO stacked panels:
+ * the description above the cost facts. Matt ruled the placement 2026-09-02
+ * ("to the right of our machine scores"), and stacking rather than replacing
+ * keeps §7.10 clause 2's parked cost chrome built and inert. The shared
+ * --surface3 ground and the divider make them read as one column of two
+ * blocks rather than two unrelated cards. */
+.queue__right {
+  background: var(--surface3);
+  display: flex;
+  flex-direction: column;
+}
+
+.queue__what {
+  padding: 20px 30px 18px;
+  border-bottom: 1px solid var(--brdsoft);
+}
+.queue__what-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+/* Same microlabel treatment as the band's other two panel titles, so the
+ * three read as siblings: --type-microlabel is the 9.5px mono the
+ * bundle uses for MACHINE SCORES and COST TO PURSUE alike. */
+.queue__what-title {
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-wide);
+  color: var(--text7);
+}
+.queue__what-body {
+  margin: 0;
+  font: var(--type-body-para);
+  color: var(--text3);
+  /* The description is the one long-form thing on this card. white-space
+   * preserves the paragraph breaks description.ts deliberately keeps, and
+   * overflow-wrap stops an unbroken solicitation number widening the grid. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.queue__what-more {
+  margin: 8px 0 0;
+  font: var(--type-body-help);
+  color: var(--text6);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.queue__what-empty {
+  margin: 0;
+  font: var(--type-body-para);
+  color: var(--text6);
+}
+
 .queue__cost {
   padding: 20px 30px 24px;
-  background: var(--surface3);
 }
 
 /* One column below the bundle's own card width. The band's whole point is
