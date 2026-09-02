@@ -1087,3 +1087,81 @@ Its **judgement** half — why this fits, a recommended posture — is a call ag
 the Firm Profile and stays parked with qualification (design spec §1.1). What
 arrived is the source's own description, a **fact** rather than a judgement,
 which was never the parked part. The callout now says exactly that.
+
+---
+
+## D25 — IDOA carries no posting date, and `first-seen` stands in for one
+
+**Matt's ruling, 2026-09-02.** Indiana IDOA's listing publishes a **Response Due By** and nothing
+else. Verified against a committed capture: only **3 of 50** descriptions contained a long-form
+date, and all three were *addendum* notices rather than postings.
+
+So `posted_at` has nothing to read. `first-seen` — the date we first observed a row — stands in
+for it, **labelled distinctly and never written into the same column bare**. Migration 016 makes
+that enforceable: `posted_at_origin` is `published` or `observed`, and a CHECK ties it to
+`posted_at` so a date cannot exist without saying where it came from.
+
+> ⚠️ **The CHECK as first written would have permitted exactly the row it forbids.**
+> `posted_at_origin IN ('published','observed')` yields **NULL**, not FALSE, when the column is
+> NULL — and Postgres CHECK constraints **pass on NULL**. The shipped version carries
+> `posted_at_origin IS NOT NULL AND` before the `IN`, and that clause is load-bearing rather than
+> redundant. Found by the test that proves the constraint *rejects*; a happy-path test would have
+> shipped a constraint that constrains nothing.
+
+**The cost, stated so it is not discovered later.** IDOA's volume-per-week can only count **from
+the day we first scrape**. There is nothing to backfill. SAM's history came free because SAM
+publishes `posted_at`; IDOA's does not exist until we create it. **Every day before the first run
+is volume data that can never be recovered.**
+
+---
+
+## D26 — position in IDOA's table encodes DEADLINE, not recency
+
+Raised by Matt as a general question — *could we infer creation order from table order?* — and
+answered against the real page rather than assumed.
+
+**The main table is sorted ascending by `Response Due By`, with zero violations across all 69
+adjacent row pairs**, and explicitly **not** by Event ID. Established by exhaustive per-row
+extraction, not by the two-row anecdote that raised the question.
+
+**So no order-derived signal may be recorded, and the adapter derives none.** Treating position as
+recency would manufacture a posting sequence that is pure invention *and looks entirely plausible
+on screen* — there is nothing downstream that would contradict it.
+
+This is `verified_facets` (§5.4) applied one level up: the field exists because SAM.gov accepted an
+`is_active` parameter and silently ignored it. A property of a source is verified before anything
+depends on it, or it is not recorded at all.
+
+---
+
+## D27 — the merge layer was SAM-shaped, and a second source revealed it
+
+**Not a deviation from the bundle. A finding about this codebase, recorded here because it is the
+most consequential thing the IDOA slice produced.**
+
+Tenderfoot had exactly **one real ingesting source for its entire life**. Every layer that reads a
+payload therefore looks source-agnostic and is actually SAM-shaped, and **nothing could reveal that
+until a second source existed.** IDOA is the first thing that could.
+
+Four instances, all one root cause — `merge`'s field extractors are per-source and each knew only
+SAM:
+
+| Field | How it failed | Found by |
+|---|---|---|
+| `description` | no IDOA case | Matt, trying to triage (D24) |
+| `closes_at` | `closes-at.ts` had only `case "SAM.gov"` — **0 of 71** rows got a deadline, and the queue *orders* by it | the live run |
+| `title` | `merge.ts` read `raw.title`; IDOA emits `raw.eventName` — **71 of 71** read `(untitled)` | the live run |
+| `org_id` | `org-chain.ts` had no IDOA case — **0 of 45** rows showed a buyer | the fix for the previous one |
+
+**None of these were caught by 653 passing tests**, because every fixture was SAM-shaped too.
+
+> 🔴 **And one of them is not fully repairable in place.** `titleUpdates` is only populated in the
+> `else if (Number(g.unlinked) > 0)` branch, so a title is recomputed **only for rows with unlinked
+> sightings**. Rows created before the fix have `(untitled)` baked in at insert, and re-import is
+> idempotent — so there is no path that re-derives their title. New rows are correct; existing ones
+> need a deliberate backfill or deletion and re-ingest. **Recorded rather than fixed: touching
+> merge's update logic is a slice of its own, not a footnote to this one.**
+
+**The generalisable lesson**, for `Proto2PRD`: *a layer is only proven source-agnostic by a second
+source.* Until then "generic" is a claim about intent, not about behaviour — and the tests written
+alongside a single source cannot distinguish the two, because they share its shape.
