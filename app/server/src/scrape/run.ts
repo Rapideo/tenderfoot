@@ -104,6 +104,20 @@ export async function runScrape(
     throw new Error("snapshot adapters are not runnable until Task 4");
   }
 
+  /* Task 3 (spec §4) made `since`/`until` optional on RunRequest so a
+   * snapshot request never has to carry a window it does not have.
+   * Narrowing that away is Task 4's job for the snapshot loop; this loop
+   * is windowed-only (the isSnapshot check above already refused every
+   * other adapter shape), and validateRun's windowed branch (contract.ts)
+   * still fails closed on a missing window -- so both are guaranteed
+   * non-null by the time a validated request reaches here. A guard rather
+   * than a bare assertion, so a RunRequest built by hand (bypassing
+   * validateRun -- this module's own tests do) fails loud instead of
+   * sending `undefined` into `adapter.fetchListing`. */
+  if (req.since === undefined || req.until === undefined) {
+    throw new Error("runScrape: a windowed adapter requires since and until on the request");
+  }
+
   const started = now();
   const art = openArtifact(outPath, {
     /* FIX 1: the CANONICAL name, not the CLI's short key -- see the

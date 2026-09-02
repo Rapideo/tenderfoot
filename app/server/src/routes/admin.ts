@@ -75,6 +75,21 @@ admin.use(requireAdminSecret);
 admin.post(
   "/scrape",
   asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    /* The adapter lookup has to happen BEFORE validateRun now, not after:
+     * validateRun needs the resolved adapter's `shape` (windowed vs
+     * snapshot, Task 2) as its second argument, so there is no ordering
+     * left where the contract is checked before anything is known about
+     * which adapter answers `source`. */
+    const sourceKey = typeof body.source === "string" ? body.source : undefined;
+    const entry = sourceKey !== undefined ? ADAPTERS[sourceKey] : undefined;
+    if (!entry) {
+      res.status(400).json({ error: `No adapter named ${sourceKey}` });
+      return;
+    }
+    const adapter = entry.make();
+
     let request: RunRequest;
     try {
       /* `budgetMs` is in validateRun's allowed-key set (see contract.ts),
@@ -82,18 +97,12 @@ admin.post(
        * unknown-key guard. The caller-supplied value (if any) is
        * overridden immediately below regardless: the handler's budget is
        * fixed by the platform's function ceiling, not by the request. */
-      request = validateRun(req.body ?? {});
+      request = validateRun(body, adapter.shape);
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
       return;
     }
     request.budgetMs = SCRAPE_HANDLER_BUDGET_MS;
-
-    const entry = ADAPTERS[request.source];
-    if (!entry) {
-      res.status(400).json({ error: `No adapter named ${request.source}` });
-      return;
-    }
 
     /* FIX 1 / FIX 2: resolve against the source registry -- and refuse a
      * disabled source -- before any fetching. A 400 here is cheap; a 400
@@ -133,7 +142,7 @@ admin.post(
     const dir = mkdtempSync(join(tmpdir(), "tf-scrape-"));
     try {
       const out = join(dir, `run-${request.source}.db`);
-      const result = await runScrape(request, entry.make(), out);
+      const result = await runScrape(request, adapter, out);
 
       res.setHeader("Content-Type", "application/vnd.sqlite3");
       res.setHeader("Content-Disposition", `attachment; filename="${request.source}.db"`);
@@ -310,6 +319,7 @@ admin.post(
     }
     // resolveAdapterKey only ever returns a key that is present in ADAPTERS.
     const entry = ADAPTERS[key]!;
+    const adapter = entry.make();
 
     /* Computed here rather than after resolveSource because the row it
      * reads is the row this route STAMPS, and that target is `entry` +
@@ -356,7 +366,7 @@ admin.post(
 
     let request: RunRequest;
     try {
-      request = validateRun({ source: key, since, depth: "listing" });
+      request = validateRun({ source: key, since, depth: "listing" }, adapter.shape);
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
       return;
@@ -382,7 +392,7 @@ admin.post(
     const dir = mkdtempSync(join(tmpdir(), "tf-run-"));
     try {
       const out = join(dir, `run-${key}.db`);
-      const result = await runScrape(request, entry.make(), out);
+      const result = await runScrape(request, adapter, out);
 
       /* THE GUARD (2026-08-28). RUN_HANDLER_BUDGET_MS bounds only the
        * scrape loop; import and merge run after it, in this same request,

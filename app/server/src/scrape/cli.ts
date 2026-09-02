@@ -37,9 +37,18 @@ export function parseArgv(argv: string[]): Record<string, unknown> {
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  const req = validateRun(parseArgv(argv));
-  const entry = ADAPTERS[req.source];
-  if (!entry) throw new Error(`No adapter named ${req.source}. Known: ${Object.keys(ADAPTERS).join(", ")}`);
+  const parsed = parseArgv(argv);
+  /* The adapter lookup now has to happen BEFORE validateRun, not after --
+   * validateRun needs the resolved adapter's `shape` (windowed vs
+   * snapshot) as its second argument, so there is no "validate first, look
+   * up the adapter second" ordering left that also knows the shape. */
+  const sourceKey = typeof parsed.source === "string" ? parsed.source : undefined;
+  const entry = sourceKey !== undefined ? ADAPTERS[sourceKey] : undefined;
+  if (!entry) {
+    throw new Error(`No adapter named ${sourceKey}. Known: ${Object.keys(ADAPTERS).join(", ")}`);
+  }
+  const adapter = entry.make();
+  const req = validateRun(parsed, adapter.shape);
 
   /* FIX 1 / FIX 2 (final review, 2026-08-15): resolve the registry key
    * against the source registry UP FRONT, before any fetching. This is
@@ -55,7 +64,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
   const out = join(dir, `run-${req.source}-${stamp}.db`);
 
-  const res = await runScrape(req, entry.make(), out);
+  const res = await runScrape(req, adapter, out);
   console.log(JSON.stringify(res, null, 2));
   /* FIX 4 (final review, 2026-08-15): make the undated-skip count visible
    * in the CLI output on its own line, not just buried in the JSON dump
