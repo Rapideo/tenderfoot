@@ -41,7 +41,7 @@
 import { all, tx } from "../db/index.js";
 import { orgChain } from "./org-chain.js";
 import { closesAt } from "./closes-at.js";
-import { postedAt } from "./posted-at.js";
+import { postedAt, type PostedAt } from "./posted-at.js";
 import { description } from "./description.js";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
 
@@ -181,6 +181,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     source_id: number;
     closes_at: string | null;
     posted_at: string | null;
+    posted_at_origin: string | null;
     kind: string | null;
     codes: string | null;
     set_aside: string | null;
@@ -195,7 +196,11 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * later group wins, deterministically, rather than the planner choosing
    * among duplicate keys. */
   const deadlineUpdates = new Map<number, string>();
-  const postedUpdates = new Map<number, string>();
+  /* Value carries the origin alongside the date rather than a second parallel
+   * map, so the two can never desynchronise -- a date without a matching
+   * origin is exactly the state migration 016's CHECK constraint exists to
+   * make impossible, and two independently-keyed maps could drift into it. */
+  const postedUpdates = new Map<number, PostedAt>();
   const descriptionUpdates = new Map<number, string>();
   /* The three listing facts (listing-facts.ts). Keyed and guarded exactly as
    * the two above: a null never enters the map, so a source that states none
@@ -307,7 +312,8 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
         codes: codes === null ? null : JSON.stringify(codes),
         set_aside: setaside,
         closes_at: closes,
-        posted_at: posted,
+        posted_at: posted?.date ?? null,
+        posted_at_origin: posted?.origin ?? null,
       });
       if (chain.length) chains.set(g.external_id, chain);
     } else if (Number(g.unlinked) > 0) {
@@ -346,12 +352,13 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
            * row -- a text[] of JSON strings is the only shape unnest can
            * carry, and ::jsonb on the SELECT side is where it becomes the
            * column's real type. */
-          `INSERT INTO solicitation (external_id, title, source_id, closes_at, posted_at, kind, codes, set_aside)
-           SELECT u.external_id, u.title, u.source_id, u.closes_at, u.posted_at,
+          `INSERT INTO solicitation
+             (external_id, title, source_id, closes_at, posted_at, posted_at_origin, kind, codes, set_aside)
+           SELECT u.external_id, u.title, u.source_id, u.closes_at, u.posted_at, u.posted_at_origin,
                   u.kind, u.codes::jsonb, u.set_aside
              FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[],
-                         $6::text[], $7::text[], $8::text[])
-               AS u(external_id, title, source_id, closes_at, posted_at, kind, codes, set_aside)
+                         $6::text[], $7::text[], $8::text[], $9::text[])
+               AS u(external_id, title, source_id, closes_at, posted_at, posted_at_origin, kind, codes, set_aside)
            RETURNING id, external_id`,
           [
             inserts.map((i) => i.external_id),
@@ -359,6 +366,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
             inserts.map((i) => i.source_id),
             inserts.map((i) => i.closes_at),
             inserts.map((i) => i.posted_at),
+            inserts.map((i) => i.posted_at_origin),
             inserts.map((i) => i.kind),
             inserts.map((i) => i.codes),
             inserts.map((i) => i.set_aside),
@@ -393,13 +401,20 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       : 0;
 
     /* Same guard as the deadline above: nothing is written when the payload
-     * already agrees with the column, so a steady-state re-run is free. */
+     * already agrees with the column, so a steady-state re-run is free.
+     * `posted_at_origin` is written in the SAME statement as `posted_at` --
+     * never a date without the provenance that migration 016's CHECK
+     * constraint requires travel with it. */
     const postedSet = postedUpdates.size
       ? await q.run(
-          `UPDATE solicitation s SET posted_at = u.posted_at
-             FROM unnest($1::int[], $2::text[]) AS u(id, posted_at)
+          `UPDATE solicitation s SET posted_at = u.posted_at, posted_at_origin = u.origin
+             FROM unnest($1::int[], $2::text[], $3::text[]) AS u(id, posted_at, origin)
             WHERE s.id = u.id AND s.posted_at IS DISTINCT FROM u.posted_at`,
-          [[...postedUpdates.keys()], [...postedUpdates.values()]],
+          [
+            [...postedUpdates.keys()],
+            [...postedUpdates.values()].map((p) => p.date),
+            [...postedUpdates.values()].map((p) => p.origin),
+          ],
         )
       : 0;
 

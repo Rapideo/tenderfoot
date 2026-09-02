@@ -367,24 +367,33 @@ test("merge reads the posting date out of the payload, on insert and on backfill
   await sightRaw(sourceSam, "POSTED-1", raw, "2026-08-19T00:00:00Z");
   await mergeSightings();
 
-  const row = await one<{ posted_at: string; closes_at: string }>(
-    `SELECT posted_at, closes_at FROM solicitation WHERE external_id = 'POSTED-1'`,
+  const row = await one<{ posted_at: string; posted_at_origin: string; closes_at: string }>(
+    `SELECT posted_at, posted_at_origin, closes_at FROM solicitation WHERE external_id = 'POSTED-1'`,
   );
   /* A bare YYYY-MM-DD, matching the column's existing shape. */
   expect(row?.posted_at).toBe("2026-08-18");
   expect(row?.closes_at).toBe("2026-09-01");
+  /* SAM.gov PUBLISHES this date -- it is migration 016's 'published' case,
+   * not a date derived from when we merely saw the row. */
+  expect(row?.posted_at_origin).toBe("published");
 
   /* BACKFILL. The rows that need this most were merged before it existed --
    * they have an organisation and nothing unlinked, so every other branch
-   * skips them. Null the column and re-merge: it must come back. */
-  await run(`UPDATE solicitation SET posted_at = NULL WHERE external_id = 'POSTED-1'`);
+   * skips them. Null BOTH columns and re-merge: they must come back together
+   * -- migration 016's CHECK constraint refuses posted_at_origin alone to
+   * survive a null posted_at, so a fix that forgot to null it here would fail
+   * this setup step outright, not the assertion. */
+  await run(
+    `UPDATE solicitation SET posted_at = NULL, posted_at_origin = NULL WHERE external_id = 'POSTED-1'`,
+  );
   const again = await mergeSightings();
   expect(again.postedSet).toBeGreaterThanOrEqual(1);
 
-  const back = await one<{ posted_at: string }>(
-    `SELECT posted_at FROM solicitation WHERE external_id = 'POSTED-1'`,
+  const back = await one<{ posted_at: string; posted_at_origin: string }>(
+    `SELECT posted_at, posted_at_origin FROM solicitation WHERE external_id = 'POSTED-1'`,
   );
   expect(back?.posted_at).toBe("2026-08-18");
+  expect(back?.posted_at_origin).toBe("published");
 });
 
 /* A source with no posting date to read must be left alone, not given a
@@ -399,10 +408,52 @@ test("a source with no posting date is left null rather than guessed at", async 
     "2026-08-19T00:00:00Z",
   );
   await mergeSightings();
-  const row = await one<{ posted_at: string | null }>(
-    `SELECT posted_at FROM solicitation WHERE external_id = 'NO-POSTED-1'`,
+  const row = await one<{ posted_at: string | null; posted_at_origin: string | null }>(
+    `SELECT posted_at, posted_at_origin FROM solicitation WHERE external_id = 'NO-POSTED-1'`,
   );
   expect(row?.posted_at).toBeNull();
+  /* A provenance for a date that does not exist would be inventing the thing
+   * this column exists to prevent -- see migration 016's own comment. */
+  expect(row?.posted_at_origin).toBeNull();
+});
+
+/* THE CHECK CONSTRAINT ITSELF (migration 016). Half of what this migration
+ * delivers is the column; the other half is that a date can never exist
+ * without saying where it came from. A test that only exercises the happy
+ * path above would still pass if this constraint were dropped -- this one
+ * would not. */
+test("the CHECK constraint rejects a posted_at with no origin", async () => {
+  await expect(
+    run(
+      `INSERT INTO solicitation (external_id, title, source_id, posted_at, posted_at_origin)
+       VALUES ('CHECK-NO-ORIGIN', 'CHECK constraint fixture', $1, '2026-01-01', NULL)`,
+      [sourceSam],
+    ),
+  ).rejects.toThrow(/solicitation_posted_at_origin_valid/);
+});
+
+/* The mirror image: an origin recorded for a date that was never set is the
+ * same defect from the other side, and the same constraint refuses it. */
+test("the CHECK constraint rejects an origin with no posted_at", async () => {
+  await expect(
+    run(
+      `INSERT INTO solicitation (external_id, title, source_id, posted_at, posted_at_origin)
+       VALUES ('CHECK-NO-DATE', 'CHECK constraint fixture', $1, NULL, 'published')`,
+      [sourceSam],
+    ),
+  ).rejects.toThrow(/solicitation_posted_at_origin_valid/);
+});
+
+/* And an origin outside the two allowed values is rejected too -- the CHECK
+ * is a closed set, not merely "non-null". */
+test("the CHECK constraint rejects an origin value that isn't published or observed", async () => {
+  await expect(
+    run(
+      `INSERT INTO solicitation (external_id, title, source_id, posted_at, posted_at_origin)
+       VALUES ('CHECK-BAD-ORIGIN', 'CHECK constraint fixture', $1, '2026-01-01', 'guessed')`,
+      [sourceSam],
+    ),
+  ).rejects.toThrow(/solicitation_posted_at_origin_valid/);
 });
 
 /* THE THIRD INSTANCE, and the largest: five columns null on 1,724 of 1,724

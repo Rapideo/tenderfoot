@@ -16,8 +16,9 @@ beforeAll(async () => {
   await migrate(false);
   source = await insert(`INSERT INTO source (name) VALUES ('route source') RETURNING id`);
   solicitation = await insert(
-    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
-     VALUES ('route fixture', $1, '2026-08-01', '2027-06-01') RETURNING id`,
+    /* Migration 016: a non-null posted_at requires a non-null origin. */
+    `INSERT INTO solicitation (title, source_id, posted_at, posted_at_origin, closes_at)
+     VALUES ('route fixture', $1, '2026-08-01', 'published', '2027-06-01') RETURNING id`,
     [source],
   );
 }, 120000);

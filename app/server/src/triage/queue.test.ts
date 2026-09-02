@@ -240,15 +240,19 @@ async function wipe(): Promise<void> {
   await run(`DELETE FROM solicitation`);
 }
 
+/* Migration 016: posted_at_origin travels with posted_at or the CHECK
+ * constraint rejects the row -- derived here from whether postedAt is null
+ * rather than taken as a fifth parameter, so every caller in this file gets
+ * it for free and cannot pass one without the other. */
 async function solPosted(
   title: string,
   closesAt: string | null,
   postedAt: string | null,
 ): Promise<number> {
   return insert(
-    `INSERT INTO solicitation (title, source_id, closes_at, posted_at)
-     VALUES ($1, 1, $2, $3) RETURNING id`,
-    [title, closesAt, postedAt],
+    `INSERT INTO solicitation (title, source_id, closes_at, posted_at, posted_at_origin)
+     VALUES ($1, 1, $2, $3, $4) RETURNING id`,
+    [title, closesAt, postedAt, postedAt === null ? null : "published"],
   );
 }
 

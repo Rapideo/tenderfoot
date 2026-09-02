@@ -20,11 +20,18 @@ afterAll(async () => {
   await close();
 });
 
+/* Migration 016: posted_at_origin is derived from whether postedAt is null,
+ * never passed separately -- the CHECK constraint requires the two travel
+ * together, and a fixture helper that could set one without the other would
+ * let a test accidentally rely on a state the constraint forbids in
+ * production. 'published' is not a claim these fixtures need to be precise
+ * about; it is simply the one non-null value the constraint accepts that
+ * every row here is entitled to use. */
 async function sol(title: string, postedAt: string | null): Promise<number> {
   return insert(
-    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
-     VALUES ($1, $2, $3, '2027-06-01') RETURNING id`,
-    [title, source, postedAt],
+    `INSERT INTO solicitation (title, source_id, posted_at, posted_at_origin, closes_at)
+     VALUES ($1, $2, $3, $4, '2027-06-01') RETURNING id`,
+    [title, source, postedAt, postedAt === null ? null : "published"],
   );
 }
 
@@ -133,8 +140,8 @@ test("a posted_at that looks like a date but is not a valid one is excluded, not
 test("trailing garbage after a valid date prefix does not crash the report, and the row is counted", async () => {
   const trailingSource = await insert(`INSERT INTO source (name) VALUES ('trailing garbage source') RETURNING id`);
   await insert(
-    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
-     VALUES ('date with trailing junk', $1, '2026-01-01 (TBD)', '2027-06-01') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id, posted_at, posted_at_origin, closes_at)
+     VALUES ('date with trailing junk', $1, '2026-01-01 (TBD)', 'published', '2027-06-01') RETURNING id`,
     [trailingSource],
   );
 
@@ -156,8 +163,8 @@ test("trailing garbage after a valid date prefix does not crash the report, and 
 test("a full ISO timestamp still lands in the correct week bucket", async () => {
   const isoSource = await insert(`INSERT INTO source (name) VALUES ('iso timestamp source') RETURNING id`);
   await insert(
-    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
-     VALUES ('posted with a timestamp', $1, '2026-03-04T12:00:00Z', '2027-06-01') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id, posted_at, posted_at_origin, closes_at)
+     VALUES ('posted with a timestamp', $1, '2026-03-04T12:00:00Z', 'published', '2027-06-01') RETURNING id`,
     [isoSource],
   );
 
@@ -218,8 +225,8 @@ test("a reversed decision counts once, as what it became", async () => {
 test("a sample nobody has triaged reports no rate at all", async () => {
   const virgin = await insert(`INSERT INTO source (name) VALUES ('untouched source') RETURNING id`);
   await insert(
-    `INSERT INTO solicitation (title, source_id, posted_at, closes_at)
-     VALUES ('never triaged', $1, '2026-08-01', '2027-06-01') RETURNING id`,
+    `INSERT INTO solicitation (title, source_id, posted_at, posted_at_origin, closes_at)
+     VALUES ('never triaged', $1, '2026-08-01', 'published', '2027-06-01') RETURNING id`,
     [virgin],
   );
   const sample = await drawSample({ sourceId: virgin, n: 5, seed: "virgin" });
