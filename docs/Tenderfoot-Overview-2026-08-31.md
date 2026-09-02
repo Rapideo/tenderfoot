@@ -370,6 +370,22 @@ The question changed when matching was parked. It used to be "is the scorer's to
 
 A negative result is a valid result, and the shape of the negative changed with the question. The old failure was "the scorer cannot separate fits from non-fits". The new one is "everything the active sources return, read exhaustively, contained almost nothing worth pursuing" — a finding about the market rather than about the software, reached faster and with less machinery.
 
+> ### ⚠️ SUPERSEDED 2026-09-02 — the paragraph below is no longer true of the first clause
+>
+> **"Had not otherwise seen" IS captured now.** Migration 013 added
+> `pursuit.discovery_channel`; the Interested step requires one of seven values
+> and refuses without it; the metric reads it back. Live on production, verified
+> by behaviour. So the headline number has a data path — what it does not yet
+> have is **answers**, because no one has triaged the sample.
+>
+> **The second clause below still stands unchanged.** Value weighting remains
+> impossible, and the 09-01 payload audit closed that by evidence rather than
+> leaving it pending: SAM publishes no estimate for open notices.
+>
+> The rest of this section — the two supporting numbers, and the honest reading
+> that they support a headline the system could not produce — was accurate when
+> written and is the reason the capture was built.
+
 Now the unflattering part. **The gate's own question has a clause the system cannot currently measure.** "Would pursue" is captured — that is the pursuit row and its reason. "Had not otherwise seen" is not captured anywhere. There is no column, no prompt, no field, and no code path in the client or the server that records whether an opportunity was already known through another channel. The acceptance-criteria table defines discovery as "qualified opportunities surfaced that would not have been seen, weighted by value" — and the second half is unmeasurable too, because the value column is null on every ingested row for the same reason the posting date is. So the two numbers the gate actually ships are volume and base rate, which the design correctly calls *supporting* numbers, and the headline number they support has no data path.
 
 That is not a reason to distrust the gate session. A person paging through a sample can say "I already knew about this one" out loud, and that judgment is exactly what the session is for. But it will be an impression rather than a figure, and if you want it as a figure the smallest honest change is one more state or one more field captured at decision time — which is a design decision, and yours.

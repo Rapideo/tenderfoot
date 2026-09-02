@@ -149,12 +149,41 @@ triage habit is even physically possible against this firehose.
 
 ### 1. Interested-per-hundred — no data exists
 
+*(Status 2026-09-02: still no decisions, but **the sample is now drawn and
+waiting** — sample 1, seed `gate-2026-09-02`, **100 of 6,893** eligible SAM.gov
+notices, `decided 0`. The blocker is no longer setup; it is an hour of Matt's
+attention.)*
+
 `pursuit` on production is **empty**: 0 rows, 0 distinct solicitations. The
 "rate over five decisions" recorded elsewhere was never on production. This
 number requires a person triaging a real sample and nothing else can produce it.
 
-### 2. Discovery — "had not otherwise seen" is not captured anywhere
+### ~~2. Discovery — "had not otherwise seen" is not captured anywhere~~ ✅ **CLOSED 2026-09-02**
 
+> **The capture exists, end to end, and is live on production.** Migration 013
+> added `pursuit.discovery_channel` with a seven-value CHECK; the Interested
+> step asks for it and refuses without it; `discoveryRate()` reads it back.
+> Verified on production by `GET /api/triage/metrics` answering **200** with a
+> `discovery` object — on an unmigrated database that same route is a 500, so
+> the 200 *is* the column existing.
+>
+> **Ruled by Matt: a CHANNEL rather than a yes/no.** "Would you have found this
+> without Tenderfoot?" is §8.5's literal question, but it is a counterfactual
+> judgement made inside a ten-second decision. Naming the channel is closer to
+> recall than to judgement — and `nowhere` **is** the discovery count, while
+> every other value names the channel Tenderfoot is merely duplicating. That
+> second half is information no yes/no can give.
+>
+> ⚠️ **The vocabulary is invented, not derived**, which cuts against SVRC 1.1.4.
+> The argument for overriding it is in migration 013 and **deviation D21**, and
+> it is deliberately narrow: a reason is an open judgement, a channel is a
+> closed factual set, and free text cannot be counted.
+>
+> **`not_sure` is excluded from the rate and reported beside it** — folding it
+> into either side would be a claim nobody made. **The number is still `null`,
+> which is correct: nobody has answered yet.**
+
+*Original text, kept because it is exactly right about what was missing:*
 §8.5 calls this **the whole measure**. Nothing in the schema or the UI records
 whether an item was already known to KP, so the gate **cannot answer its own
 question** no matter how much triaging happens. Designing that capture is a

@@ -1,0 +1,766 @@
+<title>Triage Sample One</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+  /* ── Tenderfoot's own tokens, lifted from app/client/src/tokens/tokens.css.
+     Light values are verbatim; the dark set is authored here, using the dark
+     accent the token generator records in its own header (#4aa6cb). ───────── */
+  :root {
+    --canvas:      #eaeef0;
+    --surface:     #ffffff;
+    --recess:      #f4f7f8;
+    --chip:        #f3f6f7;
+
+    --text:        #14181c;
+    --text-2:      #3d474e;
+    --text-3:      #5a666e;
+    --label:       #93a0a8;
+
+    --line-card:   #dfe4e8;
+    --line-ctl:    #dbe2e7;
+    --line-soft:   #edf1f3;
+
+    --acc:         #1b6a8c;
+    --acc-line:    #17607f;
+    --acc-wash:    #e7f1f6;
+
+    --bad:         #a33a2e;
+    --bad-deep:    #8c3226;
+    --bad-wash:    #fdf3f1;
+    --bad-line:    #e8cfc9;
+
+    --ok:          #2e7d5b;
+    --ok-wash:     #eef7f2;
+
+    --warn:        #b5761a;
+    --warn-wash:   #fdf6e7;
+    --warn-line:   #ecdcb9;
+
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+    --shadow: 0 1px 2px rgba(20, 24, 28, .04), 0 8px 24px -12px rgba(20, 24, 28, .10);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --canvas:    #11171a;
+      --surface:   #1a2126;
+      --recess:    #151c20;
+      --chip:      #202a30;
+
+      --text:      #e9eef1;
+      --text-2:    #b6c3cb;
+      --text-3:    #93a4ae;
+      --label:     #6f818c;
+
+      --line-card: #2a353c;
+      --line-ctl:  #34424a;
+      --line-soft: #222c32;
+
+      --acc:       #4aa6cb;
+      --acc-line:  #3f93b5;
+      --acc-wash:  #15303d;
+
+      --bad:       #d4695a;
+      --bad-deep:  #b85242;
+      --bad-wash:  #2c1b18;
+      --bad-line:  #4a2c26;
+
+      --ok:        #55ab82;
+      --ok-wash:   #16281f;
+
+      --warn:      #d09a41;
+      --warn-wash: #2a2216;
+      --warn-line: #4a3c1e;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.30), 0 8px 24px -12px rgba(0,0,0,.55);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --canvas:    #11171a;
+    --surface:   #1a2126;
+    --recess:    #151c20;
+    --chip:      #202a30;
+
+    --text:      #e9eef1;
+    --text-2:    #b6c3cb;
+    --text-3:    #93a4ae;
+    --label:     #6f818c;
+
+    --line-card: #2a353c;
+    --line-ctl:  #34424a;
+    --line-soft: #222c32;
+
+    --acc:       #4aa6cb;
+    --acc-line:  #3f93b5;
+    --acc-wash:  #15303d;
+
+    --bad:       #d4695a;
+    --bad-deep:  #b85242;
+    --bad-wash:  #2c1b18;
+    --bad-line:  #4a2c26;
+
+    --ok:        #55ab82;
+    --ok-wash:   #16281f;
+
+    --warn:      #d09a41;
+    --warn-wash: #2a2216;
+    --warn-line: #4a3c1e;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.30), 0 8px 24px -12px rgba(0,0,0,.55);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--canvas);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 40px 24px 88px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ── microlabel: the product's own ALL-CAPS mono ───────────────────────── */
+  .ml {
+    font: 500 10px/1 var(--mono);
+    letter-spacing: .1em;
+    color: var(--label);
+    text-transform: uppercase;
+  }
+
+  /* ── masthead ───────────────────────────────────────────────────────────── */
+  .masthead { display: flex; flex-direction: column; gap: 14px; }
+
+  .mark {
+    display: flex; align-items: center; gap: 11px;
+  }
+  .mark-square {
+    width: 26px; height: 26px; flex: none;
+    border: 1px solid var(--acc-line);
+    border-radius: 6px;
+    background: var(--acc-wash);
+    display: grid; place-items: center;
+  }
+  .mark-square i {
+    width: 9px; height: 9px; background: var(--acc); border-radius: 1px; display: block;
+  }
+  .mark-word {
+    font: 600 12.5px/1 var(--mono);
+    letter-spacing: .18em;
+    color: var(--text-2);
+  }
+
+  h1 {
+    margin: 0;
+    font: 700 34px/1.15 var(--sans);
+    letter-spacing: -.018em;
+    text-wrap: balance;
+  }
+  .standfirst {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--text-2);
+    font-size: 16.5px;
+  }
+  .standfirst strong { color: var(--text); font-weight: 600; }
+
+  /* ── the run: sample facts ──────────────────────────────────────────────── */
+  .run {
+    background: var(--surface);
+    border: 1px solid var(--line-card);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .run-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .run-cell {
+    padding: 15px 18px;
+    display: flex; flex-direction: column; gap: 6px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .run-cell:last-child { border-right: none; }
+  .run-v {
+    font: 600 19px/1 var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .run-v.is-denom { color: var(--acc); }
+  .run-note { padding: 13px 18px; font-size: 13.5px; color: var(--text-3); }
+  .run-note code { font: 500 12.5px/1 var(--mono); color: var(--text-2); }
+
+  .go {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    background: var(--recess);
+    border-top: 1px solid var(--line-soft);
+  }
+  .go a {
+    font: 500 13px/1 var(--mono);
+    color: var(--acc);
+    text-decoration: none;
+    border-bottom: 1px solid var(--acc-line);
+    padding-bottom: 2px;
+    word-break: break-all;
+  }
+  .go a:hover { color: var(--acc-line); }
+  .go a:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 2px; }
+
+  /* ── generic section ────────────────────────────────────────────────────── */
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 {
+    margin: 0;
+    font: 600 21px/1.25 var(--sans);
+    letter-spacing: -.01em;
+    display: flex; align-items: baseline; gap: 11px;
+  }
+  h2 .n {
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .08em;
+    color: var(--acc);
+    border: 1px solid var(--acc-line);
+    background: var(--acc-wash);
+    border-radius: 4px;
+    padding: 4px 6px;
+    flex: none;
+  }
+  .lede { margin: 0; max-width: 66ch; color: var(--text-2); }
+
+  /* ── keys ───────────────────────────────────────────────────────────────── */
+  .keys { display: flex; flex-direction: column; gap: 1px; background: var(--line-soft);
+          border: 1px solid var(--line-card); border-radius: 9px; overflow: hidden; }
+  .key-row {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 16px;
+    align-items: start;
+    padding: 14px 18px;
+    background: var(--surface);
+  }
+  .kc {
+    font: 500 11px/1 var(--mono);
+    color: var(--text-3);
+    background: var(--chip);
+    border: 1px solid var(--line-ctl);
+    border-radius: 3px;
+    padding: 6px 0;
+    text-align: center;
+    display: block;
+  }
+  .key-what { display: flex; flex-direction: column; gap: 4px; }
+  .key-what b { font-weight: 600; font-size: 14.5px; }
+  .key-what span { color: var(--text-3); font-size: 13.5px; }
+  .changed {
+    display: inline-block;
+    font: 500 9.5px/1 var(--mono);
+    letter-spacing: .09em;
+    color: var(--warn);
+    background: var(--warn-wash);
+    border: 1px solid var(--warn-line);
+    border-radius: 3px;
+    padding: 3px 5px;
+    margin-left: 7px;
+    vertical-align: 1px;
+  }
+
+  /* ── the chip replicas — matched to ChoiceChip.css ──────────────────────── */
+  .chip-key {
+    border: 1px solid var(--line-card);
+    border-radius: 9px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .ck-head {
+    display: grid;
+    grid-template-columns: 150px 132px 1fr;
+    gap: 18px;
+    padding: 10px 18px;
+    background: var(--recess);
+    border-bottom: 1px solid var(--line-card);
+  }
+  .ck-row {
+    display: grid;
+    grid-template-columns: 150px 132px 1fr;
+    gap: 18px;
+    align-items: center;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .ck-row:last-child { border-bottom: none; }
+  .ck-row.is-count { background: var(--ok-wash); }
+  .ck-row.is-excluded { background: var(--warn-wash); }
+
+  /* exact replica: ChoiceChip.css — 1px --line-control, --ground-surface,
+     --text-secondary, --radius-pill 20px, 9px 14px, --type-ui-action */
+  .chip {
+    border: 1px solid var(--line-ctl);
+    background: var(--surface);
+    color: var(--text-2);
+    border-radius: 20px;
+    padding: 9px 14px;
+    font: 500 12.5px/1 var(--sans);
+    justify-self: start;
+    white-space: nowrap;
+  }
+  .chip.on {
+    border-color: var(--acc-line);
+    background: var(--acc);
+    color: var(--surface);
+  }
+  .wire {
+    font: 400 12px/1 var(--mono);
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .ck-mean { font-size: 13.5px; color: var(--text-2); }
+  .ck-mean em { font-style: normal; color: var(--text); font-weight: 600; }
+
+  .ck-foot {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    padding: 12px 18px;
+    background: var(--recess);
+    border-top: 1px solid var(--line-card);
+    font-size: 13px;
+    color: var(--text-3);
+  }
+  .swatch { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch i { width: 11px; height: 11px; border-radius: 3px; display: block; flex: none; }
+  .swatch i.ok { background: var(--ok-wash); border: 1px solid var(--ok); }
+  .swatch i.wa { background: var(--warn-wash); border: 1px solid var(--warn); }
+
+  /* ── checklist ──────────────────────────────────────────────────────────── */
+  .checks { display: flex; flex-direction: column; gap: 10px; }
+  .check {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 13px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--line-card);
+    border-left: 3px solid var(--acc);
+    border-radius: 7px;
+    padding: 13px 16px;
+  }
+  .box {
+    width: 15px; height: 15px; margin-top: 3px;
+    border: 1.5px solid var(--line-ctl);
+    border-radius: 3px;
+    background: var(--recess);
+  }
+  .check-body { display: flex; flex-direction: column; gap: 5px; }
+  .check-body b { font-weight: 600; font-size: 14.5px; }
+  .check-body span { color: var(--text-3); font-size: 13.5px; }
+  .check-body span code, .lede code, li code {
+    font: 500 12.5px/1.4 var(--mono);
+    background: var(--chip);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: 1px 4px;
+    color: var(--text-2);
+  }
+
+  /* ── known / new ────────────────────────────────────────────────────────── */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .panel {
+    border-radius: 9px;
+    padding: 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .panel.known { background: var(--recess); border: 1px dashed var(--line-ctl); }
+  .panel.newish { background: var(--surface); border: 1px solid var(--line-card); box-shadow: var(--shadow); }
+  .panel h3 { margin: 0; font: 600 15px/1.3 var(--sans); }
+  .panel ul { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 9px; }
+  .panel li { font-size: 13.5px; color: var(--text-2); }
+  .panel li b { color: var(--text); font-weight: 600; }
+  .panel .ml { margin-bottom: -4px; }
+
+  /* ── caveat ─────────────────────────────────────────────────────────────── */
+  .caveat {
+    background: var(--bad-wash);
+    border: 1px solid var(--bad-line);
+    border-radius: 9px;
+    padding: 17px 20px;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .caveat h3 { margin: 0; font: 600 15px/1.35 var(--sans); color: var(--bad-deep); }
+  .caveat p { margin: 0; font-size: 13.5px; color: var(--text-2); max-width: 70ch; }
+  .caveat p strong { color: var(--text); }
+
+  footer {
+    border-top: 1px solid var(--line-card);
+    padding-top: 18px;
+    color: var(--text-3);
+    font-size: 13px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  footer code { font: 400 12px/1 var(--mono); color: var(--text-2); }
+
+  @media (max-width: 720px) {
+    .run-grid { grid-template-columns: 1fr 1fr; }
+    .run-cell:nth-child(2) { border-right: none; }
+    .run-cell:nth-child(1), .run-cell:nth-child(2) { border-bottom: 1px solid var(--line-soft); }
+    .ck-head { display: none; }
+    .ck-row { grid-template-columns: 1fr; gap: 8px; }
+    .two { grid-template-columns: 1fr; }
+    h1 { font-size: 27px; }
+  }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <div class="mark">
+      <span class="mark-square"><i></i></span>
+      <span class="mark-word">TENDERFOOT</span>
+    </div>
+    <h1>Sample one: what to press, and what to watch</h1>
+    <p class="standfirst">
+      One hundred federal SAM.gov notices, drawn against a recorded population. Every
+      Interested now asks a second question — <strong>where else would this have reached
+      you?</strong> — and that answer is the only measure the GO/NO-GO gate has.
+    </p>
+  </header>
+
+  <!-- ── THE RUN ──────────────────────────────────────────────────────────── -->
+  <div class="run">
+    <div class="run-grid">
+      <div class="run-cell">
+        <span class="ml">Sample</span>
+        <span class="run-v">1</span>
+      </div>
+      <div class="run-cell">
+        <span class="ml">Drawn</span>
+        <span class="run-v">100</span>
+      </div>
+      <div class="run-cell">
+        <span class="ml">Population</span>
+        <span class="run-v is-denom">6,893</span>
+      </div>
+      <div class="run-cell">
+        <span class="ml">Source</span>
+        <span class="run-v">SAM.gov</span>
+      </div>
+    </div>
+    <p class="run-note">
+      Seed <code>gate-2026-09-02</code>. The screen states all three
+      — <code>SAMPLE · 100 of 6,893 · SAM.gov · seed gate-2026-09-02</code> — because a rate
+      quoted without its denominator is not a measurement.
+    </p>
+    <div class="go">
+      <span class="ml">Triage here</span>
+      <a href="https://tenderfoot-tau.vercel.app/?sample=1">https://tenderfoot-tau.vercel.app/?sample=1</a>
+    </div>
+  </div>
+
+  <!-- ── 1. GETTING IN ────────────────────────────────────────────────────── -->
+  <section>
+    <h2><span class="n">01</span> Two prompts, once each</h2>
+    <p class="lede">
+      Both are held for the tab's lifetime only. Close the tab and you will be asked again —
+      that is deliberate, not a bug.
+    </p>
+    <div class="keys">
+      <div class="key-row">
+        <span class="kc">1</span>
+        <span class="key-what">
+          <b>Admin secret</b>
+          <span>The 40-character value on <code>.env</code> line 26. A wrong one answers 401 and
+            clears itself, so you get another go rather than a bricked session.</span>
+        </span>
+      </div>
+      <div class="key-row">
+        <span class="kc">2</span>
+        <span class="key-what">
+          <b>Your name or initials</b>
+          <span>Stored as <code>decided_by</code> on every row this session. Two people scoring
+            cannot be merged into one ground truth without knowing whose is whose.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 2. THE LOOP ──────────────────────────────────────────────────────── -->
+  <section>
+    <h2><span class="n">02</span> The loop</h2>
+    <div class="keys">
+      <div class="key-row">
+        <span class="kc">I</span>
+        <span class="key-what">
+          <b>Interested <span class="changed">CHANGED TODAY</span></b>
+          <span>Opens the discovery step. It no longer decides on its own — pick a channel,
+            then <b>Save &amp; next</b>. This is the slowest path in the product and it is the
+            price of the gate having a measure at all.</span>
+        </span>
+      </div>
+      <div class="key-row">
+        <span class="kc">P</span>
+        <span class="key-what">
+          <b>Pass</b>
+          <span>Opens the reason step. Free text, no chips — a reason vocabulary stays parked
+            until a hand-run derives one. Confirm is <b>Pass &amp; next</b>.</span>
+        </span>
+      </div>
+      <div class="key-row">
+        <span class="kc">U</span>
+        <span class="key-what">
+          <b>Undo</b>
+          <span>Appends a return to New; it never deletes. Both rows survive and the later one
+            wins. No time limit — it is simply deciding again.</span>
+        </span>
+      </div>
+      <div class="key-row">
+        <span class="kc">↵</span>
+        <span class="key-what">
+          <b>Open the full record</b>
+          <span>Fields, citations and the documents they came from. Use it when the card alone
+            will not settle it.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 3. THE SEVEN CHANNELS ────────────────────────────────────────────── -->
+  <section>
+    <h2><span class="n">03</span> The seven channels</h2>
+    <p class="lede">
+      Listed in the order they appear on screen, so you can find one by position rather than by
+      reading. The question is about <b>first sighting</b>, not about whether the opportunity is
+      any good — you have already answered that by pressing <code>I</code>.
+    </p>
+
+    <div class="chip-key">
+      <div class="ck-head">
+        <span class="ml">Chip</span>
+        <span class="ml">Stored as</span>
+        <span class="ml">Pick it when</span>
+      </div>
+
+      <div class="ck-row">
+        <span class="chip">Already knew</span>
+        <span class="wire">already_knew</span>
+        <span class="ck-mean">It was already on KP's radar before Tenderfoot showed it to you.</span>
+      </div>
+
+      <div class="ck-row">
+        <span class="chip">Indiana email</span>
+        <span class="wire">indiana_email</span>
+        <span class="ck-mean">Indiana's own notifications would have caught it.
+          <em>Rare on federal notices</em> — the vocabulary was written with Indiana in mind, and
+          this sample is SAM.gov. If it never fires, that is data, not a fault.</span>
+      </div>
+
+      <div class="ck-row">
+        <span class="chip">Portal</span>
+        <span class="wire">portal</span>
+        <span class="ck-mean">A procurement portal KP checks directly would have carried it.</span>
+      </div>
+
+      <div class="ck-row">
+        <span class="chip">Colleague</span>
+        <span class="wire">colleague</span>
+        <span class="ck-mean">Someone would have mentioned it.</span>
+      </div>
+
+      <div class="ck-row is-count">
+        <span class="chip on">Nowhere</span>
+        <span class="wire">nowhere</span>
+        <span class="ck-mean"><em>Nothing would have surfaced it.</em> This is the discovery
+          count — the numerator of the only number the gate produces. Shown here in its selected
+          state, which is how a picked chip looks.</span>
+      </div>
+
+      <div class="ck-row is-excluded">
+        <span class="chip">Not sure</span>
+        <span class="wire">not_sure</span>
+        <span class="ck-mean"><em>A real answer, not a skip.</em> Excluded from the rate and
+          reported beside it, so uncertainty costs the measure honestly instead of silently
+          deflating or inflating it. Use it rather than guessing.</span>
+      </div>
+
+      <div class="ck-row">
+        <span class="chip">Other</span>
+        <span class="wire">other</span>
+        <span class="ck-mean">None of the above. Put the detail in the free-text box beneath —
+          there is no second field.</span>
+      </div>
+
+      <div class="ck-foot">
+        <span class="swatch"><i class="ok"></i> counts as discovery</span>
+        <span class="swatch"><i class="wa"></i> excluded from the rate, reported separately</span>
+        <span>If <b>Other</b> or <b>Not sure</b> dominates, the vocabulary was wrong — and the
+          values will have said so.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 4. WHAT TO LOOK FOR ──────────────────────────────────────────────── -->
+  <section>
+    <h2><span class="n">04</span> What to look for</h2>
+    <p class="lede">
+      Each of these was proven in a browser before you started, so a failure here is a real
+      regression and worth stopping for.
+    </p>
+    <div class="checks">
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>The banner names all three numbers</b>
+          <span>Top of the card: <code>SAMPLE · 100 of 6,893 · SAM.gov · seed gate-2026-09-02</code>.
+            If it is missing, you are on the ordinary queue and measuring something else.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b><code>I</code> opens a step rather than deciding</b>
+          <span>The counter must <em>not</em> move until you confirm. If a card advances the
+            moment you press <code>I</code>, an old bundle is cached — hard-reload.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>Confirming with nothing picked refuses</b>
+          <span>You should see <em>“Where else would this have reached you? Pick one —
+            &lsquo;Not sure&rsquo; counts.”</em> and the card must not advance. Nothing is sent
+            to the server.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>Picking a second chip replaces the first</b>
+          <span>Never two lit at once — the column stores one value, and a UI showing two would
+            be lying about what it is going to write.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b><code>Back</code> clears the selection</b>
+          <span>Reopen the step and nothing should be pre-selected. A channel carried over from
+            an abandoned card is the quiet way a discovery rate stops being defensible.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>The two confirms do not look alike</b>
+          <span><b>Pass &amp; next</b> is red; <b>Save &amp; next</b> is teal. A rejection must
+            not look like a save at the moment you commit. Both say <code>&amp; next</code>.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>No chips on the Pass step</b>
+          <span>The discovery chips must not leak across the mode. Pass is free text only.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b><code>U</code> restores the card and the count</b>
+          <span>Press it right after a decision: the counter goes back up and the card returns.
+            Both database rows survive — that is the design, not a leak.</span>
+        </span>
+      </div>
+
+      <div class="check">
+        <span class="box"></span>
+        <span class="check-body">
+          <b>Sampling did not filter the product</b>
+          <span>Open <code>/</code> with no <code>?sample=1</code> in another tab: it should show
+            a much larger queue, around 6,920. Sampling selects what <em>you</em> read, never
+            what the product returns.</span>
+        </span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 5. KNOWN vs NEW ──────────────────────────────────────────────────── -->
+  <section>
+    <h2><span class="n">05</span> Already logged, and worth stopping for</h2>
+    <div class="two">
+
+      <div class="panel known">
+        <span class="ml">Don't re-report</span>
+        <h3>Known, and deliberately not fixed yet</h3>
+        <ul>
+          <li><b>The decision bar loses its grey band</b> when either step opens. The bundle keeps
+            one band and swaps its contents; ours drops the background. Two CSS declarations,
+            already written up as audit item 10.</li>
+          <li><b>A bad channel value answers 500, not 400.</b> Unreachable from the screen — the
+            UI can only send the seven.</li>
+          <li><b>The reason input is 12px where the bundle is 13px.</b> No 13px token exists yet.</li>
+        </ul>
+      </div>
+
+      <div class="panel newish">
+        <span class="ml">Tell me</span>
+        <h3>Shapes worth interrupting for</h3>
+        <ul>
+          <li><b>A card you cannot answer the channel question about.</b> That is the vocabulary
+            failing, and it is the single most useful thing this run can find.</li>
+          <li><b>A deadline or value that reads wrong</b> against the notice itself — extraction
+            is the layer under the gate.</li>
+          <li><b>Anything that makes you slow down</b> and think about the interface rather than
+            the opportunity. Ten seconds a card is the design target.</li>
+          <li><b>A conflict shown inline</b> where the two dates look implausible — that display
+            is new and has had little real data through it.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 6. CAVEAT ────────────────────────────────────────────────────────── -->
+  <div class="caveat">
+    <h3>What this run can and cannot conclude</h3>
+    <p>
+      <strong>SAM.gov is the only source that has ever been ingested.</strong> Indiana IDOA and
+      Indiana EDS read health <code>ok</code> but have never run — there is no adapter for either.
+      So whatever number comes out of this, it is a verdict on <strong>the federal market alone</strong>,
+      and it has to be said in those words.
+    </p>
+    <p>
+      It is still worth having. It is the first time discovery has been measurable at all, and the
+      shape of the answer — how often <em>Nowhere</em> wins, and which channel dominates when it
+      does not — tells you what Indiana has to beat.
+    </p>
+  </div>
+
+  <footer>
+    <span>Stop whenever you like — the sample keeps its place, and <code>decided</code> counts up
+      as you go. Partial is fine; the denominator is fixed at 6,893 either way.</span>
+    <span>When you are done, say so and I will read back Interested-per-hundred and the discovery
+      rate, denominators attached.</span>
+  </footer>
+
+</div>

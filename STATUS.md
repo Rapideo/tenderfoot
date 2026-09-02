@@ -217,7 +217,28 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-02
 
-## ▶️ NEXT SESSION — the discovery capture is DONE, MERGED, DEPLOYED and MIGRATED. What is left is a triage session, and then IDOA.
+## ▶️ NEXT SESSION — everything is built and the sample is drawn. **The next move is Matt triaging it**, and then IDOA.
+
+### 🎯 SAMPLE 1 IS DRAWN AND WAITING — production, 2026-09-02
+| | |
+|---|---|
+| Source | **SAM.gov** (id 1) — the only source ever ingested |
+| Seed | `gate-2026-09-02` |
+| Drawn | **100** |
+| Population at draw time | **6,893** — the denominator |
+| Decided | **0** |
+| Triage at | `https://tenderfoot-tau.vercel.app/?sample=1` |
+
+**This is the first sample ever drawn on production.** The SP6 demo (sample 1, seed `gate-2026-08-31`, population 1,018) was on **`test`** — a different database and a different sample id, so do not confuse the two.
+
+**Two prompts, once each:** the admin secret, then a name/initials stored as `decided_by` on every row (spec §5.3). **`I` now opens a step rather than deciding** — that is the behaviour change to the fastest path in the product.
+
+**An operator's guide was published for the run** — the seven channels, the keyboard loop, and nine checks that were proven in a browser first so a failure is a real regression: `https://claude.ai/code/artifact/85361af2-0180-40a2-a097-45b621c9e7df`
+
+⚠️ **The queue is not the sample.** `/` with no `?sample=1` is ~6,920 rows across three sources including two disabled corpus imports. Triaging *that* measures something else. The banner on screen is the check: `SAMPLE · 100 of 6,893 · SAM.gov · seed gate-2026-09-02`.
+
+⚠️ **Not yet done on production: a real Interested.** The step was pre-flighted there (bundle `index-DNeXJwnW.js`, seven chips, correct copy and colours on a live SAM.gov notice) but **no decision has ever been recorded on production**, so the first one Matt makes is genuinely the first.
+
 
 ### ✅ PRODUCTION IS LIVE, MIGRATED AND VERIFIED — 2026-09-02
 

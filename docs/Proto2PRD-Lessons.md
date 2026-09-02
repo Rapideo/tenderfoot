@@ -399,6 +399,89 @@ Workflow spec §8 recorded a six-step dashboard procedure for per-preview databa
 
 ---
 
+### 2.24 Fidelity checked at the container level passes anything with the right silhouette
+
+**Observed 2026-09-02, in two places at once, from one root.**
+
+**Form one — the audit recorded shape and not strings.** `SP6-fidelity-audit.md`
+described the decision bar's reason step as *"prompt + help text, 8 reason
+chips, a free-text input"* and marked it built. It never transcribed the
+prompt. So four invented strings shipped and passed review: `WHY ARE YOU
+PASSING?` for the bundle's **`WHY NOT? — REQUIRED`**, a help line written from
+scratch, `Confirm pass` for **`Pass & next`**, and a placeholder with its tail
+**`(this is the training signal)`** dropped. The audit's own §7.10 says copy is
+specification; the audit checked everything except the copy.
+
+**Form two — a boolean where the reference has an enum.** The same slice built
+`askReason` as `true | false`. The bundle's is `null | "pass" | "interested"`,
+and **eight** rendered values branch off it — prompt, help, accent, chip list,
+confirm label, confirm style among them. The boolean looked like a
+simplification and was actually **an unbuilt branch plus four hardcoded
+constants**, one of which (`reasonAccent`, pinned to `--bad`) would have
+rendered the new step's prompt in the rejection colour the moment anyone built
+it.
+
+**Proposed generalisation.** **A fidelity check that names the container passes
+any contents.** "Has a prompt" is satisfied by any prompt; "is a mode machine"
+is satisfied by any number of modes ≥ 2. Both forms survived a screenshot,
+because a screenshot of *one* branch shows nothing about the branch nobody
+built, and invented copy looks exactly as convincing as transcribed copy.
+
+> **The tell is an audit line that describes a slot rather than quoting what
+> fills it** — and, in code, a two-valued type standing in for a reference's
+> n-valued one.
+
+**The check that catches it.** An audit item for anything bearing text quotes
+the string and its source index, so the diff is mechanical. An audit item for
+anything with modes states **how many**, and names each. Where the reference
+holds a ternary, grep for the values it branches to before declaring the
+element matched.
+
+**Why not promoted.** One slice — but it is the second time this project has
+found invented copy downstream of a check that looked thorough, and the first
+time it went unnoticed through a full review. Worth promoting if it recurs.
+
+---
+
+### 2.25 A shared name is not a shared component
+
+**Observed 2026-09-02, as a near-miss rather than a defect.** The discovery
+step needed selectable chips. An SP2 primitive called **`Chip`** already
+existed, and the obvious move — the one the mandate's own *"prefer the
+primitives"* clause seems to endorse — is to reuse it, or add a tone to it.
+
+**They share a word and nothing else.** `Chip` was matched against the bundle's
+**tag pills** — `10px` mono, `4px` radius, `5×8` padding, no border, a `<span>`,
+not interactive. The reason chips are `20px` radius, `12.5px` sans, `9×14`,
+bordered, toggleable `<button>`s. Reusing `Chip` would have rendered the control
+at roughly **40% of the size the bundle draws**, and adding a third "tone" would
+have buried a completely different geometry inside a prop that otherwise only
+changes colour.
+
+**Caught only by opening the bundle** and reading the declaration the new
+element had to match, rather than by reading our own component list.
+
+**Proposed generalisation.** **The codebase's vocabulary and the reference's
+vocabulary drift, and a name match is not a component match.** A design system
+names things by role; a prototype names nothing at all. So "we already have a
+Chip" is a claim about our naming, not about the reference — and the reuse
+instinct is strongest exactly where the names collide.
+
+> **The tell is a primitive that fits the noun but not the picture.** If
+> matching the reference means passing a prop that changes radius *and* type
+> *and* element, it is a second component wearing the first one's name.
+
+**The check that catches it.** Before extending a primitive, put the two bundle
+declarations side by side. Shared *role* justifies a variant; shared *word* with
+different geometry justifies a new file. Record which declaration each one was
+matched against, in the file — SP2's convention, and it is what made the
+collision visible here.
+
+**Why not promoted.** One instance, and it was avoided rather than paid for.
+Promote if a second name-collision appears.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
