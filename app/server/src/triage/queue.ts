@@ -1,6 +1,6 @@
 import { all, one } from "../db/index.js";
 import { LATEST_PURSUIT } from "./latest.js";
-import { ELIGIBLE, UNDECIDED } from "./eligibility.js";
+import { ELIGIBLE, UNDECIDED, EFFECTIVE_CLOSES_AT, DEADLINE_UNRELIABLE } from "./eligibility.js";
 import { getSample, type SampleHeader } from "./sample.js";
 
 export interface DeadlineConflict {
@@ -28,6 +28,14 @@ export interface QueueItem {
   /* Region 1.1.1: show the disagreement rather than silently picking a
    * winner. Empty for the overwhelming majority of rows. */
   deadline_conflict: DeadlineConflict[];
+  /* 🔴 The stored deadline is EARLIER THAN THE POSTING DATE, so it cannot be
+   * true. 106 such rows on production, 62 of them biddable and recently posted
+   * -- they used to be filed as closed and never reached the queue at all
+   * (eligibility.ts). They now DO reach it, which makes telling the screen
+   * necessary: `closes_at` still carries the source's claim, and rendering
+   * "2006-09-24" as a live deadline would be a worse lie than hiding it was.
+   * The screen shows the date is not usable; it does not invent one. */
+  deadline_unreliable: boolean;
   /* SAMPLE MODE ONLY, spec §10: an item whose deadline passes mid-session
    * stays in the sample, marked closed, rather than becoming unreachable.
    * Always false in ordinary (non-sample) mode, where a closed item cannot
@@ -138,13 +146,23 @@ export async function queuePage(
                   AND s.closes_at IS NOT NULL
                   AND ef.value_text <> s.closes_at),
               '[]'::json) AS deadline_conflict,
-            (s.closes_at IS NOT NULL AND s.closes_at < $1) AS closed
+            -- closed reads the EFFECTIVE deadline, not the stored one. An
+            -- impossible date (closes before posted) is unknown rather than
+            -- past, so it must not be marked closed: that flag is what put 62
+            -- live opportunities out of the queue. See eligibility.ts.
+            (${EFFECTIVE_CLOSES_AT} IS NOT NULL AND ${EFFECTIVE_CLOSES_AT} < $1) AS closed,
+            ${DEADLINE_UNRELIABLE} AS deadline_unreliable
        FROM solicitation s
        LEFT JOIN (${LATEST_PURSUIT}) lp ON lp.solicitation_id = s.id
        LEFT JOIN organization o ON o.id = s.org_id
        LEFT JOIN source src ON src.id = s.source_id
       WHERE ${membership} ${itemsScope}
-      ORDER BY s.closes_at ASC NULLS LAST, s.id ASC
+      -- ORDERS ON THE EFFECTIVE DEADLINE, and this line is why the fix is not
+      -- a one-word change to ELIGIBLE. D16 sorts soonest-first, so a notice
+      -- claiming 2006 sorts ABOVE everything real the moment it is let back
+      -- in: admitting these rows without this line would put the worst data at
+      -- the top of the Pri 5 screen. Unknown sorts last, where it belongs.
+      ORDER BY ${EFFECTIVE_CLOSES_AT} ASC NULLS LAST, s.id ASC
       LIMIT $2 OFFSET $3`,
     itemsParams,
   );

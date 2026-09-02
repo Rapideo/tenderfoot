@@ -19,6 +19,7 @@ const ITEM = {
   sightings: 2,
   deadline_conflict: [],
   closed: false,
+  deadline_unreliable: false,
 };
 
 function page(over: Record<string, unknown> = {}) {
@@ -410,4 +411,22 @@ test("a deadline disagreement shows both values side by side, unresolved", async
   expect(text).toContain("2026-09-17");
   expect(text).toContain("2026-08-26");
   expect(text).toContain("document");
+});
+
+/* 🔴 THE IMPOSSIBLE DEADLINE, on the screen. These rows reach the queue at all
+ * only because of the 2026-09-01 eligibility fix -- 62 biddable, recently posted
+ * opportunities were being filed as closed and dropped. Having admitted them,
+ * the card must not then render the bad date as if it were real: "2006-09-24"
+ * coloured by urgency under a "closes today" caption is a worse lie than the
+ * hiding was. */
+test("an impossible deadline shows as unknown, and says what the source claimed", async () => {
+  stub(page({ items: [{ ...ITEM, closes_at: "2006-09-24", deadline_unreliable: true }] }));
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* The source's claim is still reported -- not discarded, not presented as a
+   * deadline. */
+  expect(screen.getByText(/Source states 2006-09-24, before it was posted/)).toBeTruthy();
+  /* And it is NOT rendered as a live deadline with an urgency reading. */
+  expect(screen.queryByText(/closes today/i)).toBeNull();
 });

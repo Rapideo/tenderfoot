@@ -63,6 +63,11 @@ interface QueueItem {
    * session stays in the sample and reaches the queue, marked closed,
    * rather than becoming unreachable. Always false outside sample mode. */
   closed: boolean;
+  /* 🔴 The stored deadline is EARLIER than the posting date, so it cannot be
+   * true -- a year typo in the source (production: "posted 2026-08-25, closes
+   * 2006-09-24"). 106 such rows, 62 of them biddable and recently posted, used
+   * to be filed as closed and never reached this screen at all. */
+  deadline_unreliable: boolean;
 }
 interface SampleHeader {
   id: number;
@@ -315,10 +320,32 @@ export function Queue() {
           <div className="queue__facts">
             <div className="queue__fact">
               <div className="queue__fact-label">DEADLINE</div>
-              <div className="queue__fact-value" style={{ color: deadlineColour(item.closes_at) }}>
-                {item.closes_at ?? "—"}
-              </div>
-              <div className="queue__fact-sub">{deadlineIn(item.closes_at)}</div>
+              {/* AN IMPOSSIBLE DATE IS SHOWN AS UNKNOWN, NOT AS A DEADLINE.
+                * These rows are in the queue precisely because a wrong date is
+                * not a reason to hide an opportunity -- but rendering
+                * "2006-09-24" in the deadline slot, coloured by urgency and
+                * captioned "closes today", would be a worse lie than hiding it
+                * was. The dash is what we actually know; the sub-line says why,
+                * and still reports what the source claimed rather than
+                * discarding it. */}
+              {item.deadline_unreliable ? (
+                <>
+                  <div className="queue__fact-value">—</div>
+                  <div className="queue__fact-sub">
+                    Source states {item.closes_at}, before it was posted. Verify with the buyer.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div
+                    className="queue__fact-value"
+                    style={{ color: deadlineColour(item.closes_at) }}
+                  >
+                    {item.closes_at ?? "—"}
+                  </div>
+                  <div className="queue__fact-sub">{deadlineIn(item.closes_at)}</div>
+                </>
+              )}
             </div>
             <div className="queue__fact">
               <div className="queue__fact-label">EST. VALUE</div>

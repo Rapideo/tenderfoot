@@ -212,3 +212,109 @@ test("total tracks the eligible population, and remaining follows offset", async
   expect(after.total).toBe(totalBefore + added);
   expect(after.remaining).toBe(after.total - 1);
 });
+
+/* ─── 🔴 THE IMPOSSIBLE DEADLINE, and the 62 opportunities it was hiding ───
+ *
+ * Measured on production 2026-09-01: 106 solicitations close BEFORE they were
+ * posted -- worst case `posted 2026-08-25, closes 2006-09-24`, a year typo in
+ * SAM's own payload. ELIGIBLE read `closes_at >= today` directly, so every one
+ * was filed as closed and never entered the queue. 75 were a biddable kind and
+ * 62 had been posted within the month: ~1.4% of a week's biddable volume, lost
+ * in silence, from the system whose entire purpose is measuring DISCOVERY.
+ *
+ * These tests seed the real shape rather than a tidy one, and they assert
+ * BEHAVIOUR -- membership, order, flag -- not the SQL that produces it. The
+ * check depends on posted_at being populated, which it was not on production
+ * until the day this landed, so a test that pinned the expression would pass
+ * while the feature did nothing. */
+/* Dependents first. Earlier tests in this file leave extracted_field and
+ * triage_sample_item rows pointing at solicitations, and a bare
+ * `DELETE FROM solicitation` trips their foreign keys -- which fails for a
+ * reason none of these tests are about. */
+async function wipe(): Promise<void> {
+  await run(`DELETE FROM extracted_field`);
+  await run(`DELETE FROM document`);
+  await run(`DELETE FROM triage_sample_item`);
+  await run(`DELETE FROM pursuit`);
+  await run(`DELETE FROM sighting`);
+  await run(`DELETE FROM solicitation`);
+}
+
+async function solPosted(
+  title: string,
+  closesAt: string | null,
+  postedAt: string | null,
+): Promise<number> {
+  return insert(
+    `INSERT INTO solicitation (title, source_id, closes_at, posted_at)
+     VALUES ($1, 1, $2, $3) RETURNING id`,
+    [title, closesAt, postedAt],
+  );
+}
+
+test("an impossible deadline does not hide the opportunity", async () => {
+  await wipe();
+  /* The production shape: posted recently, closes twenty years ago. */
+  const bad = await solPosted("Year typo in the payload", "2006-09-24", "2026-08-25");
+  const good = await solPosted("Ordinary live notice", FUTURE, "2026-08-25");
+  /* A genuinely closed notice must STILL be excluded -- this fix must not
+   * become "let everything in", which would be a different bug with the same
+   * green tests. */
+  const closed = await solPosted("Genuinely closed", PAST, "2019-01-01");
+
+  const page = await queuePage({ limit: 50, offset: 0 });
+  const ids = page.items.map((i) => i.id);
+
+  expect(ids).toContain(bad);
+  expect(ids).toContain(good);
+  expect(ids).not.toContain(closed);
+});
+
+test("an impossible deadline sorts last, not first", async () => {
+  await wipe();
+  const bad = await solPosted("Year typo", "2006-09-24", "2026-08-25");
+  const soon = await solPosted("Closes soon", "2027-01-01", "2026-08-25");
+  const later = await solPosted("Closes later", "2027-09-01", "2026-08-25");
+
+  const page = await queuePage({ limit: 50, offset: 0 });
+  const ids = page.items.map((i) => i.id);
+
+  /* ⚠️ THE WHOLE REASON THIS IS NOT A ONE-LINE FIX. D16 orders
+   * soonest-deadline-first, so "2006" sorts above everything real. Admitting
+   * these rows without reordering would put the worst data at the top of the
+   * Pri 5 screen -- strictly worse than hiding it. Unknown belongs last. */
+  expect(ids.indexOf(soon)).toBeLessThan(ids.indexOf(bad));
+  expect(ids.indexOf(later)).toBeLessThan(ids.indexOf(bad));
+  expect(ids[ids.length - 1]).toBe(bad);
+});
+
+test("an impossible deadline is flagged, and is not reported as closed", async () => {
+  await wipe();
+  const bad = await solPosted("Year typo", "2006-09-24", "2026-08-25");
+  const good = await solPosted("Ordinary", FUTURE, "2026-08-25");
+
+  const page = await queuePage({ limit: 50, offset: 0 });
+  const badRow = page.items.find((i) => i.id === bad)!;
+  const goodRow = page.items.find((i) => i.id === good)!;
+
+  expect(badRow.deadline_unreliable).toBe(true);
+  /* NOT closed: that flag is what excluded it, and it would still read as a
+   * dead item on the card. */
+  expect(badRow.closed).toBe(false);
+  /* The source's own claim is still carried, unrewritten -- the screen needs
+   * it to say WHY the date is unusable, and this project does not discard
+   * what a source stated. */
+  expect(badRow.closes_at).toBe("2006-09-24");
+
+  expect(goodRow.deadline_unreliable).toBe(false);
+});
+
+/* A missing posted_at means the check cannot run, and an unknown answer must
+ * not become an accusation: without a posting date there is nothing to compare
+ * against, so the deadline is taken at face value exactly as before. */
+test("without a posting date, the deadline is taken at face value", async () => {
+  await wipe();
+  const noPosted = await solPosted("No posting date", PAST, null);
+  const page = await queuePage({ limit: 50, offset: 0 });
+  expect(page.items.map((i) => i.id)).not.toContain(noPosted);
+});

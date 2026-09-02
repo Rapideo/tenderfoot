@@ -23,6 +23,56 @@ export const UNDECIDED = `(lp.state IS NULL OR lp.state = 'New')`;
  *
  * Expects the caller to bind today's ISO date as $1, and to have joined
  * the latest-pursuit view as `lp` and the solicitation as `s`. */
+/* 🔴 A DEADLINE EARLIER THAN ITS OWN POSTING DATE IS NOT A DEADLINE.
+ *
+ * Measured on production 2026-09-01: 106 solicitations close BEFORE they were
+ * posted, the worst by 7,275 days -- `posted 2026-08-25, closes 2006-09-24`, a
+ * year typo in SAM's own payload. closesAt() records what the source states,
+ * which is correct; the defect is upstream and not ours to fix.
+ *
+ * WHAT WAS OURS. The predicate below used to read `s.closes_at >= $1`
+ * directly, so a notice claiming 2006 was filed as CLOSED and never entered the
+ * queue. 75 of the 106 were a biddable kind and 62 had been posted within the
+ * month -- roughly 1.4% of a week's biddable volume, dropped in silence. The
+ * gate exists to measure DISCOVERY (design spec §8.5), so a discovery hole is
+ * the most expensive kind of bug this system can have.
+ *
+ * THE ASYMMETRY THAT CAUSED IT is worth naming, because the reasoning was
+ * half-done rather than absent. This module already treats a MISSING deadline
+ * with care -- "a missing deadline is not a reason to hide an opportunity" --
+ * and then hid opportunities for a WRONG one. Null was thought about;
+ * impossible was not.
+ *
+ * SO IMPOSSIBLE IS TREATED AS UNKNOWN, which is what it is: a date that cannot
+ * be true tells us nothing about when the thing closes, and "we do not know
+ * when this closes" is a state this file already has a considered answer for.
+ * That reuses existing reasoning rather than inventing a fourth state.
+ *
+ * ⚠️ THE STORED VALUE IS NOT REWRITTEN. `solicitation.closes_at` keeps exactly
+ * what the source said. This is a DERIVED reading of it, in the same spirit as
+ * precedence.ts keeping rejected values and decisions being append-only: the
+ * one thing this project does not do is quietly discard what a source claimed.
+ * The raw value still travels to the client so the screen can show that the
+ * date is untrustworthy rather than pretending there is none.
+ *
+ * ⚠️ THIS CHECK ONLY WORKS BECAUSE posted_at EXISTS. It was null on 9,743 of
+ * 9,883 production rows until the 2026-09-01 backfill, so written a day earlier
+ * this expression would have been a no-op that looked fine. Anything that
+ * empties posted_at silently disables it -- which is why the tests assert the
+ * behaviour and not merely the SQL.
+ *
+ * Expects the solicitation aliased as `s`, exactly as the predicates here do. */
+export const EFFECTIVE_CLOSES_AT = `
+  (CASE WHEN s.closes_at IS NOT NULL
+         AND s.posted_at IS NOT NULL
+         AND s.closes_at < s.posted_at
+        THEN NULL ELSE s.closes_at END)`;
+
+/** True when the stored deadline is the impossible kind above. Used to tell the
+ *  client, so a screen can decline to render `2006-09-24` as a live deadline. */
+export const DEADLINE_UNRELIABLE = `
+  (s.closes_at IS NOT NULL AND s.posted_at IS NOT NULL AND s.closes_at < s.posted_at)`;
+
 export const ELIGIBLE = `
       ${UNDECIDED}
-  AND (s.closes_at IS NULL OR s.closes_at >= $1)`;
+  AND (${EFFECTIVE_CLOSES_AT} IS NULL OR ${EFFECTIVE_CLOSES_AT} >= $1)`;
