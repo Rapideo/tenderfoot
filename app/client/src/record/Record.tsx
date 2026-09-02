@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Shell } from "../shell/Shell";
-import { Callout, MicroLabel, Section, TableRow } from "../primitives";
+import { Button, Callout, MicroLabel, Section, TableRow } from "../primitives";
 import "./Record.css";
 
 interface Conflict {
@@ -45,6 +45,9 @@ interface RecordBody {
   org_name: string | null;
   source_name: string | null;
   closes_at: string | null;
+  /* The posting's own words, WHOLE here -- the card truncates to ~200 words,
+   * this is the place that does not. Null when the source published none. */
+  description: string | null;
   fields: Field[];
   documents: Doc[];
   timeline: Event[];
@@ -393,13 +396,46 @@ export function Record() {
         * fits", "recommended posture") is qualification against the Firm
         * Profile, and View 2.2 is parked with scoring outright. Inventing
         * either would be the back-door reintroduction §6 warns against. */}
+      {/* THE BRIEF, half-unparked 2026-09-02.
+        *
+        * Matt: "We also need a summary and a full-text summary on the main
+        * full-detail panel too." This is that panel, and the Brief is where it
+        * belongs -- the tab is literally "what is this".
+        *
+        * ⚠️ The tab stays PARTLY parked, and the distinction is the point. Its
+        * JUDGEMENT half -- why this fits, a recommended posture -- is a call
+        * against the Firm Profile, and qualification is undesigned by decision
+        * (design spec §1.1). That is still parked and still says so. What has
+        * arrived is the source's own description, which is a FACT rather than
+        * a judgement, and was never the parked part. */}
       {tab === "brief" && (
-        <Callout>
-          <strong>The Brief is parked for V1.</strong> Its live half — why this fits, and a
-          recommended posture — is a judgement against the Firm Profile, and qualification is
-          undesigned by decision (design spec §1.1). What remains of it is already carried by the
-          card, the extracted fields and the timeline.
-        </Callout>
+        <div className="record__brief">
+          <div className="record__brief-head">
+            <span className="record__brief-title">
+              WHAT THIS IS — THE POSTING&rsquo;S OWN WORDS
+            </span>
+            {/* Inert, per §7.10 clause 2: the intelligence chrome is built and
+              * left non-functional until the thing behind it is designed. This
+              * is where the summariser will hang, and the heading above becomes
+              * a machine-summary heading only when a model actually writes one
+              * -- calling source prose a summary is D20's mistake. */}
+            <Button variant="ghost" ariaLabel="Summarise" disabled>
+              SUMMARISE
+            </Button>
+          </div>
+          {body.description ? (
+            <p className="record__brief-body">{body.description}</p>
+          ) : (
+            <p className="record__brief-empty">This source published no description.</p>
+          )}
+
+          <Callout>
+            <strong>The Brief&rsquo;s judgement half is still parked for V1.</strong> Why this
+            fits, and a recommended posture, are judgements against the Firm Profile, and
+            qualification is undesigned by decision (design spec §1.1). The text above is the
+            source&rsquo;s own — it is not an assessment, and nothing here has read it.
+          </Callout>
+        </div>
       )}
 
       {tab === "scores" && (
