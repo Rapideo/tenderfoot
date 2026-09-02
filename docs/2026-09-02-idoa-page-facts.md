@@ -120,8 +120,57 @@ one row; no claim is made about it.)
   (no default JS sort) — confirming the ascending-by-due-date order visible
   in the raw HTML is the server's own ordering, not something a browser's
   JS imposes afterward.
-- The raw 15-digit-ID regex from the brief's script matches **170** hits
-  across the whole document against only 70 rows in `events-table`, because
-  each row embeds the same Event ID more than once (e.g. in more than one
-  link). A scraper must scope its ID extraction to one field per row rather
-  than using a whole-document regex, or it will pick up duplicates.
+- **`pageLength: 50` means a browser will only ever show 50 rows at a time.**
+  Anyone sanity-checking the 71-row total against the live page in a browser
+  window (without paging through, or without noticing the DataTables page
+  control) will see 50 rows and conclude the count is wrong. It isn't — the
+  full 70-row `events-table` body is present in the HTML; DataTables just
+  paginates it client-side. Fixture-based counts (via `<tr>` in the raw HTML)
+  are correct; on-screen counts in a browser are not, unless every page is
+  clicked through.
+- **Correction to an earlier draft of this document:** this document
+  previously claimed "each row embeds the same Event ID more than once" to
+  explain why the brief's whole-document 15-digit regex matches **170**
+  hits against only 70 `events-table` rows (+ 1 in the Additional
+  Business Opportunities table, which has no 15-digit ID at all — its
+  Event ID is the literal string `NA`). **That claim is false as a general
+  statement**, and the real explanation is more dangerous for a parser than
+  a benign duplicate would be.
+
+  There are **71 unique 15-digit strings** in the document, not 70 and not
+  71-because-of-the-NA-row. Reconciling 71 unique values against 70
+  `events-table` rows (each with a distinct Event ID column value — 70
+  unique column values, confirmed): **70 of the 71 unique values are real
+  Event IDs from the Event ID column** (each also appears a second time in
+  that row's `Bid Documents` ZIP href, which is where the "more than once"
+  observation came from and is legitimately true for those rows). **The
+  71st unique value, `003000000088930`, is not a second occurrence of any
+  real Event ID — it does not match any row's Event ID column value at
+  all.**
+
+  It comes from row 52 of `events-table` — "300 FW Wilbur Wright FWA 4-year
+  Tenant Farm Lease" (Agency: Natural Resources). That row's Event ID
+  **column** value is `003000000088390` (matching its ZIP href,
+  `.../003000000088390.zip`). But the free-text **Event Description**
+  field for the same row reads `RFQ# 003000000088930` — the last two
+  non-zero digits are transposed (`...390` vs `...930`). This is a live
+  data-entry error on the state's own page, not a scraper artifact and not
+  a second solicitation.
+
+  **This means the earlier guidance ("scope extraction to one field per
+  row") was necessary but not sufficient, and is now corrected:** scoping
+  to the right *row* but the wrong *field* — pulling a 15-digit number out
+  of the description text instead of the Event ID column — silently
+  produces a wrong ID that looks exactly as valid as a real one. **The
+  parser MUST read the Event ID from the `Event ID` table column
+  specifically (the 3rd `<td>` in each `events-table` row) and must never
+  regex a 15-digit string out of row or description text as a stand-in.**
+- **66 unique `.zip` (`Bid Documents`) hrefs across 71 total solicitation
+  rows — 5 rows have no Bid Documents link at all.** Within `events-table`,
+  4 of 70 rows have no `.zip` href: row 41 ("AMB 28942 TOC Gas Gen"), row 42
+  ("AMB 28521 (103) BV Tree Trim"), row 43 ("AMB 28917 (105) SR UV Mont"),
+  and row 60 ("300 FW Driftwood 2-year Trash Service Contract"). The 71st
+  missing link is the single "Additional Business Opportunities" row
+  (`table05781`), which also has no `.zip` href. **A parser that assumes
+  every row has a Bid Documents anchor will throw on at least these 5
+  rows** — the field must be treated as optional.
