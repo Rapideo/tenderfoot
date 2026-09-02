@@ -71,3 +71,58 @@ test("an unknown source yields null even when the payload looks familiar", () =>
   expect(closesAt("Corpus import — Indiana open (2026-08-04)", SAM)).toBeNull();
   expect(closesAt("", SAM)).toBeNull();
 });
+
+/* Indiana IDOA. Verbatim strings from the committed fixture
+ * (scrape/adapters/fixtures/idoa-listing.html), not invented ones -- US
+ * month/day/year, 12-hour clock, AM/PM glued to the seconds, a trailing
+ * named zone. */
+test("reads an IDOA deadline as a bare calendar date", () => {
+  expect(
+    closesAt("Indiana IDOA solicitations", { responseDueBy: "10/05/2026 3:00:00PM EST" }),
+  ).toBe("2026-10-05");
+  expect(
+    closesAt("Indiana IDOA solicitations", { responseDueBy: "09/29/2026 11:00:00AM EST" }),
+  ).toBe("2026-09-29");
+});
+
+/* IDOA states this deadline in its own civil time, so -- unlike SAM's
+ * responseDate/responseDateActual pair -- there is no UTC-vs-local
+ * conversion to get right. The date component of the string IS the answer,
+ * regardless of what the named zone says. */
+test("does not shift the IDOA date for its stated timezone", () => {
+  expect(
+    closesAt("Indiana IDOA solicitations", { responseDueBy: "01/01/2026 12:00:00AM EST" }),
+  ).toBe("2026-01-01");
+});
+
+/* THE CASE THE TASK CALLS OUT BY NAME: a string this function cannot parse
+ * must return null, never a guess -- a wrong deadline sorts and filters the
+ * queue on a lie, where a null just sorts last and says nothing. */
+test("an unparseable IDOA date yields null rather than a guess", () => {
+  expect(closesAt("Indiana IDOA solicitations", { responseDueBy: "TBD" })).toBeNull();
+  expect(closesAt("Indiana IDOA solicitations", { responseDueBy: "" })).toBeNull();
+  // Missing seconds -- close to the real shape, but not it.
+  expect(closesAt("Indiana IDOA solicitations", { responseDueBy: "10/05/2026 3:00PM EST" })).toBeNull();
+  // Missing AM/PM.
+  expect(
+    closesAt("Indiana IDOA solicitations", { responseDueBy: "10/05/2026 15:00:00 EST" }),
+  ).toBeNull();
+  // Missing the timezone abbreviation.
+  expect(
+    closesAt("Indiana IDOA solicitations", { responseDueBy: "10/05/2026 3:00:00PM" }),
+  ).toBeNull();
+  // ISO shape, not IDOA's own.
+  expect(closesAt("Indiana IDOA solicitations", { responseDueBy: "2026-10-05" })).toBeNull();
+  // Out-of-range month/day.
+  expect(
+    closesAt("Indiana IDOA solicitations", { responseDueBy: "13/40/2026 3:00:00PM EST" }),
+  ).toBeNull();
+  expect(closesAt("Indiana IDOA solicitations", { responseDueBy: 20261005 })).toBeNull();
+  expect(closesAt("Indiana IDOA solicitations", {})).toBeNull();
+});
+
+/* A source with neither a recognised name nor a usable field still gets
+ * nothing, exactly as SAM's own unknown-source case does. */
+test("IDOA's own field means nothing to a different source", () => {
+  expect(closesAt("SAM.gov", { responseDueBy: "10/05/2026 3:00:00PM EST" })).toBeNull();
+});

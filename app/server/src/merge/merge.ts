@@ -44,6 +44,7 @@ import { closesAt } from "./closes-at.js";
 import { postedAt, type PostedAt } from "./posted-at.js";
 import { description } from "./description.js";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
+import { title as resolveTitle } from "./title.js";
 
 export interface MergeResult {
   created: number;
@@ -174,7 +175,10 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * That is deliberate: the two are not equivalent for a non-string title
    * (`->>` renders an object as JSON text where String() gives
    * "[object Object]"), and this rewrite is about round trips, not about
-   * quietly changing what a title is. */
+   * quietly changing what a title is. The lookup itself now lives in
+   * title.ts, extracted after IDOA proved it was source-specific (SAM's
+   * `title` at top level is not IDOA's `eventName`) -- but it is still
+   * called from JS below, not inlined as a JSON path here. */
   const inserts: {
     external_id: string;
     title: string;
@@ -225,8 +229,8 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
   for (const g of groups) {
     const raw = typeof g.latest_raw === "string" ? JSON.parse(g.latest_raw) : g.latest_raw;
-    const title = String(raw?.title ?? "").trim() || "(untitled)";
     const src = sourceById.get(g.latest_source_id);
+    const title = resolveTitle(src?.name ?? "", raw);
     const chain = orgChain(src?.name ?? "", raw);
     for (const name of chain) {
       if (!jurisdictionByName.has(name)) jurisdictionByName.set(name, src?.jurisdiction ?? null);
