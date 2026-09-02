@@ -346,6 +346,35 @@ const testResult = spawnSync("npm run test", { stdio: "inherit", shell: true, en
  * failure -- still wins if both fail. */
 const cleanResult = spawnSync("npm run test:clean", { stdio: "inherit", shell: true, env: process.env });
 
+/* AND THEN REAP THE ORPHANS, which the step above cannot reach.
+ *
+ * `test:clean` drops only THIS run's schemas, and that is all it can safely do
+ * without knowing how old the others are. The gap is real and measured: a gate
+ * run that dies before the line above -- interrupted, crashed, a `git stash` in
+ * another window -- orphans its twenty schemas permanently. Two such runs were
+ * found on 2026-09-01 inside a backlog of 87, alongside 11,052 pg_class rows,
+ * with the suite taking 174s and failing a DIFFERENT test on every run. Clearing
+ * it took the gate to 107s and three consecutive greens.
+ *
+ * This is the second time that backlog has been fixed. The first fix (adding the
+ * line above, 2026-08-16) closed the ordinary path and left the orphan path
+ * open, so the leak restarted the moment a run was interrupted. `--reap` closes
+ * the orphan path: it drops only schemas the registry records as older than
+ * three hours, so a suite in flight -- schemas seconds old -- is untouched, and
+ * running it unattended is safe in a way plain `--stale` never was.
+ *
+ * Non-fatal by design. A gate must not go red because bookkeeping failed; the
+ * consequence of a skipped reap is a slower suite tomorrow, not a wrong answer
+ * today. It is reported, so a persistent failure is visible rather than silent. */
+const reapResult = spawnSync("npm run test:clean -- --reap", {
+  stdio: "inherit",
+  shell: true,
+  env: process.env,
+});
+if (reapResult.status !== 0) {
+  console.warn("⚠️  schema reap failed -- not fatal, but the test branch may accumulate schemas");
+}
+
 if (testResult.status !== 0) {
   process.exit(testResult.status ?? 1);
 }

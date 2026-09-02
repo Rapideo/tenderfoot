@@ -38,6 +38,26 @@ if (!CONN) {
 }
 
 const stale = process.argv.includes("--stale");
+/* `--reap` is the SAFE half of `--stale`, and the difference is age.
+ *
+ * --stale drops every other run's schemas outright, which is why its own
+ * header says NOT SAFE TO RUN CONCURRENTLY: a CI run in flight owns schemas
+ * it would delete. Because it was unsafe, nothing ran it automatically;
+ * because nothing ran it automatically, the 106-schema backlog it was written
+ * for came back -- 87 schemas and 11,052 pg_class rows on 2026-09-01, with the
+ * gate failing a different test on every run and taking 174s instead of 107s.
+ *
+ * --reap drops only schemas the registry says are OLDER THAN THE THRESHOLD.
+ * A suite in flight has schemas seconds old and is untouched; an orphan from a
+ * gate run that died before its cleanup is hours old and goes. That makes it
+ * safe to run unattended, which is the property the backlog needed and never
+ * had. Unregistered schemas are LEFT ALONE -- an unknown age is not an old
+ * one, and `--stale` remains the by-hand sledgehammer for those. */
+const reap = process.argv.includes("--reap");
+/* Three hours: comfortably longer than any suite run (the gate is ~2 minutes,
+ * and the slowest CI run on record is well under an hour), and short enough
+ * that a day's orphans never accumulate into a second backlog. */
+const REAP_AFTER = "3 hours";
 const suffix = runSuffix();
 
 /* Prefixes the harness and its strays have used. `bench_` and `verify_` are
@@ -48,6 +68,20 @@ const PREFIXES = ["test\\_%", "bench\\_%", "verify\\_%"];
 const client = new pg.Client({ connectionString: CONN });
 await client.connect();
 try {
+  /* Created HERE rather than in testdb.ts, and that is deliberate. resetSchema()
+   * runs once per test FILE, in ~71 parallel processes; concurrent
+   * CREATE SCHEMA / CREATE TABLE IF NOT EXISTS from that many workers races on
+   * the system catalogs and can raise "tuple concurrently updated". This script
+   * is single-threaded and runs before and after the suite, so the DDL happens
+   * exactly once and resetSchema() only ever INSERTs. */
+  await client.query(`CREATE SCHEMA IF NOT EXISTS tenderfoot_meta`);
+  await client.query(
+    `CREATE TABLE IF NOT EXISTS tenderfoot_meta.test_schema_registry (
+       schema_name text PRIMARY KEY,
+       created_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+  );
+
   const { rows } = await client.query(
     `SELECT nspname FROM pg_namespace
       WHERE (${PREFIXES.map((_, i) => `nspname LIKE $${i + 1}`).join(" OR ")})
@@ -56,10 +90,31 @@ try {
   );
 
   const mine = (n) => n.endsWith(`_${suffix}`);
-  const targets = rows.map((r) => r.nspname).filter((n) => (stale ? !mine(n) : mine(n)));
+  const all = rows.map((r) => r.nspname);
 
+  /* Registered-and-old, computed by the DATABASE's clock rather than this
+   * process's -- a laptop with a skewed clock must not be able to reap a
+   * live CI run's schemas. */
+  let reapable = new Set();
+  if (reap) {
+    const { rows: old } = await client.query(
+      `SELECT schema_name FROM tenderfoot_meta.test_schema_registry
+        WHERE created_at < now() - $1::interval`,
+      [REAP_AFTER],
+    );
+    reapable = new Set(old.map((r) => r.schema_name));
+  }
+
+  const targets = all.filter((n) => {
+    if (reap) return !mine(n) && reapable.has(n);
+    return stale ? !mine(n) : mine(n);
+  });
+
+  const mode = reap ? "reap" : stale ? "stale" : "own";
   if (!targets.length) {
-    console.log(`Nothing to drop (${stale ? "no other runs' schemas" : `no schemas for run '${suffix}'`}).`);
+    console.log(
+      `Nothing to drop (mode=${mode}${reap ? `, nothing registered older than ${REAP_AFTER}` : ""}).`,
+    );
   } else {
     for (const name of targets) {
       /* Interpolated, because CREATE/DROP SCHEMA takes no parameters. Every
@@ -72,8 +127,20 @@ try {
       }
       await client.query(`DROP SCHEMA IF EXISTS ${name} CASCADE`);
     }
+    /* The registry row goes with the schema. A row for a schema that no longer
+     * exists would make the table grow without bound -- the same class of leak
+     * this script exists to stop, one level up. */
+    await client.query(
+      `DELETE FROM tenderfoot_meta.test_schema_registry WHERE schema_name = ANY($1::text[])`,
+      [targets],
+    );
     console.log(
-      `Dropped ${targets.length} schema(s) ${stale ? `from other runs (kept run '${suffix}')` : `for run '${suffix}'`}.`,
+      `Dropped ${targets.length} schema(s) [mode=${mode}] ` +
+        (reap
+          ? `registered before now() - ${REAP_AFTER}.`
+          : stale
+            ? `from other runs (kept run '${suffix}').`
+            : `for run '${suffix}'.`),
     );
   }
 } finally {

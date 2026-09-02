@@ -1,4 +1,9 @@
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+/* Importing pg does not OPEN anything -- testdb.ts already imports it at module
+ * level -- so this does not violate the "before anything that opens a pool"
+ * rule below. The registry assertions need their own admin connection, outside
+ * the pool, exactly as resetSchema() uses one. */
+import pg from "pg";
 import { useTestSchema, resetSchema } from "./testdb.js";
 
 /* Scratch schema. Set before importing anything that opens a pool. */
@@ -394,4 +399,64 @@ test("pursuit_latest index exists, because every read depends on it", async () =
     [SCHEMA],
   );
   expect(idx.map((i) => i.indexname)).toContain("pursuit_latest");
+});
+
+/* ⏰ THE SCHEMA REGISTERS ITS OWN AGE, and this test exists because the
+ * registration is deliberately BEST EFFORT -- resetSchema() swallows any error
+ * from it so a developer running one test file against a branch with no
+ * registry never fails over bookkeeping.
+ *
+ * That swallowed catch is exactly what makes this test necessary. If
+ * registration silently stops working, clean-test-schemas.mjs `--reap` reaps
+ * nothing, the orphan backlog rebuilds, and the only symptom is the gate
+ * getting slower and failing a different test on every run -- which is how the
+ * 87-schema backlog was found on 2026-09-01, and the 106-schema one before it.
+ * A no-op reaper looks identical to a working one until it is far too late.
+ *
+ * The registry table is created by clean-test-schemas.mjs (single-threaded, so
+ * ~71 parallel workers never race on the DDL). This test creates it the same
+ * way if it is absent, so it passes whether or not the gate ran first. */
+test("resetSchema records the schema's creation time, so orphans can be reaped", async () => {
+  const admin = new pg.Client({ connectionString: process.env.DATABASE_URL_TEST });
+  await admin.connect();
+  try {
+    await admin.query(`CREATE SCHEMA IF NOT EXISTS tenderfoot_meta`);
+    await admin.query(
+      `CREATE TABLE IF NOT EXISTS tenderfoot_meta.test_schema_registry (
+         schema_name text PRIMARY KEY,
+         created_at  timestamptz NOT NULL DEFAULT now()
+       )`,
+    );
+
+    /* ⚠️ DELETE FIRST, and this line is the test.
+     *
+     * Without it this test passes against a row left by a PREVIOUS run: the
+     * registration is an upsert, the row survives between runs, and the
+     * freshness assertion below has a ten-minute window, so a re-run minutes
+     * later still sees a "fresh" row that this run did not write. Proven by
+     * mutation -- with registerSchema() stubbed out to do nothing, the version
+     * of this test without this DELETE passed, which would have shipped a
+     * reaper that silently reaps nothing. */
+    await admin.query(`DELETE FROM tenderfoot_meta.test_schema_registry WHERE schema_name = $1`, [
+      SCHEMA,
+    ]);
+
+    /* Re-register by resetting: the row must appear, and its timestamp must be
+     * the DATABASE's clock, not this process's -- a laptop with a skewed clock
+     * must never be able to make a live run's schemas look reapable. */
+    await resetSchema();
+
+    const { rows } = await admin.query<{ age_seconds: number }>(
+      `SELECT EXTRACT(EPOCH FROM (now() - created_at)) AS age_seconds
+         FROM tenderfoot_meta.test_schema_registry WHERE schema_name = $1`,
+      [SCHEMA],
+    );
+    expect(rows.length).toBe(1);
+    /* Fresh: nowhere near the 3-hour reap threshold. A negative age would mean
+     * the timestamp came from somewhere other than the database. */
+    expect(Number(rows[0]!.age_seconds)).toBeGreaterThanOrEqual(0);
+    expect(Number(rows[0]!.age_seconds)).toBeLessThan(600);
+  } finally {
+    await admin.end();
+  }
 });

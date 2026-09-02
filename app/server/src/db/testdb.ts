@@ -94,7 +94,55 @@ export async function resetSchema(): Promise<void> {
   try {
     await admin.query(`DROP SCHEMA IF EXISTS ${name} CASCADE`);
     await admin.query(`CREATE SCHEMA ${name}`);
+    await registerSchema(admin, name);
   } finally {
     await admin.end();
+  }
+}
+
+/* WHY THIS SCHEMA WRITES DOWN ITS OWN BIRTHDAY.
+ *
+ * Postgres records no creation time for a schema -- `pg_namespace` has an oid
+ * and a name and nothing else -- so clean-test-schemas.mjs could not tell a
+ * schema abandoned last Tuesday from one a CI run created ninety seconds ago
+ * and is actively using. That is the whole reason its `--stale` mode carries
+ * the warning "NOT SAFE TO RUN CONCURRENTLY WITH ANOTHER SUITE", which in turn
+ * is why nothing ran it automatically, which is why the backlog came back.
+ *
+ * IT CAME BACK. The 106-schema leak that header describes was fixed on
+ * 2026-08-16 by running cleanup after every gate. Measured 2026-09-01: 87
+ * schemas and 11,052 rows in pg_class, and the gate had started failing
+ * differently on every run -- 71/71 green, then 11 failures across 5 files,
+ * then 1 failure somewhere else. Dropping the backlog took the suite from
+ * 174s to 107s and three consecutive runs went green. Same defect, same
+ * symptom, second time.
+ *
+ * The leak has two sources the default cleanup cannot reach. A gate run that
+ * dies before its cleanup step -- interrupted, crashed, `git stash` in another
+ * window -- orphans its twenty schemas permanently, and two such runs were
+ * found. And `npx vitest run one.test.ts` outside the gate resolves the suffix
+ * to "local", which nothing ever cleans.
+ *
+ * A timestamp makes age-based reaping possible, and age is the property that
+ * is actually safe to act on: a suite in flight has schemas seconds old, and
+ * an orphan has schemas hours old. See clean-test-schemas.mjs `--reap`.
+ *
+ * BEST EFFORT ON PURPOSE. The registry lives in its own schema so it can never
+ * collide with an app table, and every failure here is swallowed: a developer
+ * running one test file against a branch where the registry has not been
+ * created must not have their test fail over bookkeeping. The cost of a missed
+ * registration is that one schema is reaped by `--stale` by hand later, not
+ * that anything breaks. */
+async function registerSchema(admin: pg.Client, name: string): Promise<void> {
+  try {
+    await admin.query(
+      `INSERT INTO tenderfoot_meta.test_schema_registry (schema_name, created_at)
+       VALUES ($1, now())
+       ON CONFLICT (schema_name) DO UPDATE SET created_at = now()`,
+      [name],
+    );
+  } catch {
+    /* The registry is created by clean-test-schemas.mjs, which the gate runs.
+     * Its absence means "not running under the gate", which is fine. */
   }
 }
