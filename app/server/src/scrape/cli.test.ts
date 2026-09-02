@@ -49,3 +49,50 @@ test("a run with no --source at all is refused as a missing source, not an unkno
     /source is required/,
   );
 });
+
+/* Task 9: the document pass, chained by default. `main` takes an optional
+ * second argument -- a partial `CliPasses` -- that replaces the listings
+ * and/or documents pass with a fake. That seam did not exist before this
+ * task (main() took only argv); it is added here because there was no other
+ * way to observe which passes ran without a live database -- the real
+ * passes call resolveSource(), which dynamically imports db/index.ts, and
+ * that module throws at evaluation time with no DATABASE_URL (see
+ * resolve-source.ts's own header on why that import is dynamic, and why
+ * this file otherwise runs with none set: scripts/check.mjs strips it from
+ * the test child's environment deliberately).
+ *
+ * `idoa` (not `sam`) is used throughout: it is a registered, real adapter
+ * (registry.ts, Task 8) with shape "snapshot", so `validateRun` never asks
+ * for `--since`/`--until` -- these calls exercise nothing but parseArgv,
+ * the adapter lookup, and validateRun, all synchronous and DB-free, before
+ * either fake pass is invoked. */
+function runCliWith(argv: string[]): Promise<string[]> {
+  const calls: string[] = [];
+  return main(argv, {
+    listings: async () => {
+      calls.push("listings");
+    },
+    documents: async () => {
+      calls.push("documents");
+    },
+  }).then(() => calls);
+}
+
+test("by default a run does listings AND documents", async () => {
+  const calls = await runCliWith(["--source", "idoa"]);
+  expect(calls).toEqual(["listings", "documents"]);
+});
+
+test("--listings-only does exactly one half", async () => {
+  expect(await runCliWith(["--source", "idoa", "--listings-only"])).toEqual(["listings"]);
+});
+
+test("--documents-only does exactly the other half", async () => {
+  expect(await runCliWith(["--source", "idoa", "--documents-only"])).toEqual(["documents"]);
+});
+
+test("the two flags together are refused rather than silently ranked", async () => {
+  await expect(
+    runCliWith(["--source", "idoa", "--listings-only", "--documents-only"]),
+  ).rejects.toThrow(/mutually exclusive/);
+});
