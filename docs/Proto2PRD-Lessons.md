@@ -482,6 +482,55 @@ Promote if a second name-collision appears.
 
 ---
 
+### 2.26 A layer is only proven source-agnostic by a SECOND source
+
+**Observed 2026-09-02, four times in one afternoon, all from one root.**
+
+Tenderfoot ingested exactly **one** real source for its entire life. Every layer that reads a
+payload was written to look source-agnostic — a `switch` on source name, a `(sourceName, raw)`
+signature, a registry of adapters. **None of it was.** Each extractor knew SAM.gov's payload shape
+and nothing else, and nothing could reveal that until a second source arrived.
+
+Adding Indiana IDOA exposed four instances of the same defect within hours:
+
+| Field | How it failed | Scale |
+|---|---|---|
+| `description` | no case for the new source | every row |
+| `closes_at` | `case "SAM.gov":` and nothing else | 0 of 71 got a deadline — and the queue ORDERS by it |
+| `title` | merge read `raw.title`; the new source emits `raw.eventName` | 71 of 71 read `(untitled)` |
+| `org_id` | no case for the new source | 0 of 45 showed a buyer |
+
+**653 tests passed throughout.** They could not have caught any of it: every fixture was built from
+the one source's payload, so the tests shared the assumption they would have had to falsify.
+
+**Proposed generalisation.** **"Generic" is a claim about intent until a second instance exercises
+it.** A plugin interface, an adapter registry, a `switch` on a type discriminator — each *looks*
+like evidence of generality and is really evidence that someone anticipated it. The anticipation is
+worth having; it is not the same as the property.
+
+> **The tell is a codebase with N=1 of something it describes in the plural** — "sources",
+> "providers", "adapters", "backends" — especially when the abstraction is well-built. A crude
+> abstraction with two implementations is proven; an elegant one with a single implementation is a
+> hypothesis.
+
+**The check that catches it.** When adding the second instance of anything, **enumerate every
+place the first one is named** and check each — do not wait for failures to arrive one at a time.
+`grep` for the first instance's identifier across the codebase; every hit is a place the new one
+must also appear, or be deliberately excluded. Here that would have found all four in one pass
+instead of four sequential discoveries, each costing a live run to notice.
+
+**A corollary worth its own line.** Two of these four surfaced only in a **live run against real
+data**, after unit tests, task reviews and a whole-branch review had passed. The demo criterion is
+not ceremony — it is the first point at which the single-source assumption meets something that
+does not share it.
+
+**Why not promoted.** One project, though four instances inside it. The pattern is well known in
+principle ("the rule of three"); what this adds is the specific tell (an elegant abstraction at
+N=1) and the specific check (enumerate the first instance's mentions). Promote if a second project
+shows the same shape.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
