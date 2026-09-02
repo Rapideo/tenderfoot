@@ -21,6 +21,23 @@ const RECORD = {
         },
       ],
     },
+    /* A DOCUMENT-ORIGIN FIELD THAT CARRIES ITS OWN QUOTE, added 2026-09-01.
+     *
+     * Until today the fixture's ONLY quote hung off the conflict on
+     * `closes_at`, because a listing-origin winner has no extracted passage.
+     * Matt's inline-conflict ruling drops the loser's quote from the screen
+     * (D18), which would have taken the suite's only coverage of
+     * .record__quote with it and left the quote rendering deletable with
+     * every test still green -- the exact failure mode CLAUDE.md §4 asks
+     * about ("would this still pass if I deleted the thing it tests?").
+     * This row keeps that coverage on a field where a quote genuinely
+     * belongs. confidence 0.6 is what fields.ts actually emits. */
+    {
+      field_name: "qa_closes_at", value: "2026-09-03", origin: "document",
+      source_label: "SCOPE OF WORK.docx",
+      confidence: 0.6, quote: "questions must be received by September 3, 2026",
+      note: null, state: "found", conflicts: [],
+    },
     {
       field_name: "value_cents", value: null, origin: "document",
       confidence: null, quote: null, note: null, state: "absent", conflicts: [],
@@ -102,22 +119,64 @@ test("a field shows its value, its confidence, and its quoted passage", async ()
    * this test is about. */
   await waitFor(() => expect(screen.getAllByText(/2026-09-17/).length).toBeGreaterThan(0));
   expect(screen.getByText(/100%/)).toBeTruthy();
-  /* The near-miss conflict's own confidence and quote -- both are absent
-   * from the winning field itself (a listing-origin value has no extracted
-   * passage), so this is the citation evidence that makes the deadline
-   * disagreement inspectable rather than merely stored. */
-  expect(screen.getByText(/72%/)).toBeTruthy();
-  expect(screen.getByText(/proposals due August 26, 2026/)).toBeTruthy();
+  /* The citation evidence -- SP4's deferred bullet 2, and the whole reason
+   * this screen exists. Carried by qa_closes_at since 2026-09-01: the
+   * conflict's quote that used to prove this is no longer rendered (D18). */
+  expect(screen.getByText(/60%/)).toBeTruthy();
+  expect(screen.getByText(/questions must be received by September 3, 2026/)).toBeTruthy();
 });
 
-/* SP4 criterion bullet 3. The FSSA near-miss, visible in the product for
- * the first time. */
-test("a conflict renders beneath the winner, with its origin", async () => {
+/* SP4 criterion bullet 3. The FSSA near-miss, visible in the product.
+ *
+ * ⚖️ REWRITTEN 2026-09-01 for Matt's ruling: the conflict renders INLINE in
+ * the value cell, as the bundle draws it, not beneath the winner as SP6 spec
+ * §6.1 had specified. The three things that must survive that change are
+ * asserted separately below, because they are three different losses if any
+ * one of them silently stops rendering. */
+test("a conflict renders inline in the value cell, naming both values", async () => {
   const { container } = renderRecord();
   await waitFor(() => expect(screen.getByText(/2026-08-26/)).toBeTruthy());
-  const conflict = container.querySelector(".record__conflict");
-  expect(conflict).toBeTruthy();
-  expect(conflict!.textContent).toContain("document");
+
+  /* 1. ONE cell carries both values and the bundle's own connective word. */
+  const value = container.querySelector(".record__field-value");
+  expect(value!.textContent).toContain("2026-09-17");
+  expect(value!.textContent).toContain("CONFLICT with");
+  expect(value!.textContent).toContain("2026-08-26");
+
+  /* 2. BOTH origins are named, joined as the bundle's fixture joins them
+   *    ("listing + addendum"). This is the losing value's surviving
+   *    provenance -- its quote is gone (D18), so if this stops rendering
+   *    the disagreement becomes unattributable. */
+  const source = screen.getByText(/listing \+ document/);
+  expect(source).toBeTruthy();
+
+  /* 2b. ⚠️ AND THE TITLE CARRIES IT IN FULL, which is the only reason the
+   *     above is readable. The SOURCE column is a fixed 150px and truncates
+   *     with an ellipsis (Matt's ruling 2026-08-31); a conflicted row now
+   *     puts TWO source names in that cell, so in a real browser the second
+   *     one is off the end. The DOM assertion above passes either way --
+   *     that gap between "the text exists" and "a person can read it" is
+   *     exactly what CLAUDE.md §4 is about -- so the hover fallback is
+   *     pinned here rather than assumed. */
+  expect(source.getAttribute("title")).toBe("listing + document");
+
+  /* 3. The row still reads as a disagreement: --badbg2 ground and a --bad
+   *    confidence, both of which the bundle uses to mark a conflicted row.
+   *    Without these the inline text is the ONLY signal, in a table where
+   *    long values already wrap. */
+  const row = container.querySelector(".record__fieldgroup [style*='--badbg2']")
+    ?? container.querySelector("[style*='--badbg2']");
+  expect(row).toBeTruthy();
+});
+
+/* ⚠️ D18, asserted rather than merely written down. The losing value's quote
+ * is NOT rendered anywhere after the inline ruling. This test exists so that
+ * if someone later reinstates it, they are told that it is a reversal of a
+ * ruling and not a bug fix -- and so the deviation cannot quietly rot. */
+test("the losing value's quote is not rendered — D18", async () => {
+  renderRecord();
+  await waitFor(() => expect(screen.getByText(/2026-08-26/)).toBeTruthy());
+  expect(screen.queryByText(/proposals due August 26, 2026/)).toBeNull();
 });
 
 test("absent and never-looked-for read differently", async () => {

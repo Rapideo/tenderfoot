@@ -68,6 +68,55 @@ test("the queue counter shows what is left to decide", async () => {
   await waitFor(() => expect(screen.getByLabelText(/queue count/i).textContent).toContain("12"));
 });
 
+/* ⚖️ REGION A.1.2, ruled 2026-09-01: all seven nav entries, each to a stub.
+ *
+ * ⚠️ THIS TEST EXISTS BECAUSE ITS ABSENCE WAS CAUGHT. The nav went from two
+ * entries to seven and every test in this file stayed green -- the nav had
+ * no coverage at all beyond "it disappears when reduced". A region the SVRC
+ * scores as shell-critical was deletable without a single failure.
+ *
+ * The label assertions are not padding. "Triage" is the bundle's word and
+ * ours read "Queue" until today; copy is specification (CLAUDE.md §1), so a
+ * silent revert to "Queue" must fail here. */
+test("the primary nav renders all seven entries, in the bundle's order", async () => {
+  stubSources();
+  render(<Shell queueCount={3}>content</Shell>);
+  await waitFor(() => expect(screen.getByRole("navigation")).toBeTruthy());
+  const labels = Array.from(
+    screen.getByRole("navigation").querySelectorAll("a"),
+  ).map((a) => a.textContent);
+  expect(labels).toEqual([
+    "Triage",
+    "Opportunities",
+    "Radars",
+    "Entities",
+    "Reports",
+    "Admin",
+    "Pipeline",
+  ]);
+});
+
+/* Every entry goes SOMEWHERE. The ruling was for stubs over inert entries
+ * precisely so that none of these is a dead end (the D14 failure), so an
+ * href that goes missing is the defect this catches. */
+test("every nav entry has a destination", async () => {
+  stubSources();
+  render(<Shell queueCount={3}>content</Shell>);
+  await waitFor(() => expect(screen.getByRole("navigation")).toBeTruthy());
+  const hrefs = Array.from(
+    screen.getByRole("navigation").querySelectorAll("a"),
+  ).map((a) => a.getAttribute("href"));
+  expect(hrefs).toEqual([
+    "/",
+    "/opportunities",
+    "/radars",
+    "/entities",
+    "/reports",
+    "/admin",
+    "/pipeline",
+  ]);
+});
+
 /* SVRC Screen 1: the queue wants full width and no competing affordances. */
 test("the reduced shell collapses primary nav", async () => {
   stubSources();

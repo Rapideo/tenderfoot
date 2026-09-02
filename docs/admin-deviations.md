@@ -546,7 +546,48 @@ above. That is what the SVRC's "citation" requirement actually needs, and
 highlighting a passage inside the separately-rendered full document text is
 not attempted.
 
-## D13 — the score strip does not render on the composed queue card
+## D13 — ~~the score strip does not render on the composed queue card~~ **REVERSED 2026-09-01: it renders, and it says it is not populated**
+
+> ### ⚖️ REVERSED BY MATT, 2026-09-01. Read this before the original below.
+>
+> **The strip renders on the triage card.** The original ruling stands as a
+> piece of reasoning and is kept in full underneath, because the reversal did
+> not find it wrong — it found it **argued against the wrong alternative**.
+>
+> **What changed is the third option nobody had put on the table.** D13 was
+> decided between *render four dashes captioned as a reading aid* and *render
+> nothing*, and on those two D13 was right: four dashes under **A READING AID**
+> read as a **result** — the machine scored this and found nothing. What the
+> 2026-09-01 ruling picked instead is **render the bars as placeholders and say
+> in words that they are not populated yet**, which answers D13's objection
+> rather than overruling it. `ScoreStrip` gained a `note` prop for exactly
+> this, and `Queue.tsx` passes:
+>
+> > Nothing is scored yet. These four rows show what will be judged, not a result.
+>
+> **What was also wrong is the premise about the bundle.** D13 weighed the SVRC
+> against a STATUS line. It never weighed either against the **frozen V1.2
+> bundle**, which draws the panel — because the fidelity mandate was not in
+> view when D13 was decided (`CLAUDE.md` §3 records that neither SP6's spec nor
+> its plan referenced §7.10 once). Under §7.10 the bundle is the authority, and
+> a prototype/spec conflict is Matt's to rule. It was surfaced and it was ruled.
+>
+> **The four labels are the bundle's own — `Fit`, `Winnability`, `Value`,
+> `Timing`** — read off the prototype rendered in a browser. An earlier draft of
+> this work invented `Capability` and `Competition` from memory and would have
+> shipped them; opening the prototype is what caught it. Copy is specification
+> (§7.10), and that applies to a panel's row labels as much as to its title.
+>
+> **Nothing about V1 scoring changed.** Every value is still `null`, the
+> assessment table is still empty by design (spec §1.1), `ScoreBar`'s RULING 13
+> comment still stands, and D16's point — that two of the SVRC's three ratified
+> orderings need a scorer — is untouched. This is a **placement** decision, as
+> the original entry said it was. See **D17** for the note itself, which is a
+> divergence from the bundle in its own right.
+
+---
+
+**The original entry, 2026-08-30, kept in full.**
 
 Two dated rulings disagreed, and the disagreement would have surfaced the
 moment a card was composed:
@@ -630,3 +671,137 @@ signal to sort on. Only *deadline, soonest first* survives, so `queue.ts`
 orders `closes_at ASC NULLS LAST`, and the switch has nothing left to switch
 between. **When qualification is designed, the SVRC's ratified answer returns
 intact** — nothing here argues against it. Design spec §4.2.
+
+## D17 — the score strip says it is unpopulated, and the bundle has no such line
+
+**Matt's ruling, 2026-09-01, and the load-bearing half of D13's reversal.**
+
+The bundle's `MACHINE SCORES — A READING AID` panel carries a title, an
+`EXPAND ALL` toggle and four rows. It carries **no note**, and it could not:
+all four of its scores are populated, so it has nothing to disclose.
+
+V1 has no scorer, so ours renders four empty bars. The ruling was *"show the
+placeholder for the data bars; but indicate that they are not populated yet
+until these judgements are made"* — so `ScoreStrip` gained an optional `note`,
+styled from `.fact-panel__note` rather than invented, because FactPanel says
+the same **kind** of thing one band over (D15) and the two must not read as
+two different voices.
+
+**The line is not decoration and must not be dropped as tidying.** Without it
+the panel is exactly what D13 objected to. `Queue.test.tsx` asserts the note's
+presence separately from the strip's, so a change that renders the panel and
+loses the sentence fails rather than passing a laxer test.
+
+**⚠️ The `EXPAND ALL` toggle is still absent**, unchanged from SP2's reasoning:
+it exists to reveal per-row citations, and there are none to reveal. When
+scoring arrives, the toggle and the citation rows arrive with it.
+
+## D18 — a conflict renders inline, and the losing value's quote is dropped
+
+**Matt's ruling, 2026-09-01.** The bundle writes a disagreement into the value
+cell itself:
+
+```
+v:   "2026-09-18 · CONFLICT with Addendum 2 (2026-09-25)"
+conf: "48%"    src: "listing + addendum"    bg: var(--badbg2)
+```
+
+SP6 design spec §6.1 specified the opposite — *"conflicts render beneath the
+winner, with their origin, unresolved"* — on its own row, carrying its own
+origin **and its own quote**. Both were defensible; `CLAUDE.md` §1 reserves
+that call for Matt. **He ruled for the bundle, so the spec is amended rather
+than quietly contradicted** — §6.1 now records the ruling and its date.
+
+**⚠️ WHAT THIS COSTS, recorded because it is a real loss.** The losing value's
+**quoted passage no longer appears anywhere on the screen.** The bundle's field
+table has no per-row quote at all, and one cell cannot hold two citations. What
+survives is both **values** and both **origins** (joined `A + B`, the bundle's
+own connective). What does not survive is the loser's evidence.
+
+**This bites hardest on exactly the case the display exists for.** A listing
+-origin winner has no extracted passage, so when a document contradicts a
+listing — the FSSA near-miss shape — the row now shows **no citation at all**.
+The record's test fixture had this precise shape, and its only quote hung off
+the conflict; a `qa_closes_at` row was added so the suite still proves a quote
+renders somewhere, rather than losing that coverage silently.
+
+**Nothing is lost in the DATA.** `resolveField` still returns
+`{value, origin, conflicts}` with quotes intact, at read time. This is a display
+decision and is reversible without re-extraction.
+
+**⚠️ A SECOND CONSEQUENCE, found by screenshot and not by any test.** The SOURCE
+column is a fixed 150px that truncates with an ellipsis (Matt's ruling,
+2026-08-31, on the grounds that `title=` puts the full name one hover away). A
+conflicted row now puts **two source names** in that cell. On real data it
+renders as `Solicitation Amendment…` — so in practice **the losing value's
+origin is hover-only**, which is thinner than "both origins survive" implies.
+The `title` attribute carries the full joined string and is now pinned by a
+test. **Whether that is good enough is Matt's call and is open**; the earlier
+truncation ruling was made before any row had two sources in it.
+
+## D19 — Pipeline is in the primary nav, and the SVRC says it should not be
+
+**Matt's ruling, 2026-09-01: all seven nav entries, each to a stub.**
+
+The bundle's shell carries seven: `Triage · Opportunities · Radars · Entities ·
+Reports · Admin · Pipeline`. **The SVRC carries six.** Region A.1.2 lists
+*"Triage, Opportunities, Radars, Entities, Reports, Admin"* and then says the
+pipeline board *"joins this list when the management phase starts and not
+before"*; Screen 7 is marked `PARKED`.
+
+**The conflict was surfaced before the ruling, not after it**, and Matt ruled
+for seven with it on the table.
+
+**Two further notes, both consequences of the same ruling.**
+
+**The first entry now reads `Triage`, not `Queue`.** Ours said Queue until
+today. Copy is specification, the bundle says Triage, and the SVRC calls the
+screen `View 1.1 : Triage`. The **route** is still `/` and the component is
+still `Queue.tsx` — this is a label, not a rename.
+
+**Every entry goes to a real screen, none is disabled.** The ruling was
+specifically for stubs over inert entries, and the reason is on the record:
+**D14 was corrected for exactly the cheap failure** — three `ShortcutCard`s
+that looked like navigation and carried no `onClick`, which made the cleared
+screen the dead end the SVRC's line exists to prevent. Five inert nav entries
+would be that mistake five times, on the shell. Each stub's copy is the
+**SVRC's own Overview** for that screen, compressed but not reworded into a
+claim it does not make.
+
+**⚠️ The bundle hides the nav entirely on the triage screen**
+(`nav = navCollapsed ? [] : screens.map(…)`), and so do we, so this ruling
+changes what is visible on the record, admin and stub screens — not on the
+`Pri 5` screen.
+
+## D20 — CONFIDENCE keeps a flat 0.6, knowingly
+
+**Matt's ruling, 2026-09-01: *"For now, I say we keep it."* Recorded as a
+provisional hold, not a settled answer, because it was ruled with the
+objection in front of him.**
+
+`fields.ts:211` sets `confidence: value !== null ? 0.6 : 0` — **a constant**.
+Every document-extracted value in the product renders `60%`. It means *found*,
+not *how sure*, and it sits under a column heading a reader will believe.
+
+**The colour-coding cannot vary either.** `confColour()` in `Record.tsx` has
+three real bands (`≥0.85`, `≥0.6`, below), and with a constant input every
+found row lands in the same middle band, permanently. The machinery is built,
+tested, and decorative by construction.
+
+**The bundle designed the opposite.** Its own fixture runs 97 / 91 / 84 / 76 /
+48 / `—` across four colour bands. Confidence there is a judgement.
+
+**Why this is not simply a fidelity fix.** The heading `CONFIDENCE` is **the
+bundle's own literal copy**, so relabelling the column would itself be a
+divergence needing its own number. This is the one place in the five rulings
+where the fidelity mandate and the honesty of the display genuinely pull
+against each other.
+
+**`fields.ts`'s own comment is straight about the value:** a non-flat score is
+*"deferred pending the slice's accuracy instrument — ruled out for this round,
+not overlooked."* The **value** is a known deferral; the **label** is what was
+ruled on, and the ruling is *keep it, for now*.
+
+**Two cheap exits remain open** whenever this is revisited: render `—` until
+the number varies (the treatment already exists for absent rows), or relabel
+the column. Neither needs new data or extraction work.

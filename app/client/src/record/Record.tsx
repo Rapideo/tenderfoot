@@ -105,7 +105,41 @@ const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%
 function stateLabel(f: Field): string {
   if (f.state === "absent") return "absent from bundle";
   if (f.state === "not_looked_for") return "not yet looked for";
-  return f.source_label ?? f.origin ?? "";
+  /* CONFLICTED ROWS NAME BOTH ORIGINS, joined by the bundle's own connective:
+   * its fixture reads src: "listing + addendum". This is the half of the
+   * losing value's provenance that survives the inline form -- see valueCell
+   * below for the half that does not. */
+  const origin = f.source_label ?? f.origin ?? "";
+  if (f.conflicts.length === 0) return origin;
+  const others = f.conflicts.map((c) => c.source_label ?? c.origin);
+  return [origin, ...others].filter(Boolean).join(" + ");
+}
+
+/* ⚖️ RULING 2026-09-01 -- CONFLICTS RENDER INLINE, as the bundle draws them.
+ *
+ * The bundle writes the disagreement into the value itself:
+ *   v: "2026-09-18 · CONFLICT with Addendum 2 (2026-09-25)"
+ *   conf: "48%"   src: "listing + addendum"   bg: var(--badbg2)
+ *
+ * SP6 spec §6.1 had specified the opposite -- the losing value BENEATH the
+ * winner, on its own row, with its own origin AND its own quote. Both were
+ * defensible and CLAUDE.md §1 reserves that call for Matt. He ruled for the
+ * bundle; the spec is amended rather than quietly contradicted.
+ *
+ * ⚠️ WHAT THIS COSTS, recorded because it is a real loss and not a detail:
+ * the losing value's QUOTED PASSAGE no longer appears anywhere on the screen.
+ * The bundle's field table has no per-row quote at all, and one cell cannot
+ * hold two citations. Both VALUES and both ORIGINS survive (above); the
+ * loser's evidence does not. resolveField still returns it, and the winner's
+ * quote still renders, so this is a display decision that can be revisited
+ * without re-extraction. Deviation D18. */
+function valueCell(f: Field): string {
+  const value = f.value ?? "Not found";
+  if (f.conflicts.length === 0) return value;
+  const disagreements = f.conflicts
+    .map((c) => `CONFLICT with ${c.source_label ?? c.origin} (${c.value_text})`)
+    .join(" · ");
+  return `${value} · ${disagreements}`;
 }
 
 /* The bundle's five tabs, in its order and with its labels. Two of them
@@ -228,44 +262,19 @@ export function Record() {
             <div key={f.field_name} className="record__fieldgroup">
               <TableRow columns={FIELD_COLUMNS} padding="12px 16px" background={rowBackground(f)}>
                 <span className="record__field-name">{FIELD_LABELS[f.field_name] ?? f.field_name}</span>
-                <span className="record__field-value">{f.value ?? "Not found"}</span>
+                <span className="record__field-value">{valueCell(f)}</span>
                 <span className="record__field-conf" style={{ color: confColour(f) }}>
                   {f.state === "found" ? pct(f.confidence) : "—"}
                 </span>
                 <span className="record__field-state" title={stateLabel(f)}>{stateLabel(f)}</span>
               </TableRow>
 
+              {/* The WINNER's quote still renders. That is not part of the
+                * inline ruling -- the ruling was about where a DISAGREEMENT
+                * goes, not whether citations are readable, and SP4's whole
+                * deferred criterion rests on this line. */}
               {f.quote && <blockquote className="record__quote">“{f.quote}”</blockquote>}
               {f.note && <span className="record__note">{f.note}</span>}
-
-              {/* The losing value is KEPT and SHOWN. A rejection you cannot
-                * inspect is a bug you will never find -- and this display is
-                * what makes the FSSA near-miss visible in the product.
-                *
-                * ⚠️ DIVERGENCE, deliberately surfaced rather than resolved:
-                * the bundle expresses a conflict INLINE in the value cell
-                * ("2026-09-18 · CONFLICT with Addendum 2 (2026-09-25)") on a
-                * --badbg2 row. The SP6 spec §6.1 instead requires the loser
-                * BENEATH the winner with its own origin and quote, which
-                * carries strictly more evidence. Pending Matt's ruling
-                * (CLAUDE.md §1), this keeps the spec's information and the
-                * bundle's visual language: the same columns, and the bundle's
-                * own conflict background. */}
-              {f.conflicts.map((c) => (
-                <div key={`${c.origin}-${c.value_text}`} className="record__conflict">
-                  <TableRow columns={FIELD_COLUMNS} padding="10px 16px" background="var(--badbg2)">
-                    <span className="record__conflict-tag">disagrees</span>
-                    <span className="record__field-value">{c.value_text}</span>
-                    <span className="record__field-conf" style={{ color: "var(--bad)" }}>
-                      {pct(c.confidence)}
-                    </span>
-                    <span className="record__field-state" title={c.source_label ?? c.origin}>
-                      {c.source_label ?? c.origin}
-                    </span>
-                  </TableRow>
-                  {c.quote && <blockquote className="record__quote">“{c.quote}”</blockquote>}
-                </div>
-              ))}
             </div>
           ))}
         </div>

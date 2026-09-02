@@ -11,8 +11,55 @@
   padding: 12px 18px;
   border-bottom: 1px solid var(--brdsoft);
 }
-.shell__nav { display: flex; gap: 14px; }
-.shell__nav a { font: var(--type-ui-link); }
+/* REGION A.1.2 : PRIMARY NAV -- seven entries, per Matt's ruling 2026-09-01.
+ *
+ * The bundle's own navBtn(active), copied rather than approximated:
+ *   border:none;border-radius:6px;padding:8px 12px;
+ *   font:500 12.5px/1 'IBM Plex Sans';letter-spacing:.005em;
+ *   active  ? background:var(--accbg4);color:var(--text);
+ *           : background:transparent;color:var(--text5);
+ *
+ * The gap drops from 14px to 3px because these are now PADDED buttons, not
+ * bare links -- 14px between items that each carry 12px of their own side
+ * padding leaves 38px of dead space and the seven entries stop reading as
+ * one group. The bundle's own nav row uses gap:3px for the same reason.
+ *
+ * ⚠️ The header is LIGHT. An earlier draft of this work built these on a
+ * dark ground, having drawn the nav from memory rather than from the bundle;
+ * --text5 on transparent is the resting state, over --surface. */
+.shell__nav { display: flex; gap: 3px; flex-wrap: wrap; }
+
+.shell__navitem {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  /* --type-ui-action is `500 12.5px/1 'IBM Plex Sans'` and --tracking-hairline
+   * is `.005em` -- byte-identical to navBtn's own declaration. Reused rather
+   * than given a new --type-ui-nav of its own, on SP2's precedent (ScoreStrip
+   * reuses MicroLabel for the same reason): the token layer names what a
+   * declaration was observed DOING in the bundle, and adding a second token
+   * with identical values is how a design system starts to drift. */
+  font: var(--type-ui-action);
+  letter-spacing: var(--tracking-hairline);
+  background: transparent;
+  color: var(--text5);
+  text-decoration: none;
+}
+
+.shell__navitem--on {
+  background: var(--accbg4);
+  color: var(--text);
+}
+
+/* Not in the bundle, which is a static mockup and has no hover or focus
+ * states anywhere. Both are required of a real control: five of these seven
+ * lead to stub screens, and a user needs to know the thing they are about to
+ * click is clickable. */
+.shell__navitem:hover { color: var(--text3); }
+.shell__navitem:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
+}
 /* THE COUNTER, per the bundle: a button, not a number.
  *   flex; gap:9px; padding:7px 12px; radius 8; white-space:nowrap
  *   --acc background / --accbrd border when there is work,

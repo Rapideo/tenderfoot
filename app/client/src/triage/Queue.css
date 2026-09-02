@@ -43,7 +43,41 @@
  * ones that set their own end up misaligned against the ones that do not --
  * which is exactly how the cost panel came to sit 30px out from the title. */
 .queue__inner .card { padding: 0; }
-.queue__cost { padding: 20px 30px 24px; }
+/* ── the two-up band: scores left, cost right ───────────────────────────── *
+ *
+ * Bundle (V1.2, the band directly under the fact panel):
+ *   display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)
+ *     left   padding:20px 30px 24px;border-right:1px solid var(--brdsoft)
+ *     right  padding:20px 30px 24px;background:var(--surface3)
+ *
+ * Reproduced exactly. The 1.15fr is not arbitrary -- the score rows carry a
+ * 96px label column and a bar that needs width to read as a bar, while the
+ * cost grid is two narrow cells. Equal columns squash the left one.
+ *
+ * ⚖️ This band was ONE column until 2026-09-01, when Matt reversed D13 and
+ * put the score strip back on the card. */
+.queue__band {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+}
+
+.queue__scores {
+  padding: 20px 30px 24px;
+  border-right: 1px solid var(--brdsoft);
+}
+
+.queue__cost {
+  padding: 20px 30px 24px;
+  background: var(--surface3);
+}
+
+/* One column below the bundle's own card width. The band's whole point is
+ * two panels side by side; at narrow widths that becomes two slivers, and
+ * the border-right becomes a rule in the middle of nothing. */
+@media (max-width: 860px) {
+  .queue__band { grid-template-columns: minmax(0, 1fr); }
+  .queue__scores { border-right: none; border-bottom: 1px solid var(--brdsoft); }
+}
 
 /* ── card header ────────────────────────────────────────────────────────── */
 .queue__head { padding: 26px 30px 22px; border-bottom: 1px solid var(--brdsoft); }

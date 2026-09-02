@@ -2,12 +2,43 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import {
-  Button, Callout, Card, Chip, FactPanel, Keycap, MicroLabel, ShortcutCard,
+  Button, Callout, Card, Chip, FactPanel, Keycap, MicroLabel, ScoreStrip, ShortcutCard,
 } from "../primitives";
 import { adminHeaders, clearAdminSecret, getAdminSecret } from "../admin/adminSecret";
 import { getDecidedBy } from "./decidedBy";
 import { useQueueKeys } from "./useQueueKeys";
 import "./Queue.css";
+
+/* THE FOUR SCORE ROWS, and every value is null on purpose.
+ *
+ * The labels are the bundle's own -- Fit, Winnability, Value, Timing, read
+ * off the rendered prototype rather than guessed (an earlier draft of this
+ * work invented "Capability" and "Competition"; opening the prototype in a
+ * browser is what caught it).
+ *
+ * `null` is not a placeholder for data that is coming in this slice. V1
+ * ships NO scorer: the assessment table is empty by design (design spec
+ * §1.1), and D16 records that two of the SVRC's three ratified queue
+ * orderings need one before they can exist either. Nothing here may become
+ * wired -- ScoreBar.tsx's own RULING 13 comment is the standing rule, and
+ * these four constants must never acquire a source, a fetch or a sort.
+ *
+ * ⚠️ If a future reader is tempted to populate these: the honest move is a
+ * scorer with its own slice and its own gate, not a number invented here. */
+const SCORES: { label: string; value: number | null }[] = [
+  { label: "Fit", value: null },
+  { label: "Winnability", value: null },
+  { label: "Value", value: null },
+  { label: "Timing", value: null },
+];
+
+/* The disclosure Matt's 2026-09-01 ruling requires, and the whole reason the
+ * panel is allowed back onto the card after D13 removed it. D13's objection
+ * was that four bare dashes under "A READING AID" read as a RESULT -- the
+ * machine scored this and found nothing. This says the opposite in words, so
+ * the dashes cannot be misread as a verdict. */
+const SCORES_NOTE =
+  "Nothing is scored yet. These four rows show what will be judged, not a result.";
 
 interface DeadlineConflict {
   value_text: string;
@@ -333,17 +364,44 @@ export function Queue() {
           )}
         </div>
 
-        {/* D15: Region 1.1.3 renders and says what it does not have.
-          * Wrapped in its own band because the bundle's triage card has NO
-          * outer padding -- each band supplies its own (26px 30px 22px for the
-          * header, 20px 30px 24px here, 16px 30px for the decision bar). The
-          * Card primitive's generic 16px 18px was leaving this panel outdented
-          * by 30px against the title, the fact panel and the buttons. */}
-        <div className="queue__cost">
-        <FactPanel
-          title="PURSUIT COST"
-          note="Required forms, conference, references and notarization are not yet extracted."
-        />
+        {/* THE TWO-UP BAND, per the bundle: scores left, cost right.
+          *
+          *   display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)
+          *     left   padding:20px 30px 24px;border-right:1px solid --brdsoft
+          *     right  padding:20px 30px 24px;background:--surface3
+          *
+          * Each band supplies its own padding because the bundle's triage card
+          * has NO outer padding (26px 30px 22px for the header, 20px 30px 24px
+          * here, 16px 30px for the decision bar). The Card primitive's generic
+          * 16px 18px was leaving this panel outdented by 30px against the
+          * title, the fact panel and the buttons.
+          *
+          * ⚖️ RULING 2026-09-01 -- MATT REVERSED D13. The score strip is back
+          * on the card, which is what put this band into two columns; until
+          * today the cost panel sat here alone at full width. D13's objection
+          * is answered by the note below, not ignored: the bars render as
+          * PLACEHOLDERS and say so. See docs/admin-deviations.md D13
+          * (rewritten) and D17 (the note itself, which the bundle has no
+          * equivalent of because all four of its scores are populated). */}
+        <div className="queue__band">
+          <div className="queue__scores">
+            <ScoreStrip scores={SCORES} note={SCORES_NOTE} />
+          </div>
+          {/* D15: Region 1.1.3 renders and says what it does not have.
+            *
+            * ⚠️ Title corrected 2026-09-01. This read "PURSUIT COST", which is
+            * a PARAPHRASE of the bundle's own copy and came from the SP6 plan
+            * (plans/2026-08-30-sp6-triage-record.md:2806), not from the bundle
+            * and not from any deviation. CLAUDE.md §1: "Copy is specification,
+            * not placeholder... Do not paraphrase." FactPanel.tsx's own header
+            * comment has quoted the correct string the whole time, which is
+            * how the two drifted apart without anything failing. */}
+          <div className="queue__cost">
+            <FactPanel
+              title="COST TO PURSUE — FACTS, NOT A SCORE"
+              note="Required forms, conference, references and notarization are not yet extracted."
+            />
+          </div>
         </div>
 
         {/* THE DECISION BAR IS A MODE MACHINE, as the bundle has it: the

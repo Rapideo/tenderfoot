@@ -22,6 +22,18 @@
   margin-bottom: 12px;
 }
 
+/* The unscored disclosure (ScoreStrip.tsx's `note`). Declaration copied from
+ * .fact-panel__note rather than invented: the two say the same KIND of thing
+ * -- "this region is rendered and here is what it does not have yet" -- one
+ * band apart on the same card, and they must not read as two different
+ * voices. The title's own 12px bottom margin already separates it, so this
+ * carries the smaller 13px gap down to the list, exactly as FactPanel does. */
+.score-strip__note {
+  font: var(--type-body-small);
+  color: var(--text-muted);
+  margin-bottom: 13px;
+}
+
 .score-strip__list {
   display: flex;
   flex-direction: column;

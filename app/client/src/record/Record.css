@@ -127,12 +127,15 @@
   background: inherit;
 }
 
-.record__conflict-tag {
-  font: var(--type-microlabel);
-  letter-spacing: var(--tracking-label-tight);
-  color: var(--bad);
-}
-.record__conflict .record__quote { background: var(--badbg2); }
+/* .record__conflict-tag and .record__conflict .record__quote were REMOVED
+ * 2026-09-01. They styled the "disagrees" row that used to sit beneath a
+ * winner; Matt's ruling moved the conflict inline into the value cell, so
+ * neither selector has an element any more. Deleted rather than left in
+ * place: a rule matching nothing is exactly how .queue__keys survived a
+ * rewrite as dead weight, and a dropped CSS rule degrades silently instead
+ * of erroring. The conflicted ROW's own treatment is unaffected -- it comes
+ * from rowBackground()'s --badbg2 and confColour()'s --bad, both inline
+ * styles on the TableRow, both still exercised by Record.test.tsx. */
 
 .record__note {
   display: block;
