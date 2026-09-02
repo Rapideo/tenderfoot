@@ -158,3 +158,67 @@ export async function interestedPerHundred(): Promise<InterestedRate[]> {
       ORDER BY ts.drawn_at DESC`,
   );
 }
+
+/* ─── DISCOVERY: the gate's only measure ──────────────────────────────────
+ *
+ * Design spec §8.5, on the four acceptance criteria: "Discovery -- qualified
+ * opportunities surfaced that would not have been seen" -- **"Yes -- and it is
+ * the whole measure"**. Plan of Action §6.-1 asks it as the question SP6
+ * exists to answer: does reading everything surface work KP would pursue AND
+ * HAD NOT OTHERWISE SEEN?
+ *
+ * Until migration 013 nothing recorded the second half, so this number could
+ * not be computed at any sample size. It now can. */
+export interface DiscoveryReport {
+  /** Interested decisions carrying a channel. The denominator, stated. */
+  answered: number;
+  /** `nowhere` -- nothing else would have surfaced it. The discovery count. */
+  discovered: number;
+  /** Answered honestly rather than skipped. Counted, and NOT in `rate`. */
+  not_sure: number;
+  /** `discovered / (answered - not_sure)`, as a percentage. NULL when the
+   *  denominator is zero -- an unanswerable rate is null, never 0. */
+  discovery_rate: number | null;
+  /** Every channel with a count, so a dominant `other` is visible rather than
+   *  hidden inside a headline rate -- if `other` dominates, the vocabulary was
+   *  wrong (migration 013 says so in as many words). */
+  by_channel: { channel: string; n: number }[];
+}
+
+export async function discoveryRate(): Promise<DiscoveryReport> {
+  /* ⚠️ `not_sure` IS EXCLUDED FROM THE RATE AND REPORTED BESIDE IT.
+   *
+   * Folding it into the denominator would count "I don't know" as "it would
+   * have reached me another way", which is a claim nobody made -- it deflates
+   * discovery by exactly the uncertainty. Folding it into the numerator would
+   * do the reverse. Dropping it silently would rebuild the defect that made
+   * the 12.5% recall figure unusable: a denominator whose exclusions are
+   * invisible. So it is a field, and a reader can see what it cost.
+   *
+   * Latest-pursuit only: pursuit is append-only (decide.ts), so a re-decided
+   * item would otherwise be counted once per decision it ever had. */
+  const rows = await all<{ channel: string; n: number }>(
+    `WITH latest AS (${LATEST_PURSUIT})
+     SELECT p.discovery_channel AS channel, count(*)::int AS n
+       FROM latest l
+       JOIN pursuit p ON p.id = l.pursuit_id
+      WHERE l.state = 'Interested' AND p.discovery_channel IS NOT NULL
+      GROUP BY p.discovery_channel
+      ORDER BY n DESC`,
+  );
+
+  const by = new Map(rows.map((r) => [r.channel, Number(r.n)]));
+  const answered = rows.reduce((a, r) => a + Number(r.n), 0);
+  const notSure = by.get("not_sure") ?? 0;
+  const discovered = by.get("nowhere") ?? 0;
+  const denominator = answered - notSure;
+
+  return {
+    answered,
+    discovered,
+    not_sure: notSure,
+    discovery_rate:
+      denominator === 0 ? null : Math.round((10000 * discovered) / denominator) / 100,
+    by_channel: rows.map((r) => ({ channel: r.channel, n: Number(r.n) })),
+  };
+}

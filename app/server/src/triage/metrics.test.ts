@@ -183,7 +183,7 @@ test("Interested-per-hundred reports what it was measured over", async () => {
   for (let i = 0; i < 10; i++) ids.push(await sol(`rate ${i}`, "2026-08-01"));
   const sample = await drawSample({ sourceId: source, n: 200, seed: "rate-seed" });
 
-  await recordDecision({ solicitationId: ids[0]!, state: "Interested" });
+  await recordDecision({ solicitationId: ids[0]!, state: "Interested", discoveryChannel: "nowhere" });
   await recordDecision({
     solicitationId: ids[1]!,
     state: "Not Interested",
@@ -205,7 +205,7 @@ test("a reversed decision counts once, as what it became", async () => {
   const id = await sol("changed my mind", "2026-08-01");
   const sample = await drawSample({ sourceId: source, n: 200, seed: "reversal-seed" });
 
-  await recordDecision({ solicitationId: id, state: "Interested" });
+  await recordDecision({ solicitationId: id, state: "Interested", discoveryChannel: "nowhere" });
   await recordDecision({ solicitationId: id, state: "Not Interested", reason: "on reflection" });
 
   const mine = (await interestedPerHundred()).find((r) => r.sample_id === sample.id)!;
