@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import {
-  Button, Callout, Card, Chip, ChoiceChip, FactPanel, MicroLabel, ScoreStrip, ShortcutCard,
+  Button, Callout, Card, Chip, ChoiceChip, FactPanel, Keycap, MicroLabel, ScoreStrip,
+  ShortcutCard,
 } from "../primitives";
 import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
 import { adminHeaders, clearAdminSecret, getAdminSecret } from "../admin/adminSecret";
@@ -57,6 +58,10 @@ interface QueueItem {
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
+  /* The posting's own words, truncated server-side (server queue.ts). Null
+   * when the source published none -- a fact about the row, not a gap. */
+  description: string | null;
+  description_truncated: boolean;
   documents: number;
   sightings: number;
   deadline_conflict: DeadlineConflict[];
@@ -535,11 +540,71 @@ export function Queue() {
             * not placeholder... Do not paraphrase." FactPanel.tsx's own header
             * comment has quoted the correct string the whole time, which is
             * how the two drifted apart without anything failing. */}
-          <div className="queue__cost">
-            <FactPanel
-              title="COST TO PURSUE — FACTS, NOT A SCORE"
-              note="Required forms, conference, references and notarization are not yet extracted."
-            />
+          <div className="queue__right">
+            {/* WHAT THIS IS — the posting's own words.
+              *
+              * ⚖️ INVENTED. The frozen bundle has NO summary or description
+              * treatment anywhere: zero hits for `description`, `synopsis` or
+              * `abstract`, and its four `Summary` hits are `clearedSummary`
+              * (the queue-cleared line) and `oppsSummary` (a count). So this
+              * panel is a deviation, not a parity claim — D24.
+              *
+              * ⚖️ PLACEMENT ruled by Matt 2026-09-02: "to the right of our
+              * machine scores." That is where COST TO PURSUE sits in the
+              * bundle's two-up grid, so this STACKS ABOVE it rather than
+              * replacing it — §7.10 clause 2 requires parked chrome to be
+              * built and left inert, not trimmed.
+              *
+              * ⚠️ AND IT IS NOT CALLED A SUMMARY, also ruled the same day.
+              * Until a model actually writes one this is SAM's own prose —
+              * boilerplate-heavy, frequently opening "This is a combined
+              * synopsis/solicitation for commercial items prepared in
+              * accordance with…". Heading it MACHINE SUMMARY would repeat
+              * D20's mistake: a label claiming more than the data earns. The
+              * heading changes when the summariser exists, not before. */}
+            <div className="queue__what">
+              <div className="queue__what-head">
+                <span className="queue__what-title">WHAT THIS IS — THE POSTING&rsquo;S OWN WORDS</span>
+                {/* Inert by design, and §7.10 clause 2 is the authority for
+                  * building it that way: the intelligence chrome is
+                  * constructed and left non-functional until the thing behind
+                  * it is designed. This is where the summariser will hang. */}
+                <Button variant="ghost" ariaLabel="Summarise" disabled>
+                  SUMMARISE
+                </Button>
+              </div>
+              {item.description ? (
+                <>
+                  <p className="queue__what-body">{item.description}</p>
+                  {item.description_truncated && (
+                    <p className="queue__what-more">
+                      Trimmed for the card. <Keycap>↵</Keycap> opens the full text.
+                    </p>
+                  )}
+                </>
+              ) : (
+                /* An absent description is a FACT about this row, not a
+                  * rendering gap — and after the 2026-09-02 backfill it is
+                  * rare enough to be worth naming when it happens. */
+                <p className="queue__what-empty">This source published no description.</p>
+              )}
+            </div>
+
+            {/* D15: Region 1.1.3 renders and says what it does not have.
+              *
+              * ⚠️ Title corrected 2026-09-01. This read "PURSUIT COST", which is
+              * a PARAPHRASE of the bundle's own copy and came from the SP6 plan
+              * (plans/2026-08-30-sp6-triage-record.md:2806), not from the bundle
+              * and not from any deviation. CLAUDE.md §1: "Copy is specification,
+              * not placeholder... Do not paraphrase." FactPanel.tsx's own header
+              * comment has quoted the correct string the whole time, which is
+              * how the two drifted apart without anything failing. */}
+            <div className="queue__cost">
+              <FactPanel
+                title="COST TO PURSUE — FACTS, NOT A SCORE"
+                note="Required forms, conference, references and notarization are not yet extracted."
+              />
+            </div>
           </div>
         </div>
 

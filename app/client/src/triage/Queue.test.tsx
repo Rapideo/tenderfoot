@@ -15,6 +15,10 @@ const ITEM = {
   kind: "RFP",
   set_aside: null,
   source_name: "SAM.gov",
+  description:
+    "This is a combined synopsis/solicitation for commercial items prepared in accordance " +
+    "with the format in Subpart 12.6.",
+  description_truncated: false,
   documents: 3,
   sightings: 2,
   deadline_conflict: [],
@@ -792,4 +796,82 @@ test("the inert keycap hint is gone from the decision bar", async () => {
   /* And the legend that makes it unnecessary is still on screen -- verbatim
    * from the bundle's meta line. */
   expect(screen.getByText("I INTERESTED · P PASS · U UNDO")).toBeTruthy();
+});
+
+
+/* ===========================================================================
+ * WHAT THIS IS — the posting's own words, 2026-09-02
+ * ===========================================================================
+ * FOUND BY MATT, by trying to triage sample 1: "There are no extracted
+ * fields... Until I can get more context, I'm not really going to be able to
+ * make judgment calls." The text was in sighting.raw on 99.3% of SAM rows and
+ * merge discarded it. These pin the surface that fixes it.
+ */
+
+test("the card carries the posting's own words", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  expect(screen.getByText(/combined synopsis\/solicitation for commercial items/i)).toBeTruthy();
+});
+
+test("the panel is NOT labelled a summary while it shows source text", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* Ruled by Matt 2026-09-02. Calling SAM's own boilerplate a machine summary
+   * is D20's mistake -- a heading claiming more than the data earns. The
+   * heading changes when a model actually writes one. */
+  expect(screen.getByText(/WHAT THIS IS — THE POSTING.S OWN WORDS/i)).toBeTruthy();
+  expect(screen.queryByText(/MACHINE SUMMARY/i)).toBeNull();
+});
+
+test("the Summarise control is present and inert", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* §7.10 clause 2: the intelligence chrome is BUILT and left non-functional
+   * until the thing behind it is designed. Disabled is the honest state --
+   * a live-looking button that does nothing is the D14/D23 defect. */
+  const btn = screen.getByRole("button", { name: "Summarise" });
+  expect(btn.hasAttribute("disabled")).toBe(true);
+});
+
+test("a truncated description says so rather than just stopping", async () => {
+  stub(page({ items: [{ ...ITEM, description_truncated: true }] }));
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  expect(screen.getByText(/Trimmed for the card/i)).toBeTruthy();
+});
+
+test("a missing description is stated as a fact, not left blank", async () => {
+  stub(page({ items: [{ ...ITEM, description: null }] }));
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* An empty panel reads as a rendering bug. Naming the absence distinguishes
+   * "the source published none" from "we failed to show it". */
+  expect(screen.getByText(/This source published no description/i)).toBeTruthy();
+});
+
+test("the cost panel survives beside it -- parked chrome is built, not trimmed", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* §7.10 clause 2. The description STACKS ABOVE the cost panel rather than
+   * replacing it; a regression that swapped them would still show the
+   * description and would silently drop the bundle's own chrome. */
+  expect(screen.getByText("COST TO PURSUE — FACTS, NOT A SCORE")).toBeTruthy();
+  expect(screen.getByText(/WHAT THIS IS/i)).toBeTruthy();
 });

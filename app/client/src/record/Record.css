@@ -251,3 +251,42 @@
 .record__event-body { padding: 10px 0 20px; }
 .record__event-title { font: var(--type-subhead-field); }
 .record__event-sub { font: var(--type-body-compact); color: var(--text4); margin-top: 4px; }
+
+/* ── the Brief's description block ───────────────────────────────────────────
+ * Added 2026-09-02. The card truncates to ~200 words; this is the place that
+ * does not, so it is set as running prose rather than as a panel: no border,
+ * no fill, a comfortable measure. --type-body-para is the bundle's own
+ * paragraph style (empty state, citation, posture-why). */
+.record__brief {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.record__brief-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.record__brief-title {
+  font: var(--type-microlabel);
+  letter-spacing: var(--tracking-label-wide);
+  color: var(--text7);
+}
+.record__brief-body {
+  margin: 0;
+  font: var(--type-body-para);
+  color: var(--text3);
+  /* description.ts preserves paragraph breaks on purpose -- without
+   * white-space they collapse and a 500-character description becomes one
+   * unreadable block. max-width keeps the measure near 70ch; the record card
+   * is far wider than prose wants to be. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 72ch;
+}
+.record__brief-empty {
+  margin: 0;
+  font: var(--type-body-para);
+  color: var(--text6);
+}
