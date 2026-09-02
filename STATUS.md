@@ -219,6 +219,12 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## ▶️ NEXT SESSION — START HERE: finish the discovery capture's CLIENT half, then adjudicate.
 
+### 🗣️ MATT'S CALL, 2026-09-01 late: **IDOA should really be next.** To discuss first — not designed, not started.
+
+**One fact to bring to that conversation, checked before it:** `Indiana IDOA solicitations` reads health `ok`, which makes it look like a switch. **It is not.** `scrape/adapters/registry.ts` imports exactly three adapters — `fake`, `sam`, `usaspending` — so there is **no IDOA adapter at all**. `enabled=no` is the smallest part of what stands between us and Indiana data; this is an adapter build (the shape SP3 did twice), not a toggle.
+
+**Why it matters more than its size:** today's gate numbers are a picture of the FEDERAL market. Indiana is arguably KP's core ground. Turning it on does not improve the gate's measurement — it changes what the gate is a gate ON, which is a bigger decision than a slice.
+
 ### 🎯 THE ONE TASK TO START WITH
 **Branch `sp6-discovery-channel` holds the SERVER half of the discovery capture and is NOT merged, deliberately.** The server now REQUIRES a `discovery_channel` on Interested; the client does not send one. **Merging it as-is would make the Interested button answer 400 in the live app.** Finish the client, then merge the two together.
 
