@@ -215,7 +215,54 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-01 (evening)
+## 🔖 RESUME HERE — updated 2026-09-01 (late)
+
+## ▶️ NEXT SESSION — START HERE: finish the discovery capture's CLIENT half, then adjudicate.
+
+### 🗣️ MATT'S CALL, 2026-09-01 late: **IDOA should really be next.** To discuss first — not designed, not started.
+
+**One fact to bring to that conversation, checked before it:** `Indiana IDOA solicitations` reads health `ok`, which makes it look like a switch. **It is not.** `scrape/adapters/registry.ts` imports exactly three adapters — `fake`, `sam`, `usaspending` — so there is **no IDOA adapter at all**. `enabled=no` is the smallest part of what stands between us and Indiana data; this is an adapter build (the shape SP3 did twice), not a toggle.
+
+**Why it matters more than its size:** today's gate numbers are a picture of the FEDERAL market. Indiana is arguably KP's core ground. Turning it on does not improve the gate's measurement — it changes what the gate is a gate ON, which is a bigger decision than a slice.
+
+### 🎯 THE ONE TASK TO START WITH
+**Branch `sp6-discovery-channel` holds the SERVER half of the discovery capture and is NOT merged, deliberately.** The server now REQUIRES a `discovery_channel` on Interested; the client does not send one. **Merging it as-is would make the Interested button answer 400 in the live app.** Finish the client, then merge the two together.
+
+**What the client needs** (all decided, nothing to re-litigate):
+- The decision bar is already a two-state mode machine (default / `askReason` on Pass). **Interested needs its own step**, mirroring Pass.
+- 💡 **This is fidelity-POSITIVE, not an invention.** The bundle already has it: `confirmLabel: s.askReason === "pass" ? "Pass & next" : "Save & next"`, with a matching `--accbrd` confirm style. We only ever built the Pass branch.
+- Seven options: `already_knew · indiana_email · portal · colleague · nowhere · not_sure · other`. Picking **Other** uses the existing optional reason box for detail rather than adding a second text field.
+- POST `discovery_channel` on the decision. A missing one answers **400** with `field: "discovery_channel"`.
+- **Then: migration 013 must be run against production** before any triage session — `pursuit` gains the column and its CHECK.
+- **Then: write deviation D21** — the channel vocabulary is INVENTED, which cuts against SVRC 1.1.4's ruling that chip vocabularies be *derived* from a hand-run. The argument for overriding it is in `013_discovery_channel.sql`; it needs a number.
+
+### 📊 THE GATE'S FIRST REAL NUMBERS — measured on production today, in `docs/2026-09-01-gate-measurements.md`
+| | |
+|---|---|
+| Volume/week, SAM.gov | **7,614** notices — **4,549 biddable** |
+| Lead time posted→closes | **median 11 days** (p25 7, p75 15) |
+| Not biddable | **26%** — award notices, special notices, justifications |
+| Carrying a KP PSC code | **49/week** — ten a working day |
+
+**Still uncomputable:** Interested-per-hundred (0 decisions on production), discovery (the branch above fixes this), and value weighting — **closed by evidence, not pending:** SAM publishes no estimate for open notices.
+
+### ⚠️ THE PRECONDITION STILL FAILS, and it is not an outage
+**Only SAM.gov has ever been ingested.** `Indiana IDOA solicitations` and `Indiana EDS` are health `ok`, `enabled=no`, `last_run=never` — arguably KP's core ground, contributing nothing. **Any GO/NO-GO taken now is a verdict on federal SAM.gov alone and must say so in those words.** Turning state sources on is a separate decision and was not taken.
+
+### ✅ WHAT LANDED TODAY, all on `main`, gate green at 71 files
+- **Matt's five fidelity rulings** — score strip back (D13 reversed), conflicts inline (§6.1 amended), seven-item nav with stubs, tabs disclosed, CONFIDENCE held at a flat 0.6. Deviations **D17–D20**.
+- **The flaky gate is FIXED at the root** — 87 leftover schemas and 11,052 `pg_class` rows were slowing the suite until tests timed out. `resetSchema()` now records each schema's birthday and `--reap` drops only those over three hours old, so it is safe to run unattended. **174s → ~107s, and four consecutive green runs.**
+- **The SAM payload audit** — `kind`/`codes`/`set_aside` were null on every row while the payload carried them. Backfilled on production: `posted_at` 140 → 9,822.
+- **106 opportunities recovered** — an impossible deadline (closes before posted) was filed as *closed* and hidden. Now treated as unknown. Production queue 6,814 → **6,920**.
+
+### 🔴 STILL OPEN, unchanged
+`accuracyByField` has no surface · `fields.ts` matches one date format · the merge may still drop SAM fields nobody has looked for · the cleared-queue Metrics card goes to `/admin` · **and the real GO/NO-GO adjudication has still not happened.**
+
+> 💡 **The lesson that cost twice today:** a merge-layer fix changes nothing until the merge is RE-RUN against the database in question. Shipping and deploying is not backfilling, and the gap is invisible — production looked fine and simply had no posting dates.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-09-01 (evening)
 
 ## ▶️ NEXT SESSION — ALL FIVE RULINGS ARE RULED AND BUILT. The gate is green again after expiring overnight. What is left is the instrument, not the paint.
 
