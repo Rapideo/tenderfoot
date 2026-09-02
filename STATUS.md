@@ -217,18 +217,27 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-02
 
-## ▶️ NEXT SESSION — the discovery capture is DONE and MERGED. Two things stand between here and a triage session, and one of them is Matt's to run.
+## ▶️ NEXT SESSION — the discovery capture is DONE, MERGED, DEPLOYED and MIGRATED. What is left is a triage session, and then IDOA.
 
-### 🔴 DO THIS FIRST: migration 013 has NOT been run on production
-`pursuit.discovery_channel` and its CHECK exist on **`test` only**. Production is unmigrated, so **the Interested button will 500 on production until it is run** — the server requires the column the moment the client sends it, and both halves are now live in `main`.
+### ✅ PRODUCTION IS LIVE, MIGRATED AND VERIFIED — 2026-09-02
 
-Per §4, `DATABASE_URL` points at `test` by design, so migrating production is a **deliberate act**:
+**Migration 013 applied to production** (`applied 013_discovery_channel.sql`, endpoint `ep-super-bonus-auoe43hj`, run by Matt through the new guard below), **then** `main` pushed `b5d6b07..441cb5d`. That order was the whole hazard: the *server* half was already in `main`, so a deploy landing before the migration would have made Interested **500** on production — the client is not what would have broken it.
 
-```bash
-DATABASE_URL="$DATABASE_URL_PRODUCTION" node --env-file-if-exists=.env --import tsx app/server/src/db/migrate.ts
+**Verified by BEHAVIOUR, and one request proved both halves at once.** `GET /api/triage/metrics` answered `200` with
+
+```json
+"discovery": {"answered":0,"discovered":0,"not_sure":0,"discovery_rate":null,"by_channel":[]}
 ```
 
-⚠️ **Deploy and migration are not the same thing**, and this project has paid for that confusion twice (`posted_at`, then the merge-layer fix). Pushing `main` deploys the code; it does not add the column.
+- **The deploy landed**, because the `discovery` key exists only in the new code — production returned `volume, interested` and nothing else 45 seconds earlier, captured before the push precisely so this comparison could be made.
+- **The migration landed**, because `discoveryRate()` SELECTs `pursuit.discovery_channel`. On an unmigrated database that is a `500`, not a `null` rate. **A route answering 200 is the column existing.**
+
+**And the write gate is intact:** an unauthenticated `POST` answers **`401`** with `X-Powered-By: Express` — our app replying, not the platform, which per §1 is positive proof `ADMIN_SECRET` is truthy in the production runtime.
+
+⚠️ **`discovery_rate` is `null`, not `0`, and that is correct** — nobody has answered the question yet. **The first real number comes from a triage session, which has still not happened.**
+
+### 🛡️ NEW: `npm run migrate:production`, because §4 made the safe thing silent
+§4 repointed `DATABASE_URL` at `test`, which made every local command safe by default and left migrating production as a bare shell-variable override. **Getting that override subtly wrong is SILENT: it migrates `test` a second time and prints success.** The wrapper prints the host, checks it against §4's two recorded endpoints, and **refuses the test endpoint by name** rather than merely failing a positive check. All three refusal paths were exercised before it was handed over — a guard nobody has seen refuse is decoration.
 
 ### ✅ WHAT LANDED TODAY — merged `07d216f` (`--no-ff`), gate **592 tests / 72 files**, exit 0
 **Branch `sp6-discovery-channel` is merged.** It had been held unmerged on purpose since 09-01: the server half REQUIRES `discovery_channel` on Interested, so landing it alone would have made the button answer 400 in the live app.
