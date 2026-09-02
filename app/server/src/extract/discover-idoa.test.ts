@@ -186,3 +186,23 @@ test("honours budgetMs, reporting only what it actually walked", async () => {
   const docs = await all<{ id: number }>(`SELECT id FROM document`);
   expect(docs).toHaveLength(0);
 });
+
+/* FIX ROUND 1 (Important 1, Task 9.5 review): IDOA_SOURCE_NAME is exported
+ * from this module's own code, but nothing anywhere checked it against a
+ * SEEDED source.name row -- only against another hand-typed literal
+ * (registry.ts's own test does exactly that, resolve-source.test.ts:77,
+ * which is a real gap the review named). This queries the ACTUAL migrated
+ * schema -- migrations/003_seed_source_registry.sql is what really owns this
+ * name -- so a future rename on either side (the migration's spelling, or
+ * registry.ts's `idoa.sourceName` this constant now derives from) fails
+ * this test loudly instead of silently discovering zero candidates. */
+test("IDOA_SOURCE_NAME matches a seeded source.name row exactly", async () => {
+  await resetSchema();
+  await migrate(false);
+
+  const rows = await all<{ name: string }>(`SELECT name FROM source WHERE name = $1`, [
+    IDOA_SOURCE_NAME,
+  ]);
+
+  expect(rows).toHaveLength(1);
+});

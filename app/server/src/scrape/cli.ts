@@ -134,22 +134,31 @@ async function runListingsPass(req: RunRequest, adapter: Adapter): Promise<void>
  * spelling, so it lines up with the canonical `source.name` row every other
  * consumer of a resolved source keys against.
  *
- * The literal below is not imported from discover-idoa.ts's own
- * `IDOA_SOURCE_NAME` export -- that module has the same static top-level
- * `db/index.js` import discover.ts and run-extract.ts have, and a static
- * import here for just the constant would defeat the whole point of the
- * dynamic imports below. Same trade registry.ts already makes: its `idoa`
- * entry hardcodes this identical string as `sourceName` rather than
- * importing it either. Both must agree with
- * migrations/003_seed_source_registry.sql, which is the row that actually
- * owns this name. */
-async function runDocumentsPass(req: RunRequest): Promise<void> {
+ * FIX ROUND 1 (Important 1, Task 9.5 review): this branch used to compare
+ * against a FOURTH hand-typed copy of "Indiana IDOA solicitations" (SAM's
+ * own registered name, registry.ts's `idoa` entry, and the seed migration
+ * were the other three), untested and uncross-checked -- a typo here would
+ * have compiled, dispatched to `discoverAttachments` anyway, and recreated
+ * the exact zero-candidates bug this task exists to close, silently, with a
+ * green suite. Compared against `ADAPTERS.idoa?.sourceName` instead:
+ * `ADAPTERS` is already imported statically above (registry.ts is a "plain
+ * synchronous map, no database access", per its own header, so this needs
+ * no new import and no dynamic one), and it is the SAME single source of
+ * truth discover-idoa.ts's own `IDOA_SOURCE_NAME` now derives from -- one
+ * literal, in registry.ts, instead of four independent ones. See
+ * cli-documents-pass.test.ts for the dispatch itself, exercised directly
+ * rather than only reasoned about in a comment. */
+/* Exported (not merely file-local) so cli-documents-pass.test.ts can
+ * exercise the dispatch branch above directly, with `../extract/discover.js`
+ * and `../extract/discover-idoa.js` swapped for mocks -- "faking one level
+ * lower than cli.test.ts's whole-pass fakes", per the Task 9.5 review. */
+export async function runDocumentsPass(req: RunRequest): Promise<void> {
   const resolved = await resolveSource(req.source);
   const limit = req.limit ?? MAX_BATCH;
 
   const { runExtract } = await import("../extract/run-extract.js");
 
-  if (resolved.sourceName === "Indiana IDOA solicitations") {
+  if (resolved.sourceName === ADAPTERS.idoa?.sourceName) {
     const { discoverIdoaAttachments } = await import("../extract/discover-idoa.js");
     const discovered = await discoverIdoaAttachments(limit, req.budgetMs);
     console.log(

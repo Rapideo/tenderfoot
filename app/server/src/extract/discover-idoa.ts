@@ -1,4 +1,5 @@
 import { all, one, insert } from "../db/index.js";
+import { ADAPTERS } from "../scrape/adapters/registry.js";
 
 /* SIBLING of discover.ts's discoverAttachments, not a generalisation of it
  * (Ruling 12, 2026-09-02 progress.md). The two sources need genuinely
@@ -25,17 +26,38 @@ import { all, one, insert } from "../db/index.js";
  * split (scrape/adapters/idoa.ts vs sam.ts) and keeps discoverAttachments's
  * SAM logic untouched.
  */
-/* Exported so this file's own test can seed fixtures against the SAME string
- * this module queries with, rather than a second hand-typed copy of a name
- * that only migrations/003_seed_source_registry.sql truly owns. The dispatch
- * sites (scrape/cli.ts, routes/admin.ts) do NOT import this constant --
- * cli.ts's dispatch runs before this module is even loaded (see its own
- * comment on why the discover-idoa import there stays dynamic), and
- * admin.ts's dispatch calls both discovery functions unconditionally rather
- * than branching on a name at all. Both already hardcode this identical
- * string where they need it (registry.ts's `idoa` entry does too), and all
- * three must agree with the seed migration. */
-export const IDOA_SOURCE_NAME = "Indiana IDOA solicitations";
+/* FIX ROUND 1 (Important 1, Task 9.5 review): this used to be a SECOND
+ * hand-typed copy of "Indiana IDOA solicitations" -- the string then
+ * appeared four times (here, cli.ts's dispatch, registry.ts's `idoa` entry,
+ * and the seed migration), with only registry.ts's copy cross-checked by a
+ * test. A typo in any of the other three would compile, run, and dispatch
+ * silently to the wrong function.
+ *
+ * Derived from registry.ts's `idoa` entry instead -- the SAME single source
+ * of truth its own header comment already claims to be ("cli.ts and
+ * routes/admin.ts both import it rather than each declaring their own"),
+ * and the same precedent discover.ts sets by importing SAM_HOST from
+ * scrape/adapters/sam.js rather than re-typing SAM's own host. registry.ts
+ * has no database import (a "plain synchronous map", per its own header),
+ * so importing it here costs nothing.
+ *
+ * The runtime check (rather than a `!` assertion) fails LOUD at module load
+ * if the registry entry is ever renamed or removed -- the same fail-closed
+ * posture db/index.ts's own `insert()` guard takes ("a silent undefined
+ * here becomes a null foreign key three lines later"), applied to a
+ * registry lookup instead of a RETURNING clause.
+ *
+ * Exported so this file's own test can seed fixtures against the SAME
+ * value this module queries with, and so a test can pin it against the
+ * seeded `source.name` row -- see discover-idoa.test.ts. */
+const idoaEntry = ADAPTERS.idoa;
+if (!idoaEntry || typeof idoaEntry.sourceName !== "string") {
+  throw new Error(
+    "scrape/adapters/registry.ts's 'idoa' entry is missing or has no sourceName -- " +
+      "discover-idoa.ts cannot select IDOA candidates without it.",
+  );
+}
+export const IDOA_SOURCE_NAME = idoaEntry.sourceName;
 
 /* Same shape as discover.ts's CANDIDATES: not yet checked for documents.
  * `s.external_id IS NOT NULL` mirrors SAM's guard even though every IDOA row

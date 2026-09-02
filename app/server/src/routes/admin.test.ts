@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ useTestSchema("test_admin");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { close, one, run } = await import("../db/index.js");
+const { close, one, run, insert, all } = await import("../db/index.js");
 const { app } = await import("../index.js");
 
 beforeAll(async () => {
@@ -722,4 +722,120 @@ test("discover answers with its four counts, and touches no network to do it", a
     refreshed: 0,
     limit: 5,
   });
+});
+
+/* FIX ROUND 1 (Important 2, Task 9.5 review): the test above only ever
+ * proves the zero case -- both mechanisms answering 0 is indistinguishable
+ * from a swapped variable or a wrong field in the sum at /discover's
+ * handler, since 0 + anything-wrong-but-also-zero is still 0. This gives
+ * BOTH a real, non-zero result and pins the COMBINED total, not just that
+ * the route answered 200.
+ *
+ * Placed LAST in this file deliberately -- it is the only test that puts a
+ * SAM.gov and an IDOA solicitation into this shared schema, and the test
+ * above depends on this schema holding neither (its own comment says so).
+ * Vitest runs a file's tests in declaration order by default (no
+ * shuffle/concurrent config in vitest.config.ts), so appending here cannot
+ * put a solicitation in front of an earlier test.
+ *
+ * Global `fetch` is stubbed for SAM's one per-notice call only, for this
+ * test's duration -- admin.ts always calls `discoverAttachments` with
+ * `fetchImpl` left `undefined` (defaulting to global fetch), so there is no
+ * way to inject a fake through the HTTP layer other than stubbing the
+ * global; `vi.unstubAllGlobals()` in `finally` restores it regardless of
+ * outcome. IDOA needs no stub at all -- its url is already in
+ * `sighting.raw`, which is exactly the point of building it that way. */
+test("discover sums SAM's and IDOA's real, non-zero results, not just their zeroes", async () => {
+  const samSourceId = (
+    await one<{ id: number }>(`SELECT id FROM source WHERE name = 'SAM.gov'`)
+  )?.id;
+  const idoaSourceId = (
+    await one<{ id: number }>(`SELECT id FROM source WHERE name = 'Indiana IDOA solicitations'`)
+  )?.id;
+  expect(samSourceId).toBeDefined();
+  expect(idoaSourceId).toBeDefined();
+
+  const samSolId = await insert(
+    `INSERT INTO solicitation (title, external_id, source_id, closes_at)
+     VALUES ('admin sam fixture', 'admin-sam-1', $1, $2) RETURNING id`,
+    [samSourceId, new Date(Date.now() + 86_400_000).toISOString()],
+  );
+  const idoaSolId = await insert(
+    `INSERT INTO solicitation (title, external_id, source_id)
+     VALUES ('admin idoa fixture', 'admin-idoa-1', $1) RETURNING id`,
+    [idoaSourceId],
+  );
+  await insert(
+    `INSERT INTO sighting (source_id, solicitation_id, external_id, raw)
+     VALUES ($1, $2, 'admin-idoa-1', $3::jsonb) RETURNING id`,
+    [
+      idoaSourceId,
+      idoaSolId,
+      JSON.stringify({
+        documentsUrl: "https://www.in.gov/idoa/proc/solicitations/files/admin-idoa-1.zip",
+      }),
+    ],
+  );
+
+  const samResponse = {
+    _embedded: {
+      opportunityAttachmentList: [
+        { attachments: [{ name: "Fixture.pdf", resourceId: "rf1", type: "file", fileExists: "1" }] },
+      ],
+    },
+  };
+  /* Stubbing global fetch OUTRIGHT (first draft of this test, caught by
+   * running it) also intercepts `post()`'s own call BELOW -- that is how
+   * this suite's HTTP client reaches the local Express server in the first
+   * place, since `post()` uses the same global `fetch`. Unconditionally
+   * stubbed, the test's own request to `/api/admin/discover` never reaches
+   * the server at all; it gets the SAM fixture handed straight back as the
+   * "response", and the resulting assertion failure (`body` equal to the
+   * SAM payload, not the route's JSON) is what surfaced this. The real
+   * fetch is captured first and used for anything that is not the SAM
+   * resources host, so only discoverAttachments's OWN outbound call is
+   * faked. */
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url.includes("sam.gov")) {
+        return new Response(JSON.stringify(samResponse), { status: 200 });
+      }
+      return realFetch(url, init);
+    }),
+  );
+  try {
+    const res = await post({}, undefined, "/api/admin/discover?limit=10");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      solicitations: number;
+      skipped: number;
+      documents: number;
+      refreshed: number;
+      limit: number;
+    };
+    /* One SAM candidate (1 document) + one IDOA candidate (1 document) --
+     * the combined totals, which is exactly the arithmetic a swapped
+     * variable or a dropped term would get wrong while a same-shape-but-
+     * empty test could not catch. */
+    expect(body).toEqual({
+      solicitations: 2,
+      skipped: 0,
+      documents: 2,
+      refreshed: 0,
+      limit: 10,
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  const docs = await all<{ filename: string; source_url: string; solicitation_id: number }>(
+    `SELECT filename, source_url, solicitation_id FROM document ORDER BY filename`,
+  );
+  expect(docs.map((d) => d.filename)).toEqual(["Fixture.pdf", "admin-idoa-1.zip"]);
+  expect(docs.find((d) => d.filename === "admin-idoa-1.zip")?.solicitation_id).toBe(idoaSolId);
+  expect(docs.find((d) => d.filename === "Fixture.pdf")?.solicitation_id).toBe(samSolId);
 });
