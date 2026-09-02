@@ -165,6 +165,19 @@ async function runWindowed(
       });
 
       for (const item of page.items) {
+        /* Operator intent, distinct from the time budget (spec §5). Hitting
+         * the budget means the platform stopped us; hitting the limit means
+         * this is what was asked for -- so this path sets `done` rather than
+         * leaving a partial run the caller would try to resume. Checked
+         * BEFORE writing this item and before touching `lowWater`, so an
+         * item excluded by the limit is exactly as invisible to `lowWater`
+         * as one never fetched -- the minimum is only ever taken over rows
+         * this run actually wrote, matching runSnapshot's row-counting
+         * enforcement below. */
+        if (req.limit !== undefined && rows >= req.limit) {
+          done = true;
+          break;
+        }
         art.writeSighting({
           externalId: item.externalId,
           seenAt: new Date().toISOString(),
@@ -179,6 +192,11 @@ async function runWindowed(
         /* Track the MINIMUM, not the maximum -- see the module header. */
         if (!lowWater || item.modifiedAt < lowWater) lowWater = item.modifiedAt;
       }
+
+      /* The limit was hit mid-page: stop here rather than fetching another
+       * page. `done` is already set above -- this just keeps the outer loop
+       * from treating a limit-stop as a budget-stop. */
+      if (done) break;
 
       cursor = page.nextCursor;
       if (cursor === null) {

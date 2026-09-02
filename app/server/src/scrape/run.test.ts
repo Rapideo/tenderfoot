@@ -61,6 +61,25 @@ test("a partial snapshot run does not offer a resume it cannot honour", async ()
   expect(res.nextUntil).toBeNull();
 });
 
+/* Backfills a gap left by Task 4: `runSnapshot`'s row-counting limit
+ * enforcement (run.ts) shipped with no test exercising it at all -- Task 3
+ * only tested that `limit` survives contract validation (contract.test.ts),
+ * never that a run actually stops there. Added here, alongside Task 5's
+ * windowed counterpart, so this file's mutation proof has something real to
+ * fail on both sides of the shape dispatch. */
+test("limit stops a snapshot run at the requested number of rows", async () => {
+  const adapter = stubSnapshot([{ ids: ["a", "b", "c"], next: null }]);
+  const res = await runScrape(
+    { source: "stub-snap", depth: "listing", budgetMs: 60_000, limit: 2 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.rows).toBe(2);
+  /* The budget is a platform rail; the limit is operator intent. Hitting
+   * the limit is a completed request, not a truncated one. */
+  expect(res.done).toBe(true);
+});
+
 test("a run that fits reports done and no next_until", async () => {
   const p = tmpPath();
   const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
@@ -330,6 +349,48 @@ function tieBlockAdapter(): WindowedAdapter {
     },
   };
 }
+
+/* Task 5 (spec §5): `limit` applies to the windowed path too, not just
+ * `runSnapshot`. `d` and `stubWindowed` mirror `stubSnapshot`'s role above
+ * -- a fixed list of pages walked by position -- for a WindowedAdapter. No
+ * test here exercises since/until filtering (fakeAdapter and the fixtures
+ * above already do), so `stubWindowed` ignores those arguments. */
+function d(id: string, modifiedAt: string) {
+  return { externalId: id, modifiedAt, raw: {} };
+}
+
+function stubWindowed(pages: Array<{ items: ReturnType<typeof d>[]; next: string | null }>): WindowedAdapter {
+  let i = 0;
+  return {
+    shape: "windowed" as const,
+    name: "stub-windowed",
+    async fetchListing(_since, _until, _cursor) {
+      const p = pages[i++]!;
+      return {
+        items: p.items,
+        nextCursor: p.next,
+        requestUrl: "https://example.test/listing",
+        httpStatus: 200,
+        payload: JSON.stringify(p.items),
+      };
+    },
+  };
+}
+
+test("limit stops a windowed run at the requested number of rows", async () => {
+  const adapter = stubWindowed([
+    { items: [d("a", "2026-01-03"), d("b", "2026-01-02"), d("c", "2026-01-01")], next: null },
+  ]);
+  const res = await runScrape(
+    { source: "stub", since: "2026-01-01", until: "2026-01-04", depth: "listing", budgetMs: 60_000, limit: 2 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.rows).toBe(2);
+  /* The budget is a platform rail; the limit is operator intent. Hitting the
+   * limit is a completed request, not a truncated one. */
+  expect(res.done).toBe(true);
+});
 
 test("a tie block wider than the budget is reported as noProgress, not a silent resume", async () => {
   const p = tmpPath();
