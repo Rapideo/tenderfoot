@@ -38,7 +38,7 @@ import {
   StatusDot,
   TableRow,
 } from "../primitives";
-import type { ButtonVariant, StatusDotState } from "../primitives";
+import type { ButtonSize, ButtonVariant, StatusDotState } from "../primitives";
 
 const STATUS_STATES: StatusDotState[] = ["ok", "failing", "rot", "off"];
 
@@ -72,14 +72,41 @@ const SHORTCUT_CARDS = [
 /* Button copy is reproduced character-for-character from the bundle
  * instance each variant was matched against (see Button.css): interestIt
  * ("Interested"), passIt ("Pass"), openDetail ("Open full detail →"),
- * markRead ("CLEAR"). */
+ * markRead ("CLEAR"), confirmReason on its pass branch ("Pass & next").
+ *
+ * `Record<ButtonVariant, ...>` earned its keep on 2026-09-02: adding the
+ * `danger` variant failed typecheck HERE, which is the gallery refusing to
+ * silently stop being a complete inventory of the primitive. */
 const BUTTON_EXAMPLES: Record<ButtonVariant, string> = {
   primary: "Interested",
   secondary: "Pass",
   tertiary: "Open full detail →",
   ghost: "CLEAR",
+  danger: "Pass & next",
 };
-const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "tertiary", "ghost"];
+/* Four variants have a default-size declaration in the bundle; `danger` has
+ * only the sm one, because the bundle draws it in exactly one place. Rendering
+ * it at the default would show an UNSTYLED button and read as a broken
+ * primitive rather than as a deliberately narrow one. */
+const VARIANT_SIZE: Record<ButtonVariant, ButtonSize> = {
+  primary: "default",
+  secondary: "default",
+  tertiary: "default",
+  ghost: "default",
+  danger: "sm",
+};
+
+const BUTTON_VARIANTS: ButtonVariant[] = [
+  "primary",
+  "secondary",
+  "tertiary",
+  "ghost",
+  /* danger is defined at size="sm" ONLY -- the bundle draws it nowhere else
+   * (Button.css). The gallery renders it at its real size rather than at the
+   * default the other four use, because an unstyled swatch would suggest the
+   * variant is broken when it is in fact undefined by design. */
+  "danger",
+];
 
 /* Task 7 -- the intelligence chrome, built inert. THESE ARE BUILT AND
  * RENDERED. THEY ARE NOT WIRED, AND MUST NOT BECOME WIRED (Matt,
@@ -276,10 +303,11 @@ export function Gallery() {
           </div>
         </div>
 
-        {/* Button, in the four styles the bundle's 49 <button> elements
+        {/* Button, in the five styles the bundle's 49 <button> elements
          * actually contain (primary/secondary/ghost from the original
          * brief, plus tertiary -- a fourth recurring style the brief did
-         * not name; see Button.css and task-5-report.md). */}
+         * not name -- plus danger, the reason step's pass-branch confirm,
+         * added 2026-09-02; see Button.css and task-5-report.md). */}
         <h3>Button</h3>
 
         <div className="gallery-section">
@@ -287,7 +315,9 @@ export function Gallery() {
             {BUTTON_VARIANTS.map((variant) => (
               <span className="gallery-button-item" key={variant}>
                 <MicroLabel>{variant.toUpperCase()}</MicroLabel>
-                <Button variant={variant}>{BUTTON_EXAMPLES[variant]}</Button>
+                <Button variant={variant} size={VARIANT_SIZE[variant]}>
+                  {BUTTON_EXAMPLES[variant]}
+                </Button>
               </span>
             ))}
           </div>
@@ -298,7 +328,7 @@ export function Gallery() {
             {BUTTON_VARIANTS.map((variant) => (
               <span className="gallery-button-item" key={`${variant}-disabled`}>
                 <MicroLabel>{variant.toUpperCase()}, DISABLED</MicroLabel>
-                <Button variant={variant} disabled>
+                <Button variant={variant} size={VARIANT_SIZE[variant]} disabled>
                   {BUTTON_EXAMPLES[variant]}
                 </Button>
               </span>

@@ -54,6 +54,33 @@ const renderQueue = () =>
     </MemoryRouter>,
   );
 
+/* MARKING SOMETHING INTERESTED IS THREE STEPS NOW, not one. Migration 013
+ * made the discovery channel required on Interested (design spec §8.5 --
+ * "the whole measure"), so `I` opens a step instead of deciding.
+ *
+ * Deliberately NOT a helper that swallows the intermediate states: each test
+ * below still asserts the thing it is about. This only spares four unrelated
+ * tests from re-spelling the same three clicks. `channel` defaults to
+ * "Nowhere" because that is the answer the gate actually counts, so a
+ * fixture that drifts to some other value fails visibly. */
+async function markInterested(channel = "Nowhere") {
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: channel })).toBeTruthy());
+  screen.getByRole("button", { name: channel }).click();
+  /* WAIT FOR THE SELECTION TO COMMIT before confirming. Clicking both in one
+   * synchronous run reads a `channel` of null out of the confirm handler's
+   * closure, decide() refuses, and no POST is sent -- which is the guard
+   * working, not a flake. Same shape as the undo race documented below: React
+   * commits on a macrotask, and a real operator cannot click twice inside
+   * one. */
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: channel }).getAttribute("aria-pressed")).toBe(
+      "true",
+    ),
+  );
+  screen.getByRole("button", { name: /confirm interested/i }).click();
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -194,6 +221,10 @@ test("Pass is blocked until a reason is given", async () => {
 
   screen.getByRole("button", { name: /confirm pass/i }).click();
   await waitFor(() => expect(screen.getByText(/reason is required/i)).toBeTruthy());
+  /* The bundle's own label, restored 2026-09-02 -- we shipped "Confirm
+   * pass". ariaLabel keeps the control targetable either way, so this
+   * asserts the VISIBLE copy, which is what §7.10 governs. */
+  expect(screen.getByRole("button", { name: /confirm pass/i }).textContent).toBe("Pass & next");
 
   /* The assertion that matters, unchanged: no decision reached the server. */
   const posts = fetchMock.mock.calls.filter((c) => (c[1] as any)?.method === "POST");
@@ -212,7 +243,7 @@ test("the decision POST carries decided_by", async () => {
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
 
-  screen.getByRole("button", { name: /interested/i }).click();
+  await markInterested();
   await waitFor(() =>
     expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
   );
@@ -231,7 +262,7 @@ test("a seeded decided_by is used without prompting", async () => {
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
 
-  screen.getByRole("button", { name: /interested/i }).click();
+  await markInterested();
   await waitFor(() =>
     expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
   );
@@ -258,7 +289,7 @@ test("a 401 on decide clears the stored admin secret", async () => {
 
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
-  screen.getByRole("button", { name: /interested/i }).click();
+  await markInterested();
 
   await waitFor(() => expect(sessionStorage.getItem("tenderfoot.adminSecret")).toBeNull());
 });
@@ -321,7 +352,7 @@ test("undo appends a return to New rather than deleting", async () => {
   renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
 
-  screen.getByRole("button", { name: /interested/i }).click();
+  await markInterested();
   await waitFor(() =>
     expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
   );
@@ -429,4 +460,220 @@ test("an impossible deadline shows as unknown, and says what the source claimed"
   expect(screen.getByText(/Source states 2006-09-24, before it was posted/)).toBeTruthy();
   /* And it is NOT rendered as a live deadline with an urgency reading. */
   expect(screen.queryByText(/closes today/i)).toBeNull();
+});
+
+
+/* ===========================================================================
+ * THE DISCOVERY CHANNEL — migration 013, client half, 2026-09-02
+ * ===========================================================================
+ * Design spec §8.5 calls discovery "the whole measure": qualified
+ * opportunities surfaced THAT WOULD NOT HAVE BEEN SEEN. The server half
+ * shipped on 2026-09-01 requiring the channel; until these tests passed, the
+ * client did not send one and the Interested button answered 400 in the live
+ * app. That is why the server half was held unmerged.
+ */
+
+test("Interested is blocked until a channel is picked, and nothing reaches the server", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* The mirror of the Pass test above, and the property is asserted where it
+   * can actually be violated: confirming with nothing selected. */
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() =>
+    expect(screen.getByText(/WHERE ELSE WOULD THIS HAVE REACHED YOU/i)).toBeTruthy(),
+  );
+
+  screen.getByRole("button", { name: /confirm interested/i }).click();
+  await waitFor(() => expect(screen.getByText(/Where else would this have reached you/i)).toBeTruthy());
+
+  const posts = fetchMock.mock.calls.filter((c) => (c[1] as any)?.method === "POST");
+  expect(posts).toHaveLength(0);
+});
+
+test("the Interested POST carries the discovery channel", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  await markInterested("Indiana email");
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.state).toBe("Interested");
+  /* The WIRE value, not the label. A test asserting "Indiana email" would
+   * pass while the server's CHECK constraint rejected the row. */
+  expect(body.discovery_channel).toBe("indiana_email");
+});
+
+test("all seven channels are offered, in the migration's order", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+  screen.getByRole("button", { name: /^interested$/i }).click();
+
+  await waitFor(() => expect(screen.getByRole("button", { name: "Nowhere" })).toBeTruthy());
+  const chips = Array.from(document.querySelectorAll(".choice-chip")).map((c) => c.textContent);
+  expect(chips).toEqual([
+    "Already knew",
+    "Indiana email",
+    "Portal",
+    "Colleague",
+    "Nowhere",
+    "Not sure",
+    "Other",
+  ]);
+});
+
+test("the channel is single-select: picking a second replaces the first", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Portal" })).toBeTruthy());
+
+  screen.getByRole("button", { name: "Portal" }).click();
+  screen.getByRole("button", { name: "Nowhere" }).click();
+
+  /* Exactly one selected -- the column holds one value, and a UI that let two
+   * look chosen would be lying about what it is about to store. */
+  await waitFor(() =>
+    expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(1),
+  );
+  expect(screen.getByRole("button", { name: "Nowhere" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "Portal" }).getAttribute("aria-pressed")).toBe("false");
+
+  screen.getByRole("button", { name: /confirm interested/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.discovery_channel).toBe("nowhere");
+});
+
+test("a Pass carries no channel", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+  /* No chip row on this branch: SVRC 1.1.4 parked reason chips pending a
+   * hand-run, and the discovery chips must not leak across the mode. */
+  expect(document.querySelectorAll(".choice-chip")).toHaveLength(0);
+
+  (screen.getByLabelText("Reason") as HTMLInputElement).focus();
+  const input = screen.getByLabelText("Reason") as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )!.set!;
+  setter.call(input, "Out of geography");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+
+  screen.getByRole("button", { name: /confirm pass/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.state).toBe("Not Interested");
+  /* §8.5 asks about QUALIFIED opportunities. A channel on a rejected item
+   * would enter the denominator of a rate it is not part of. */
+  expect(body.discovery_channel).toBeNull();
+});
+
+test("backing out of Interested clears the channel rather than carrying it over", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Colleague" })).toBeTruthy());
+  screen.getByRole("button", { name: "Colleague" }).click();
+  await waitFor(() => expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(1));
+
+  screen.getByRole("button", { name: "Back" }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: /^pass$/i })).toBeTruthy());
+
+  /* Reopening must not present a stale answer as this card's answer. A
+   * channel left selected from an abandoned decision is the quiet way a
+   * discovery rate stops being defensible. */
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Colleague" })).toBeTruthy());
+  expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(0);
+});
+
+test("the two confirms do not look alike -- a rejection is not a save", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+  const passConfirm = screen.getByRole("button", { name: /confirm pass/i }).className;
+  screen.getByRole("button", { name: "Back" }).click();
+
+  await waitFor(() => expect(screen.getByRole("button", { name: /^interested$/i })).toBeTruthy());
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Nowhere" })).toBeTruthy());
+  const yesConfirm = screen.getByRole("button", { name: /confirm interested/i }).className;
+
+  /* The bundle branches confirmStyle on exactly this: --bad/--baddk on the
+   * pass branch, --acc/--accbrd on the other. Built as one variant, both
+   * branches would render accent and the distinction would be lost at the
+   * moment of committing. */
+  expect(passConfirm).not.toBe(yesConfirm);
+  expect(passConfirm).toMatch(/btn--danger/);
+  expect(yesConfirm).toMatch(/btn--primary/);
+});
+
+test("the prompt and help are the bundle's own copy, per branch", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  /* Verbatim from the bundle's reasonPrompt/reasonHelp ternary. Ruled by
+   * Matt 2026-09-02 after the audit found we had invented both. */
+  await waitFor(() => expect(screen.getByText("WHY NOT? — REQUIRED")).toBeTruthy());
+  expect(
+    screen.getByText("A rejection with no reason is the one event that teaches nothing."),
+  ).toBeTruthy();
+
+  /* reasonAccent is a ternary in the bundle and was a constant here: the
+   * discovery prompt would have rendered in the rejection colour. */
+  expect(screen.getByText("WHY NOT? — REQUIRED").className).toMatch(/--bad/);
+
+  screen.getByRole("button", { name: "Back" }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: /^interested$/i })).toBeTruthy());
+  screen.getByRole("button", { name: /^interested$/i }).click();
+
+  await waitFor(() =>
+    expect(screen.getByText("WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED")).toBeTruthy(),
+  );
+  expect(
+    screen.getByText("WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED").className,
+  ).toMatch(/--acc/);
 });

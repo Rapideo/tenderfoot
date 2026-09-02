@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import "./Button.css";
 import { Keycap } from "./Keycap";
 
-export type ButtonVariant = "primary" | "secondary" | "tertiary" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "tertiary" | "ghost" | "danger";
 export type ButtonSize = "default" | "sm";
 
 /* Action button, matched against the bundle's 49 <button> elements -- see
@@ -11,6 +11,14 @@ export type ButtonSize = "default" | "sm";
  * named set (primary | secondary | ghost); it is added here because a
  * fourth, recurring style exists in the bundle that neither of the other
  * three can represent without changing its colour -- see Button.css.
+ *
+ * "danger" is the fifth, added 2026-09-02 for the reason step's Pass
+ * confirm. It is defined ONLY at size="sm", because the bundle only ever
+ * draws it there -- it is one branch of a ternary on the confirm button, the
+ * other branch being primary-sm. See Button.css. Passing variant="danger"
+ * without size="sm" yields an unstyled button on purpose rather than a
+ * silently-invented large red control: there is no bundle declaration for
+ * one, and inventing geometry is what §7.10 exists to stop.
  *
  * `size` (Ruling 9, added on review) covers the smaller primary/secondary
  * cluster (tourNext, saveView, confirmReason / cancelReason, closeEditor)

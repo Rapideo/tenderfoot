@@ -1,9 +1,10 @@
 export { Button } from "./Button";
-export type { ButtonVariant } from "./Button";
+export type { ButtonSize, ButtonVariant } from "./Button";
 export { Callout } from "./Callout";
 export { Card } from "./Card";
 export { Chip } from "./Chip";
 export type { ChipTone } from "./Chip";
+export { ChoiceChip } from "./ChoiceChip";
 export { FactPanel } from "./FactPanel";
 export { FactTile } from "./FactTile";
 export { GatedDrawer } from "./GatedDrawer";

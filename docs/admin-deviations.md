@@ -805,3 +805,127 @@ ruled on, and the ruling is *keep it, for now*.
 **Two cheap exits remain open** whenever this is revisited: render `—` until
 the number varies (the treatment already exists for absent rows), or relabel
 the column. Neither needs new data or extraction work.
+
+---
+
+## D21 — the Interested step asks a different question from the bundle's, with an invented vocabulary
+
+**Matt's ruling, 2026-09-02, taken as a gate question under `CLAUDE.md` §1 with
+both options and their costs in front of him: replace the question.**
+
+### What the bundle draws, in full
+
+The frozen V1.2 bundle **already has an Interested branch** — this is not a
+step we invented. `decide()` sets `askReason: "interested"`, and eight
+rendered values branch off it:
+
+```js
+const YES_CHIPS = ["Strong fit", "Sub / teaming play", "Known buyer", "Watch only"];
+reasonPrompt: askReason === "pass" ? "WHY NOT? — REQUIRED"  : "ANYTHING TO NOTE? — OPTIONAL",
+reasonHelp:   askReason === "pass" ? "A rejection with…"    : "Skip it and the decision still records.",
+confirmLabel: askReason === "pass" ? "Pass & next"          : "Save & next",
+confirmStyle: …--baddk/--bad on pass, --accbrd/--acc otherwise
+confirm() { if (kind === "pass" && !picked.length && !freeText.trim()) return; … }
+```
+
+That last line is the sharp end: **the bundle's Interested step is optional**,
+and confirming it with nothing selected is allowed.
+
+### What we ship instead
+
+`WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED`, over seven single-select
+channels — `already_knew · indiana_email · portal · colleague · nowhere ·
+not_sure · other` — which the server refuses to record a decision without
+(400, `field: "discovery_channel"`).
+
+**Three things change, and each is a separate cost:**
+
+1. **The question.** "Anything to note?" is an open note about *fit*; ours is a
+   closed factual question about *provenance*. Different question, so the
+   bundle's four `YES_CHIPS` do not survive.
+2. **The requiredness.** `ANYTHING TO NOTE? — OPTIONAL` and *"Skip it and the
+   decision still records"* are literal bundle copy, and §7.10's copy clause
+   makes copy specification rather than placeholder. Both are gone.
+3. **The vocabulary is INVENTED, not derived** — see below.
+
+**What is NOT a deviation, and should not be re-litigated as one:** the step
+existing at all; its prompt/help/chip-row/input/Back/confirm frame; the label
+`Save & next`; and the `--acc`/`--accbrd` confirm style. All of that is the
+bundle's own Interested branch, which we had simply never built — we shipped
+the Pass branch and a boolean where the bundle has a three-state mode.
+
+### The vocabulary cuts against this project's own precedent, and that is the real cost
+
+**SVRC Region 1.1.4 parked reason chips on exactly this reasoning:** *"the chip
+vocabulary should be DERIVED from that hand-run rather than invented before
+it"*, because pre-set categories flatten what a person would otherwise say in
+their own words. **That parking is still live** — the Pass step ships with free
+text and no chips, and this deviation does not reopen it.
+
+**The argument for overriding it here is narrow, and must stay narrow:**
+
+- A **reason** is an open-ended judgement. A **channel** is a closed factual
+  set — an Indiana alert either exists or it does not.
+- **Free text cannot be counted.** A derived-later vocabulary yields no
+  discovery number *from the session it is needed for*, and that session is the
+  GO/NO-GO gate.
+- `other` and `not_sure` are the escape hatches. **If either dominates, the
+  vocabulary was wrong, and the values themselves will say so** — which is a
+  property the parked reason chips would not have had.
+
+### Why the requiredness has no off switch, unlike `requireReasonOnPass`
+
+That flag exists because a queue of forty items with three obvious junk rows
+must not stall on a text field — a friction argument about the **common**
+branch. Interested is the **rare** branch, and this is not a text field:
+`not_sure` is a real option, so the prompt is always answerable in one tap.
+
+Switching it off would not lose a corpus, as `requireReasonOnPass` does. **It
+would lose the gate's only measure, silently, while every screen kept
+working** — and a skipped answer would be indistinguishable from an
+unanswerable one. That is precisely the defect that made the 12.5% recall
+figure unusable: a denominator nobody can defend.
+
+### What this costs that is worth naming
+
+**The bundle's Interested step captured a note; ours does not ask for one.**
+The free-text box is still there and still writes `reason`, and `other`'s
+detail is specified to go in it — but nothing on screen now *invites* a note
+the way `ANYTHING TO NOTE? — OPTIONAL` did. If the fit vocabulary
+(`Strong fit`, `Sub / teaming play`, `Known buyer`, `Watch only`) turns out to
+matter, it is a second question on this step, not a replacement for this one.
+
+**Migration 013 carries the full argument** for channel-over-yes/no and for
+allowing NULL; this entry carries the fidelity half.
+
+---
+
+## D22 — `Button` gains a `danger` variant, and the Pass confirm stops looking like a save
+
+**Not ruled separately. Built 2026-09-02 as part of Matt's ruling to make the
+Pass step match the bundle, and recorded here so it can be reversed in one
+line if that reads as too wide.**
+
+The bundle branches **one** button's style on `askReason`:
+
+```
+confirmStyle: "border:1px solid " + (pass ? "var(--baddk)" : "var(--accbrd)") +
+  ";background:" + (pass ? "var(--bad)" : "var(--acc)") + ";color:var(--surface)" +
+  ";border-radius:7px;padding:11px 18px;font:600 12.5px/1 'IBM Plex Sans'"
+```
+
+**We had built only the accent half.** `Confirm pass` rendered `--acc` — the
+same colour as the Interested confirm — so the two branches of the decision
+were visually identical at the moment of committing. STATUS already named
+`Button` danger-primary as an SP2 gap *"gated on SP6 existing"*; this is the
+first screen that needed it.
+
+**Defined at `size="sm"` only**, because the bundle draws it nowhere else.
+`variant="danger"` without `size="sm"` yields an unstyled button **on purpose**
+rather than an invented large red control — there is no bundle declaration for
+one.
+
+`--baddk` (`--signal-neg-deep`) has exactly **one** use in V1.2 and this is it.
+It is a real step darker than `--bad`, verified in the browser
+(`rgb(140,50,38)` border on `rgb(163,58,46)` ground), so substituting `--bad`
+would have flattened a distinction the bundle drew deliberately.

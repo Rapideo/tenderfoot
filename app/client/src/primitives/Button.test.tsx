@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { Button } from "./Button";
 import type { ButtonVariant } from "./Button";
 
-const VARIANTS: ButtonVariant[] = ["primary", "secondary", "tertiary", "ghost"];
+const VARIANTS: ButtonVariant[] = ["primary", "secondary", "tertiary", "ghost", "danger"];
 
 test("renders every variant via tokens, not inline values", () => {
   for (const variant of VARIANTS) {
@@ -20,7 +20,7 @@ test("renders every variant via tokens, not inline values", () => {
   }
 });
 
-test("the four variants resolve to four different classes", () => {
+test("every variant resolves to a distinct class", () => {
   const classNames = VARIANTS.map((variant) => {
     const { unmount } = render(<Button variant={variant}>X</Button>);
     const cls = screen.getByRole("button", { name: "X" }).className;
@@ -159,4 +159,30 @@ test("it is type=button, not an accidental submit", () => {
   const { unmount } = render(<Button variant="primary">Interested</Button>);
   expect(screen.getByRole("button").getAttribute("type")).toBe("button");
   unmount();
+});
+
+/* The reason step renders Pass-confirm and Interested-confirm side by side
+ * across two modes, and the bundle's whole reason for branching confirmStyle
+ * is that they must not look alike. A regression that dropped `danger` back
+ * to `primary` would still pass every assertion above -- both are real
+ * variants with real classes -- so this pins the pair apart explicitly. */
+test("danger and primary are not the same button at size sm", () => {
+  const { unmount } = render(
+    <Button variant="danger" size="sm">
+      Pass & next
+    </Button>,
+  );
+  const danger = screen.getByRole("button", { name: "Pass & next" }).className;
+  unmount();
+
+  render(
+    <Button variant="primary" size="sm">
+      Save & next
+    </Button>,
+  );
+  const primary = screen.getByRole("button", { name: "Save & next" }).className;
+
+  expect(danger).not.toBe(primary);
+  expect(danger).toMatch(/btn--danger/);
+  expect(danger).toMatch(/btn--sm/);
 });

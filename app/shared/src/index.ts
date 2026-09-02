@@ -274,3 +274,42 @@ export interface SourcePatch {
   since_default?: string;
   health?: SourceHealth;
 }
+
+/* ===========================================================================
+ * THE DISCOVERY CHANNEL — migration 013, 2026-09-02
+ * ===========================================================================
+ * Design spec §8.5 names discovery "the whole measure": qualified
+ * opportunities surfaced THAT WOULD NOT HAVE BEEN SEEN. `nowhere` is that
+ * count; every other value names the channel Tenderfoot is merely
+ * duplicating, which is the half a yes/no cannot give.
+ *
+ * THIS LIVES IN `shared` FOR THE `SourceHealth` REASON, and it is the same
+ * mistake avoided twice. Migration 013's CHECK constraint is the authority;
+ * a union declared next to one consumer becomes a second authority that
+ * drifts silently, and a value the constraint allows but a consumer omits is
+ * a decision the metric cannot count. Server (`triage/decide.ts`) and client
+ * (`triage/Queue.tsx`) both read THIS array, so the vocabulary exists once.
+ *
+ * ORDER IS THE MIGRATION'S ORDER, and it is also the order the chips render
+ * in. `nowhere` sits fifth rather than first on purpose: it is the answer the
+ * gate wants to be true, and putting the flattering option under the cursor
+ * is how a measurement talks itself into a number.
+ */
+export const DISCOVERY_CHANNELS = [
+  /** already on KP's radar before Tenderfoot showed it */
+  "already_knew",
+  /** Indiana's own notifications would have caught it (§5.7) */
+  "indiana_email",
+  /** a procurement portal KP checks directly */
+  "portal",
+  /** someone would have mentioned it */
+  "colleague",
+  /** NOTHING would have surfaced it -- the discovery count */
+  "nowhere",
+  /** answered honestly rather than skipped invisibly */
+  "not_sure",
+  /** none of the above; detail goes in the existing reason box */
+  "other",
+] as const;
+
+export type DiscoveryChannel = (typeof DISCOVERY_CHANNELS)[number];

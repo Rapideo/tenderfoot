@@ -4,8 +4,16 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { requireAdminSecret } from "../lib/adminSecret.js";
 import { queuePage } from "../triage/queue.js";
 import { drawSample, getSample, listSamples } from "../triage/sample.js";
-import { recordDecision, ReasonRequiredError } from "../triage/decide.js";
-import { interestedPerHundred, volumePerSourcePerWeek } from "../triage/metrics.js";
+import {
+  recordDecision,
+  ReasonRequiredError,
+  DiscoveryChannelRequiredError,
+} from "../triage/decide.js";
+import {
+  interestedPerHundred,
+  volumePerSourcePerWeek,
+  discoveryRate,
+} from "../triage/metrics.js";
 
 /* SP6. Reads open, writes gated -- the rule routes/index.ts already
  * follows. Reads stay open so the screens load without turning a shared
@@ -106,7 +114,8 @@ triage.post(
     const exists = await one(`SELECT id FROM solicitation WHERE id = $1`, [id]);
     if (!exists) return res.status(404).json({ error: `No solicitation ${id}.` });
 
-    const { state, reason, decided_by, require_reason_on_pass } = req.body ?? {};
+    const { state, reason, decided_by, require_reason_on_pass, discovery_channel } =
+      req.body ?? {};
     try {
       const latest = await recordDecision({
         solicitationId: id,
@@ -114,11 +123,21 @@ triage.post(
         reason,
         decidedBy: typeof decided_by === "string" ? decided_by : null,
         requireReasonOnPass: require_reason_on_pass !== false,
-      });
+        /* Passed through unvalidated ON PURPOSE. Presence is checked in
+         * recordDecision and VALIDITY by migration 013's CHECK, so a value
+         * outside the vocabulary fails at the database rather than being
+         * silently coerced to something countable here. */
+        discoveryChannel: typeof discovery_channel === "string" ? discovery_channel : null,
+      } as Parameters<typeof recordDecision>[0]);
       return res.status(201).json(latest);
     } catch (err) {
       if (err instanceof ReasonRequiredError) {
         return res.status(400).json({ error: err.message, field: "reason" });
+      }
+      /* Same 400, different field, so the screen can point at the control the
+       * user actually has to touch rather than saying "something was wrong". */
+      if (err instanceof DiscoveryChannelRequiredError) {
+        return res.status(400).json({ error: err.message, field: "discovery_channel" });
       }
       throw err;
     }
@@ -131,6 +150,9 @@ triage.get(
     res.json({
       volume: await volumePerSourcePerWeek(),
       interested: await interestedPerHundred(),
+      /* §8.5's "whole measure". Uncomputable before migration 013 -- there was
+       * nothing recording whether an item had been seen elsewhere. */
+      discovery: await discoveryRate(),
     });
   }),
 );

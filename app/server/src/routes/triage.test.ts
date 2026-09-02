@@ -120,6 +120,8 @@ test("a decision appends and returns the new latest state", async () => {
   const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
     state: "Interested",
     decided_by: "matt",
+    /* Required on Interested since migration 013 -- §8.5's discovery measure. */
+    discovery_channel: "nowhere",
   });
   expect(res.status).toBe(201);
   const body = (await res.json()) as any;
@@ -150,4 +152,30 @@ test("metrics report both numbers and the exclusion", async () => {
   const body = (await res.json()) as any;
   expect(body.volume).toHaveProperty("excluded_unparseable_posted_at");
   expect(Array.isArray(body.interested)).toBe(true);
+});
+
+/* ⚖️ THE DISCOVERY CHANNEL AT THE ROUTE BOUNDARY (migration 013, ruled
+ * 2026-09-01). A missing channel is the CALLER's to fix, so it must answer 400
+ * and name the field -- a 500 here would read as a server fault and tell the
+ * screen nothing about which control to point at. Same contract
+ * ReasonRequiredError already sets one branch over. */
+test("Interested without a discovery channel is a 400 naming the field", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Interested",
+  });
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as any;
+  expect(body.field).toBe("discovery_channel");
+});
+
+/* Validity is the DATABASE's job (migration 013's CHECK), not the route's. The
+ * route passes the value through unvalidated on purpose, so a word outside the
+ * vocabulary must fail rather than be silently coerced into something the
+ * discovery rate would then count. */
+test("a channel outside the vocabulary does not become a stored decision", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Interested",
+    discovery_channel: "carrier_pigeon",
+  });
+  expect(res.status).not.toBe(201);
 });
