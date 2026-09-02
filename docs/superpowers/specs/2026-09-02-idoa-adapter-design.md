@@ -139,7 +139,12 @@ Re-verify before building.** The page carries no version or API contract.
 - **Static HTML.** No JS rendering required, no login, no CAPTCHA, no API.
 - **Columns:** `Event Name` · `Agency` · `Event ID` · `Event Description` · `Response Due By` ·
   `Contact`
-- **~50 open solicitations** in the largest table.
+- **71 open solicitations across TWO tables** — 70 in the main `events-table` plus **1** in a
+  separate *"Additional Business Opportunities"* section (`table05781`) with identical headers.
+  > ⚠️ **CORRECTED 2026-09-02 by Task 1. This line read "~50 in the largest table" and was
+  > wrong** — the page's DataTables config sets `pageLength: 50` and drops off-page rows from the
+  > DOM, so a count taken in a browser sees 50 of 70. The raw HTML has all of them. **The
+  > undercount was exactly the risk §3.1 was written to catch, and it was real.**
 - **Event ID:** 15 digits, e.g. `002300000087895`, `007000000088051`.
 - **Due date format:** `09/02/2026 3:00:00PM EST` — US-order, 12-hour, named zone.
 - **Documents:** one ZIP per row, linked from the Event Name cell, e.g.
@@ -147,18 +152,43 @@ Re-verify before building.** The page carries no version or API contract.
 - **No posted date anywhere.** Only **3 of 50** descriptions contain a long-form date, and all
   three are *addendum* notices — not postings.
 
-### 3.1 🔴 Two things about the page that are NOT yet verified and must be, first
+### 3.1 ✅ ANSWERED 2026-09-02 by Task 1 — and both answers changed the build
 
-**There are three `<table>` elements on the page.** The largest is the solicitations table. A
-second is pre-bid conference sessions (`Solicitation Name` · `Session Time and Event Link` ·
-`IGCS Conference Room Location`). **The third carries the SAME headers as the main table.**
+Findings recorded in `docs/2026-09-02-idoa-page-facts.md`, against a committed fixture.
 
-> **The "~50" figure above came from the largest table alone.** If the third table is a second
-> category of solicitations, **50 is an undercount and the adapter would silently miss a whole
-> class of opportunity.** Determining what that third table is, is **task one**, before any
-> parsing is written.
+**Three `<table>` elements, and TWO of them hold solicitations.**
 
-**The row ordering is unexplained** — see §8.
+| Table | Section | Rows | Verdict |
+|---|---|---|---|
+| `events-table` | main listing | **70** | solicitations |
+| `table05781` | *"Additional Business Opportunities"* | **1** | **solicitations — same headers, genuinely distinct section** |
+| — | *"Pre-Proposal Conference"* | 3 | **not** solicitations; a schedule referencing rows listed elsewhere |
+
+**Total: 71.** An adapter that parses only the biggest table silently drops a whole category.
+
+> 🔴 **The one row in `table05781` is not a rendering artifact and not an Indiana agency.** It is
+> **RFP 23420 Group 71022 — Business Consulting Services**, a **NASPO ValuePoint cooperative**
+> RFP issued by the *State of New York Office of General Services*, and its **Event ID is the
+> literal string `NA`**, not a 15-digit number. See §3.2.
+
+**The ordering is settled, and it is the dangerous answer.** The main table is sorted
+**ascending by `Response Due By`**, with zero violations across all 69 adjacent pairs — and
+explicitly **not** by Event ID. Confirmed by exhaustive per-row extraction, not by the two-row
+anecdote that raised the question.
+
+> **So §8's trap is live, not hypothetical: position in this table encodes DEADLINE, not
+> recency.** No order-derived signal may be recorded. The adapter derives nothing from row
+> position.
+
+### 3.2 🔴 Two facts that break the obvious parser
+
+**Not every row has a document.** **66 unique ZIP hrefs for 71 rows** — five rows have no Bid
+Documents link at all. A parser that assumes an anchor per row throws on the first one that
+lacks it.
+
+**Event ID is not always numeric.** 70 rows carry a 15-digit ID; `table05781`'s row carries
+`NA`. So `external_id` cannot be "the Event ID" unconditionally — `NA` is neither unique nor
+stable, and two such rows would collide into one solicitation.
 
 ---
 
