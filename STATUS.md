@@ -314,7 +314,35 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 ### 🟡 STILL OPEN, unchanged by today
 `accuracyByField` has no surface · `fields.ts` matches one date format · the merge may still drop SAM fields nobody has looked for · the cleared-queue Metrics card goes to `/admin` · **and the real GO/NO-GO adjudication still has not happened.**
 
-### 🗣️ AND THEN: IDOA, which Matt called next on 09-01
+### 🗣️ IDOA IS NEXT, AND IT IS NOW SCOPED — researched and ruled 2026-09-02
+
+**The platform question is answered, and the answer killed the cheaper-looking option.**
+
+| | **Indiana IDOA** (state) | **City of Indianapolis** |
+|---|---|---|
+| Platform | **bespoke, in-house** HTML table on `in.gov` | **transitioning to OpenGov** — says so on the page |
+| Open right now | **50** | ~9 |
+| Listing fields | Event Name · Agency · Event ID · Description · **Response Due By** · Contact | Bid Number · Title · Agency · Status · Service Type · Due Date |
+| Posted date | **none** | **none** |
+| Documents | **direct ZIP per row**, named by Event ID, no auth | not surfaced in the list |
+
+**They are two adapters, not one — no shared platform, no carry-over.** Matt's instinct that cities outsource was right, and it argues *against* Indianapolis as a first target: **whatever is built against today's indy.gov list is thrown away when the OpenGov migration completes.** Nine rows is also too little to learn from.
+
+**So IDOA wins on engineering as well as on being KP's ground:** 50 rows is small enough to see end to end, the ZIPs exercise the `.zip` parser that already exists, it is static HTML with no JS and no login, and the document depth is where `qa_closes_at` / `prebid_at` actually come from.
+
+> 📌 **File for later: OpenGov is the platform bet.** If Indianapolis is moving there, other Indiana municipalities likely are too — one OpenGov adapter would then cover many cities at once. That is §5.7's leverage, not yet available.
+
+**⚠️ FREE CORRECTNESS CHECK, noticed in passing.** Row 2 of IDOA's live table is *"General Supervision-State Complaint Corrective Act"* — **the same solicitation sitting in our production queue** from the `Corpus import — Indiana open (2026-08-04)`. That corpus was taken from this exact page, so the first adapter run can be diffed against it.
+
+### ⚖️ TWO RULINGS, Matt, 2026-09-02
+
+**1. `first-seen` stands in for `posted_at` on IDOA — labelled distinctly, not written into the same column.** IDOA publishes no posting date and only 3 of 50 descriptions leak one (all addendum notices), so there is nothing to backfill. `sighting` already models first-observation, and SP3.5 merged sightings into canonical records.
+
+> 🔴 **THIS MAKES STARTING EARLIER WORTH SOMETHING, which is unusual and easy to miss.** Volume-per-week for IDOA can only count **from the day we first scrape**. Every day before the first run is a day of volume data that **can never be recovered** — unlike SAM, where the history came free because SAM publishes `posted_at`. The clock does not start until the adapter runs.
+
+**2. Scrape listings first; fetch documents on a separate pass.** Same shape as SAM. ⚠️ Worth naming the known cost: **that separation is exactly why extraction has only ever run on 12 of 9,883 SAM rows.** A second pass that nobody invokes is a second pass that does not happen. Whatever schedules the IDOA document pass should be decided when the adapter is built, not after.
+
+### 🗄️ Matt's original call, 2026-09-01
 **To discuss first — not designed, not started.** `Indiana IDOA solicitations` reads health `ok`, which makes it look like a switch. **It is not:** `scrape/adapters/registry.ts` imports exactly three adapters — `fake`, `sam`, `usaspending` — so **there is no IDOA adapter at all** (re-verified 2026-09-02). This is an adapter build, not a toggle. It does not improve the gate's measurement; it changes **what the gate is a gate ON**, which is bigger than a slice.
 
 ### ⚠️ THE PRECONDITION STILL FAILS
