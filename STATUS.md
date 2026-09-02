@@ -1,6 +1,6 @@
 # Tenderfoot — status
 
-**Updated 2026-08-29.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-09-01.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
 > **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
 >
@@ -215,7 +215,54 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-08-31 (evening)
+## 🔖 RESUME HERE — updated 2026-09-01 (evening)
+
+## ▶️ NEXT SESSION — ALL FIVE RULINGS ARE RULED AND BUILT. The gate is green again after expiring overnight. What is left is the instrument, not the paint.
+
+**Branch `sp6-fidelity-rulings`, two commits, merged to `main` with `--no-ff`. Gate green at 556 tests / 70 files, exit 0** (from 550 / 69 — and **34 tests that had been reporting as *skipped* are now actually running**, because a file that fails to collect reports its whole body as skipped).
+
+### ⚖️ THE FIVE RULINGS — all decided 2026-09-01, all built, all recorded
+
+| # | Ruling | Built | Recorded |
+|---|---|---|---|
+| **01** | **Render the score strip**, bars as placeholders that state they are unpopulated | Two-up band on the triage card: `Fit · Winnability · Value · Timing`, all empty, with the disclosure | **D13 REVERSED** (kept in full, reversal on top) + new **D17** |
+| **02** | **Conflicts inline**, as the bundle draws them | `2026-08-17 · CONFLICT with …pdf (2026-08-13)` on `--badbg2`, both origins joined `A + B` | **spec §6.1 AMENDED** + new **D18** |
+| **03** | **All seven nav entries, each to a stub** | 5 stub screens, copy from the SVRC's own overviews; `Queue` → `Triage` | new **D19** |
+| **04** | **Five tabs, parking disclosed** | already built — no code change | audit table |
+| **05** | **Keep `CONFIDENCE` at a flat `0.6`, for now** | no change | new **D20**, as a *provisional hold* |
+
+**Ruling 01 did not simply overturn D13.** D13 chose between *four dashes captioned A READING AID* and *nothing*, and on those two it was right. The ruling picked a third option nobody had tabled — **render the placeholders and say in words that they are not populated** — which answers D13's objection rather than ignoring it. The note is load-bearing and is asserted separately from the strip.
+
+**⚠️ Ruling 02 cost something real, and D18 records it.** The losing value's **quote no longer appears anywhere**. Both values and both origins survive; the loser's evidence does not — and it bites hardest on the case the display exists for, since a listing-origin winner contradicted by a document now shows **no citation at all**. That is the FSSA near-miss shape exactly.
+
+**⚠️ Ruling 03 contradicts the SVRC on exactly one item.** Region A.1.2 lists **six** and says the pipeline board joins the nav *"when the management phase starts and not before"*. Surfaced before the ruling, ruled anyway. **D19.**
+
+### 🔴 STILL OPEN AND STILL OUTRANKING FIDELITY — unchanged by this session
+Every item in the 2026-08-31 block below is **still true and still unactioned**: `accuracyByField` has no surface; `fields.ts` matches exactly one date format; nothing captures *"had not otherwise seen"*; the merge drops most of the SAM payload (assume a third instance); parser dispatch covers five types; the cleared-queue Metrics card goes to `/admin`. **And the real GO/NO-GO adjudication session still has not happened.**
+
+### ⏰ THE GATE EXPIRED OVERNIGHT, and it is worth knowing how
+**`main` was RED when this session started, and STATUS said green.** Both were true: four tests in `run-extract.test.ts` hardcoded `2026-09-01` as the "soonest" deadline and **went red at 20:00 EDT on 2026-09-01**, when a **GMT** database rolled to `2026-09-02` and that date stopped satisfying the ordering clause's liveness test.
+
+**The rows did not fail — they SORTED DIFFERENTLY**, which is worse. Only one of the four broken assertions was about ordering; the rest were about batch contents and document text, so the failure surfaced far from its cause. Fixed with a computed `daysOut(n)`; a JS fake clock cannot help because **`now()` is evaluated by Postgres**. Proven by two mutations, so the fixtures still exercise the ordering rather than sorting correctly by luck.
+
+**⚠️ THIS IS NOT THE FLAKY GATE, and must not be recorded as fixing it.** That one has a **connection-level signature on repeated sequential runs**; this was deterministic, dated, and reproducible on a clean tree. **The flaky second cause is still live and still unexplained.**
+
+### 🔎 THREE THINGS THE SCREENSHOTS CAUGHT THAT NO TEST DID
+- **The stub screen was broken on its first cut** — it used `Section`, whose padding belongs to the triage card's band, and skipped the card, so the title sat 30px out from its own paragraph on bare canvas. **Rebuilt on Screen 2's frame.**
+- **Opening the prototype in a browser caught two errors before they reached code** — the score rows are `Fit / Winnability / Value / Timing`, not labels invented from memory; and the shell header is **light**, not dark.
+- **⚖️ OPEN FOR MATT: the SOURCE column truncates, and now holds TWO filenames.** On real data it renders `Solicitation Amendment…`, so the losing value's origin is **hover-only**. The 150px truncation was ruled 2026-08-31, **before any row had two sources in it**. The `title` attribute is pinned by a test. Whether that is good enough is **not decided**.
+
+### 💡 THE BUNDLE *DOES* DESIGN THE CLEARED QUEUE — found while pulling evidence
+The audit had `View 1.3` as *"not audited against the bundle at all"* and **D14 rests on the state being undesigned**. It is not: the bundle's `isCleared` branch renders a 64px mono `0`, `Queue cleared.`, and **two cards wired to `goRadars` and `goReports`**. This does not overturn D14 — its correction was about *our* cards carrying no `onClick` — but **D14's premise is false about the bundle**, and that premise is why three cards were invented. Both of the bundle's cards now have real destinations, since `/radars` and `/reports` exist as stubs.
+
+### ⏭ BUILDABLE NEXT
+The buyer-note callout wired to entity resolution; the decision bar's own `--surface4` band; and `View 1.3`, which now has a bundle treatment to match rather than an invention to defend.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-08-31 (evening)
+
+> **All five rulings named below were ruled on 2026-09-01 — see the block above.** Kept because its statement of the conflicts, and of the findings that outrank them, is the fullest one written.
 
 ## ▶️ NEXT SESSION — SP6 is MERGED, DEPLOYED and its criterion is MET. The work now is FIDELITY, and five rulings are waiting on Matt.
 
