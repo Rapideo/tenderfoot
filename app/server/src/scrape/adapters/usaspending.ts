@@ -90,7 +90,7 @@
  * Modified Date" is confirmed against their documentation -- until then it
  * is insurance, not superstition.
  */
-import type { Adapter, ListingItem, ListingPage } from "../adapter.js";
+import type { WindowedAdapter, ListingItem, ListingPage } from "../adapter.js";
 
 const URL = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
 
@@ -142,8 +142,9 @@ export function parseUsaSpendingPage(body: string): { items: ListingItem[]; hasN
   return { items, hasNext };
 }
 
-export function usaSpendingAdapter(fetchImpl: typeof fetch = fetch): Adapter {
+export function usaSpendingAdapter(fetchImpl: typeof fetch = fetch): WindowedAdapter {
   return {
+    shape: "windowed" as const,
     name: "usaspending",
     async fetchListing(since, until, cursor): Promise<ListingPage> {
       const page = cursor ? Number(cursor) : 1;

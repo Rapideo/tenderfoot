@@ -61,7 +61,7 @@
  * and an adapter, and returns a file path.
  */
 import type { RunRequest } from "./contract.js";
-import type { Adapter } from "./adapter.js";
+import { isSnapshot, type Adapter } from "./adapter.js";
 import { openArtifact } from "./artifact.js";
 
 export const SCRAPER_VER = "1";
@@ -93,6 +93,17 @@ export async function runScrape(
   outPath: string,
   now: () => number = Date.now,
 ): Promise<RunResult> {
+  /* Task 2 (type split, spec §2.1) only splits the Adapter type -- it does
+   * not build the snapshot loop. That is Task 4. Narrowing here is a
+   * placeholder so `Adapter` being a union typechecks; a snapshot adapter
+   * reaching this loop is a caller bug (resolve-source.ts/registry.ts
+   * should never hand one to runScrape yet), not a runtime case to handle
+   * gracefully. Checked before openArtifact so a doomed call does not leave
+   * a stray artifact file behind. */
+  if (isSnapshot(adapter)) {
+    throw new Error("snapshot adapters are not runnable until Task 4");
+  }
+
   const started = now();
   const art = openArtifact(outPath, {
     /* FIX 1: the CANONICAL name, not the CLI's short key -- see the

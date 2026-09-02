@@ -9,20 +9,30 @@
  * source sorts only by modification date and silently ignores a request to
  * sort by publication date (see adapters/sam.ts).
  */
-export interface ListingItem {
+export type SourceShape = "windowed" | "snapshot";
+
+export interface WindowedItem {
   externalId: string;
   modifiedAt: string;
   raw: unknown;
 }
 
-export interface ListingPage {
-  items: ListingItem[];
-  /** Opaque to the caller. Null means the source has no more pages. */
+/* NO modifiedAt, and that is the whole point: an undated source must have
+ * nowhere to put a fabricated date. See the design doc §2.1. */
+export interface SnapshotItem {
+  externalId: string;
+  raw: unknown;
+}
+
+interface PageBase {
   nextCursor: string | null;
   requestUrl: string;
   httpStatus: number;
-  /** The response body exactly as received. Stored as a capture. */
   payload: string;
+}
+
+export interface WindowedPage extends PageBase {
+  items: WindowedItem[];
   /* Spec §5.4: sources degrade rather than fail. A record with no usable
    * date cannot be placed in the window and is excluded from `items`
    * rather than poisoning the low-water resume marker with an empty
@@ -31,7 +41,31 @@ export interface ListingPage {
   undatedSkipped?: number;
 }
 
-export interface Adapter {
-  name: string;
-  fetchListing(since: string, until: string, cursor: string | null): Promise<ListingPage>;
+export interface SnapshotPage extends PageBase {
+  items: SnapshotItem[];
+  /* No undatedSkipped: there is no date to be missing, so the counter would
+   * always read 0 and be mistaken for "we checked and found none". */
 }
+
+export interface WindowedAdapter {
+  shape: "windowed";
+  name: string;
+  fetchListing(since: string, until: string, cursor: string | null): Promise<WindowedPage>;
+}
+
+export interface SnapshotAdapter {
+  shape: "snapshot";
+  name: string;
+  fetchSnapshot(cursor: string | null): Promise<SnapshotPage>;
+}
+
+export type Adapter = WindowedAdapter | SnapshotAdapter;
+
+export function isSnapshot(a: Adapter): a is SnapshotAdapter {
+  return a.shape === "snapshot";
+}
+
+/** @deprecated Kept so existing importers keep compiling. Use WindowedItem. */
+export type ListingItem = WindowedItem;
+/** @deprecated Kept so existing importers keep compiling. Use WindowedPage. */
+export type ListingPage = WindowedPage;

@@ -6,7 +6,7 @@ import { runScrape } from "./run.js";
 import { fakeAdapter } from "./adapters/fake.js";
 import { readArtifact } from "./artifact.js";
 import { validateRun } from "./contract.js";
-import type { Adapter } from "./adapter.js";
+import type { WindowedAdapter } from "./adapter.js";
 
 function tmpPath() {
   return join(mkdtempSync(join(tmpdir(), "tf-run-")), "run.db");
@@ -94,8 +94,13 @@ test("a run that exhausts its budget commits what it has and reports a resume ma
  * as it would with a real artifact writer and real wall-clock time. This
  * makes the defect and its fix observable deterministically, without any
  * dependence on real timing. */
-function withWriteCost(adapter: Adapter, elapsed: { value: number }, msPerItem: number): Adapter {
+function withWriteCost(
+  adapter: WindowedAdapter,
+  elapsed: { value: number },
+  msPerItem: number,
+): WindowedAdapter {
   return {
+    shape: "windowed",
     name: adapter.name,
     async fetchListing(since, until, cursor) {
       const page = await adapter.fetchListing(since, until, cursor);
@@ -176,9 +181,10 @@ test("two sequential runs resume correctly: the second reaches new ground and th
  * CLI output, nor the response headers. This adapter fixture returns two
  * pages, each reporting a nonzero `undatedSkipped`, so the fix under test
  * is specifically the ACCUMULATION across pages, not just a single read. */
-function undatedFixtureAdapter(): Adapter {
+function undatedFixtureAdapter(): WindowedAdapter {
   let called = 0;
   return {
+    shape: "windowed",
     name: "undated-fixture",
     async fetchListing(): Promise<import("./adapter.js").ListingPage> {
       called++;
@@ -241,9 +247,10 @@ test("a run with no undated records reports undatedSkipped: 0, not undefined", a
  * the budget is set to trip after that one page commits, before page 1
  * (whose items are NOT tied and WOULD make real progress) is ever
  * fetched. */
-function tieBlockAdapter(): Adapter {
+function tieBlockAdapter(): WindowedAdapter {
   const TIE = "2026-08-10T00:00:00.000Z";
   return {
+    shape: "windowed",
     name: "tie-block-fixture",
     async fetchListing(_since, _until, cursor): Promise<import("./adapter.js").ListingPage> {
       const page = cursor ? Number(cursor) : 0;

@@ -127,6 +127,7 @@ test("a page reporting undated records surfaces a nonzero X-Scrape-Undated-Skipp
   ADAPTERS["undated-fixture"] = {
     sourceName: null,
     make: () => ({
+      shape: "windowed" as const,
       name: "undated-fixture",
       async fetchListing() {
         return {
@@ -183,6 +184,7 @@ test("a pre-stream failure (adapter throws) does not leak the temp directory", a
   ADAPTERS.breaks = {
     sourceName: null,
     make: () => ({
+      shape: "windowed" as const,
       name: "breaks",
       fetchListing: () => Promise.reject(new Error("simulated adapter network failure")),
     }),
@@ -447,6 +449,7 @@ test("the temp artifact directory is removed even when the scrape throws", async
   ADAPTERS["run-breaks"] = {
     sourceName: null,
     make: () => ({
+      shape: "windowed" as const,
       name: "run-breaks",
       fetchListing: () => Promise.reject(new Error("simulated adapter network failure")),
     }),
