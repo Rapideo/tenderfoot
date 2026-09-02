@@ -205,6 +205,61 @@ test("array-encoded raw survives braces, quotes, commas and backslashes", async 
   expect(row?.raw).toEqual(hostile);
 });
 
+/* BLOCKING PRECONDITION 2 (task-8, found in task-4): a snapshot run has no
+ * window at all, and `RunMeta.since`/`until` are non-optional strings, so
+ * `runScrape` writes `""` rather than inventing a date. Without the fix,
+ * `art.run.outcome === "complete" ? art.run.until : null` would write `""`
+ * into `ingested_through` on a complete snapshot run -- and `""` is `IS NOT
+ * NULL`, so `ingestedThrough()`'s filter does not catch it, and the
+ * watermark resolves to a wrong, non-absent value instead of staying
+ * genuinely absent.
+ *
+ * A DEDICATED source is used (not 'fake', which already carries other
+ * tests' non-empty watermarks): `ingestedThrough()` orders by
+ * `ingested_through DESC`, and a real non-empty value from an earlier test
+ * would always outrank "" and mask the defect. On a source whose only
+ * `ingest_run` row is this one, the bug is directly observable: `""` is
+ * returned as-is (not null) without the fix, and no row matches (correctly
+ * null) with it. */
+test("a snapshot artifact (no window at all) never writes an empty-string watermark", async () => {
+  await run(`INSERT INTO source (name, enabled) VALUES ('snapshot-fixture', true)`);
+  const src = await one(`SELECT id FROM source WHERE name = 'snapshot-fixture'`);
+
+  const p = join(mkdtempSync(join(tmpdir(), "tf-imp-")), "run.db");
+  const a = openArtifact(p, {
+    sourceName: "snapshot-fixture",
+    since: "",
+    until: "",
+    depth: "listing",
+    scraperVer: "test",
+  });
+  const cap = a.writeCapture({ hop: "listing", url: "fake://snap", httpStatus: 200, payload: "{}" });
+  a.writeSighting({
+    externalId: "snap-1",
+    seenAt: "2026-09-02T00:00:00.000Z",
+    raw: { title: "a snapshot item" },
+    captureId: cap,
+    extractorVer: "test",
+    mode: "mechanical",
+  });
+  /* Mirrors runSnapshot exactly (scrape/run.ts): a snapshot run that
+   * exhausts its items always finishes "complete" with nextUntil null --
+   * there is no cursor to resume from either way. */
+  a.finish("complete", null);
+  a.close();
+
+  const res = await importArtifact(p);
+  expect(res.imported).toBe(1);
+  expect(res.ingestedThrough).toBeNull();
+  expect(await ingestedThrough(src.id)).toBeNull();
+
+  const row = await one<{ ingested_through: string | null }>(
+    `SELECT ingested_through FROM ingest_run WHERE source_id = $1`,
+    [src.id],
+  );
+  expect(row?.ingested_through).toBeNull();
+});
+
 /* A COMPLETE run that found nothing is not a failed run. The window was
  * fetched and was genuinely empty, so the mark advances -- otherwise every
  * quiet window would be re-scraped forever. Guards the `if` that now stands

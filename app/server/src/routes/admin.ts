@@ -348,33 +348,57 @@ admin.post(
      * parameter that now means "derive it" instead of "refuse". A duration
      * passed explicitly is still refused by validateRun below, unchanged:
      * deriving a window is this route's job, guessing what a caller meant
-     * by a malformed one is not. */
-    let since = String(req.query.since ?? "");
-    if (!since) {
-      const row = await one<{ last_run_at: Date | null; since_default: string | null }>(
-        `SELECT last_run_at, since_default FROM source WHERE name = $1`,
-        [stampTarget],
-      );
-      if (!row) {
-        res.status(400).json({
-          error:
-            `No source row named '${stampTarget}' (registry key '${key}'), so no ` +
-            `ingestion window can be derived. Pass ?since= explicitly, or check ` +
-            `migrations/003_seed_source_registry.sql.`,
-        });
-        return;
+     * by a malformed one is not.
+     *
+     * BLOCKING PRECONDITION (task-8, found in task-3, deferred until a
+     * snapshot adapter was registered): this used to derive (or default to
+     * `""`) and pass `since` into `validateRun` UNCONDITIONALLY, regardless
+     * of the resolved adapter's shape. That was harmless while every
+     * registered adapter was windowed, but `validateRun`'s snapshot branch
+     * (contract.ts §5.4) THROWS the moment `since`/`until` is present at
+     * all -- deliberately, so a parameter a source cannot honour is refused
+     * rather than silently ignored. The instant a snapshot source is
+     * registered, every /run call against it would 400 unconditionally.
+     *
+     * The fix: a snapshot adapter has no window to derive (there is no
+     * `last_run_at`/`since_default` arithmetic that means anything for "what
+     * is currently open"), so derivation is skipped entirely for that shape.
+     * An explicit `?since=` is still forwarded rather than dropped, on
+     * purpose -- silently ignoring an operator-supplied parameter is exactly
+     * the failure mode §5.4 exists to catch; `validateRun` is left to refuse
+     * it loudly, same as it already refuses a malformed date. */
+    const requestInput: Record<string, unknown> = { source: key, depth: "listing" };
+    if (adapter.shape === "snapshot") {
+      if (req.query.since !== undefined) requestInput.since = String(req.query.since);
+    } else {
+      let since = String(req.query.since ?? "");
+      if (!since) {
+        const row = await one<{ last_run_at: Date | null; since_default: string | null }>(
+          `SELECT last_run_at, since_default FROM source WHERE name = $1`,
+          [stampTarget],
+        );
+        if (!row) {
+          res.status(400).json({
+            error:
+              `No source row named '${stampTarget}' (registry key '${key}'), so no ` +
+              `ingestion window can be derived. Pass ?since= explicitly, or check ` +
+              `migrations/003_seed_source_registry.sql.`,
+          });
+          return;
+        }
+        try {
+          since = resolveSince(row);
+        } catch (e) {
+          res.status(400).json({ error: (e as Error).message });
+          return;
+        }
       }
-      try {
-        since = resolveSince(row);
-      } catch (e) {
-        res.status(400).json({ error: (e as Error).message });
-        return;
-      }
+      requestInput.since = since;
     }
 
     let request: RunRequest;
     try {
-      request = validateRun({ source: key, since, depth: "listing" }, adapter.shape);
+      request = validateRun(requestInput, adapter.shape);
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
       return;

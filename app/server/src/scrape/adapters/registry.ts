@@ -28,6 +28,7 @@
 import { fakeAdapter } from "./fake.js";
 import { samAdapter } from "./sam.js";
 import { usaSpendingAdapter } from "./usaspending.js";
+import { idoaAdapter } from "./idoa.js";
 import type { Adapter } from "../adapter.js";
 
 export interface AdapterRegistryEntry {
@@ -47,4 +48,15 @@ export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
   fake: { sourceName: null, make: () => fakeAdapter(25, 10) },
   sam: { sourceName: "SAM.gov", make: () => samAdapter() },
   usaspending: { sourceName: "USASpending", make: () => usaSpendingAdapter() },
+  /* Task 8: the first SNAPSHOT source to be registered. `sourceName` must
+   * match the seeded `source.name` row exactly
+   * (migrations/003_seed_source_registry.sql) -- resolve-source.ts looks it
+   * up by name, same as every windowed entry above. Registering this is
+   * what makes `admin.ts`'s /run route actually reach a snapshot adapter
+   * for the first time, which is why this task also had to fix two latent
+   * bugs that registering it made live (see admin.ts and
+   * ingest/import-artifact.ts). `source.enabled` stays false -- turning it
+   * on is Task 10's deliberate operator act, not a consequence of this
+   * registration. */
+  idoa: { sourceName: "Indiana IDOA solicitations", make: () => idoaAdapter() },
 };

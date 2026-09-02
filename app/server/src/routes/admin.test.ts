@@ -548,6 +548,96 @@ test("a source that has run before resumes from last_run_at", async () => {
   expect(new Date(body.since).toISOString()).toBe("2026-07-04T09:00:00.000Z");
 });
 
+/* ---- BLOCKING PRECONDITION 1 (task-8): /run and a snapshot source -------
+ *
+ * Found in task-3, deferred because no snapshot adapter was registered yet.
+ * `/run` used to derive (or default to `""`) a `since` and pass it into
+ * `validateRun` UNCONDITIONALLY, regardless of the resolved adapter's
+ * shape. `validateRun`'s snapshot branch (contract.ts §5.4) THROWS the
+ * moment `since`/`until` is present at all -- so the instant a snapshot
+ * adapter was registered (task-8's own registry.ts change), every /run call
+ * against it would 400 before running anything. This is the operator's
+ * actual path to running IDOA, so it needs its own end-to-end proof, not
+ * just contract.ts's unit test of the throw. */
+
+test("POST /api/admin/run works end to end for a snapshot source (no window at all)", async () => {
+  const { ADAPTERS } = await import("../scrape/adapters/registry.js");
+  const KEY = "snap-fixture";
+  ADAPTERS[KEY] = {
+    sourceName: null,
+    make: () => ({
+      shape: "snapshot" as const,
+      name: KEY,
+      async fetchSnapshot() {
+        return {
+          items: [{ externalId: "snap-1", raw: { title: "a snapshot item" } }],
+          nextCursor: null,
+          requestUrl: "fake://snapshot",
+          httpStatus: 200,
+          payload: "{}",
+        };
+      },
+    }),
+  };
+  await run(`INSERT INTO source (name, enabled) VALUES ($1, true)`, [KEY]);
+
+  try {
+    const before = await one<{ last_run_at: string | null }>(
+      `SELECT last_run_at FROM source WHERE name = $1`,
+      [KEY],
+    );
+
+    const res = await post({}, undefined, `/api/admin/run?source=${KEY}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      rows: number;
+      imported: number;
+      last_run_at: string;
+      since?: string;
+    };
+    expect(body.rows).toBe(1);
+    expect(body.imported).toBe(1);
+    /* No window was ever sent -- there is nothing to echo back. */
+    expect(body.since).toBeUndefined();
+
+    const after = await one<{ last_run_at: string | null }>(
+      `SELECT last_run_at FROM source WHERE name = $1`,
+      [KEY],
+    );
+    expect(after?.last_run_at).not.toBe(before?.last_run_at ?? null);
+  } finally {
+    delete ADAPTERS[KEY];
+  }
+});
+
+/* The other half of the fix: skipping DERIVATION for a snapshot source must
+ * not mean silently dropping an operator-supplied `?since=` too -- that
+ * would be exactly the "accepted and quietly ignored" failure mode §5.4
+ * exists to catch, just moved one layer up. An explicit window is still
+ * forwarded to `validateRun`, which still refuses it loudly. */
+test("an explicit ?since= for a snapshot source is refused, not silently dropped", async () => {
+  const { ADAPTERS } = await import("../scrape/adapters/registry.js");
+  const KEY = "snap-fixture-2";
+  ADAPTERS[KEY] = {
+    sourceName: null,
+    make: () => ({
+      shape: "snapshot" as const,
+      name: KEY,
+      fetchSnapshot: () => Promise.reject(new Error("must not be called")),
+    }),
+  };
+  await run(`INSERT INTO source (name, enabled) VALUES ($1, true)`, [KEY]);
+
+  try {
+    const res = await post({}, undefined, `/api/admin/run?source=${KEY}&since=2026-08-01`);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/snapshot/i);
+  } finally {
+    delete ADAPTERS[KEY];
+  }
+});
+
 /* ---- SP4 T11: the two extraction endpoints ---------------------------- */
 
 /* Both inherit `admin.use(requireAdminSecret)`, so neither declares auth of
