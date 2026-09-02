@@ -57,6 +57,58 @@ market. `posted_at → closes_at` is the real number. Same class of error
 **Eleven days is the "finding out too late" pain, quantified.** A quarter of the
 market closes within a week of being published.
 
+> #### ⚠️ AMENDED — what that median's filter was hiding
+>
+> The query above bounds the interval to `0..400` days. **That filter is a
+> disclosure, not a detail**, and the first version of this file reported the
+> median without it. Of **7,784** rows carrying both dates:
+>
+> | | n | |
+> |---|---:|---|
+> | deadline **before** posting | **106** | excluded |
+> | same day | 157 | included |
+> | 1–400 days | 7,513 | included |
+> | over 400 days | 8 | excluded |
+>
+> **114 excluded, 1.5% — so the 11-day median holds.** The headline is not
+> wrong. What the filter hid is the finding below.
+
+### 🔴 62 live opportunities are silently dropped, and this is a DISCOVERY loss
+
+The raw interval runs from **−7,275 days to +1,825**. The worst case:
+
+```
+id 9312   posted 2026-08-25   closes 2006-09-24   (−7,275 days)
+          "RFQ - FA8118-26-Q-0009 LEVER, REMOTE CONTROL"
+```
+
+A year typo — 2006 for 2026 — **in SAM's own payload**. `closesAt()` records
+what the source states, which is correct behaviour; the defect is upstream.
+
+**What it costs us is not.** `eligibility.ts`'s `ELIGIBLE` predicate is
+`undecided AND (closes_at IS NULL OR closes_at >= today)`, so a notice whose
+payload says 2006 is filed as **closed** and never reaches the queue.
+
+| | n |
+|---|---:|
+| deadline before posting | 106 |
+| …of a biddable kind | 75 |
+| **…and posted since 2026-08-01 — plausibly live** | **62** |
+
+**62 biddable, recently-posted opportunities never appear**, against ~4,549
+biddable in a week — roughly **1.4% of discovery, lost silently to a bad date.**
+
+⚠️ **Note the asymmetry, because it is the actual bug.** That predicate treats a
+**missing** deadline with real care — its own comment says *"a missing deadline
+is not a reason to hide an opportunity"* — and then hides opportunities for a
+**wrong** one. Null was reasoned about; impossible was not. A deadline earlier
+than its own posting date is not a deadline, and the queue is the one place that
+distinction is never drawn.
+
+**Not fixed here.** How an impossible date should be treated — surfaced as
+undated, flagged, or excluded loudly — is a design decision, and the queue's
+ordering rule (D16, `closes_at ASC NULLS LAST`) is downstream of it.
+
 ### The notice mix — 26% of the queue cannot be bid on
 
 | Kind | n | share |
