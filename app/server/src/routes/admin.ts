@@ -52,6 +52,7 @@ import { one, run as dbRun } from "../db/index.js";
 import { importArtifact } from "../ingest/import-artifact.js";
 import { mergeSightings } from "../merge/merge.js";
 import { discoverAttachments } from "../extract/discover.js";
+import { discoverIdoaAttachments } from "../extract/discover-idoa.js";
 import { runExtract } from "../extract/run-extract.js";
 import { batchLimit } from "../lib/batchLimit.js";
 
@@ -538,19 +539,50 @@ admin.post(
  * this budget and CEILING_MS is what that last document spends. Reusing the
  * constant keeps one number under one ceiling, which is the whole lesson of
  * 2026-08-27; what changes here is only what the reservation is FOR. */
+/* DISPATCH BY SOURCE, THE ADMIN-ROUTE SHAPE (Ruling 12, 2026-09-02
+ * progress.md / Task 9.5). Unlike the CLI, this route is not scoped to one
+ * `--source` -- it has always run discoverAttachments over the whole
+ * database regardless of what was just scraped, filtered internally to
+ * SAM.gov. Reaching IDOA candidates from the SAME endpoint means running
+ * BOTH discovery mechanisms and reporting the combined totals, rather than
+ * branching on a source this route was never given.
+ *
+ * The budget is SHARED across the two calls, not given to each in full --
+ * RUN_HANDLER_BUDGET_MS bounds this whole request against the platform
+ * ceiling (see the comment above), and handing it twice could in principle
+ * run up to 2x that if SAM's per-notice fetches ran long. IDOA's own pass
+ * makes no network call at all (its URL is already in the stored payload),
+ * so in practice this remaining-budget arithmetic rarely matters -- but the
+ * request's total wall-clock exposure must stay bounded regardless. */
 admin.post(
   "/discover",
   asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
     const limit = batchLimit(req.query.limit);
     /* REVIEW FINDING 5 (2026-08-30): this call had NO budget, while the
      * comment above reasoned about one. Up to MAX_BATCH sequential fetches
      * with no clock check runs past the ceiling on a slow day, and a killed
      * request reports nothing at all. */
-    const result = await discoverAttachments(limit, undefined, RUN_HANDLER_BUDGET_MS);
+    const sam = await discoverAttachments(limit, undefined, RUN_HANDLER_BUDGET_MS);
+    const remainingMs = Math.max(0, RUN_HANDLER_BUDGET_MS - (Date.now() - startedAt));
+    const idoa = await discoverIdoaAttachments(limit, remainingMs);
     /* The effective limit, echoed. An operator who asks for 99999 and gets 50
      * should be told, not left to infer it from a batch that stopped early --
-     * and a clamp nobody can observe is a clamp no test can pin. */
-    res.json({ ...result, limit });
+     * and a clamp nobody can observe is a clamp no test can pin.
+     *
+     * Same four-key shape the route has always answered with -- `refreshed`
+     * stays SAM-only (discoverIdoaAttachments writes no listing fields; see
+     * its own header for why it has no REFRESH counterpart), while
+     * `solicitations`/`skipped`/`documents` are combined totals across both
+     * mechanisms so an empty-of-both-sources schema still answers all
+     * zeroes, unchanged from before this dispatch existed. */
+    res.json({
+      solicitations: sam.solicitations + idoa.solicitations,
+      skipped: sam.skipped + idoa.skipped,
+      documents: sam.documents + idoa.documents,
+      refreshed: sam.refreshed,
+      limit,
+    });
   }),
 );
 

@@ -113,31 +113,58 @@ async function runListingsPass(req: RunRequest, adapter: Adapter): Promise<void>
  * handler one below 300s, and the same code serves both." Nothing here is
  * new capability; this is that wiring, finally added to the CLI.
  *
- * `discoverAttachments`/`runExtract` are imported DYNAMICALLY, inside this
- * function, not statically at the top of the file -- both discover.ts and
- * run-extract.ts have a static top-level `import ... from "../db/index.js"`,
- * which throws at module-evaluation time with no DATABASE_URL set. A static
- * import here would make merely importing cli.ts (and so cli.test.ts, which
- * tests the DB-free parseArgv/main flag logic) require a database
- * connection -- exactly the gate resolve-source.ts's own header already
- * documents and protects with the same fix.
+ * `discoverAttachments`/`discoverIdoaAttachments`/`runExtract` are imported
+ * DYNAMICALLY, inside this function, not statically at the top of the file --
+ * discover.ts, discover-idoa.ts and run-extract.ts each have a static
+ * top-level `import ... from "../db/index.js"`, which throws at
+ * module-evaluation time with no DATABASE_URL set. A static import here
+ * would make merely importing cli.ts (and so cli.test.ts, which tests the
+ * DB-free parseArgv/main flag logic) require a database connection --
+ * exactly the gate resolve-source.ts's own header already documents and
+ * protects with the same fix.
  *
- * Also resolves (and can refuse a disabled) source independently of
- * runListingsPass, so `--documents-only` gets the same fail-closed check a
- * chained or `--listings-only` run already gets. */
+ * DISPATCH BY SOURCE (Ruling 12, 2026-09-02 progress.md / Task 9.5).
+ * discoverAttachments is SAM-only -- it calls SAM's per-notice attachment
+ * API and its two queries filter `src.name = 'SAM.gov'` -- so chaining it
+ * unconditionally after an IDOA listings run finds zero candidates and IDOA
+ * lands with listings and no documents, the exact failure the chaining
+ * exists to prevent. IDOA needs no API call at all; its ZIP url already
+ * sits in `sighting.raw.documentsUrl` (discover-idoa.ts). `resolveSource`'s
+ * return is what makes this dispatch, rather than `req.source`'s CLI-key
+ * spelling, so it lines up with the canonical `source.name` row every other
+ * consumer of a resolved source keys against.
+ *
+ * The literal below is not imported from discover-idoa.ts's own
+ * `IDOA_SOURCE_NAME` export -- that module has the same static top-level
+ * `db/index.js` import discover.ts and run-extract.ts have, and a static
+ * import here for just the constant would defeat the whole point of the
+ * dynamic imports below. Same trade registry.ts already makes: its `idoa`
+ * entry hardcodes this identical string as `sourceName` rather than
+ * importing it either. Both must agree with
+ * migrations/003_seed_source_registry.sql, which is the row that actually
+ * owns this name. */
 async function runDocumentsPass(req: RunRequest): Promise<void> {
-  await resolveSource(req.source);
+  const resolved = await resolveSource(req.source);
   const limit = req.limit ?? MAX_BATCH;
 
-  const { discoverAttachments } = await import("../extract/discover.js");
   const { runExtract } = await import("../extract/run-extract.js");
 
-  const discovered = await discoverAttachments(limit, undefined, req.budgetMs);
-  console.log(
-    `\nDiscover: ${discovered.documents} document(s) queued from ` +
-      `${discovered.solicitations} solicitation(s) checked (${discovered.skipped} skipped, ` +
-      `${discovered.refreshed} listing field(s) refreshed).`,
-  );
+  if (resolved.sourceName === "Indiana IDOA solicitations") {
+    const { discoverIdoaAttachments } = await import("../extract/discover-idoa.js");
+    const discovered = await discoverIdoaAttachments(limit, req.budgetMs);
+    console.log(
+      `\nDiscover: ${discovered.documents} document(s) queued from ` +
+        `${discovered.solicitations} solicitation(s) checked (${discovered.skipped} skipped).`,
+    );
+  } else {
+    const { discoverAttachments } = await import("../extract/discover.js");
+    const discovered = await discoverAttachments(limit, undefined, req.budgetMs);
+    console.log(
+      `\nDiscover: ${discovered.documents} document(s) queued from ` +
+        `${discovered.solicitations} solicitation(s) checked (${discovered.skipped} skipped, ` +
+        `${discovered.refreshed} listing field(s) refreshed).`,
+    );
+  }
 
   const extracted = await runExtract({ limit, budgetMs: req.budgetMs });
   console.log(
