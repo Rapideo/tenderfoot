@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import {
-  Button, Callout, Card, Chip, FactPanel, Keycap, MicroLabel, ScoreStrip, ShortcutCard,
+  Button, Callout, Card, Chip, ChoiceChip, FactPanel, Keycap, MicroLabel, ScoreStrip,
+  ShortcutCard,
 } from "../primitives";
+import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
 import { adminHeaders, clearAdminSecret, getAdminSecret } from "../admin/adminSecret";
 import { getDecidedBy } from "./decidedBy";
 import { useQueueKeys } from "./useQueueKeys";
@@ -126,13 +128,53 @@ function money(cents: number | null): string {
   return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 }
 
+/* THE SEVEN CHANNELS AS A PERSON READS THEM.
+ *
+ * Typed `Record<DiscoveryChannel, string>` rather than an array of pairs so
+ * that adding an eighth value to the shared vocabulary -- or to migration
+ * 013's CHECK, which is the real authority -- fails TYPECHECK here instead of
+ * silently rendering six chips for seven countable answers. That failure mode
+ * is not hypothetical: it is exactly how `accuracyByField` came to have no
+ * surface, a measure that existed and that nothing exposed.
+ *
+ * The labels are OURS, and D21 records that. The values are the migration's;
+ * these are the reading of them, kept short because they sit in a wrapped
+ * chip row under a ten-second decision. */
+const CHANNEL_LABELS: Record<DiscoveryChannel, string> = {
+  already_knew: "Already knew",
+  indiana_email: "Indiana email",
+  portal: "Portal",
+  colleague: "Colleague",
+  nowhere: "Nowhere",
+  not_sure: "Not sure",
+  other: "Other",
+};
+
+/* The decision bar's three modes, the bundle's own `askReason` state widened
+ * from our boolean back to what it always was there:
+ *
+ *   askReason: null | "pass" | "interested"
+ *
+ * We shipped it as a boolean because only the Pass branch was built. The
+ * bundle branches EIGHT rendered values off this one field -- prompt, help,
+ * accent, chip list, confirm label and confirm style among them -- so the
+ * boolean was not a simplification, it was half a state machine. */
+type ReasonMode = null | "pass" | "interested";
+
 export function Queue() {
   const [page, setPage] = useState<QueuePage | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [lastDecided, setLastDecided] = useState<number | null>(null);
-  /* The bundle's decision bar is two-state: Pass opens a reason step. */
-  const [askReason, setAskReason] = useState(false);
+  /* The bundle's decision bar is a MODE machine, and both non-default modes
+   * are now built: Pass opens the reason step, Interested opens the discovery
+   * step. Until 2026-09-02 only the Pass branch existed. */
+  const [askReason, setAskReason] = useState<ReasonMode>(null);
+  /* SINGLE-SELECT, where the bundle's chips are multi. A decision may have
+   * several reasons; it cannot have several places it first reached you, and
+   * migration 013 stores one column. Selecting replaces rather than appends
+   * -- see the chip row's onClick. */
+  const [channel, setChannel] = useState<DiscoveryChannel | null>(null);
   const navigate = useNavigate();
 
   const sampleId = new URLSearchParams(window.location.search).get("sample");
@@ -159,6 +201,18 @@ export function Queue() {
         setError("A reason is required on Pass.");
         return;
       }
+      /* Mandatory on Interested, same guard for the same reason. The server
+       * answers 400 with field:"discovery_channel" if this ever gets past,
+       * and that 400 is the authority -- this is the courtesy, not the rule.
+       *
+       * `state === "New"` is UNDO, and it deliberately falls through both
+       * guards: undo decides a row back to New, which is not a qualified
+       * opportunity and carries no channel (migration 013 stores NULL for
+       * anything that is not Interested). */
+      if (state === "Interested" && !channel) {
+        setError("Where else would this have reached you? Pick one — “Not sure” counts.");
+        return;
+      }
       const secret = getAdminSecret();
       if (!secret) return;
       /* Spec §5.3: "decided_by is set once per session and stored on every
@@ -170,7 +224,17 @@ export function Queue() {
       const res = await fetch(`/api/solicitations/${id}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...adminHeaders(secret) },
-        body: JSON.stringify({ state, reason: reason.trim() || null, decided_by: decidedBy }),
+        body: JSON.stringify({
+          state,
+          reason: reason.trim() || null,
+          decided_by: decidedBy,
+          /* Sent only where it means something. A Pass carrying a channel
+           * would enter the denominator of a rate it is not part of (§8.5
+           * asks about QUALIFIED opportunities), and the server drops it on
+           * any other state anyway -- but sending it would make the client
+           * look like it believed otherwise. */
+          discovery_channel: state === "Interested" ? channel : null,
+        }),
       });
       if (!res.ok) {
         /* adminSecret.ts's own rule: "Call on a 401 -- a wrong secret must
@@ -182,26 +246,36 @@ export function Queue() {
         return;
       }
       setReason("");
+      setChannel(null);
       setError(null);
-      setAskReason(false);
+      setAskReason(null);
       setLastDecided(id);
       await load();
     },
-    [current, reason, load],
+    [current, reason, channel, load],
   );
 
-  /* Pass is a two-step: the key or the button opens the reason step, and the
-   * decision is only recorded on confirm. Mandatory-on-Pass is still enforced
-   * here as well as on the server, so an empty reason never becomes a
-   * request. */
-  const confirmPass = useCallback(async () => {
-    if (!reason.trim()) {
-      setError("A reason is required on Pass.");
-      return;
-    }
-    await decide("Not Interested");
-    setAskReason(false);
-  }, [reason, decide]);
+  /* BOTH branches are two-step now: the key or the button opens a step, and
+   * the decision is only recorded on confirm. One function, as the bundle has
+   * it (`confirm()` reads `this.state.askReason` rather than taking a kind),
+   * because two near-identical confirm handlers is how the branches drift.
+   *
+   * The per-branch requirement is re-checked inside decide(); this only picks
+   * the state to record. */
+  const confirmReason = useCallback(async () => {
+    if (askReason === "interested") await decide("Interested");
+    else if (askReason === "pass") await decide("Not Interested");
+  }, [askReason, decide]);
+
+  /* Back out of either step. Clears BOTH inputs, not just the current
+   * branch's: the bundle's cancelReason resets picked and freeText together,
+   * and a channel left selected from an abandoned Interested would otherwise
+   * still be sitting there when the next card's step opened. */
+  const cancelReason = useCallback(() => {
+    setAskReason(null);
+    setChannel(null);
+    setError(null);
+  }, []);
 
   /* UNDO IS AN APPEND, not a delete: it decides the row back to New, and
    * both rows survive (spec §5.1). No time limit -- it is simply
@@ -213,8 +287,12 @@ export function Queue() {
   }, [lastDecided, decide]);
 
   useQueueKeys({
-    onInterested: () => void decide("Interested"),
-    onPass: () => setAskReason(true),
+    /* `I` no longer decides -- it OPENS the step, exactly as `P` does. That
+     * is a real behaviour change to the fastest path in the product, and it
+     * is the price of §8.5 having any measure at all: an Interested recorded
+     * without a channel is a row the gate cannot count. */
+    onInterested: () => setAskReason("interested"),
+    onPass: () => setAskReason("pass"),
     onUndo: () => void undo(),
     onOpen: () => current && navigate(`/solicitation/${current.id}`),
   });
@@ -432,45 +510,92 @@ export function Queue() {
         </div>
 
         {/* THE DECISION BAR IS A MODE MACHINE, as the bundle has it: the
-          * default state offers Interested and Pass; pressing Pass SWAPS the
-          * bar for a reason step with a prompt, a free-text field, Back and a
+          * default state offers Interested and Pass, and either one SWAPS the
+          * bar for a step with a prompt, help, a free-text field, Back and a
           * confirm. The first cut flattened this into a permanently-visible
-          * textarea beside the buttons, which is not what the bundle does.
+          * textarea beside the buttons, which is not what the bundle does;
+          * the second built the Pass branch only.
           *
-          * Reason CHIPS are correctly absent -- the SVRC ratified free text
-          * only for V1, since with qualification parked no recorded reason
-          * feeds anything and a preset vocabulary would flatten exactly the
-          * signal it exists to capture. The two-state SHAPE is not a chip
-          * decision, which is why it is built. */}
+          * ⚖️ THE INTERESTED BRANCH ASKS A DIFFERENT QUESTION FROM THE
+          * BUNDLE'S, ON MATT'S RULING OF 2026-09-02. The bundle's is
+          * "ANYTHING TO NOTE? — OPTIONAL" over four fit chips (YES_CHIPS:
+          * Strong fit / Sub-teaming play / Known buyer / Watch only), and
+          * confirming with nothing picked is allowed there. Ours is the
+          * discovery channel: a different question, a different vocabulary,
+          * and REQUIRED. Deviation D21, which also carries the vocabulary's
+          * own argument against SVRC 1.1.4.
+          *
+          * What is NOT a deviation is the step existing, or its chrome: the
+          * prompt/help/chips/input/Back/confirm frame, the "Save & next"
+          * label and the accent confirm are all the bundle's own interested
+          * branch, which we simply had never built.
+          *
+          * PASS CHIPS are still correctly absent -- SVRC 1.1.4 ratified free
+          * text only for V1, since a preset reason vocabulary would flatten
+          * the signal it exists to capture. The discovery chips do not
+          * reopen that: a REASON is an open judgement, a CHANNEL is a closed
+          * factual set, and free text cannot be counted. See migration 013. */}
         {askReason ? (
           <div className="queue__reason">
             <div className="queue__reason-head">
-              <span className="queue__reason-prompt">WHY ARE YOU PASSING?</span>
+              <span
+                className={`queue__reason-prompt queue__reason-prompt--${
+                  askReason === "pass" ? "bad" : "acc"
+                }`}
+              >
+                {askReason === "pass"
+                  ? "WHY NOT? — REQUIRED"
+                  : "WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED"}
+              </span>
               <span className="queue__reason-help">
-                Required on Pass. In six months this is the answer to “why did we pass on this”.
+                {askReason === "pass"
+                  ? "A rejection with no reason is the one event that teaches nothing."
+                  : "“Nowhere” is the discovery count — the gate’s only measure."}
               </span>
             </div>
+
+            {/* Single-select: picking REPLACES, so there is never more than
+              * one channel to send. The bundle's chips append to an array
+              * because a pass may have several reasons; a first sighting
+              * cannot, and migration 013 stores one column. */}
+            {askReason === "interested" && (
+              <div className="queue__reason-chips">
+                {DISCOVERY_CHANNELS.map((c) => (
+                  <ChoiceChip
+                    key={c}
+                    selected={channel === c}
+                    onClick={() => {
+                      setChannel(c);
+                      setError(null);
+                    }}
+                  >
+                    {CHANNEL_LABELS[c]}
+                  </ChoiceChip>
+                ))}
+              </div>
+            )}
+
             <div className="queue__reason-row">
               <input
-                aria-label="Reason"
+                aria-label={askReason === "pass" ? "Reason" : "Note"}
                 value={reason}
                 autoFocus
                 onChange={(e) => setReason(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void confirmPass()}
-                placeholder="…or say it in your own words"
+                onKeyDown={(e) => e.key === "Enter" && void confirmReason()}
+                placeholder="…or say it in your own words (this is the training signal)"
               />
-              <Button
-                variant="secondary"
-                ariaLabel="Back"
-                onClick={() => {
-                  setAskReason(false);
-                  setError(null);
-                }}
-              >
+              <Button variant="secondary" size="sm" ariaLabel="Back" onClick={cancelReason}>
                 Back
               </Button>
-              <Button variant="primary" ariaLabel="Confirm pass" onClick={() => void confirmPass()}>
-                Confirm pass
+              {/* danger vs primary is the bundle's own ternary on this one
+                * button: a rejection must not look like a save. */}
+              <Button
+                variant={askReason === "pass" ? "danger" : "primary"}
+                size="sm"
+                ariaLabel={askReason === "pass" ? "Confirm pass" : "Confirm interested"}
+                onClick={() => void confirmReason()}
+              >
+                {askReason === "pass" ? "Pass & next" : "Save & next"}
               </Button>
             </div>
             {error && <Callout>{error}</Callout>}
@@ -486,7 +611,7 @@ export function Queue() {
               variant="primary"
               keycap="I"
               ariaLabel="Interested"
-              onClick={() => void decide("Interested")}
+              onClick={() => setAskReason("interested")}
             >
               Interested
             </Button>
@@ -494,7 +619,7 @@ export function Queue() {
               variant="secondary"
               keycap="P"
               ariaLabel="Pass"
-              onClick={() => setAskReason(true)}
+              onClick={() => setAskReason("pass")}
             >
               Pass
             </Button>

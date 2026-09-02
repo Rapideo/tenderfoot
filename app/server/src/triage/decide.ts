@@ -12,20 +12,16 @@ const STATES: readonly PursuitState[] = ["New", "Triaged", "Interested", "Not In
  * is the half a yes/no cannot give and the half that tells KP what they could
  * stop doing.
  *
- * Kept in lockstep with migration 013's CHECK constraint -- the database is
- * the authority and this array must not drift from it. A value here that the
- * constraint rejects is a 500 at decision time; a value the constraint allows
- * and this array omits is a decision the metric silently cannot count. */
-export const DISCOVERY_CHANNELS = [
-  "already_knew",
-  "indiana_email",
-  "portal",
-  "colleague",
-  "nowhere",
-  "not_sure",
-  "other",
-] as const;
-export type DiscoveryChannel = (typeof DISCOVERY_CHANNELS)[number];
+ * MOVED TO `app/shared` 2026-09-02, when the client half was built. It was
+ * declared here first, next to its only consumer, and a second consumer is
+ * exactly the moment that stops being right: the client needs the same seven
+ * values to render the same seven chips, and a copy-paste of a vocabulary the
+ * database CHECKs is how `SourceHealth` nearly went wrong (see shared's own
+ * note on it). The database is still the authority; `shared` is its single
+ * mirror; this re-export keeps every existing importer of `decide.js`
+ * working. */
+export { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
+import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
 
 /* Distinct from a generic Error so the route can answer 400 rather than 500:
  * a missing reason is the caller's to fix, not a fault. */

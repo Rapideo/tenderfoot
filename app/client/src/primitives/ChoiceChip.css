@@ -1,0 +1,51 @@
+/* ChoiceChip -- the SELECTABLE chip of the decision bar's reason step,
+ * matched against the bundle's `chips` declaration (V1.2, index ~692669):
+ *
+ *   border:1px solid (on ? var(--accbrd) : var(--brdctl));
+ *   background:      (on ? var(--acc)    : var(--surface));
+ *   color:           (on ? var(--surface): var(--text3));
+ *   border-radius:20px;padding:9px 14px;font:500 12.5px/1 'IBM Plex Sans'
+ *
+ * ⚠️ THIS IS NOT `Chip`, AND THE NAMES ARE A TRAP. `Chip` was matched
+ * against the bundle's TAG pills ("MEDICAID", "IN · SUPPLIER PORTAL"):
+ * 10px mono, 4px radius, 5x8 padding, no border, not interactive. The two
+ * share a word and nothing else -- different element (span vs button),
+ * different radius step, different type family, different padding. Reusing
+ * `Chip` here, or bolting a third tone onto it, would have produced a
+ * control that renders at 40% of the bundle's size; a new primitive is the
+ * cheaper honesty. SP2 did not build this one because reason chips were
+ * parked (SVRC 1.1.4) and nothing needed a selectable chip until the
+ * discovery channel did.
+ *
+ * --radius-pill is that exact 20px step, and tokens.css names it "filter
+ * pills". --type-ui-action is that exact font shorthand, its own comment
+ * naming "Back / Cancel / confirm actions" -- the same reason-step family.
+ * --accbrd/--brdctl are --accent-line/--line-control, --acc/--surface are
+ * --accent/--ground-surface, --text3 is --text-secondary (the mapping
+ * Button.css's secondary variant already established against passIt).
+ * Padding has no token -- tokens.css covers colour and radius only, and
+ * there is deliberately no spacing scale -- so it stays a literal, as it is
+ * in the bundle.
+ *
+ * cursor and the reset of the browser's default button chrome are
+ * structural, not colour/radius/font values: the bundle's chips are
+ * <button>s whose inline style overrides nothing the UA sheet would have
+ * supplied for a <span>. */
+.choice-chip {
+  border: 1px solid var(--line-control);
+  background: var(--ground-surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 9px 14px;
+  font: var(--type-ui-action);
+  cursor: pointer;
+}
+
+/* Higher specificity than the base rule via the extra class, so selection
+ * wins regardless of source order -- the same guard Button.css uses for
+ * its `sm` sizes. */
+.choice-chip.choice-chip--on {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--ground-surface);
+}

@@ -180,15 +180,36 @@
   align-items: center;
 }
 /* The bundle's reason step is a MODE, not a permanently-visible box: pressing
- * Pass swaps the bar for this panel. Chips are parked for V1 (SVRC ratified
- * free text only), so the chip row is deliberately absent -- the two-state
- * shape is not a chip decision. */
+ * Pass or Interested swaps the bar for this panel.
+ *
+ * PASS reason chips remain deliberately absent (SVRC 1.1.4 ratified free text
+ * only for V1). The chip row below is the INTERESTED branch's discovery
+ * channel, which is a closed factual set rather than an open judgement -- see
+ * migration 013 and D21 for why that distinction is load-bearing. */
 .queue__reason { padding: 18px 30px 20px; }
 .queue__reason-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
 .queue__reason-prompt {
   font: var(--type-microlabel-alert);
   letter-spacing: var(--tracking-label);
-  color: var(--bad);
+}
+
+/* The bundle's `reasonAccent`, which is a ternary and was built as a
+ * constant: var(--bad) on pass, var(--acc) otherwise. With only the Pass
+ * branch built the hardcode was invisible; it would have rendered the
+ * discovery prompt in the rejection colour. */
+.queue__reason-prompt--bad { color: var(--bad); }
+.queue__reason-prompt--acc { color: var(--acc); }
+
+/* The bundle's chip container, verbatim (V1.2 ~564400):
+ *   display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px
+ * flex-wrap matters at seven chips -- this is one of only three wrapping
+ * flex containers in the whole bundle, and the row does not fit on one line
+ * inside the card at the container width. */
+.queue__reason-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 14px;
 }
 .queue__reason-help { font: var(--type-body-help); color: var(--text6); }
 .queue__reason-row { display: flex; gap: 10px; align-items: center; }
