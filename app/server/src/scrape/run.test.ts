@@ -12,6 +12,55 @@ function tmpPath() {
   return join(mkdtempSync(join(tmpdir(), "tf-run-")), "run.db");
 }
 
+/* Task 4 (spec §4, §4.1): a stub SnapshotAdapter that walks a fixed list of
+ * pages, mirroring fakeAdapter's role for the windowed tests above. */
+function stubSnapshot(pages: Array<{ ids: string[]; next: string | null }>) {
+  let i = 0;
+  return {
+    shape: "snapshot" as const,
+    name: "stub-snap",
+    async fetchSnapshot(_cursor: string | null) {
+      const p = pages[i++]!;
+      return {
+        items: p.ids.map((id) => ({ externalId: id, raw: { id } })),
+        nextCursor: p.next,
+        requestUrl: "https://example.test/page",
+        httpStatus: 200,
+        payload: JSON.stringify(p.ids),
+      };
+    },
+  };
+}
+
+test("a snapshot run walks its pages and reports no resume marker", async () => {
+  const adapter = stubSnapshot([
+    { ids: ["a", "b"], next: "p2" },
+    { ids: ["c"], next: null },
+  ]);
+  const res = await runScrape(
+    { source: "stub-snap", depth: "listing", budgetMs: 60_000 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.rows).toBe(3);
+  expect(res.done).toBe(true);
+  /* There is no window to narrow, so there is nothing to resume FROM.
+   * A date here would be an invented one. */
+  expect(res.nextUntil).toBeNull();
+  expect(res.noProgress).toBe(false);
+});
+
+test("a partial snapshot run does not offer a resume it cannot honour", async () => {
+  const adapter = stubSnapshot([{ ids: ["a"], next: "p2" }]);
+  const res = await runScrape(
+    { source: "stub-snap", depth: "listing", budgetMs: 0 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.done).toBe(false);
+  expect(res.nextUntil).toBeNull();
+});
+
 test("a run that fits reports done and no next_until", async () => {
   const p = tmpPath();
   const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");

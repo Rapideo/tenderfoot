@@ -61,7 +61,7 @@
  * and an adapter, and returns a file path.
  */
 import type { RunRequest } from "./contract.js";
-import { isSnapshot, type Adapter } from "./adapter.js";
+import { isSnapshot, type Adapter, type SnapshotAdapter, type WindowedAdapter } from "./adapter.js";
 import { openArtifact } from "./artifact.js";
 
 export const SCRAPER_VER = "1";
@@ -93,31 +93,17 @@ export async function runScrape(
   outPath: string,
   now: () => number = Date.now,
 ): Promise<RunResult> {
-  /* Task 2 (type split, spec §2.1) only splits the Adapter type -- it does
-   * not build the snapshot loop. That is Task 4. Narrowing here is a
-   * placeholder so `Adapter` being a union typechecks; a snapshot adapter
-   * reaching this loop is a caller bug (resolve-source.ts/registry.ts
-   * should never hand one to runScrape yet), not a runtime case to handle
-   * gracefully. Checked before openArtifact so a doomed call does not leave
-   * a stray artifact file behind. */
-  if (isSnapshot(adapter)) {
-    throw new Error("snapshot adapters are not runnable until Task 4");
-  }
-
-  /* Task 3 (spec §4) made `since`/`until` optional on RunRequest so a
-   * snapshot request never has to carry a window it does not have.
-   * Narrowing that away is Task 4's job for the snapshot loop; this loop
-   * is windowed-only (the isSnapshot check above already refused every
-   * other adapter shape), and validateRun's windowed branch (contract.ts)
-   * still fails closed on a missing window -- so both are guaranteed
-   * non-null by the time a validated request reaches here. A guard rather
-   * than a bare assertion, so a RunRequest built by hand (bypassing
-   * validateRun -- this module's own tests do) fails loud instead of
-   * sending `undefined` into `adapter.fetchListing`. */
-  if (req.since === undefined || req.until === undefined) {
-    throw new Error("runScrape: a windowed adapter requires since and until on the request");
-  }
-
+  /* Task 4 (spec §4, §4.1): dispatch on shape instead of refusing every
+   * snapshot adapter outright. The artifact is opened once, here, for
+   * either shape it turns out to be.
+   *
+   * RunMeta.since/until (artifact.ts) are non-optional strings, but a
+   * snapshot RunRequest never carries a window at all -- contract.ts's
+   * snapshot branch of validateRun refuses `since`/`until` outright, it
+   * does not merely leave them undefined. "" stands in for "no window"
+   * rather than inventing a date: it can never be mistaken for a real
+   * boundary (contract.ts's isValidDate rejects it, and it sorts before
+   * every real ISO string a windowed run would ever produce). */
   const started = now();
   const art = openArtifact(outPath, {
     /* FIX 1: the CANONICAL name, not the CLI's short key -- see the
@@ -126,11 +112,36 @@ export async function runScrape(
      * caller that builds a RunRequest directly, bypassing the entry
      * points' resolveSource() call (e.g. this module's own tests). */
     sourceName: req.sourceName ?? req.source,
-    since: req.since,
-    until: req.until,
+    since: req.since ?? "",
+    until: req.until ?? "",
     depth: req.depth,
     scraperVer: SCRAPER_VER,
   });
+
+  if (isSnapshot(adapter)) return runSnapshot(req, adapter, art, now, started);
+  return runWindowed(req, adapter, art, now, started);
+}
+
+async function runWindowed(
+  req: RunRequest,
+  adapter: WindowedAdapter,
+  art: ReturnType<typeof openArtifact>,
+  now: () => number,
+  started: number,
+): Promise<RunResult> {
+  /* Task 3 (spec §4) made `since`/`until` optional on RunRequest so a
+   * snapshot request never has to carry a window it does not have.
+   * Narrowing that away is this function's job: runScrape's dispatch above
+   * already sends every snapshot adapter to runSnapshot instead, and
+   * validateRun's windowed branch (contract.ts) still fails closed on a
+   * missing window -- so both are guaranteed non-null by the time a
+   * validated request reaches here. A guard rather than a bare assertion,
+   * so a RunRequest built by hand (bypassing validateRun -- this module's
+   * own tests do) fails loud instead of sending `undefined` into
+   * `adapter.fetchListing`. */
+  if (req.since === undefined || req.until === undefined) {
+    throw new Error("runScrape: a windowed adapter requires since and until on the request");
+  }
 
   let cursor: string | null = null;
   let rows = 0;
@@ -199,8 +210,94 @@ export async function runScrape(
     done,
     nextUntil,
     rows,
-    artifactPath: outPath,
+    artifactPath: art.path,
     undatedSkipped: undatedSkippedTotal,
     noProgress,
+  };
+}
+
+/* THE SNAPSHOT LOOP. Deliberately much smaller than the windowed one: there
+ * is no window to narrow, so there is no lowWater, no nextUntil, and no
+ * cross-invocation resume.
+ *
+ * A snapshot of "what is currently open" SHIFTS between runs, so a cursor
+ * saved from a previous invocation may skip rows or duplicate them, and
+ * neither failure is visible in the result. So a run that exhausts its
+ * budget reports partial and starts over next time. At IDOA's ~50 rows that
+ * costs nothing; if a snapshot source ever grows big enough for it to hurt,
+ * repeated partial runs say so loudly instead of miscounting quietly. */
+async function runSnapshot(
+  req: RunRequest,
+  adapter: SnapshotAdapter,
+  art: ReturnType<typeof openArtifact>,
+  now: () => number,
+  started: number,
+): Promise<RunResult> {
+  let cursor: string | null = null;
+  let rows = 0;
+  let done = false;
+
+  try {
+    for (;;) {
+      const page = await adapter.fetchSnapshot(cursor);
+      const capId = art.writeCapture({
+        hop: "listing",
+        url: page.requestUrl,
+        httpStatus: page.httpStatus,
+        payload: page.payload,
+      });
+
+      for (const item of page.items) {
+        if (req.limit !== undefined && rows >= req.limit) break;
+        /* artifact.ts has no `writeRecord` and no separate "record" table --
+         * a SnapshotItem's fields map onto the same `sighting` table a
+         * windowed run writes, via writeSighting's real SightingRow shape.
+         * `modifiedAt` has no snapshot equivalent (that is the whole point
+         * of SnapshotItem, adapter.ts), so `seenAt` -- the only date this
+         * row can honestly carry -- is when it was FETCHED, same as the
+         * windowed loop. `mode: "mechanical"` mirrors the windowed loop for
+         * the same reason: the column exists so a smart path can be
+         * COMPARED later, not a live toggle (spec §3.4). */
+        art.writeSighting({
+          externalId: item.externalId,
+          seenAt: new Date().toISOString(),
+          raw: item.raw,
+          captureId: capId,
+          extractorVer: SCRAPER_VER,
+          mode: "mechanical",
+        });
+        rows++;
+      }
+      if (req.limit !== undefined && rows >= req.limit) {
+        done = true;
+        break;
+      }
+
+      cursor = page.nextCursor;
+      if (cursor === null) {
+        done = true;
+        break;
+      }
+      if (now() - started >= req.budgetMs) break;
+    }
+  } finally {
+    /* Mirrors the windowed loop's try/finally: the artifact must stay
+     * self-describing and its SQLite handle must not leak, whether the loop
+     * finished, broke on budget, or threw. `undatedSkipped` is always 0 here
+     * -- SnapshotPage has no such counter at all (there is no date to be
+     * missing, adapter.ts), so there is nothing to sum. */
+    art.finish(done ? "complete" : "partial", null, 0);
+    art.close();
+  }
+
+  return {
+    done,
+    /* There is no window to narrow, so there is nothing to resume FROM. A
+     * date here would be an invented one -- the point of this whole slice. */
+    nextUntil: null,
+    rows,
+    artifactPath: art.path,
+    undatedSkipped: 0,
+    noProgress: false,
   };
 }
