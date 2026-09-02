@@ -43,7 +43,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
    * snapshot) as its second argument, so there is no "validate first, look
    * up the adapter second" ordering left that also knows the shape. */
   const sourceKey = typeof parsed.source === "string" ? parsed.source : undefined;
-  const entry = sourceKey !== undefined ? ADAPTERS[sourceKey] : undefined;
+  /* Reported as ITS OWN failure, not folded into "no adapter named
+   * undefined" below -- a missing --source and an unrecognised one are two
+   * distinct mistakes, and collapsing them cost the clearer message when
+   * the adapter lookup moved ahead of validateRun (fix round 1, 2026-09-02). */
+  if (sourceKey === undefined) throw new Error("source is required");
+  const entry = ADAPTERS[sourceKey];
   if (!entry) {
     throw new Error(`No adapter named ${sourceKey}. Known: ${Object.keys(ADAPTERS).join(", ")}`);
   }

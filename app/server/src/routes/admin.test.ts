@@ -95,6 +95,18 @@ test("a run with no window is refused with 400", async () => {
   expect(((await res.json()) as any).error).toMatch(/since/i);
 });
 
+/* Fix round 1 (2026-09-02): the adapter lookup moved ahead of validateRun
+ * (needed to learn its `shape`), which collapsed "no source at all" and
+ * "an unrecognised source" into the same "No adapter named undefined"
+ * message -- untested in either direction until this reorder made the gap
+ * possible. Asserts the missing-source case is reported as a missing
+ * source, not as an adapter lookup failure. */
+test("a request with no source at all is refused as a missing source with 400", async () => {
+  const res = await post({ since: "2026-08-01", depth: "listing" });
+  expect(res.status).toBe(400);
+  expect(((await res.json()) as any).error).toMatch(/source is required/);
+});
+
 /* §1.1 -- the contract must refuse a content filter rather than ignore it. */
 test("a content filter is refused with 400", async () => {
   const res = await post({ source: "fake", since: "2026-08-01", depth: "listing", minValue: 50000 });

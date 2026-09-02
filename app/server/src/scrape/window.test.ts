@@ -87,11 +87,11 @@ test.each(["P7D", "P1D", "P30D", "P1M"])(
   "the value produced from %s is accepted by validateRun",
   (duration) => {
     const since = resolveSince({ last_run_at: null, since_default: duration }, NOW);
-    expect(() => validateRun({ source: "sam", since, depth: "listing" })).not.toThrow();
+    expect(() => validateRun({ source: "sam", since, depth: "listing" }, "windowed")).not.toThrow();
   },
 );
 
 test("the value produced from a last run is accepted by validateRun", () => {
   const since = resolveSince({ last_run_at: NOW, since_default: "P7D" }, NOW);
-  expect(() => validateRun({ source: "sam", since, depth: "listing" })).not.toThrow();
+  expect(() => validateRun({ source: "sam", since, depth: "listing" }, "windowed")).not.toThrow();
 });

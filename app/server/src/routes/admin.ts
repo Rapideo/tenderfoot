@@ -83,7 +83,15 @@ admin.post(
      * left where the contract is checked before anything is known about
      * which adapter answers `source`. */
     const sourceKey = typeof body.source === "string" ? body.source : undefined;
-    const entry = sourceKey !== undefined ? ADAPTERS[sourceKey] : undefined;
+    /* Reported as ITS OWN 400, not folded into "no adapter named undefined"
+     * below -- a missing `source` and an unrecognised one are two distinct
+     * mistakes, and collapsing them cost the clearer message when the
+     * adapter lookup moved ahead of validateRun (fix round 1, 2026-09-02). */
+    if (sourceKey === undefined) {
+      res.status(400).json({ error: "source is required" });
+      return;
+    }
+    const entry = ADAPTERS[sourceKey];
     if (!entry) {
       res.status(400).json({ error: `No adapter named ${sourceKey}` });
       return;

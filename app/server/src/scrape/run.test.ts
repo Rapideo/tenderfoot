@@ -14,7 +14,7 @@ function tmpPath() {
 
 test("a run that fits reports done and no next_until", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
   const res = await runScrape(req, fakeAdapter(5, 2), p);
   expect(res.done).toBe(true);
   expect(res.nextUntil).toBeNull();
@@ -34,7 +34,7 @@ test("a run that fits reports done and no next_until", async () => {
  * would have caught the direction defect. */
 test("a run that exhausts its budget commits what it has and reports a resume marker", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing", budgetMs: 1 });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing", budgetMs: 1 }, "windowed");
   let t = 0;
   const clock = () => (t += 10); // every check advances past the 1ms budget
   const res = await runScrape(req, fakeAdapter(100, 2), p, clock);
@@ -129,7 +129,7 @@ test("two sequential runs resume correctly: the second reaches new ground and th
     until: "2026-12-31T00:00:00.000Z",
     depth: "listing",
     budgetMs: BUDGET_MS,
-  });
+  }, "windowed");
   const res1 = await runScrape(
     req1,
     withWriteCost(fakeAdapter(TOTAL, PAGE_SIZE), elapsed1, MS_PER_ITEM),
@@ -150,7 +150,7 @@ test("two sequential runs resume correctly: the second reaches new ground and th
     until: res1.nextUntil as string,
     depth: "listing",
     budgetMs: BUDGET_MS,
-  });
+  }, "windowed");
   const res2 = await runScrape(
     req2,
     withWriteCost(fakeAdapter(TOTAL, PAGE_SIZE), elapsed2, MS_PER_ITEM),
@@ -212,7 +212,7 @@ function undatedFixtureAdapter(): WindowedAdapter {
 
 test("undatedSkipped is accumulated across pages, onto RunResult and the artifact", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
   const res = await runScrape(req, undatedFixtureAdapter(), p);
 
   expect(res.done).toBe(true);
@@ -224,7 +224,7 @@ test("undatedSkipped is accumulated across pages, onto RunResult and the artifac
 
 test("a run with no undated records reports undatedSkipped: 0, not undefined", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
   const res = await runScrape(req, fakeAdapter(3, 3), p);
   expect(res.undatedSkipped).toBe(0);
   expect(readArtifact(p).run.undated_skipped).toBe(0);
@@ -291,7 +291,7 @@ test("a tie block wider than the budget is reported as noProgress, not a silent 
     until: TIE,
     depth: "listing",
     budgetMs: 1,
-  });
+  }, "windowed");
   let t = 0;
   const clock = () => (t += 10); // trips the 1ms budget check after page 0 commits
 

@@ -62,12 +62,15 @@ export interface RunRequest {
   sourceName?: string;
 }
 
-/* `shape` defaults to "windowed" so every existing call site (this repo's
- * own tests included) that predates the snapshot split keeps compiling and
- * keeps its exact behaviour -- only a caller that explicitly resolves a
- * snapshot adapter (cli.ts, routes/admin.ts, after resolveSource()) passes
- * "snapshot" and takes the new branch below. */
-export function validateRun(input: unknown, shape: SourceShape = "windowed"): RunRequest {
+/* `shape` is REQUIRED, deliberately -- it used to default to "windowed",
+ * which let a caller that forgot the argument compile silently. That is
+ * exactly the failure this task's flagship test exists to catch: a
+ * snapshot request validated as windowed would pass `since` through
+ * un-rejected, which is the §5.4 "accepted and quietly ignored" defect
+ * `source.verified_facets` exists because of. Every call site now names
+ * its shape explicitly, including this file's own pre-snapshot tests
+ * (fix round 1, 2026-09-02). */
+export function validateRun(input: unknown, shape: SourceShape): RunRequest {
   const o = (input ?? {}) as Record<string, unknown>;
 
   for (const k of Object.keys(o)) {
