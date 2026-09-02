@@ -88,24 +88,47 @@ test("a deadline disagreement is shown, not resolved away", async () => {
   expect(screen.getByText(/proposals due August 26/)).toBeTruthy();
 });
 
-/* D13. The strip is built and lives on /dev/gallery; it does not render
- * here. A panel captioned "MACHINE SCORES" showing four dashes reads as
- * "the machine scored this and found nothing". */
-test("no score strip appears on the card", async () => {
+/* ⚖️ D13 REVERSED by Matt, 2026-09-01. This test asserted the OPPOSITE until
+ * today ("no score strip appears on the card") and is inverted, not deleted,
+ * so the reversal is visible in the diff rather than looking like coverage
+ * that quietly evaporated.
+ *
+ * The ruling is not simply "render it". D13's objection was that four bare
+ * dashes under "A READING AID" read as a RESULT -- the machine scored this
+ * and found nothing. The ruling answers that objection with the note, so the
+ * note is the load-bearing half and gets its own assertion below. Rendering
+ * the strip WITHOUT it would satisfy a lazier version of this test and would
+ * be the thing D13 was right about. */
+test("the score strip renders, and says it is not populated yet", async () => {
   stub(page());
   const { container } = renderQueue();
   await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
-  expect(container.querySelector(".score-strip")).toBeNull();
-  expect(screen.queryByText(/machine scores/i)).toBeNull();
+  expect(container.querySelector(".score-strip")).toBeTruthy();
+  expect(screen.getByText(/machine scores — a reading aid/i)).toBeTruthy();
+  /* The disclosure. Without this the four dashes are a verdict. */
+  expect(screen.getByText(/nothing is scored yet/i)).toBeTruthy();
+  /* All four rows render, and every one of them is empty. If a value ever
+   * appears here it means something started wiring a scorer that does not
+   * exist -- see the SCORES constant in Queue.tsx. */
+  const bars = container.querySelectorAll(".score-bar");
+  expect(bars.length).toBe(4);
+  expect(container.querySelectorAll(".score-bar--empty").length).toBe(4);
 });
 
 /* D15. None of the panel's four facts are extracted. It says so rather than
  * being quietly dropped -- if the session repeatedly wants a fact this
- * panel cannot give, that is a finding the gate should produce. */
-test("the pursuit-cost panel renders, empty and labelled", async () => {
+ * panel cannot give, that is a finding the gate should produce.
+ *
+ * ⚠️ The title assertion changed 2026-09-01. It matched /pursuit cost/i,
+ * which was a PARAPHRASE the SP6 plan introduced; the bundle's own copy is
+ * "COST TO PURSUE — FACTS, NOT A SCORE" and copy is specification. The old
+ * regex would have passed against the wrong words forever. */
+test("the cost-to-pursue panel renders, empty and labelled", async () => {
   stub(page());
   renderQueue();
-  await waitFor(() => expect(screen.getByText(/pursuit cost/i)).toBeTruthy());
+  await waitFor(() =>
+    expect(screen.getByText(/cost to pursue — facts, not a score/i)).toBeTruthy(),
+  );
   expect(screen.getByText(/not yet extracted/i)).toBeTruthy();
 });
 

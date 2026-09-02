@@ -91,6 +91,30 @@ Bundle: `border-top:1px solid var(--brdsoft); background:var(--surface4)`, and i
 
 Not audited against the bundle — D14 records that the SVRC calls its content undesigned and that SP6 invented three `ShortcutCard`s. **The bundle should be checked for an empty-state treatment before that deviation stands.** Not done in this pass.
 
+> ### ✅ ANSWERED 2026-09-01, and the answer is yes. **The bundle designs it.**
+>
+> Found while extracting evidence for the score-strip ruling, not by a pass of
+> this section. The bundle's `isCleared` branch renders:
+>
+> - a **64px mono `0`** in `--acc`, `letter-spacing:-.02em`
+> - **`Queue cleared.`** at `600 22px/1.3 Sans`, then a `clearedSummary` line at
+>   `400 14px/1.6` `--text4`, `max-width:44ch`, centred
+> - **two cards** in a `1fr 1fr` grid, each `--surface` / `1px --brd` / radius 9 /
+>   `16px 18px`, left-aligned text — *"3 contracts expire inside your sectors"* over
+>   *"Expiration radar — re-competes, months early"*, wired to `goRadars`; and
+>   *"Next ingest at 06:00"* over *"4 sources · last run clean"*, wired to `goReports`
+> - a `resetQueue` control beneath
+>
+> **This does not overturn D14.** D14's correction was about *our* three cards
+> carrying no `onClick`, and both of the bundle's lead to screens we have not
+> built. But **D14's premise — that the cleared state is undesigned — is false
+> about the bundle**, whatever the SVRC says, and that premise is why three cards
+> were invented in the first place. Worth reading before `View 1.3` is rebuilt.
+>
+> 💡 Note also that both bundle cards now have **real destinations in our product**
+> — `/radars` and `/reports` are stub screens as of the 2026-09-01 nav ruling. The
+> dead-end objection that forced D14's correction no longer applies to them.
+
 ---
 
 ## D. Screen 2 — Opportunity Detail
@@ -151,10 +175,31 @@ Bundle: `grid-template-columns:112px 20px minmax(0,1fr); gap:14px` — a right-a
 9. **B.1** buyer-note callout for entity resolution *(the treatment now exists; the data is not yet wired to it)*
 10. **B.6** the decision bar does not yet sit on `--surface4` behind its own top border as a distinct band
 
-**Needs Matt's ruling:**
-- **B.4** score strip: bundle renders it, D13 says no
-- **D.2** conflict inline vs beneath
-- **A.1** full seven-item nav vs two
+**~~Needs Matt's ruling~~ — ✅ ALL FIVE RULED 2026-09-01. None is open.**
+
+| # | Ruling | Where it landed |
+|---|---|---|
+| **B.4** score strip | **Render it**, bars as placeholders that state they are unpopulated | D13 **reversed**, new **D17** |
+| **D.2** conflict inline vs beneath | **Inline**, as the bundle draws it | spec §6.1 **amended**, new **D18** |
+| **A.1** seven-item nav vs two | **All seven, each to a stub** | new **D19** |
+| **D.1** parked tabs disclosed vs absent | **Five, parking disclosed** — already built, no change | recorded in `Record.tsx` `TABS` |
+| **CONFIDENCE** on a flat `0.6` | **Keep it, for now** — a provisional hold | new **D20** |
+
+Two fidelity corrections landed alongside them, neither of which needed a ruling
+because both move *toward* the bundle:
+
+- **`PURSUIT COST` → `COST TO PURSUE — FACTS, NOT A SCORE`.** The short form was
+  a **paraphrase** introduced by the SP6 plan (`plans/2026-08-30-sp6-triage-record.md:2806`),
+  not by the bundle and not by any deviation. `FactPanel.tsx`'s own header comment
+  had quoted the correct string the whole time, which is how the two drifted apart
+  without anything failing. Copy is specification (§7.10).
+- **The first nav entry reads `Triage`, not `Queue`.** The bundle's word, and the
+  SVRC's (`View 1.1 : Triage`). Route and component unchanged.
+
+⚠️ **And one coverage gap the ruling exposed:** the primary nav went from two
+entries to seven with **every existing test still green** — it had no coverage
+beyond "it disappears when reduced". Two tests added, pinning the seven labels
+in the bundle's order and that every entry has a destination.
 
 **Blocked on data or scope:**
 - **B.5** six cost facts — needs extraction currently parked

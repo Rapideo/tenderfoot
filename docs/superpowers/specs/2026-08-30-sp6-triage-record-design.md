@@ -177,7 +177,11 @@ Reached from the queue by `Enter`, and addressable at `/solicitation/:id`.
 
 Six field rows. Each carries **value, confidence, origin, and the quoted passage it came from.** The three states the SVRC insists on are honoured and visually distinct: **found with a confidence**, **absent** (*"we looked and it is not there"*), and **not yet looked for**. Collapsing the last two into one low number is how a missing ceiling quietly becomes a guessed one.
 
-**Conflicts render beneath the winner, with their origin, unresolved.** `resolveField` already returns `{value, origin, conflicts}` and is applied at read time so the precedence rule can change without re-extraction.
+⚖️ **AMENDED 2026-09-01 by Matt's ruling. Conflicts render INLINE, in the value cell, as the bundle draws them** — `2026-09-18 · CONFLICT with Addendum 2 (2026-09-25)` on a `--badbg2` row, with the SOURCE cell naming both origins joined (`listing + addendum`). The original sentence is struck below rather than deleted, because the reasoning behind it is still the best statement of what the change costs.
+
+~~**Conflicts render beneath the winner, with their origin, unresolved.**~~ The clause about `resolveField` is unaffected and still true: it returns `{value, origin, conflicts}` and is applied at read time, so the precedence rule — and this display decision — can change without re-extraction.
+
+⚠️ **What the amendment costs, and it is not nothing.** The beneath-the-winner form carried the losing value's **own quote**; the inline form has nowhere to put it, because the bundle's field table has no per-row quote at all. Both values and both origins survive; the loser's evidence does not. This bites hardest on the case the display exists for — a listing-origin winner contradicted by a document has **no citation left on the row**, which is the FSSA near-miss shape exactly. Recorded as deviation **D18**, along with a second consequence found by screenshot: the 150px SOURCE column truncates, so with two source names in it the loser's origin is hover-only.
 
 **This view is where SP4's deferred bullets 2 and 3 land** (`2026-08-28-sp4-fetch-extraction-design.md` §10.1). Until it exists, SP4 proves a citation is *stored*, never that it is *readable*, and the FSSA near-miss stays theoretical inside the product.
 

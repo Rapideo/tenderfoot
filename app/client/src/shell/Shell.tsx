@@ -1,7 +1,37 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { HeaderLockup, StatusBar } from "../primitives";
 import "./Shell.css";
+
+/* ⚖️ REGION A.1.2 : PRIMARY NAV -- ALL SEVEN, per Matt's ruling 2026-09-01.
+ *
+ * The bundle's own array, in its order and with its labels:
+ *   [["triage","Triage"],["opps","Opportunities"],["radars","Radars"],
+ *    ["entities","Entities"],["reports","Reports"],["admin","Admin"],
+ *    ["pipeline","Pipeline"]]
+ *
+ * ⚠️ THE FIRST ITEM IS "Triage", NOT "Queue". Ours said Queue until today.
+ * Copy is specification (CLAUDE.md §1) and the SVRC calls the screen
+ * `View 1.1 : Triage`, so the bundle's word wins. The ROUTE stays "/" and the
+ * component stays Queue.tsx -- this is the label a user reads, not a rename
+ * of the module.
+ *
+ * ⚠️ "Pipeline" contradicts the SVRC, which lists six and says the pipeline
+ * board joins the nav "when the management phase starts and not before".
+ * Ruled for seven with that conflict on the table. Deviation D19.
+ *
+ * Five of the seven lead to Stub screens (see router.tsx). None is disabled:
+ * the ruling was specifically for stubs over inert entries, because an entry
+ * that looks like navigation and does nothing is the D14 failure. */
+const NAV: [string, string][] = [
+  ["/", "Triage"],
+  ["/opportunities", "Opportunities"],
+  ["/radars", "Radars"],
+  ["/entities", "Entities"],
+  ["/reports", "Reports"],
+  ["/admin", "Admin"],
+  ["/pipeline", "Pipeline"],
+];
 
 interface SourceRow {
   id: number;
@@ -48,6 +78,13 @@ export function Shell({
   const [forceNav, setForceNav] = useState(false);
   const reduced = reducedProp && !forceNav;
   const navigate = useNavigate();
+  /* The bundle marks the current screen with --accbg4/--text against
+   * transparent/--text5 for the rest. A record page is a child of
+   * Opportunities in the bundle's own map (`map = { opps: s.screen ===
+   * "detail" ? "detail" : "opps" }`), so a solicitation highlights that
+   * entry rather than nothing. */
+  const { pathname } = useLocation();
+  const here = pathname.startsWith("/solicitation/") ? "/opportunities" : pathname;
 
   useEffect(() => {
     let live = true;
@@ -68,8 +105,16 @@ export function Shell({
         <HeaderLockup />
         {!reduced && (
           <nav role="navigation" className="shell__nav">
-            <Link to="/">Queue</Link>
-            <Link to="/admin">Admin</Link>
+            {NAV.map(([to, label]) => (
+              <Link
+                key={to}
+                to={to}
+                className={`shell__navitem${to === here ? " shell__navitem--on" : ""}`}
+                aria-current={to === here ? "page" : undefined}
+              >
+                {label}
+              </Link>
+            ))}
           </nav>
         )}
         {/* THE NAV-COLLAPSED AFFORDANCE. The SVRC's "reduced shell" has a

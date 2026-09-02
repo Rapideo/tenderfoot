@@ -28,12 +28,32 @@ import { ScoreBar } from "./ScoreBar";
  * find yourself writing a comparator, stop"). */
 const TITLE = "MACHINE SCORES — A READING AID";
 
-export function ScoreStrip({ scores }: { scores: { label: string; value: number | null }[] }) {
+/* `note` added 2026-09-01 for Matt's ruling on the score strip (deviation
+ * D13, now REVERSED -- see docs/admin-deviations.md). D13 removed this panel
+ * from the triage card because four bare dashes under the words "a reading
+ * aid" read as THE MACHINE SCORED THIS AND FOUND NOTHING rather than as
+ * THIS HAS NOT BEEN SCORED. The ruling keeps the panel and answers that
+ * objection directly: render the bars as placeholders and SAY they are not
+ * populated yet.
+ *
+ * So this prop is not decoration and it is not optional in spirit -- it is
+ * the entire reason the panel is allowed back on the card. Same shape and
+ * same styling as FactPanel's own `note`, which exists for the identical
+ * reason one region over (D15). The bundle has no note here, because every
+ * one of its four scores is populated; that divergence is deviation D17. */
+export function ScoreStrip({
+  scores,
+  note,
+}: {
+  scores: { label: string; value: number | null }[];
+  note?: string;
+}) {
   return (
     <div className="score-strip">
       <div className="score-strip__title">
         <MicroLabel>{TITLE}</MicroLabel>
       </div>
+      {note && <div className="score-strip__note">{note}</div>}
       <div className="score-strip__list">
         {scores.map((s) => (
           <ScoreBar key={s.label} label={s.label} value={s.value} />
