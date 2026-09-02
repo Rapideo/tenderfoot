@@ -342,6 +342,22 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 **2. Scrape listings first; fetch documents on a separate pass.** Same shape as SAM. ⚠️ Worth naming the known cost: **that separation is exactly why extraction has only ever run on 12 of 9,883 SAM rows.** A second pass that nobody invokes is a second pass that does not happen. Whatever schedules the IDOA document pass should be decided when the adapter is built, not after.
 
+### 🧭 ADAPTER ARCHITECTURE — brainstorm opened 2026-09-02, PARKED mid-design
+
+**The framework does not fit IDOA, and that is the finding.** `Adapter.fetchListing(since, until, cursor)` is built on three assumptions — a filterable date window ("what makes backfill and live the same code path", §3.1), a required `modifiedAt` per item, and a resume marker that tracks the MINIMUM `modifiedAt` written, exploiting SAM paging newest-first. **IDOA has no dates, 50 rows on one page, and no history.** Followed literally, every IDOA row lands in `undatedSkipped` and nothing ingests.
+
+**So there are two SOURCE SHAPES, and Matt ruled they be recognised explicitly:**
+- **Windowed feed** (SAM) — dated, filterable, paged, history reachable. Resume by lowering the ceiling.
+- **Open-set snapshot** (IDOA, Indianapolis) — undated, small, bounded, no history. **No window to resume; the diff against the last run is the news**, and the scrape itself is the clock. `sighting` already models this.
+
+**⚖️ RULED: adapters return what they can; the merge layer decides what is trustworthy.** The alternative — an adapter DECLARING its capabilities, with the framework refusing to infer beyond the declaration — was tabled and rejected *for now*: **"We need to keep it flexible."** A declaration maintained before the shapes are known is a guess with ceremony attached.
+
+> 🔴 **THE CONSEQUENCE THAT MAKES THAT RULING WORK, and it is not optional: PROVENANCE MUST TRAVEL WITH THE VALUE.** Merge can only sort out trustworthiness if it can tell a published `posted_at` from a synthesised one. `extracted_field` already carries origin and confidence; **listing-level fields are merged bare.** If IDOA hands back a first-seen-derived `posted_at` with no tag, merge cannot distinguish it from SAM's published one and the distinction is lost silently — the exact shape of every field-level defect this project has already paid for.
+
+**⚠️ THE INFERENCE TRAP, raised by Matt and worth writing down before anyone builds on it.** Position in a table is often a proxy for recency and occasionally fiction. **IDOA's first two rows share a due date but carry wildly different Event IDs** (`0023…87895`, `0070…88051`), so the table is probably ordered by DUE DATE, not insertion. Assume insertion order and we manufacture a posting sequence that is pure invention **and looks entirely plausible on screen.** The ordering must be VERIFIED before anything depends on it — the `verified_facets` instinct (§5.4), one level up.
+
+**Still open when this was parked:** what `run.ts` does for a source with no resume marker; whether the operator gets a row LIMIT alongside the time budget ("just grab me 1,000 records"); and what triggers IDOA's document pass.
+
 ### 🗄️ Matt's original call, 2026-09-01
 **To discuss first — not designed, not started.** `Indiana IDOA solicitations` reads health `ok`, which makes it look like a switch. **It is not:** `scrape/adapters/registry.ts` imports exactly three adapters — `fake`, `sam`, `usaspending` — so **there is no IDOA adapter at all** (re-verified 2026-09-02). This is an adapter build, not a toggle. It does not improve the gate's measurement; it changes **what the gate is a gate ON**, which is bigger than a slice.
 
