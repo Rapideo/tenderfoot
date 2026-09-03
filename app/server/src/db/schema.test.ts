@@ -497,6 +497,24 @@ test("HigherGov's verified_facets record the silently-ignored state parameters",
 /* The metered allowance is the only budget in this project, and an ingest
  * cannot ask the API how much is left. The constraint has to travel with the
  * row that spends it. */
+/* Migration 020. 003's row drew a consequence from a true finding and the
+ * consequence turned out false. The finding must survive the correction --
+ * IDOA really does publish no archive -- so this asserts BOTH halves: the
+ * original fact is still stated, and the superseded claim is gone. */
+test("020 corrects Indiana's archive claim without erasing the finding", async () => {
+  const row = await one<{ archive_depth: string | null; source_note: string | null }>(
+    `SELECT archive_depth, source_note FROM source WHERE name = 'Indiana IDOA solicitations'`,
+  );
+  const depth = row?.archive_depth ?? "";
+  /* Still true, still said: IDOA itself retains nothing. */
+  expect(depth).toMatch(/NONE AT IDOA/);
+  /* The superseded consequence must not be readable as current. */
+  expect(depth).toMatch(/CORRECTED 2026-09-03/);
+  expect(depth).toMatch(/9,286/);
+  /* The red flag and its cost belong on the row, not only in a document. */
+  expect(row?.source_note ?? "").toMatch(/idoa-adapter/);
+});
+
 test("HigherGov's note carries the quota constraint, not just the capability", async () => {
   const row = await one<{ source_note: string | null }>(
     `SELECT source_note FROM source WHERE name = 'HigherGov'`,

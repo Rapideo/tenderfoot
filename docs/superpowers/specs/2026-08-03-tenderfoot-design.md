@@ -293,7 +293,7 @@ States do not build procurement portals; most license one of roughly five. Verif
 | Ohio OhioBuys | Ivalua | **Blocked to automation** — CAPTCHA browser check (2026-08-12) | Unknown |
 | Michigan SIGMA VSS | CGI Advantage VSS | ✅ **Cleared 2026-08-12** — posture **in**; authorisation read as deriving from a held vendor account | ❌ **NO — settled 2026-08-12.** Only open solicitations are listed, and the filter that would change that is silently ignored |
 | Kentucky eMARS VSS | CGI Advantage VSS — *same as Michigan* | ✅ **In**, same reading, same platform | ❌ Assume none — same platform, same behaviour |
-| Indiana IDOA | PeopleSoft supplier portal + static HTML public list | Verified public | **No.** Closed solicitations are not published (§5.8) |
+| Indiana IDOA | PeopleSoft supplier portal + static HTML public list | Verified public | **No — at IDOA.** Closed solicitations are not published (§5.8). ⚠️ **AMENDED 2026-09-03: Indiana IS backtestable, via an aggregator** — HigherGov holds 9,286 Indiana state+local records back to 2013-06-19 |
 
 The same platforms recur nationally: Periscope also runs Arkansas and Montana, Ivalua runs North Dakota, CGI Advantage runs Colorado and Maine.
 
@@ -312,7 +312,7 @@ Established 2026-08-04. Recorded because they constrain the build.
 | Indiana IDOA | Emails solicitations to registered bidders, matched on **UNSPSC code** | Tier 2 viable, with the over-inclusive registration rule in §5.1 |
 | Indiana IDOA | Only solicitations expected to exceed **$75,000** are publicly posted | A documented coverage floor, not an unknown |
 | Indiana IDOA | Public listing is anonymous-readable — event name, agency, event ID, description, due date, contact. No RSS, API, or bulk download | Tier 3, plain table, low complexity |
-| Indiana IDOA | **No solicitation archive.** Closed solicitations are not published | Indiana cannot be backtested on the solicitation side (§8.2) |
+| Indiana IDOA | **No solicitation archive.** Closed solicitations are not published | ~~Indiana cannot be backtested on the solicitation side (§8.2)~~ **SUPERSEDED 2026-09-03 — see the amendment below.** The finding is still true of IDOA; the consequence drawn from it is not |
 | Indiana Transparency Portal / IDOA contract search | Contracts searchable by ID, vendor, agency, amount, type, and date range | Indiana's Phase 0 and expiration radar run here instead |
 | SAM.gov | API returns latest active version only; Data Services publishes archived CSVs going back decades, refreshed weekly | Clean split — API for live, bulk CSV for backfill. Validates the `since` design in §3.1 |
 | USASpending | FY2008 via Award Data Archive, FY2001 via custom download; period-of-performance dates present | Deep enough for the entity chain |
@@ -326,6 +326,18 @@ Established 2026-08-04. Recorded because they constrain the build.
 | **Ohio OhioBuys (Ivalua)** | **Gated behind a CAPTCHA browser check.** The public solicitation URL redirects to `/bas/browser_check` and fails automated navigation | **Not a tier-3 candidate as things stand.** Bot detection is a legal-posture and adapter-feasibility fact, not merely an inconvenience. A person can browse it; a scheduled adapter cannot |
 
 The Indiana archive gap resolves in a useful direction. The state's *contract* side is well published even though its *solicitation* side is not — and contract end dates were already the higher-value signal (§4.3). The gap pushes Phase 0 toward the better data rather than away from it.
+
+> ### ⚠️ AMENDED 2026-09-03 — the Indiana archive gap is a gap in IDOA, not in Indiana
+>
+> **Measured, not inferred:** a HigherGov saved search scoped to Indiana state and local returns **9,286 records reaching back to 2013-06-19**, continuous from 2017 — while IDOA itself publishes **71 open notices and no archive of any kind**.
+>
+> **Every sentence above stays true of IDOA.** What does not survive is the consequence: *"Indiana cannot be backtested on the solicitation side."* It can be, through an aggregator holding what the source discards.
+>
+> **This is the same shape of finding as Illinois/Periscope on 2026-08-12**, two rows down in this table — a working assumption overturned by going and looking. The difference is that Illinois retains its own history and Indiana does not; the archive exists only because a third party kept it.
+>
+> **What this does NOT change.** Indiana's Phase 0 may still run on contract data, and the contract side remains independently valuable — end dates are the expiration radar and the only route to real award values. The gap simply no longer *forces* that choice. And §8.2 stands unaltered: there is still no answer key, and validation is still human adjudication.
+>
+> Evidence, including the §5.4 result that three state parameters are silently ignored: [`docs/2026-09-03-platform-comparison.md`](../../2026-09-03-platform-comparison.md) §R1–R3. Registry row: migration `019_seed_highergov.sql`.
 
 
 ### 5.9 Platform properties
@@ -719,7 +731,7 @@ Still open:
 | `out` | not accessed at all | GovWin, BidNet, BidPrime — excluded by their own terms |
 
 **This rule is not a legal opinion and does not pretend to be one.** It is a workflow guaranteeing that a person made the call knowingly, and that the call is findable afterwards.
-2. ~~**Do any state portals archive closed solicitations?**~~ **Answered for Illinois, 2026-08-12: yes, and deeply.** Periscope's public advanced search returns **2,155 closed solicitations back to 2018-02-23**, with awarded vendor on the row. **This overturns the working assumption that solicitation-side backtesting is federal-only.** Michigan indicates the same capability without proving it. Indiana remains the exception — no solicitation archive, which is why its Phase 0 runs on contract data (§5.8).
+2. ~~**Do any state portals archive closed solicitations?**~~ **Answered for Illinois, 2026-08-12: yes, and deeply.** Periscope's public advanced search returns **2,155 closed solicitations back to 2018-02-23**, with awarded vendor on the row. **This overturns the working assumption that solicitation-side backtesting is federal-only.** Michigan indicates the same capability without proving it. ~~Indiana remains the exception — no solicitation archive, which is why its Phase 0 runs on contract data (§5.8).~~ **AMENDED 2026-09-03: Indiana is no longer the exception.** IDOA still publishes no archive, but HigherGov holds 9,286 Indiana state+local records back to 2013 — so Phase 0 *may* run on contract data rather than *must*. See the amendment block in §5.8.
 
    > **The consequence is larger than a source being added.** §8.2 says validation is human adjudication because there is no answer key; that stands. But a state with eight years of closed solicitations *and* awarded vendors is the first non-federal place where a backtest can run against outcomes rather than only against judgment — and Illinois is a neighbouring state inside the Firm Profile's secondary geography.
 3. ~~**Technology stack, hosting, and deployment**~~ **CLOSED 2026-08-12** — [`2026-08-12-tenderfoot-workflow.md`](2026-08-12-tenderfoot-workflow.md). Stack is the ideate/IDE8 stack (React 19, Vite, Zustand+Immer, Express, better-sqlite3 local-first), minus dnd-kit, plus a router. **Hosting: none in V1** — local-first, one user, batch ingestion — with a knowable expiry at SP7, when scheduled ingestion means a closed laptop stops scraping. Four decisions remain open *inside* the stack and are listed there; the significant one is the extraction runtime, which must land before SP4.
