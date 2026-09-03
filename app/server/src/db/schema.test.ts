@@ -501,6 +501,55 @@ test("HigherGov's verified_facets record the silently-ignored state parameters",
  * consequence turned out false. The finding must survive the correction --
  * IDOA really does publish no archive -- so this asserts BOTH halves: the
  * original fact is still stated, and the superseded claim is gone. */
+test("021 adds sole_source and source_key, and sole_source is three-valued", async () => {
+  const cols = (
+    await all<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'solicitation'
+          AND column_name IN ('sole_source', 'source_key') ORDER BY column_name`,
+      [SCHEMA],
+    )
+  ).map((c) => c.column_name);
+  expect(cols).toEqual(["sole_source", "source_key"]);
+
+  /* NULL means "the source did not say", which is a different fact from
+   * `false` -- the same three-state reasoning as document.extract_status. */
+  const id = await insert(
+    `INSERT INTO solicitation (title, source_id) VALUES ('021 fixture', 1) RETURNING id`,
+  );
+  const row = await one<{ sole_source: boolean | null; source_key: string | null }>(
+    `SELECT sole_source, source_key FROM solicitation WHERE id = $1`, [id],
+  );
+  expect(row?.sole_source).toBeNull();
+  expect(row?.source_key).toBeNull();
+  await dbRun(`DELETE FROM solicitation WHERE id = $1`, [id]);
+});
+
+/* The rubric graded SAM.gov R9 UNKNOWN on its first production run -- but that
+ * was a MEASURED fact nobody had recorded, not an unmeasured one. 003's own
+ * verified_facets already said sort=-modifiedDate works while
+ * sort=-publishDate is silently ignored. */
+test("021 records the watermarks the registry already knew", async () => {
+  const wm = async (name: string) =>
+    (
+      await one<{ watermark_field: string | null }>(
+        `SELECT watermark_field FROM source WHERE name = $1`, [name],
+      )
+    )?.watermark_field;
+
+  expect(await wm("SAM.gov")).toBe("modifiedDate");
+  /* NOT endDate: that is a filter parameter on the Indiana API. The row's own
+   * note says "Pagination sorted on publishDate silently dropped ~33% of a
+   * window. Stop on modifiedDate instead." */
+  expect(await wm("Indiana EDS contract register")).toBe("modifiedDate");
+  expect(await wm("HigherGov")).toBe("captured_date");
+
+  /* Sources whose watermark genuinely is unknown must stay NULL. Filling them
+   * in with a guess is the failure this column exists to prevent. */
+  expect(await wm("Illinois BidBuy")).toBeNull();
+  expect(await wm("Michigan SIGMA VSS")).toBeNull();
+});
+
 test("020 corrects Indiana's archive claim without erasing the finding", async () => {
   const row = await one<{ archive_depth: string | null; source_note: string | null }>(
     `SELECT archive_depth, source_note FROM source WHERE name = 'Indiana IDOA solicitations'`,
