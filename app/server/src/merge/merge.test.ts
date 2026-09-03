@@ -431,7 +431,18 @@ test("merge reads kind, codes and set-aside out of the payload, on insert and on
   /* ⚖️ SAM's own word, per Matt's ruling 2026-09-01 -- NOT mapped to RFP. */
   expect(row?.kind).toBe("Combined Synopsis/Solicitation");
   /* The null psc code is dropped rather than carried as an entry. */
-  expect(row?.codes).toEqual({ naics: ["541611"], psc: ["R410"] });
+  /* WIDENED 2026-09-02: `codes` now carries the human-readable labels
+   * alongside the codes, because the triage card showed nothing about what a
+   * notice IS and "541611" only helps a reader who knows it by heart. The
+   * fixture's naics entry has no `value`, so its label list is empty here --
+   * which is the point of keeping the two lists independent rather than
+   * zipping them into pairs. See listing-facts.ts. */
+  expect(row?.codes).toEqual({
+    naics: ["541611"],
+    psc: ["R410"],
+    naics_labels: [],
+    psc_labels: [],
+  });
   /* The current set-aside, not the superseded originalSetAside. */
   expect(row?.set_aside).toBe("SBA");
 
@@ -448,7 +459,14 @@ test("merge reads kind, codes and set-aside out of the payload, on insert and on
     `SELECT kind, codes, set_aside FROM solicitation WHERE external_id = 'FACTS-1'`,
   );
   expect(back?.kind).toBe("Combined Synopsis/Solicitation");
-  expect(back?.codes).toEqual({ naics: ["541611"], psc: ["R410"] });
+  /* Same widening as the insert assertion above -- this is the BACKFILL half
+   * of the same test, and it has to agree with it. */
+  expect(back?.codes).toEqual({
+    naics: ["541611"],
+    psc: ["R410"],
+    naics_labels: [],
+    psc_labels: [],
+  });
   expect(back?.set_aside).toBe("SBA");
 });
 

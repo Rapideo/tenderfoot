@@ -58,6 +58,18 @@ interface QueueItem {
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
+  /* Two-letter state, or null. ~36% coverage by nature of the source --
+   * rendered only when present, because a blank is the truth here. */
+  place_of_performance: string | null;
+  /* jsonb: { naics, psc, naics_labels, psc_labels }. The card shows the first
+   * LABEL, since "Dental Laboratories" is actionable where "339116" is a
+   * lookup the reader has to perform. */
+  codes: {
+    naics?: string[];
+    psc?: string[];
+    naics_labels?: string[];
+    psc_labels?: string[];
+  } | null;
   /* The posting's own words, truncated server-side (server queue.ts). Null
    * when the source published none -- a fact about the row, not a gap. */
   description: string | null;
@@ -410,6 +422,26 @@ export function Queue() {
             {item.source_name && <span className="queue__chip-source">{item.source_name}</span>}
             {item.kind && <span className="queue__chip">{item.kind}</span>}
             {item.set_aside && <span className="queue__chip">{item.set_aside}</span>}
+            {/* WHAT AND WHERE — added 2026-09-02 after Matt reported the card
+              * unworkable. Both facts were already in the payload; the codes
+              * were already in the DATABASE. The card carried neither.
+              *
+              * On "Dental prosthetics — Blanket purchase agreement", whose
+              * entire stored description is "…see SOW and additional items
+              * list", the place of performance is AZ. For an Indiana firm that
+              * is an instant pass decided in two letters, and it was invisible.
+              * That one card is why these are here.
+              *
+              * Rendered ONLY when present. ~36% of rows carry a place, so a
+              * placeholder would be on screen more often than the fact, and
+              * "unknown" where a location goes reads as data rather than as
+              * absence. */}
+            {item.place_of_performance && (
+              <span className="queue__chip-place">{item.place_of_performance}</span>
+            )}
+            {item.codes?.naics_labels?.[0] && (
+              <span className="queue__chip">{item.codes.naics_labels[0]}</span>
+            )}
           </div>
 
           <h2 className="queue__title">{item.title}</h2>

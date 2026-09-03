@@ -24,6 +24,14 @@ export interface QueueItem {
   kind: string | null;
   set_aside: string | null;
   source_name: string | null;
+  /* WHERE THE WORK IS — a two-letter state, or null. ~36% coverage by nature
+   * of the source. The first filter a geographically-bounded firm applies,
+   * and the card did not carry it until 2026-09-02. */
+  place_of_performance: string | null;
+  /* WHAT KIND OF WORK IT IS. `codes` is jsonb `{naics, psc, naics_labels,
+   * psc_labels}`; the card shows the first LABEL because "Dental
+   * Laboratories" is actionable where "339116" is a lookup. */
+  codes: { naics?: string[]; psc?: string[]; naics_labels?: string[]; psc_labels?: string[] } | null;
   /* THE POSTING'S OWN WORDS, truncated for the card.
    *
    * Added 2026-09-02, after Matt could not triage sample 1: a card carrying a
@@ -148,7 +156,7 @@ export async function queuePage(
   const items = await all<QueueItem>(
     `SELECT s.id, s.title, o.name AS org_name, o.jurisdiction,
             s.closes_at, s.posted_at, s.value_cents, s.kind, s.set_aside,
-            s.description,
+            s.description, s.place_of_performance, s.codes,
             src.name AS source_name,
             (SELECT count(*)::int FROM document d WHERE d.solicitation_id = s.id) AS documents,
             (SELECT count(*)::int FROM sighting g WHERE g.solicitation_id = s.id) AS sightings,

@@ -43,6 +43,7 @@ import { orgChain } from "./org-chain.js";
 import { closesAt } from "./closes-at.js";
 import { postedAt } from "./posted-at.js";
 import { description } from "./description.js";
+import { placeOfPerformance } from "./place.js";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
 
 export interface MergeResult {
@@ -67,6 +68,10 @@ export interface MergeResult {
    * this number is 0 on a run that created rows, the triage card is back to a
    * title and two dates and the gate cannot be run against it. */
   descriptionsSet: number;
+  /** Solicitations whose `place_of_performance` was written this run. Reported
+   * separately because coverage is only ~36% by nature of the source, so a low
+   * number here is expected rather than a symptom. */
+  placesSet: number;
   /* The three listing facts (listing-facts.ts). Reported separately rather
    * than folded into one number because they have different availability in
    * the payload -- kind 100%, codes ~98%, set_aside 56% of SAM rows -- so a
@@ -197,6 +202,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
   const deadlineUpdates = new Map<number, string>();
   const postedUpdates = new Map<number, string>();
   const descriptionUpdates = new Map<number, string>();
+  const placeUpdates = new Map<number, string>();
   /* The three listing facts (listing-facts.ts). Keyed and guarded exactly as
    * the two above: a null never enters the map, so a source that states none
    * of them can never clobber a populated column. */
@@ -271,6 +277,14 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     const desc = description(src?.name ?? "", raw);
     if (g.solicitation_id !== null && desc !== null) {
       descriptionUpdates.set(g.solicitation_id, desc);
+    }
+
+    /* WHERE THE WORK IS. Same null-skips-the-map shape as every sibling, so a
+     * source that publishes no location never overwrites a populated column
+     * with a blank. See place.ts for why only the state is stored. */
+    const place = placeOfPerformance(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && place !== null) {
+      placeUpdates.set(g.solicitation_id, place);
     }
 
     /* THE THIRD INSTANCE of the closes_at / posted_at defect, and the largest:
@@ -408,6 +422,15 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * against NULL yields NULL, which WHERE reads as false -- a `<>` guard
      * would update nothing and look like it worked. A steady-state re-run
      * writes nothing. */
+    const placesSet = placeUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET place_of_performance = u.place
+             FROM unnest($1::int[], $2::text[]) AS u(id, place)
+            WHERE s.id = u.id AND s.place_of_performance IS DISTINCT FROM u.place`,
+          [[...placeUpdates.keys()], [...placeUpdates.values()]],
+        )
+      : 0;
+
     const descriptionsSet = descriptionUpdates.size
       ? await q.run(
           `UPDATE solicitation s SET description = u.description
@@ -534,7 +557,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
     return {
       created: inserted.length, updated, linked, orgsAttached,
-      deadlinesSet, postedSet, descriptionsSet, kindsSet, codesSet, setAsidesSet,
+      deadlinesSet, postedSet, descriptionsSet, placesSet, kindsSet, codesSet, setAsidesSet,
     };
   });
 }
