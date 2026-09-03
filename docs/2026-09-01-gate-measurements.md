@@ -105,9 +105,37 @@ is not a reason to hide an opportunity"* — and then hides opportunities for a
 than its own posting date is not a deadline, and the queue is the one place that
 distinction is never drawn.
 
-**Not fixed here.** How an impossible date should be treated — surfaced as
-undated, flagged, or excluded loudly — is a design decision, and the queue's
-ordering rule (D16, `closes_at ASC NULLS LAST`) is downstream of it.
+~~**Not fixed here.**~~ **FIXED 2026-09-02 in `7964047`** — the sentence below was
+true when written and was stale within a day. *(Amended 2026-09-03. The stale line
+had by then been repeated into a decision document, which is the cost of leaving
+one in place.)*
+
+*Original text, kept because the question it poses is the one the fix answered:*
+How an impossible date should be treated — surfaced as undated, flagged, or
+excluded loudly — is a design decision, and the queue's ordering rule (D16,
+`closes_at ASC NULLS LAST`) is downstream of it.
+
+**What was built, in `app/server/src/triage/eligibility.ts`:**
+
+- **`EFFECTIVE_CLOSES_AT`** resolves an impossible deadline to `NULL` — *treating
+  impossible as unknown*, which reuses the considered answer this module already
+  had for a missing deadline rather than inventing a fourth state. `ELIGIBLE` is
+  built on it, so the 62 now reach the queue.
+- **The stored value is NOT rewritten.** `solicitation.closes_at` keeps exactly
+  what the source stated, in the same spirit as `precedence.ts` retaining rejected
+  values. The fix is a derived reading, not a correction of the record.
+- **`DEADLINE_UNRELIABLE`** travels to the client, and `Queue.tsx` renders an
+  em-dash with *"Source states 2006-09-24, before it was posted. Verify with the
+  buyer."* Its own comment carries the argument: rendering `2006-09-24` coloured
+  by urgency and captioned "closes today" **would be a worse lie than hiding it
+  was**.
+- Covered on both sides — `queue.test.ts:300`/`:309` and `Queue.test.tsx:458`.
+
+⚠️ **The check only works because `posted_at` exists.** It was null on 9,743 of
+9,883 rows until this file's own backfill, so written a day earlier the expression
+would have been a no-op that looked correct. **Anything that empties `posted_at`
+silently disables it** — which is why the tests assert the behaviour rather than
+the SQL.
 
 ### The notice mix — 26% of the queue cannot be bid on
 
