@@ -8,9 +8,13 @@ three candidates, which remain `out` by their own terms.
 
 > **▶ If you are here for the outcome, skip to `RESULTS`.**
 > Headline: **coverage recall 69/70 (99%), relevance recall 5/5**, Indiana archive
-> back to **2013** where IDOA publishes none at all, **≥32/100 sub-state buyers** —
-> and a **leaked API key** whose handling rules are in §R0 and bind any code we
-> write against this API.
+> back to **2013** where IDOA publishes none at all, **34/100 sub-state buyers**,
+> and the quota confirmed to count records *returned* — and a **leaked API key**
+> whose handling rules are in §R0 and bind any code we write against this API.
+>
+> **Read §R11 before quoting any fill rate.** The headline 69/69 figures describe
+> IDOA-matched state notices; feed-wide, only **66%** of rows carry a description
+> at all, and **42%** for the sub-state buyers this is being bought for.
 
 **Fill it in AS YOU GO.** A comparison reconstructed after the fact is an
 impression, and an impression is exactly what this exercise exists to replace.
@@ -195,10 +199,10 @@ Leave a cell blank rather than guessing. A blank is information; a guess is not.
 | Legal posture today | **`in`** — attorney sign-off | `out` | `out` | `out` |
 | **1. Coverage recall** /70 | **69 / 70 — 99%** | | | |
 | **2. Relevance recall** | **5 / 5** | | | |
-| 3. Value on open notices | **69/69 present, all > 0** — ⚠️ inferred bands, not published | | | |
+| 3. Value on open notices | **92/92 on real notices** (0/8 on forecasts) — ⚠️ inferred bands, not published | | | |
 | 4. Attachments present | **69/69** carry `document_path` | | | |
-| 5. Median description chars | **930** (p10 **436**, min 110) | | | |
-| 6. Sub-state coverage | **≥32/100**, 34 distinct agencies | | | |
+| 5. Median description chars | **930** on IDOA-matched rows; **feed-wide only 66% carry one at all** — 42% for sub-state buyers (see R11) | | | |
+| 6. Sub-state coverage | **34/100**, 33 distinct agencies | | | |
 | 7. Capture latency | posted 2026-09-03 seen same day | | | |
 | **§5.4 filters honoured?** | **MIXED — `source_type` yes, `pop_state`/`state`/`place_of_performance_state` SILENTLY IGNORED** | | | |
 | Verdict | **Buy** — see the results section below | | | |
@@ -500,19 +504,80 @@ with the §R6 caveat that what returns is an estimate, and must be marked as one
 
 ---
 
-## R9. ⚠️ Two numbers here are LOWER BOUNDS, not totals
+## R9. ✅ RESOLVED — the keyword filter changed nothing, and the quota is confirmed
 
-Matt's UI screenshot shows **Keywords ✓** as well as **State ✓** on the saved
-search, against the instruction to build it state-only.
+The saved search was rebuilt state-only on 2026-09-03 and **both numbers were
+re-taken against it.**
 
-- **R2's recall figures are unaffected** — that test used `source_id` lookups and
-  never touched `search_id`.
-- **R3's 9,286 and R4's 32/100 were measured THROUGH the saved search.** With a
-  keyword filter active they are floors: the real Indiana holdings are at least
-  9,286, and the buyer spread at least that diverse.
+| | before (keyword ✓) | after (state only) |
+|---|---|---|
+| Indiana archive total | 9,286 | **9,286 — identical** |
+| Oldest record | 2013-06-19 | **2013-06-19 — identical** |
+| Sub-state buyers per 100 | 32 | **34** |
+| `pop_state` of all 100 rows | IN | **IN — filter still holding** |
 
-**Re-take both once the keyword filter is cleared.** Neither finding changes
-direction; both may get stronger.
+So the keyword filter was inert with respect to the API result. **9,286 is the
+total, not a floor**, and R3 and R4 stand as measured.
+
+### ✅ And the quota question is CLOSED
+
+**The account dashboard read exactly 260** after a run this file independently
+tallied at ~260. **The allowance counts records RETURNED, not records MATCHED.**
+
+That was the last unverified assumption in the buy case, and it holds:
+
+- a full Indiana backfill costs **~9,286 — about 93% of one month, once**
+- steady state is **single digits per day** (5 Indiana records on 2026-09-02)
+- **filtering genuinely protects the allowance**
+
+---
+
+## R11. 🔴 CORRECTION — the fill rates in R2 do not describe the whole feed
+
+**R2's `69/69` figures are real but narrow.** They describe notices matched by
+`source_id` against the IDOA answer key — i.e. **state-agency notices that IDOA
+itself publishes.** Across the broader Indiana feed, including the sub-state
+buyers that are the whole reason to buy, **description coverage is much worse.**
+
+**100 most recent Indiana records, broken out:**
+
+| Segment | n | `description_text` | `val_est_low` | `document_path` | `due_date` | median desc |
+|---|---:|---:|---:|---:|---:|---:|
+| **ALL** | 100 | **66** | 92 | **100** | **100** | 815 |
+| `sled` (real notices) | 92 | 58 (63%) | 92 | 92 | 92 | 680 |
+| `sled_forecast` | 8 | 8 | **0** | 8 | 8 | 1,313 |
+| …state agency | 66 | 47 (**71%**) | 66 | 66 | 66 | 716 |
+| …**sub-state buyer** | 26 | 11 (**42%**) | 26 | 26 | 26 | 579 |
+
+### What this actually means, because it cuts both ways
+
+**It is a PRESENCE problem, not a LENGTH problem.** Where a description exists it
+is healthy — median 579–815 characters against our own sample-2 median of 515.
+Rows either have a real description or none at all.
+
+**Descriptions are thinnest exactly where the new coverage is.** Sub-state buyers
+— counties, cities, airport authorities — carry a description **42%** of the
+time. That is the segment HigherGov is being bought for.
+
+**But `document_path` is 100/100, and that is the redeeming fact.** It is present
+on every single row, including every row with no description at all. **That is the
+exact inverse of our SAM position**, where descriptions are 86% present and
+documents are **12 of 9,883**. With HigherGov the document is always reachable
+even when the listing text is empty.
+
+> ### The consequence for what gets built
+> **The document pass stops being optional.** `docs/Pinned-Scraping-Console.md`
+> and STATUS park it as "the next real slice for triage quality"; on this feed it
+> is a **precondition for triaging sub-state work at all**, because for 58% of
+> those rows the listing carries no text to read.
+>
+> The good news is that it becomes possible rather than merely desirable: a
+> reachable `document_path` on 100% of rows is a far better starting position than
+> SAM's 12 documents, where the pass had nothing to fetch.
+
+**Also note `val_est_low` is 0/8 on `sled_forecast`.** Forecasts carry no estimate,
+which is consistent — but it means the "92/92" value figure is over real notices
+only, and any ingest must not read a missing forecast estimate as a zero.
 
 ---
 
