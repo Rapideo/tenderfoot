@@ -5,7 +5,7 @@ useTestSchema("test_merge");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { all, one, run, close, pool } = await import("../db/index.js");
+const { all, one, run, insert, close, pool } = await import("../db/index.js");
 const { mergeSightings } = await import("./merge.js");
 
 /* Counts every statement that reaches Postgres, by wrapping each client the
@@ -33,7 +33,20 @@ let sourceSam: number;
 
 beforeAll(async () => {
   await migrate(false);
-  await run(`INSERT INTO source (name, enabled) VALUES ('src-a', true), ('src-b', true)`);
+  /* external_id_scope = 'global' is REQUIRED for these fixtures as of migration
+   * 022, and stating it is the point rather than a chore. This file's
+   * cross-source tests assert the demo criterion -- "same external_id => same
+   * opportunity" -- and that is only sound where a source's ids are unique
+   * across every source, which is now a declaration a row has to carry.
+   *
+   * The default is 'local' precisely so a source cannot participate in
+   * cross-source merge by accident. If these two rows dropped the declaration,
+   * the four tests below would fail -- which is the safety property working,
+   * not a regression. */
+  await run(
+    `INSERT INTO source (name, enabled, external_id_scope)
+     VALUES ('src-a', true, 'global'), ('src-b', true, 'global')`,
+  );
   sourceA = (await one(`SELECT id FROM source WHERE name = 'src-a'`)).id;
   sourceB = (await one(`SELECT id FROM source WHERE name = 'src-b'`)).id;
   sourceSam = (await one(`SELECT id FROM source WHERE name = 'SAM.gov'`)).id;
@@ -554,4 +567,166 @@ test("status and value_cents are left null, even when the payload could tempt yo
    * identifiable in the queue at all. Ruled 2026-09-01: they are NOT
    * filtered out (spec §1.1), so being able to see them is the whole point. */
   expect(row?.kind).toBe("Award Notice");
+});
+
+/* ===========================================================================
+ * IDENTITY — migration 022. The defect merge.ts's own header warned about
+ * since SP3.5, made live by measurement on 2026-09-03: Allen County publishes
+ * external ids `132`, `134`, `135`, where IDOA publishes fifteen digits.
+ * ========================================================================= */
+
+test("two LOCAL sources sharing an external_id are NOT fused into one record", async () => {
+  const a = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('fuse local A', 'local') RETURNING id`,
+  );
+  const b = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('fuse local B', 'local') RETURNING id`,
+  );
+  /* The exact shape that would have fused: the same human-assigned string from
+   * two unrelated buyers. */
+  await run(
+    `INSERT INTO sighting (source_id, external_id, identity_key, raw)
+     VALUES ($1::int, '134', $1::int || ':134', '{"title":"County A bridge repair"}'),
+            ($2::int, '134', $2::int || ':134', '{"title":"County B snow removal"}')`,
+    [a, b],
+  );
+
+  await mergeSightings();
+
+  const rows = await all<{ id: number; title: string; identity_key: string }>(
+    `SELECT id, title, identity_key FROM solicitation WHERE external_id = '134' ORDER BY title`,
+  );
+  /* TWO records, not one. Before 022 this produced a single solicitation with
+   * two sightings, which READS AS CORROBORATION rather than as corruption --
+   * the header's own words, and the reason it is dangerous. */
+  expect(rows).toHaveLength(2);
+  expect(rows.map((r) => r.title)).toEqual([
+    "County A bridge repair",
+    "County B snow removal",
+  ]);
+  expect(new Set(rows.map((r) => r.identity_key)).size).toBe(2);
+
+  /* And each sighting is linked to ITS OWN record, not whichever the planner
+   * reached first. */
+  const links = await all<{ source_id: number; solicitation_id: number }>(
+    `SELECT source_id, solicitation_id FROM sighting WHERE external_id = '134' ORDER BY source_id`,
+  );
+  expect(links).toHaveLength(2);
+  expect(links[0]!.solicitation_id).not.toBe(links[1]!.solicitation_id);
+});
+
+/* The demo criterion, unchanged: "same external_id => same opportunity" across
+ * sources. Breaking this to fix the fusion is exactly what merge.ts's header
+ * forbids -- "that would break the demo criterion, not protect it". */
+test("two GLOBAL sources sharing an external_id STILL merge, as the demo criterion requires", async () => {
+  const a = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('fuse global A', 'global') RETURNING id`,
+  );
+  const b = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('fuse global B', 'global') RETURNING id`,
+  );
+  await run(
+    `INSERT INTO sighting (source_id, external_id, identity_key, raw, seen_at)
+     VALUES ($1, 'GLOBAL-XYZ', 'GLOBAL-XYZ', '{"title":"Seen by A"}', '2026-08-01T00:00:00Z'),
+            ($2, 'GLOBAL-XYZ', 'GLOBAL-XYZ', '{"title":"Seen by B, later"}', '2026-08-02T00:00:00Z')`,
+    [a, b],
+  );
+
+  await mergeSightings();
+
+  const rows = await all<{ id: number; title: string }>(
+    `SELECT id, title FROM solicitation WHERE external_id = 'GLOBAL-XYZ'`,
+  );
+  expect(rows).toHaveLength(1);
+  /* Latest sighting wins, across sources. */
+  expect(rows[0]!.title).toBe("Seen by B, later");
+
+  const links = await all<{ solicitation_id: number | null }>(
+    `SELECT solicitation_id FROM sighting WHERE external_id = 'GLOBAL-XYZ'`,
+  );
+  expect(links).toHaveLength(2);
+  expect(new Set(links.map((l) => l.solicitation_id)).size).toBe(1);
+});
+
+/* identity_key is a CACHE of the source's declaration, not a second rule. A
+ * sighting written without it must behave exactly as one written with it --
+ * otherwise a directly-inserted row and an imported row diverge silently for
+ * the same source, which is worse than either rule alone. */
+test("a NULL identity_key recomputes the SAME rule from the source's declaration", async () => {
+  const a = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('null ident A', 'global') RETURNING id`,
+  );
+  const b = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('null ident B', 'global') RETURNING id`,
+  );
+  /* Both declared GLOBAL and identity_key deliberately absent: the fallback
+   * must honour the declaration and merge them, exactly as if the column had
+   * been written. */
+  await run(
+    `INSERT INTO sighting (source_id, external_id, raw)
+     VALUES ($1, 'NOIDENT-1', '{"title":"No ident A"}'),
+            ($2, 'NOIDENT-1', '{"title":"No ident B"}')`,
+    [a, b],
+  );
+
+  await mergeSightings();
+
+  const rows = await all<{ id: number }>(
+    `SELECT id FROM solicitation WHERE external_id = 'NOIDENT-1'`,
+  );
+  expect(rows).toHaveLength(1);
+});
+
+/* And the same absence under a LOCAL declaration must NOT merge them. */
+test("a NULL identity_key under LOCAL scope still keeps two sources apart", async () => {
+  const a = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('null local A', 'local') RETURNING id`,
+  );
+  const b = await insert(
+    `INSERT INTO source (name, external_id_scope) VALUES ('null local B', 'local') RETURNING id`,
+  );
+  await run(
+    `INSERT INTO sighting (source_id, external_id, raw)
+     VALUES ($1, 'NOIDENT-2', '{"title":"Local A"}'),
+            ($2, 'NOIDENT-2', '{"title":"Local B"}')`,
+    [a, b],
+  );
+
+  await mergeSightings();
+
+  const rows = await all<{ id: number }>(
+    `SELECT id FROM solicitation WHERE external_id = 'NOIDENT-2'`,
+  );
+  expect(rows).toHaveLength(2);
+});
+
+/* 🔴 THE SAFETY PROPERTY ITSELF. Every other test in this block DECLARES its
+ * scope, so none of them exercises the DEFAULT -- and a mutation proved it:
+ * flipping migration 022's default from 'local' to 'global' left all 23 tests
+ * passing. The default is the whole protection for a source nobody has thought
+ * about yet, which is precisely the source that will fuse something. */
+test("a source added WITHOUT declaring a scope defaults to local and cannot fuse", async () => {
+  const a = await insert(`INSERT INTO source (name) VALUES ('undeclared A') RETURNING id`);
+  const b = await insert(`INSERT INTO source (name) VALUES ('undeclared B') RETURNING id`);
+
+  const scopes = await all<{ external_id_scope: string }>(
+    `SELECT external_id_scope FROM source WHERE id IN ($1, $2)`, [a, b],
+  );
+  expect(scopes.map((s2) => s2.external_id_scope)).toEqual(["local", "local"]);
+
+  await run(
+    `INSERT INTO sighting (source_id, external_id, raw)
+     VALUES ($1, 'RFP-2024-001', '{"title":"Undeclared A"}'),
+            ($2, 'RFP-2024-001', '{"title":"Undeclared B"}')`,
+    [a, b],
+  );
+
+  await mergeSightings();
+
+  /* "RFP-2024-001" is merge.ts's own example of the human-assigned identifier
+   * two different states plausibly reuse. */
+  const rows = await all<{ id: number }>(
+    `SELECT id FROM solicitation WHERE external_id = 'RFP-2024-001'`,
+  );
+  expect(rows).toHaveLength(2);
 });

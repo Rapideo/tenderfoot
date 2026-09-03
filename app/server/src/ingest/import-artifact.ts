@@ -47,9 +47,13 @@ export async function importArtifact(path: string): Promise<ImportResult> {
   const sha = createHash("sha256").update(readFileSync(path)).digest("hex");
   const art = readArtifact(path);
 
-  const src = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [
-    art.run.source_name,
-  ]);
+  /* external_id_scope comes along because the sighting insert below computes
+   * identity_key from it (migration 022). Reading it here rather than in the
+   * INSERT keeps the rule visible at the point a person reads the importer. */
+  const src = await one<{ id: number; external_id_scope: string }>(
+    `SELECT id, external_id_scope FROM source WHERE name = $1`,
+    [art.run.source_name],
+  );
   if (!src) throw new Error(`No source row named ${art.run.source_name}`);
 
   /* No `force` option, on purpose. A forced re-import would have to decide
@@ -129,8 +133,19 @@ export async function importArtifact(path: string): Promise<ImportResult> {
      * external_id instead of failing. */
     if (art.sightings.length) {
       await q.run(
-        `INSERT INTO sighting (source_id, external_id, seen_at, raw, extractor_ver, mode, ingest_run_id)
-         SELECT $1::int, s.external_id, s.seen_at::timestamptz, s.raw::jsonb,
+        /* identity_key is computed HERE, at write time, because merge.ts groups
+         * by it and must not recompute it inside the correlated subqueries its
+         * own "CRITICAL, hard-won" invariant protects (migration 022).
+         *
+         * `global` means the source's ids are unique across every source, so
+         * two sources seeing one notice merge -- the demo criterion. Anything
+         * else is namespaced by source id, which can only ever under-merge. */
+        `INSERT INTO sighting
+           (source_id, external_id, identity_key, seen_at, raw, extractor_ver, mode, ingest_run_id)
+         SELECT $1::int, s.external_id,
+                CASE WHEN $8::text = 'global' THEN s.external_id
+                     ELSE $1::int || ':' || s.external_id END,
+                s.seen_at::timestamptz, s.raw::jsonb,
                 s.extractor_ver, s.mode, $2::int
            FROM unnest($3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
              AS s(external_id, seen_at, raw, extractor_ver, mode)`,
@@ -142,6 +157,7 @@ export async function importArtifact(path: string): Promise<ImportResult> {
           art.sightings.map((s) => s.raw),
           art.sightings.map((s) => s.extractor_ver),
           art.sightings.map((s) => s.mode),
+          src.external_id_scope,
         ],
       );
     }

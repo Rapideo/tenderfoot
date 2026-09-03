@@ -39,6 +39,25 @@
  * up a state portal against this grouping key unchanged.
  */
 import { all, tx } from "../db/index.js";
+
+/* THE IDENTITY A MERGE GROUPS BY — one expression, used in both places that
+ * need it, so the two can never drift apart.
+ *
+ * `source.external_id_scope` is the SINGLE SOURCE OF TRUTH (migration 022) and
+ * `sighting.identity_key` is its cached form, written at import time. The
+ * coalesce falls back to recomputing the SAME rule rather than to a different
+ * one -- an earlier draft fell back to the scoped form unconditionally, which
+ * meant a directly-inserted sighting behaved differently from an imported one
+ * even for the same source. Two rules for one fact is worse than either rule.
+ *
+ * The join to `source` is safe here in a way it would NOT be inside merge's
+ * correlated subqueries: it resolves each sighting's OWN declaration, and never
+ * scopes a subquery by the source that triggered the call -- which is the
+ * "CRITICAL, hard-won" invariant documented below. */
+export const IDENTITY_SQL = (sg: string, src: string): string =>
+  `coalesce(${sg}.identity_key,
+     CASE WHEN ${src}.external_id_scope = 'global' THEN ${sg}.external_id
+          ELSE ${sg}.source_id::text || ':' || ${sg}.external_id END)`;
 import { orgChain } from "./org-chain.js";
 import { closesAt } from "./closes-at.js";
 import { postedAt, type PostedAt } from "./posted-at.js";
@@ -83,6 +102,9 @@ export interface MergeResult {
 }
 
 interface Group {
+  /** The grouping key: a globally-unique id where the source has one, else
+   *  `source_id:external_id`. See migration 022. */
+  ident: string;
   external_id: string;
   latest_raw: any;
   latest_source_id: number;
@@ -128,29 +150,48 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * external_id, from any source, not just the ones that passed g's WHERE
    * clause. */
   const groups = await all<Group>(
-    `SELECT t.*, (SELECT sol.org_id FROM solicitation sol WHERE sol.id = t.solicitation_id) AS org_id
+    /* `ident` is computed ONCE in the CTE and every correlation below is a
+     * column rename away from what it was -- s2.external_id becomes s2.ident.
+     * The subqueries keep their exact shape, which is the point: the invariant
+     * above was broken once by a change that altered them, and this edit is
+     * deliberately the smallest one that fixes the identity.
+     *
+     * The safety property is the DEFAULT, not the coalesce: external_id_scope
+     * defaults to 'local', so a source cannot participate in cross-source merge
+     * until somebody declares its ids globally unique and records why. See
+     * IDENTITY_SQL above. */
+    `WITH s AS (
+       SELECT sg.*, ${IDENTITY_SQL("sg", "src")} AS ident
+         FROM sighting sg
+         JOIN source src ON src.id = sg.source_id
+        WHERE sg.external_id IS NOT NULL
+     )
+     SELECT t.*, (SELECT sol.org_id FROM solicitation sol WHERE sol.id = t.solicitation_id) AS org_id
        FROM (
-        SELECT g.external_id,
-               (SELECT raw FROM sighting s2
-                 WHERE s2.external_id = g.external_id
+        SELECT g.ident,
+               /* external_id is functionally determined by ident -- global
+                * scope makes them equal, local scope prefixes the source id --
+                * so min() picks the only value there is. */
+               min(g.external_id) AS external_id,
+               (SELECT raw FROM s s2
+                 WHERE s2.ident = g.ident
                  ORDER BY s2.seen_at DESC, s2.id DESC LIMIT 1) AS latest_raw,
                /* The source of that same latest sighting, so the org chain is
                 * read with the reader that matches the payload in hand. Same
                 * ORDER BY as latest_raw, deliberately -- reading level names
                 * out of one source's payload with another's paths yields
                 * nothing, silently. */
-               (SELECT s5.source_id FROM sighting s5
-                 WHERE s5.external_id = g.external_id
+               (SELECT s5.source_id FROM s s5
+                 WHERE s5.ident = g.ident
                  ORDER BY s5.seen_at DESC, s5.id DESC LIMIT 1) AS latest_source_id,
-               (SELECT s3.solicitation_id FROM sighting s3
-                 WHERE s3.external_id = g.external_id AND s3.solicitation_id IS NOT NULL
+               (SELECT s3.solicitation_id FROM s s3
+                 WHERE s3.ident = g.ident AND s3.solicitation_id IS NOT NULL
                  LIMIT 1) AS solicitation_id,
-               (SELECT count(*) FROM sighting s4
-                 WHERE s4.external_id = g.external_id AND s4.solicitation_id IS NULL) AS unlinked
-          FROM sighting g
-         WHERE g.external_id IS NOT NULL
-           AND ($1::int IS NULL OR g.source_id = $1)
-         GROUP BY g.external_id
+               (SELECT count(*) FROM s s4
+                 WHERE s4.ident = g.ident AND s4.solicitation_id IS NULL) AS unlinked
+          FROM s g
+         WHERE ($1::int IS NULL OR g.source_id = $1)
+         GROUP BY g.ident
        ) t`,
     [sourceId ?? null],
   );
@@ -185,6 +226,8 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * `title` at top level is not IDOA's `eventName`) -- but it is still
    * called from JS below, not inlined as a JSON path here. */
   const inserts: {
+    /** The grouping key, so RETURNING can map results back unambiguously. */
+    ident: string;
     external_id: string;
     title: string;
     source_id: number;
@@ -218,7 +261,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
   const kindUpdates = new Map<number, string>();
   const codesUpdates = new Map<number, string>();
   const setAsideUpdates = new Map<number, string>();
-  const links: { external_id: string; solId: number }[] = [];
+  const links: { ident: string; solId: number }[] = [];
   /* external_id -> the chain for it. Collected for new groups and for any
    * existing solicitation still missing an organisation, so a re-run repairs
    * rows merged before anything read the agency out of the payload. */
@@ -231,7 +274,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
    * carrying a jurisdiction is not reassigned by a later source. */
   const jurisdictionByName = new Map<string, string | null>();
   /* Existing solicitations needing only an organisation, by id. */
-  const orgOnly: { solId: number; external_id: string }[] = [];
+  const orgOnly: { solId: number; ident: string }[] = [];
 
   for (const g of groups) {
     const raw = typeof g.latest_raw === "string" ? JSON.parse(g.latest_raw) : g.latest_raw;
@@ -323,6 +366,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
        * and therefore `title` above were read from. Passing anything else
        * here would make the column disagree with the row it describes. */
       inserts.push({
+        ident: g.ident,
         external_id: g.external_id,
         title,
         source_id: g.latest_source_id,
@@ -333,18 +377,18 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
         posted_at: posted?.date ?? null,
         posted_at_origin: posted?.origin ?? null,
       });
-      if (chain.length) chains.set(g.external_id, chain);
+      if (chain.length) chains.set(g.ident, chain);
     } else if (Number(g.unlinked) > 0) {
       titleUpdates.set(g.solicitation_id, title);
-      links.push({ external_id: g.external_id, solId: g.solicitation_id });
-      if (chain.length && g.org_id === null) chains.set(g.external_id, chain);
+      links.push({ ident: g.ident, solId: g.solicitation_id });
+      if (chain.length && g.org_id === null) chains.set(g.ident, chain);
     } else if (g.org_id === null && chain.length) {
       /* MISSING AN ORGANISATION IS ITS OWN REASON TO DO WORK. Every other
        * branch keys off unlinked sightings, and these rows have none -- they
        * were merged before this code existed and would otherwise stay
        * orphaned forever, because nothing would ever look at them again. */
-      chains.set(g.external_id, chain);
-      orgOnly.push({ solId: g.solicitation_id, external_id: g.external_id });
+      chains.set(g.ident, chain);
+      orgOnly.push({ solId: g.solicitation_id, ident: g.ident });
     }
     /* An existing group with nothing unlinked AND an organisation already
      * attached is skipped entirely. The old loop still opened a transaction
@@ -362,24 +406,34 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     let linked = 0;
 
     /* Insert first: linking the new groups needs the ids this produces, and
-     * `external_id` comes back with them so the mapping does not depend on
-     * unnest preserving row order. */
+     * the IDENTITY comes back with them so the mapping does not depend on
+     * unnest preserving row order.
+     *
+     * ⚠️ IT RETURNS identity_key, NOT external_id, and that is the fix rather
+     * than a refactor. Two sources may legitimately share an external_id --
+     * Allen County publishes "134" where IDOA publishes 15 digits -- so two
+     * inserted rows could both come back as "134" and be indistinguishable.
+     * The sightings would then be linked to whichever row the planner paired
+     * them with. Identity is unique by construction; external_id is not. */
     const inserted = inserts.length
-      ? await q.all<{ id: number; external_id: string }>(
+      ? await q.all<{ id: number; identity_key: string }>(
           /* `codes` is jsonb, so its unnest column is text[] and cast per
            * row -- a text[] of JSON strings is the only shape unnest can
            * carry, and ::jsonb on the SELECT side is where it becomes the
            * column's real type. */
           `INSERT INTO solicitation
-             (external_id, title, source_id, closes_at, posted_at, posted_at_origin, kind, codes, set_aside)
-           SELECT u.external_id, u.title, u.source_id, u.closes_at, u.posted_at, u.posted_at_origin,
-                  u.kind, u.codes::jsonb, u.set_aside
-             FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[],
-                         $6::text[], $7::text[], $8::text[], $9::text[])
-               AS u(external_id, title, source_id, closes_at, posted_at, posted_at_origin, kind, codes, set_aside)
-           RETURNING id, external_id`,
+             (external_id, identity_key, title, source_id, closes_at, posted_at,
+              posted_at_origin, kind, codes, set_aside)
+           SELECT u.external_id, u.ident, u.title, u.source_id, u.closes_at, u.posted_at,
+                  u.posted_at_origin, u.kind, u.codes::jsonb, u.set_aside
+             FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[],
+                         $7::text[], $8::text[], $9::text[], $10::text[])
+               AS u(external_id, ident, title, source_id, closes_at, posted_at,
+                    posted_at_origin, kind, codes, set_aside)
+           RETURNING id, identity_key`,
           [
             inserts.map((i) => i.external_id),
+            inserts.map((i) => i.ident),
             inserts.map((i) => i.title),
             inserts.map((i) => i.source_id),
             inserts.map((i) => i.closes_at),
@@ -391,7 +445,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
           ],
         )
       : [];
-    for (const row of inserted) links.push({ external_id: row.external_id, solId: row.id });
+    for (const row of inserted) links.push({ ident: row.identity_key, solId: row.id });
 
     const updated = titleUpdates.size
       ? await q.run(
@@ -497,10 +551,18 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
     if (links.length) {
       linked = await q.run(
+        /* ⚠️ THIS IS WHERE THE FUSION ACTUALLY HAPPENED, and fixing only the
+         * grouping above would have moved the defect rather than removed it.
+         * Matching on external_id alone links a sighting from ANY source that
+         * happens to share the string. The same fail-safe coalesce as the
+         * grouping CTE: a missing identity_key narrows the match, never widens
+         * it. */
         `UPDATE sighting s SET solicitation_id = u.sol_id
-           FROM unnest($1::text[], $2::int[]) AS u(external_id, sol_id)
-          WHERE s.external_id = u.external_id AND s.solicitation_id IS NULL`,
-        [links.map((l) => l.external_id), links.map((l) => l.solId)],
+           FROM unnest($1::text[], $2::int[]) AS u(ident, sol_id), source src
+          WHERE src.id = s.source_id
+            AND ${IDENTITY_SQL("s", "src")} = u.ident
+            AND s.solicitation_id IS NULL`,
+        [links.map((l) => l.ident), links.map((l) => l.solId)],
       );
     }
 
@@ -556,14 +618,18 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
       /* Deepest node wins: the buying office, not the department. */
       const targets: { solId: number; orgId: number }[] = [];
-      for (const row of [...inserted, ...orgOnly.map((o) => ({ id: o.solId, external_id: o.external_id }))]) {
-        const chain = chains.get(row.external_id);
+      /* Keyed by IDENTITY throughout, for the same reason the link UPDATE is:
+       * a Map keyed by external_id silently collapses two sources that share
+       * one, and the second chain would overwrite the first. */
+      for (const row of [...inserted.map((i) => ({ id: i.id, ident: i.identity_key })),
+                         ...orgOnly.map((o) => ({ id: o.solId, ident: o.ident }))]) {
+        const chain = chains.get(row.ident);
         if (!chain?.length) continue;
         const orgId = byName.get(chain[chain.length - 1]!);
         if (orgId !== undefined) targets.push({ solId: row.id, orgId });
       }
       for (const l of links) {
-        const chain = chains.get(l.external_id);
+        const chain = chains.get(l.ident);
         if (!chain?.length) continue;
         const orgId = byName.get(chain[chain.length - 1]!);
         if (orgId !== undefined) targets.push({ solId: l.solId, orgId });

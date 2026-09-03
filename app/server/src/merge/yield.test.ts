@@ -11,7 +11,13 @@ const { perSourceYield } = await import("./yield.js");
 
 beforeAll(async () => {
   await migrate(false);
-  await run(`INSERT INTO source (name, enabled) VALUES ('src-a', true), ('src-b', true)`);
+  /* Migration 022: cross-source identity now requires the sources to declare
+   * their external ids globally unique. This test asserts exactly that sharing,
+   * so the declaration belongs in its fixture. */
+  await run(
+    `INSERT INTO source (name, enabled, external_id_scope)
+     VALUES ('src-a', true, 'global'), ('src-b', true, 'global')`,
+  );
   const a = (await one(`SELECT id FROM source WHERE name = 'src-a'`)).id;
   const b = (await one(`SELECT id FROM source WHERE name = 'src-b'`)).id;
   const ins = `INSERT INTO sighting (source_id, external_id, seen_at, raw, mode)
@@ -138,7 +144,12 @@ test("an unmerged sighting (external_id NULL) raises sightings but not canonical
  * solicitation, so all three sources read unique_to_source: 0 -- not one of
  * three credited, not "n-1" credited, nobody credited. */
 test("three sources sharing one solicitation all read unique_to_source: 0", async () => {
-  await run(`INSERT INTO source (name, enabled) VALUES ('src-x', true), ('src-y', true), ('src-z', true)`);
+  /* Same as above: three sources sharing ONE solicitation is the assertion, and
+   * sharing requires the declaration as of migration 022. */
+  await run(
+    `INSERT INTO source (name, enabled, external_id_scope)
+     VALUES ('src-x', true, 'global'), ('src-y', true, 'global'), ('src-z', true, 'global')`,
+  );
   const x = (await one(`SELECT id FROM source WHERE name = 'src-x'`)).id;
   const y = (await one(`SELECT id FROM source WHERE name = 'src-y'`)).id;
   const z = (await one(`SELECT id FROM source WHERE name = 'src-z'`)).id;
