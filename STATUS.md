@@ -215,7 +215,128 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-02
+## 🔖 RESUME HERE — updated 2026-09-02 (end of day)
+
+## ▶️ NEXT SESSION — ONE DECISION BLOCKS THE NEXT SLICE. Everything else is shipped, parked, or written down.
+
+### 🔴 THE DECISION, and it is a ratification not a technical call
+Asked what the Indiana contract corpus is FOR, Matt answered **"somewhere between"**:
+**(2)** a live product surface — expiration radar, vendor records, incumbency — and
+**(3)** calibration for qualification.
+
+**(3) trips a guard this project built deliberately.** §1.1 parks matching as *undesigned*, not
+pending; §7.10 clause 2: *"A rendered control may never become an active filter, ranking, or score
+without qualification being designed first."* Its own note: inert filter chrome puts a wired-up
+switch *"one small commit away from existing"*, and that commit is *"not the wrong answer, but the
+unratified one."* **Calibration data is exactly what makes it tempting.**
+
+> **ANSWER FIRST: is this the moment qualification gets DESIGNED, or is the corpus evidence
+> gathered TOWARD that design, with nothing scoring yet?** Matt paused rather than answer quickly.
+> **Do not start building until it is answered**, and do not let an ingest slice quietly answer it
+> by arriving with a score attached.
+
+**Full findings, API contract and open design questions: [`docs/Pinned-Indiana-Contract-Register.md`](docs/Pinned-Indiana-Contract-Register.md).**
+It records the whole probe so nothing has to be rediscovered: `POST …/api/contracts/search` with
+`{page, pageSize}`, **204,991 records back to 2006**, a **PDF per row**, and a `contract` table
+already in the schema whose columns map almost one-to-one and which has never held a row.
+
+---
+
+### ✅ SHIPPED TO PRODUCTION TODAY — four things, all verified live
+| | |
+|---|---|
+| **Discovery channel** | migration 013, seven required channels; §8.5's measure is recordable for the first time |
+| **Undo toast** | D23 — the old control was a `<span>` that looked like a button. Found by Matt clicking it |
+| **Description panel** | migration 015, D24 — backfilled **0 → 8,484 of 9,883** |
+| **Eligibility + card signal** | migration 017 — the queue stopped showing awarded work, and the card gained place-of-performance and NAICS labels |
+
+**Gate: 625 tests / 75 files, exit 0.** `main` == `origin/main`.
+
+### 🎯 SAMPLES — sample 2 is the live one
+| | sample 1 | **sample 2** |
+|---|---|---|
+| Seed | `gate-2026-09-02` | **`gate-2026-09-02b`** |
+| Population | 6,893 | **4,192** (post-filter) |
+| Unbiddable items | **38** | **0** |
+| Description present | 77/100 | **100/100** |
+| NAICS label | — | **97/100** |
+| Decisions | **3, real, keep them** | 0 |
+
+⚠️ **Sample 1 keeps its 38 unbiddable items permanently** — they were drawn and stored before the
+filter existed, and an eligibility change cannot retroactively remove rows from a drawn sample.
+**Triage sample 2:** `https://tenderfoot-tau.vercel.app/?sample=2`
+
+---
+
+### 🔴 THE FINDING THAT OUTRANKS EVERYTHING SHIPPED — D27
+**Tenderfoot ingested exactly ONE real source for its entire life**, so every payload-reading layer
+looks source-agnostic and is actually SAM-shaped. **Nothing could reveal that until a second source
+existed.** Four instances, one root cause, **none caught by 653 passing tests** — because every
+fixture was SAM-shaped too. One of the modules, `org-chain.ts`, had no test file at all.
+
+Generalised as **Proto2PRD lesson 2.26**: *a layer is only proven source-agnostic by a second
+source.* An elegant abstraction at N=1 is a hypothesis, not a property.
+
+**And a second pattern worth naming:** the three defects that actually stopped work today — the
+inert undo, the missing description, the unbiddable queue — were all found by **Matt using the
+product**, not by tests, reviews or audits. Each took minutes to hit and none was catchable by the
+checks in place.
+
+---
+
+### 🅿️ PARKED — with why, so none of it is rediscovered
+
+**🚩 IDOA solicitations — RED-FLAGGED 2026-09-02.** Matt: *"if we really can only get 76 out of
+IDOA at any time, let's just red flag that right now as probably not worth pursuing."* The page
+shows **71 open and no history at all**. The branch `idoa-adapter` is **built, reviewed and green
+(673 tests / 79 files) but UNMERGED and UNPUSHED**, with one known conflict in `merge.ts` whose
+resolution is written down in its ledger: *take the branch's version, it is a strict superset.*
+**Not wasted:** the framework underneath it — two source shapes, date provenance, the shape-aware
+run contract — is what any future source needs, and building it is what exposed D27's four defects.
+
+**🅿️ HigherGov — parked, not rejected.** $500/yr with API at every tier, server-side filtering via
+a saved-search `search_id`, a dedicated **SLED** endpoint refreshed every 30 min with
+`captured_date` as a watermark, **10,000 records/month** standing, and **attorney sign-off on
+storing the data in our own store** — the §5.5.1 *documented permission* the registry requires.
+**Blocked on a trial key** (Matt has emailed them; free accounts appear not to include API access).
+**The decisive test is designed:** diff their Indiana SLED feed against the **71 known IDOA
+solicitations** captured at `app/server/src/scrape/adapters/fixtures/idoa-listing.html`. That turns
+"how comprehensive are they" into a percentage.
+
+**🅿️ The document pass — the next real slice for triage quality.** SAM sits at **12 documents
+across 9,883 solicitations**. Where a biddable notice's description is thin it usually says why:
+*"see SOW and additional items list."* Sample 2's median description is 515 chars with **6 of 25
+under 200**. Matt: *"I'm not going to be able to complete the sample for a while until they do."*
+⚠️ **Size it before starting** — it is thousands of fetches, not a handful.
+
+**🅿️ Two merge behaviours documented, not fixed** (D27): 45 IDOA rows keep `(untitled)` permanently
+because titles are recomputed only for rows with unlinked sightings and re-import is idempotent;
+and merge is **two-pass for newly created rows**, so any source's first ingest lands with empty
+fields and reads as the adapter failing. Both are merge-internals slices of their own.
+
+**🅿️ A scraping console** — `docs/Pinned-Scraping-Console.md`. `/admin` lists sources; the adapter
+layer is invisible, so a source with no adapter reads health `ok` and looks one toggle from working.
+
+### 🔴 STILL OPEN, unchanged all day
+`accuracyByField` has no surface · `fields.ts` matches one date format · the cleared-queue Metrics
+card goes to `/admin` · **the flaky gate's second cause is still unexplained** (it fired three times
+today, on solo runs as well as concurrent — so concurrency aggravates it and is not the cause;
+signature is a collect failure reporting the file's whole body as *skipped*, and an immediate
+re-run passes) · **and the real GO/NO-GO adjudication still has not happened.**
+
+### 📌 MATT'S FRAMING FOR NEXT TIME, in his words
+> *"We can refine, test, and perfect our methodology based on past bids, contracts, and data. Why
+> even worry about live data until we have all that figured out?"*
+>
+> *"…they're two separate problems: the analysis and the contracts themselves."*
+
+**Treat those as two slices, not one.** The contract INGEST is a data-plumbing problem with a
+documented API. The ANALYSIS — what a KP-shaped contract looks like, and whether that becomes a
+score — is the parked qualification question above, and it is the one that needs a ruling.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-09-02 (midday)
 
 ## ▶️ NEXT SESSION — everything is built and the sample is drawn. **The next move is Matt triaging it**, and then IDOA.
 
