@@ -53,6 +53,16 @@ A real example, live at the time of writing: the prototype renders an extraction
 
 **This covers everything** — testing, verification, a "quick check", re-running something that already worked. **Propose the call, say what it will cost in records, and wait.** The allowance is **10,000 records per month**, and it is the only metered thing in this project.
 
+> **⚖️ STANDING BUDGET, granted by Matt 2026-09-03: 500 records.**
+> Inside that budget, calls may be made without asking each time — but every one
+> is still **counted, reported, and justified in the same breath**. The budget is
+> a ceiling on unasked spending, not permission to stop counting.
+>
+> **When it is exhausted, the §5.1 rule resumes in full**: propose and wait.
+> Do not top it up, round it up, or treat a new session as a fresh 500.
+> **Consumption as of 2026-09-03: 490 spent before this grant** (verified against
+> the account dashboard at 489, then 490), so the grant runs from there.
+
 ⚠️ **Consumption cannot be measured from the API.** There is no quota field, no usage endpoint, no header — `meta` carries only `{pagination}`. **Only the account dashboard shows it** (gear icon → API, admin only), which means **a person reading a number is the sole instrument.** Anything unattended must keep its own tally in `ingest_run`, because the vendor will not tell us and a run cannot ask how much is left before it starts.
 
 **The meter counts records RETURNED** — verified 2026-09-03 by an isolated test: 478 → 489 on a call returning 1 opportunity + 10 documents. Errors and zero-result calls appear not to count. Filtering therefore protects the allowance, and **paging is a real cost**: the first document page returned 10 of 19, so pulling the rest nearly doubles the price.
