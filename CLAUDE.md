@@ -40,3 +40,48 @@ A real example, live at the time of writing: the prototype renders an extraction
   - ⚠️ **Two extension traps, both cost time on 2026-09-02.** It can report *"Browser extension is not connected"* at session start — **restarting Chrome fixes it**, so ask before falling back to CDP. And its **click coordinates are screenshot-space, not CSS pixels**: a click computed from `getBoundingClientRect()` lands short and hits whatever is up-and-left, *silently*, which reads exactly like a dead button. Calibrate with a capturing `click` listener that records `e.clientX/clientY`, then compare asked-for against landed. When synthetic input will not land at all, a DOM `.click()` on the real rendered element still exercises the real handler — say which method you used.
 - **Look at the screenshot.** Reading the DOM for the right strings proves the content exists, not that the page is legible. That distinction cost this project a broken record screen that passed its own review.
 - **Ask of every test: would this still pass if I deleted the thing it tests?** Prove the important ones by mutation, running the whole file — a `-t` filter skips the others and proves nothing about isolation.
+
+---
+
+## 5. 🛑 PAID SOURCES — the HigherGov API costs money per record, and two rules bind
+
+### 5.1 NEVER call the HigherGov API without Matt's explicit approval
+
+**Ruled 2026-09-03 by Matt**, after 489 records went out on Claude's initiative in a single session:
+
+> *"do NOT do any testing with that API unless explicitly approved. We only have about 9500 calls left for this month, and we need to be frugal with them."*
+
+**This covers everything** — testing, verification, a "quick check", re-running something that already worked. **Propose the call, say what it will cost in records, and wait.** The allowance is **10,000 records per month**, and it is the only metered thing in this project.
+
+⚠️ **Consumption cannot be measured from the API.** There is no quota field, no usage endpoint, no header — `meta` carries only `{pagination}`. **Only the account dashboard shows it** (gear icon → API, admin only), which means **a person reading a number is the sole instrument.** Anything unattended must keep its own tally in `ingest_run`, because the vendor will not tell us and a run cannot ask how much is left before it starts.
+
+**The meter counts records RETURNED** — verified 2026-09-03 by an isolated test: 478 → 489 on a call returning 1 opportunity + 10 documents. Errors and zero-result calls appear not to count. Filtering therefore protects the allowance, and **paging is a real cost**: the first document page returned 10 of 19, so pulling the rest nearly doubles the price.
+
+### 5.2 Stage retrieval so that rejection is free and only acceptance costs
+
+**Matt's framing, 2026-09-03:** *"stage retrieval based on identifying validity in the fewest calls possible."*
+
+The asymmetry that makes it work: **everything needed to REJECT a notice is already in the listing record. Documents are only needed to ACCEPT one.**
+
+| Stage | Cost | What it decides |
+|---|---|---|
+| 0. Listing pull | 1 record/notice, already paid | carries `due_date`, `pop_state`, `opp_type`, NAICS, PSC, `set_aside`, `val_est`, and a description **66% of the time** |
+| 1. Mechanical gates | **0** | deadline passed · wrong geography · not biddable · already awarded |
+| 2. Human triage on the card | **0** | decidable for every row that has a description |
+| 3. Documents | **~11**, page one only | ONLY for items surviving 0–2 that still need more |
+
+**A bulk document pass is structurally impossible, not merely expensive** — 9,286 Indiana opportunities at 10–19 documents each is 93,000–176,000 records, nine to seventeen months of allowance. **Documents are fetched on triage demand and never as a backfill.**
+
+**The open design question, unruled:** ~34% of rows carry no description at all — 58% among sub-state buyers, which is the segment this source is bought for. Those cannot be triaged from the listing, so they either trigger a document fetch or sit deferred. **That is where the quota actually goes, and it needs Matt's ruling before an adapter is written.**
+
+**Also budget the backfill separately.** A full Indiana archive pull is ~9,286 records — 93% of one month — leaving nothing for operating. The archive is a one-off research asset; the operating cost is single digits a day. They must not compete in the same billing period.
+
+### 5.3 The API key is a URL parameter, and it leaks through the response
+
+**A live key was leaked into a session transcript on 2026-09-03 and rotated the same hour** (revocation proved: the burned key answers `403` where a live one answers `400`). Three rules follow, and they bind any code written against this API:
+
+1. **`document_path` is a CREDENTIAL, not a URL.** Every opportunity response embeds the api_key inside it. **Never print it, log it, or write it to the database.** Use it and discard it inside the request.
+2. **Scrub at the boundary, never at the call site.** One recursive redactor that walks every value before anything is printed. The leak happened because a `scrub()` helper covered every *error* path while field *values* printed raw — the key was thought of as something in the request, not something that comes back.
+3. **Never build the URL inline in a shell command.** `curl` with the key in the argument list puts it in shell history and process listings. Build it inside a script from `process.env.HIGHERGOV_API_KEY`.
+
+**Full evidence and the measured findings: [`docs/2026-09-03-platform-comparison.md`](docs/2026-09-03-platform-comparison.md) §R0–R11.**
