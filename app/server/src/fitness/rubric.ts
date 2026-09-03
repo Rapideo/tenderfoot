@@ -1,0 +1,188 @@
+/* THE RUBRIC SCORES SOURCES. IT NEVER SCORES OPPORTUNITIES.
+ *
+ * Data-fitness spec §5.1, and it is the constraint most likely to erode. Every
+ * dimension below takes a SOURCE as its subject. A dimension whose sentence
+ * reads naturally with a solicitation as its subject belongs to the
+ * qualification design, which ruling 1A keeps parked and design spec §7.10
+ * clause 2 guards.
+ *
+ * ⚠️ THERE IS DELIBERATELY NO AGGREGATE SCORE. A single number would let a
+ * strong archive silently compensate for a failing legal posture, and would
+ * make this file look like the scorer it must not become. R1 is a GATE; the
+ * rest is a PROFILE a person reads. rubric.test.ts asserts the absence, so
+ * adding a total breaks the suite on purpose.
+ *
+ * PURE OVER A ROW, no database. That keeps the §5.4 acceptance test a fast unit
+ * test with hand-written rows -- and that test has to stay trivially
+ * re-runnable, because it is the only thing proving the rubric reproduces
+ * judgements already made by hand. */
+
+export type Grade = "strong" | "adequate" | "weak" | "unknown";
+
+export interface RubricSubject {
+  name: string;
+  jurisdiction: string | null;
+  platform: string | null;
+  adapter_tier: string | null;
+  legal_posture: string;
+  archive_depth: string | null;
+  verified_facets: Record<string, unknown> | null;
+  cost_posture: string;
+  annual_cost_usd: number | null;
+  field_completeness: Record<string, unknown> | null;
+  watermark_field: string | null;
+  /** From firm_profile.geography — never constant-folded (§1A). */
+  primaryGeography: string[];
+  secondaryGeography: string[];
+}
+
+export interface Dimension {
+  grade: Grade;
+  note: string;
+}
+
+export interface SourceProfile {
+  name: string;
+  disqualified: boolean;
+  disqualifiedReason?: string;
+  dimensions: Record<string, Dimension>;
+}
+
+/* archive_depth is prose written by a researcher, not an enum. These markers
+ * are matched against what the seed ACTUALLY contains -- "NONE.", "NONE AT
+ * IDOA.", "FULL --", "DEEP", "Assume none", "Unknown --". Anything unmatched
+ * grades `unknown`, which is the safe direction: a depth nobody can parse has
+ * not been established. */
+function gradeArchive(depth: string | null): Dimension {
+  if (depth === null) {
+    return { grade: "unknown", note: "archive_depth is null — never established." };
+  }
+  const d = depth.trim().toLowerCase();
+  if (d.startsWith("none") || d.startsWith("assume none")) {
+    return {
+      grade: "weak",
+      note: "Documented as retaining nothing. That is evidence, not an absence of it.",
+    };
+  }
+  if (d.startsWith("unknown")) return { grade: "unknown", note: "Recorded as untestable." };
+  if (d.startsWith("full") || d.startsWith("deep")) {
+    return { grade: "strong", note: depth.slice(0, 120) };
+  }
+  return { grade: "adequate", note: depth.slice(0, 120) };
+}
+
+function gradeTier(tier: string | null): Dimension {
+  if (tier === null) return { grade: "unknown", note: "No adapter tier recorded." };
+  if (tier.startsWith("1")) {
+    return { grade: "strong", note: "API — cheapest to build and cheapest to keep working." };
+  }
+  if (tier.startsWith("2")) return { grade: "adequate", note: "Email or RSS subscription." };
+  if (tier.startsWith("3")) return { grade: "weak", note: "HTML scraping — breaks on redesign." };
+  return { grade: "weak", note: "Manual only — cannot be scheduled." };
+}
+
+/* §5.4. A source that WITHHOLDS totals cannot be checked at all, and recording
+ * that as a failure would be wrong -- Michigan is not dishonest, it is
+ * unmeasurable. `unknown` is the honest grade, and the registry note says why. */
+function gradeFacets(f: Record<string, unknown> | null): Dimension {
+  if (f === null) return { grade: "unknown", note: "vary-a-parameter has never been run." };
+  const blob = JSON.stringify(f).toLowerCase();
+  if (blob.includes("cannot run") || blob.includes("withheld")) {
+    return { grade: "unknown", note: "Totals withheld — the check cannot run here." };
+  }
+  const ignored = (f as { silently_ignored?: unknown }).silently_ignored;
+  if (Array.isArray(ignored) && ignored.length > 0) {
+    return {
+      grade: "adequate",
+      note:
+        `${ignored.length} parameter(s) accepted and silently ignored — known and ` +
+        `worked around: ${ignored.join(", ")}.`,
+    };
+  }
+  if (typeof (f as { verified?: unknown }).verified === "string") {
+    return { grade: "strong", note: "Filters verified to move a count." };
+  }
+  if (Array.isArray(ignored)) {
+    return { grade: "strong", note: "Checked, and no silently-ignored parameters found." };
+  }
+  return { grade: "adequate", note: "Facets recorded, but no verification statement." };
+}
+
+function gradeGeography(j: string | null, primary: string[], secondary: string[]): Dimension {
+  if (j === null) return { grade: "unknown", note: "No jurisdiction recorded." };
+  if (primary.includes(j)) return { grade: "strong", note: `${j} is the Profile's primary geography.` };
+  if (j === "US") {
+    return { grade: "adequate", note: "Federal — in profile, but not the primary ground." };
+  }
+  if (secondary.includes(j)) return { grade: "adequate", note: `${j} is secondary geography.` };
+  return { grade: "weak", note: `${j} is outside the Profile's geography.` };
+}
+
+/* A source nobody has priced is NOT a free source. Migration 018 splits these
+ * into two columns for exactly this reason, and collapsing them here would undo
+ * that in the one place it matters. */
+function gradeCost(posture: string, usd: number | null): Dimension {
+  if (posture === "free") return { grade: "strong", note: "No recurring cost." };
+  if (posture === "unknown") {
+    return { grade: "unknown", note: "Never priced. An unpriced source is not a free one." };
+  }
+  return {
+    grade: "adequate",
+    note: usd === null ? "Paid, amount not recorded." : `$${usd}/yr.`,
+  };
+}
+
+export function scoreSource(s: RubricSubject): SourceProfile {
+  /* R1 IS A GATE. It runs first and returns first. A disqualified source must
+   * not present a full profile -- a profile invites comparison, and there is
+   * nothing to compare when the source may not be contacted at all. */
+  const r1: Dimension =
+    s.legal_posture === "in"
+      ? { grade: "strong", note: "Posture `in` — adapters may run on a schedule." }
+      : {
+          grade: "weak",
+          note:
+            `Posture \`${s.legal_posture}\` — no automated access. §5.5.1: documented ` +
+            `permission moves it, and the evidence goes on the row.`,
+        };
+
+  if (s.legal_posture !== "in") {
+    return {
+      name: s.name,
+      disqualified: true,
+      disqualifiedReason: `legal_posture=${s.legal_posture}`,
+      dimensions: { R1: r1 },
+    };
+  }
+
+  return {
+    name: s.name,
+    disqualified: false,
+    dimensions: {
+      R1: r1,
+      R2: gradeArchive(s.archive_depth),
+      R3: gradeTier(s.adapter_tier),
+      R4: gradeFacets(s.verified_facets),
+      R5:
+        s.platform === null
+          ? { grade: "unknown", note: "No platform recorded — leverage unassessable." }
+          : {
+              grade: "adequate",
+              note: `Platform ${s.platform}. §5.7: one adapter may reach other jurisdictions.`,
+            },
+      R6: gradeGeography(s.jurisdiction, s.primaryGeography, s.secondaryGeography),
+      R7:
+        s.field_completeness === null
+          ? { grade: "unknown", note: "Field completeness has never been measured." }
+          : { grade: "adequate", note: "Measured — see field_completeness on the row." },
+      R8: gradeCost(s.cost_posture, s.annual_cost_usd),
+      R9:
+        s.watermark_field === null
+          ? {
+              grade: "unknown",
+              note: "No watermark known — a run may have to re-read everything.",
+            }
+          : { grade: "strong", note: `Incremental on \`${s.watermark_field}\`.` },
+    },
+  };
+}
