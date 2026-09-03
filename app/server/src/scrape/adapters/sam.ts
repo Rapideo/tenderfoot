@@ -41,7 +41,7 @@
  * A record amended after the window re-appears. Under the sighting model
  * that is CORRECT -- it is a change, and it arrives as a second sighting.
  */
-import type { Adapter, ListingItem, ListingPage } from "../adapter.js";
+import type { WindowedAdapter, ListingItem, ListingPage } from "../adapter.js";
 
 /* The one real SAM.gov host, exported so nothing else re-types it from
  * memory. Task 9 fix round 1: extract/discover.ts originally hardcoded
@@ -70,8 +70,9 @@ export function parseSamPage(body: string): { items: ListingItem[]; count: numbe
   return { items, count: results.length };
 }
 
-export function samAdapter(fetchImpl: typeof fetch = fetch): Adapter {
+export function samAdapter(fetchImpl: typeof fetch = fetch): WindowedAdapter {
   return {
+    shape: "windowed" as const,
     name: "sam",
     async fetchListing(since, until, cursor): Promise<ListingPage> {
       const page = cursor ? Number(cursor) : 0;

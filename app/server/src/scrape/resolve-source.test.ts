@@ -22,6 +22,7 @@ await resetSchema();
 const { migrate } = await import("../db/migrate.js");
 const { run, close } = await import("../db/index.js");
 const { resolveSource } = await import("./resolve-source.js");
+const { ADAPTERS } = await import("./adapters/registry.js");
 
 beforeAll(async () => {
   /* migrate(false) applies 003_seed_source_registry.sql too, which is what
@@ -66,4 +67,13 @@ test("an enabled source with a matching row resolves to the canonical name", asy
   await run(`UPDATE source SET enabled = true WHERE name = 'USASpending'`);
   const resolved = await resolveSource("usaspending");
   expect(resolved.sourceName).toBe("USASpending");
+});
+
+/* Task 8: the registry entry itself, and the exact-string binding
+ * resolve-source.ts depends on -- a near-miss sourceName silently fails to
+ * resolve, per registry.ts's own comment on AdapterRegistryEntry. */
+test("idoa resolves to the registry row it binds to", () => {
+  expect(ADAPTERS.idoa).toBeDefined();
+  expect(ADAPTERS.idoa!.sourceName).toBe("Indiana IDOA solicitations");
+  expect(ADAPTERS.idoa!.make().shape).toBe("snapshot");
 });

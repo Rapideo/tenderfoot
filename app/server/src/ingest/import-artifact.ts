@@ -76,8 +76,29 @@ export async function importArtifact(path: string): Promise<ImportResult> {
    * So: complete -> the window's `until`; partial -> NULL, and the window
    * stays open until a later run finishes it. `ingestedThrough()` above
    * ignores NULL rows, so a partial import simply leaves the authority
-   * where it was. Ruled 2026-08-15 after review. */
-  const advanceTo = art.run.outcome === "complete" ? art.run.until : null;
+   * where it was. Ruled 2026-08-15 after review.
+   *
+   * BLOCKING PRECONDITION (task-8, found in task-4, deferred until a
+   * snapshot source existed to trigger it): a snapshot run has no window at
+   * all, but `RunMeta.since`/`until` (artifact.ts) are non-optional
+   * strings -- scrape/run.ts substitutes `""` rather than inventing a date
+   * (`req.since ?? ""` / `req.until ?? ""`). `""` is not a real boundary
+   * (contract.ts's `isValidDate` rejects it, and it sorts before every
+   * genuine ISO string a windowed run would ever produce), so it must never
+   * be written into `ingested_through` as if it were one -- doing so would
+   * claim a window boundary that was never fetched, exactly the silent-gap
+   * failure this whole design exists to prevent, just reached from a
+   * different direction than the partial-run case above.
+   *
+   * Fixed at the WRITE side, not the read side (`ingestedThrough()`'s `IS
+   * NOT NULL` filter): the ledger itself must never hold a false watermark,
+   * not merely have every reader remember to filter it back out. A read-side
+   * fix would need every current and future caller of `ingest_run` to know
+   * about the `""` idiom; a write-side fix means the column is simply never
+   * wrong. `art.run.until` is checked for truthiness (empty string is the
+   * only falsy string) rather than `!== ""`, for the same reason `!since`
+   * is used above -- there is no other falsy value this column can hold. */
+  const advanceTo = art.run.outcome === "complete" && art.run.until ? art.run.until : null;
 
   return tx(async (q) => {
     const runId = await q.insert(

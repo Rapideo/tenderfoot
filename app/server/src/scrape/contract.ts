@@ -7,10 +7,12 @@
  * reach for; a filter judges a record. Rejecting the key makes the attempt
  * a visible failure instead of a silent no-op.
  */
+import type { SourceShape } from "./adapter.js";
+
 export type Depth = "listing" | "detail" | "documents";
 
 const DEPTHS: readonly string[] = ["listing", "detail", "documents"];
-const ALLOWED = new Set(["source", "since", "until", "depth", "budgetMs"]);
+const ALLOWED = new Set(["source", "since", "until", "depth", "budgetMs", "limit"]);
 
 /* Validates ISO-8601 date strings. Why both shape and parse checks: the
  * character `-` (0x2D) sorts lexicographically below every digit, so a
@@ -26,10 +28,22 @@ export const DEFAULT_BUDGET_MS = 15 * 60 * 1000;
 
 export interface RunRequest {
   source: string;
-  since: string;
-  until: string;
+  /* Optional as of the snapshot split (§4): a windowed source still
+   * requires both (validateRun fails closed on their absence below), but a
+   * snapshot source has no window at all -- there is nothing to put here,
+   * and validateRun refuses to let one be supplied (§5.4, see the
+   * snapshot branch below). */
+  since?: string;
+  until?: string;
   depth: Depth;
   budgetMs: number;
+  /* Operator row cap (§4/§5). Bounds how much a single run reads, not what
+   * it reads -- distinct from the filter §1.1 already refuses (`minValue`
+   * judges a record; `limit` only stops counting). Optional: absent means
+   * uncapped, unchanged from today's behaviour. ENFORCING it is Task 5's
+   * job, not this one's -- validateRun only makes it a validated part of
+   * the request. */
+  limit?: number;
   /* FIX 1 (final review, 2026-08-15): the CANONICAL source.name row this
    * run resolves to (e.g. 'SAM.gov' for the registry key 'sam'), as
    * resolved by scrape/resolve-source.ts. Deliberately NOT part of the
@@ -48,7 +62,15 @@ export interface RunRequest {
   sourceName?: string;
 }
 
-export function validateRun(input: unknown): RunRequest {
+/* `shape` is REQUIRED, deliberately -- it used to default to "windowed",
+ * which let a caller that forgot the argument compile silently. That is
+ * exactly the failure this task's flagship test exists to catch: a
+ * snapshot request validated as windowed would pass `since` through
+ * un-rejected, which is the §5.4 "accepted and quietly ignored" defect
+ * `source.verified_facets` exists because of. Every call site now names
+ * its shape explicitly, including this file's own pre-snapshot tests
+ * (fix round 1, 2026-09-02). */
+export function validateRun(input: unknown, shape: SourceShape): RunRequest {
   const o = (input ?? {}) as Record<string, unknown>;
 
   for (const k of Object.keys(o)) {
@@ -57,15 +79,44 @@ export function validateRun(input: unknown): RunRequest {
     }
   }
   if (typeof o.source !== "string" || !o.source) throw new Error("source is required");
-  /* Fail closed. A missing window must never mean "everything". */
+  if (typeof o.depth !== "string" || !DEPTHS.includes(o.depth)) {
+    throw new Error(`depth must be one of ${DEPTHS.join(" | ")}`);
+  }
+
+  if (o.limit !== undefined) {
+    if (typeof o.limit !== "number" || !Number.isInteger(o.limit) || o.limit < 1) {
+      throw new Error(`limit must be a positive integer, got: ${String(o.limit)}`);
+    }
+  }
+
+  if (shape === "snapshot") {
+    /* §5.4: a source handed a parameter it cannot honour must throw, not
+     * silently ignore it -- the same failure mode source.verified_facets
+     * exists to catch on SAM.gov's sort parameter. A snapshot source has
+     * no dates at all, so `since`/`until` are refused outright rather than
+     * accepted and dropped. */
+    if (o.since !== undefined || o.until !== undefined) {
+      throw new Error(
+        "A snapshot source does not accept a date window. It returns what is currently open; " +
+          "there is no past to ask for. See the IDOA design §4.",
+      );
+    }
+
+    return {
+      source: o.source,
+      depth: o.depth as Depth,
+      budgetMs: typeof o.budgetMs === "number" && o.budgetMs > 0 ? o.budgetMs : DEFAULT_BUDGET_MS,
+      limit: o.limit as number | undefined,
+    };
+  }
+
+  /* Unchanged, and still fail-closed: a missing window must never mean
+   * "everything". */
   if (typeof o.since !== "string" || !o.since) {
     throw new Error("since is required — a run with no window refuses to start");
   }
   if (!isValidDate(o.since)) {
     throw new Error(`since must be an ISO-8601 date (YYYY-MM-DD[T...]), got: ${o.since}`);
-  }
-  if (typeof o.depth !== "string" || !DEPTHS.includes(o.depth)) {
-    throw new Error(`depth must be one of ${DEPTHS.join(" | ")}`);
   }
 
   const until = typeof o.until === "string" && o.until ? o.until : new Date().toISOString();
@@ -79,5 +130,6 @@ export function validateRun(input: unknown): RunRequest {
     until,
     depth: o.depth as Depth,
     budgetMs: typeof o.budgetMs === "number" && o.budgetMs > 0 ? o.budgetMs : DEFAULT_BUDGET_MS,
+    limit: o.limit as number | undefined,
   };
 }

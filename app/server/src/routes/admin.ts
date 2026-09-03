@@ -52,6 +52,7 @@ import { one, run as dbRun } from "../db/index.js";
 import { importArtifact } from "../ingest/import-artifact.js";
 import { mergeSightings } from "../merge/merge.js";
 import { discoverAttachments } from "../extract/discover.js";
+import { discoverIdoaAttachments } from "../extract/discover-idoa.js";
 import { runExtract } from "../extract/run-extract.js";
 import { batchLimit } from "../lib/batchLimit.js";
 
@@ -75,6 +76,29 @@ admin.use(requireAdminSecret);
 admin.post(
   "/scrape",
   asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    /* The adapter lookup has to happen BEFORE validateRun now, not after:
+     * validateRun needs the resolved adapter's `shape` (windowed vs
+     * snapshot, Task 2) as its second argument, so there is no ordering
+     * left where the contract is checked before anything is known about
+     * which adapter answers `source`. */
+    const sourceKey = typeof body.source === "string" ? body.source : undefined;
+    /* Reported as ITS OWN 400, not folded into "no adapter named undefined"
+     * below -- a missing `source` and an unrecognised one are two distinct
+     * mistakes, and collapsing them cost the clearer message when the
+     * adapter lookup moved ahead of validateRun (fix round 1, 2026-09-02). */
+    if (sourceKey === undefined) {
+      res.status(400).json({ error: "source is required" });
+      return;
+    }
+    const entry = ADAPTERS[sourceKey];
+    if (!entry) {
+      res.status(400).json({ error: `No adapter named ${sourceKey}` });
+      return;
+    }
+    const adapter = entry.make();
+
     let request: RunRequest;
     try {
       /* `budgetMs` is in validateRun's allowed-key set (see contract.ts),
@@ -82,18 +106,12 @@ admin.post(
        * unknown-key guard. The caller-supplied value (if any) is
        * overridden immediately below regardless: the handler's budget is
        * fixed by the platform's function ceiling, not by the request. */
-      request = validateRun(req.body ?? {});
+      request = validateRun(body, adapter.shape);
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
       return;
     }
     request.budgetMs = SCRAPE_HANDLER_BUDGET_MS;
-
-    const entry = ADAPTERS[request.source];
-    if (!entry) {
-      res.status(400).json({ error: `No adapter named ${request.source}` });
-      return;
-    }
 
     /* FIX 1 / FIX 2: resolve against the source registry -- and refuse a
      * disabled source -- before any fetching. A 400 here is cheap; a 400
@@ -133,7 +151,7 @@ admin.post(
     const dir = mkdtempSync(join(tmpdir(), "tf-scrape-"));
     try {
       const out = join(dir, `run-${request.source}.db`);
-      const result = await runScrape(request, entry.make(), out);
+      const result = await runScrape(request, adapter, out);
 
       res.setHeader("Content-Type", "application/vnd.sqlite3");
       res.setHeader("Content-Disposition", `attachment; filename="${request.source}.db"`);
@@ -310,6 +328,7 @@ admin.post(
     }
     // resolveAdapterKey only ever returns a key that is present in ADAPTERS.
     const entry = ADAPTERS[key]!;
+    const adapter = entry.make();
 
     /* Computed here rather than after resolveSource because the row it
      * reads is the row this route STAMPS, and that target is `entry` +
@@ -330,33 +349,57 @@ admin.post(
      * parameter that now means "derive it" instead of "refuse". A duration
      * passed explicitly is still refused by validateRun below, unchanged:
      * deriving a window is this route's job, guessing what a caller meant
-     * by a malformed one is not. */
-    let since = String(req.query.since ?? "");
-    if (!since) {
-      const row = await one<{ last_run_at: Date | null; since_default: string | null }>(
-        `SELECT last_run_at, since_default FROM source WHERE name = $1`,
-        [stampTarget],
-      );
-      if (!row) {
-        res.status(400).json({
-          error:
-            `No source row named '${stampTarget}' (registry key '${key}'), so no ` +
-            `ingestion window can be derived. Pass ?since= explicitly, or check ` +
-            `migrations/003_seed_source_registry.sql.`,
-        });
-        return;
+     * by a malformed one is not.
+     *
+     * BLOCKING PRECONDITION (task-8, found in task-3, deferred until a
+     * snapshot adapter was registered): this used to derive (or default to
+     * `""`) and pass `since` into `validateRun` UNCONDITIONALLY, regardless
+     * of the resolved adapter's shape. That was harmless while every
+     * registered adapter was windowed, but `validateRun`'s snapshot branch
+     * (contract.ts §5.4) THROWS the moment `since`/`until` is present at
+     * all -- deliberately, so a parameter a source cannot honour is refused
+     * rather than silently ignored. The instant a snapshot source is
+     * registered, every /run call against it would 400 unconditionally.
+     *
+     * The fix: a snapshot adapter has no window to derive (there is no
+     * `last_run_at`/`since_default` arithmetic that means anything for "what
+     * is currently open"), so derivation is skipped entirely for that shape.
+     * An explicit `?since=` is still forwarded rather than dropped, on
+     * purpose -- silently ignoring an operator-supplied parameter is exactly
+     * the failure mode §5.4 exists to catch; `validateRun` is left to refuse
+     * it loudly, same as it already refuses a malformed date. */
+    const requestInput: Record<string, unknown> = { source: key, depth: "listing" };
+    if (adapter.shape === "snapshot") {
+      if (req.query.since !== undefined) requestInput.since = String(req.query.since);
+    } else {
+      let since = String(req.query.since ?? "");
+      if (!since) {
+        const row = await one<{ last_run_at: Date | null; since_default: string | null }>(
+          `SELECT last_run_at, since_default FROM source WHERE name = $1`,
+          [stampTarget],
+        );
+        if (!row) {
+          res.status(400).json({
+            error:
+              `No source row named '${stampTarget}' (registry key '${key}'), so no ` +
+              `ingestion window can be derived. Pass ?since= explicitly, or check ` +
+              `migrations/003_seed_source_registry.sql.`,
+          });
+          return;
+        }
+        try {
+          since = resolveSince(row);
+        } catch (e) {
+          res.status(400).json({ error: (e as Error).message });
+          return;
+        }
       }
-      try {
-        since = resolveSince(row);
-      } catch (e) {
-        res.status(400).json({ error: (e as Error).message });
-        return;
-      }
+      requestInput.since = since;
     }
 
     let request: RunRequest;
     try {
-      request = validateRun({ source: key, since, depth: "listing" });
+      request = validateRun(requestInput, adapter.shape);
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
       return;
@@ -382,7 +425,7 @@ admin.post(
     const dir = mkdtempSync(join(tmpdir(), "tf-run-"));
     try {
       const out = join(dir, `run-${key}.db`);
-      const result = await runScrape(request, entry.make(), out);
+      const result = await runScrape(request, adapter, out);
 
       /* THE GUARD (2026-08-28). RUN_HANDLER_BUDGET_MS bounds only the
        * scrape loop; import and merge run after it, in this same request,
@@ -496,19 +539,50 @@ admin.post(
  * this budget and CEILING_MS is what that last document spends. Reusing the
  * constant keeps one number under one ceiling, which is the whole lesson of
  * 2026-08-27; what changes here is only what the reservation is FOR. */
+/* DISPATCH BY SOURCE, THE ADMIN-ROUTE SHAPE (Ruling 12, 2026-09-02
+ * progress.md / Task 9.5). Unlike the CLI, this route is not scoped to one
+ * `--source` -- it has always run discoverAttachments over the whole
+ * database regardless of what was just scraped, filtered internally to
+ * SAM.gov. Reaching IDOA candidates from the SAME endpoint means running
+ * BOTH discovery mechanisms and reporting the combined totals, rather than
+ * branching on a source this route was never given.
+ *
+ * The budget is SHARED across the two calls, not given to each in full --
+ * RUN_HANDLER_BUDGET_MS bounds this whole request against the platform
+ * ceiling (see the comment above), and handing it twice could in principle
+ * run up to 2x that if SAM's per-notice fetches ran long. IDOA's own pass
+ * makes no network call at all (its URL is already in the stored payload),
+ * so in practice this remaining-budget arithmetic rarely matters -- but the
+ * request's total wall-clock exposure must stay bounded regardless. */
 admin.post(
   "/discover",
   asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
     const limit = batchLimit(req.query.limit);
     /* REVIEW FINDING 5 (2026-08-30): this call had NO budget, while the
      * comment above reasoned about one. Up to MAX_BATCH sequential fetches
      * with no clock check runs past the ceiling on a slow day, and a killed
      * request reports nothing at all. */
-    const result = await discoverAttachments(limit, undefined, RUN_HANDLER_BUDGET_MS);
+    const sam = await discoverAttachments(limit, undefined, RUN_HANDLER_BUDGET_MS);
+    const remainingMs = Math.max(0, RUN_HANDLER_BUDGET_MS - (Date.now() - startedAt));
+    const idoa = await discoverIdoaAttachments(limit, remainingMs);
     /* The effective limit, echoed. An operator who asks for 99999 and gets 50
      * should be told, not left to infer it from a batch that stopped early --
-     * and a clamp nobody can observe is a clamp no test can pin. */
-    res.json({ ...result, limit });
+     * and a clamp nobody can observe is a clamp no test can pin.
+     *
+     * Same four-key shape the route has always answered with -- `refreshed`
+     * stays SAM-only (discoverIdoaAttachments writes no listing fields; see
+     * its own header for why it has no REFRESH counterpart), while
+     * `solicitations`/`skipped`/`documents` are combined totals across both
+     * mechanisms so an empty-of-both-sources schema still answers all
+     * zeroes, unchanged from before this dispatch existed. */
+    res.json({
+      solicitations: sam.solicitations + idoa.solicitations,
+      skipped: sam.skipped + idoa.skipped,
+      documents: sam.documents + idoa.documents,
+      refreshed: sam.refreshed,
+      limit,
+    });
   }),
 );
 

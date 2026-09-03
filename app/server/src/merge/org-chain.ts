@@ -53,6 +53,20 @@ export function orgChain(sourceName: string, raw: unknown): string[] {
       names = [r["Awarding Agency"]];
       break;
 
+    case "Indiana IDOA solicitations":
+      /* One level only, and unlike USASpending's case above, there is no
+       * deeper field being left unread -- IDOA's listing publishes a single
+       * plain-string `agency` ("Alcohol & Tobacco Comm", "Education",
+       * "Indiana Dept of Transportation") with no department/office
+       * hierarchy underneath it, not even one this adapter chose not to
+       * request. This is the source's own granularity, not a limitation of
+       * the parse, so a one-element chain is recorded rather than the
+       * string being split on punctuation or given a synthetic "State of
+       * Indiana" parent -- either would fabricate structure IDOA does not
+       * publish. */
+      names = [r.agency];
+      break;
+
     default:
       return [];
   }

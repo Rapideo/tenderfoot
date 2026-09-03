@@ -1002,3 +1002,166 @@ than invented**, and D21 leans on that parking to justify the discovery
 channel's narrow override. This confirms the parking stands *and* that chips are
 wanted — the blocker is the hand-run, which sample 1 is the first opportunity to
 produce. **Do not invent a pass vocabulary in the meantime.**
+
+---
+
+## D24 — the description panel, which the bundle has no equivalent of
+
+**Found 2026-09-02 by Matt trying to use the product**, which is the only way this
+class of thing gets found:
+
+> *"There are no extracted fields. There are no questions due. None of those are
+> available. There's no document. There's no timeline… I think we at least need to
+> capture a summary of the posting or something we can get off that site. Until I
+> can get more context, I'm not really going to be able to make judgment calls."*
+
+### The bundle has nothing to be faithful to
+
+Searched before designing: **zero** occurrences of `description`, `synopsis` or
+`abstract`. The four `Summary` hits are `clearedSummary` (the queue-cleared line)
+and `oppsSummary` (a count of rows). **There is no per-solicitation prose anywhere
+in V1.2**, so this panel is an invention and takes a number rather than a parity
+claim.
+
+**Why the bundle could get away with it and we cannot.** Its five mock
+opportunities are hand-written and instantly legible — *"Care-management workflow
+redesign"*, *"External Quality Reviews for MCO Programs"*. Real SAM titles are
+`16--MAST,HEATER DRAIN` and `KEYSIGHT N8487A POWER SENSOR`. A card designed
+around titles a human wrote does not survive contact with titles a procurement
+system generated.
+
+### Placement — ruled by Matt
+
+> *"I want it to the right of our machine scores."*
+
+That is exactly where `COST TO PURSUE — FACTS, NOT A SCORE` sits in the bundle's
+two-up grid (`minmax(0,1.15fr) minmax(0,1fr)`). **So it STACKS ABOVE the cost
+panel rather than replacing it** — §7.10 clause 2 requires parked chrome to be
+built and left inert, not trimmed. A test pins the cost panel surviving beside
+it, because a regression that swapped them would still show the description and
+would silently drop the bundle's own chrome.
+
+### ⚠️ It is NOT called a summary, and that is the load-bearing half
+
+Matt asked for a *machine summary*, and ruled the same day that it is **labelled
+for what it holds until a model actually writes one**. Today the panel shows
+**SAM's own prose** — boilerplate-heavy, frequently opening *"This is a combined
+synopsis/solicitation for commercial items prepared in accordance with…"*.
+
+Heading that `MACHINE SUMMARY` would repeat **D20's** mistake exactly: a label
+claiming more than the data earns, under which a reader believes something a
+machine did not do. **A test asserts `MACHINE SUMMARY` is ABSENT**, so the rename
+cannot happen by accident before the summariser exists.
+
+`SUMMARISE` is built and **disabled**, per §7.10 clause 2 — the intelligence
+chrome is constructed and left non-functional until the thing behind it is
+designed. Disabled is the honest state; a live-looking control that does nothing
+is the D14 / D23 defect, which this project has now hit three times.
+
+### What the data actually supports, measured rather than assumed
+
+Backfilled on production 2026-09-02: **0 → 8,484 of 9,883** solicitations.
+
+**The remaining 1,399 are not a miss, and this was checked rather than shrugged
+at.** Of 400 sampled sightings behind SAM rows that still have no description,
+**zero** carried usable text in the payload — 369 have no `descriptions` key at
+all and 31 have an empty one. The other 201 are the two corpus imports, which
+never had descriptions. **SAM does not publish one for roughly 12% of notices.**
+Every row that has text got it.
+
+So the empty state — *"This source published no description."* — is a statement
+of fact that fires about one card in eight, and it says so rather than rendering
+a blank panel that reads as a bug.
+
+### The truncation is server-side, and that is a content decision
+
+Matt: *"a machine summary that summarizes in 200 words what the contract is."*
+The card truncates to ~200 words on a word boundary, preferring a nearby sentence
+end; the Brief tab carries the whole thing. **One stored column, two renderings**
+— a stored summary alongside a stored full text would be two columns that must
+agree, and the shorter would drift the first time anything regenerated it.
+
+### And the Brief is half-unparked
+
+Its **judgement** half — why this fits, a recommended posture — is a call against
+the Firm Profile and stays parked with qualification (design spec §1.1). What
+arrived is the source's own description, a **fact** rather than a judgement,
+which was never the parked part. The callout now says exactly that.
+
+---
+
+## D25 — IDOA carries no posting date, and `first-seen` stands in for one
+
+**Matt's ruling, 2026-09-02.** Indiana IDOA's listing publishes a **Response Due By** and nothing
+else. Verified against a committed capture: only **3 of 50** descriptions contained a long-form
+date, and all three were *addendum* notices rather than postings.
+
+So `posted_at` has nothing to read. `first-seen` — the date we first observed a row — stands in
+for it, **labelled distinctly and never written into the same column bare**. Migration 016 makes
+that enforceable: `posted_at_origin` is `published` or `observed`, and a CHECK ties it to
+`posted_at` so a date cannot exist without saying where it came from.
+
+> ⚠️ **The CHECK as first written would have permitted exactly the row it forbids.**
+> `posted_at_origin IN ('published','observed')` yields **NULL**, not FALSE, when the column is
+> NULL — and Postgres CHECK constraints **pass on NULL**. The shipped version carries
+> `posted_at_origin IS NOT NULL AND` before the `IN`, and that clause is load-bearing rather than
+> redundant. Found by the test that proves the constraint *rejects*; a happy-path test would have
+> shipped a constraint that constrains nothing.
+
+**The cost, stated so it is not discovered later.** IDOA's volume-per-week can only count **from
+the day we first scrape**. There is nothing to backfill. SAM's history came free because SAM
+publishes `posted_at`; IDOA's does not exist until we create it. **Every day before the first run
+is volume data that can never be recovered.**
+
+---
+
+## D26 — position in IDOA's table encodes DEADLINE, not recency
+
+Raised by Matt as a general question — *could we infer creation order from table order?* — and
+answered against the real page rather than assumed.
+
+**The main table is sorted ascending by `Response Due By`, with zero violations across all 69
+adjacent row pairs**, and explicitly **not** by Event ID. Established by exhaustive per-row
+extraction, not by the two-row anecdote that raised the question.
+
+**So no order-derived signal may be recorded, and the adapter derives none.** Treating position as
+recency would manufacture a posting sequence that is pure invention *and looks entirely plausible
+on screen* — there is nothing downstream that would contradict it.
+
+This is `verified_facets` (§5.4) applied one level up: the field exists because SAM.gov accepted an
+`is_active` parameter and silently ignored it. A property of a source is verified before anything
+depends on it, or it is not recorded at all.
+
+---
+
+## D27 — the merge layer was SAM-shaped, and a second source revealed it
+
+**Not a deviation from the bundle. A finding about this codebase, recorded here because it is the
+most consequential thing the IDOA slice produced.**
+
+Tenderfoot had exactly **one real ingesting source for its entire life**. Every layer that reads a
+payload therefore looks source-agnostic and is actually SAM-shaped, and **nothing could reveal that
+until a second source existed.** IDOA is the first thing that could.
+
+Four instances, all one root cause — `merge`'s field extractors are per-source and each knew only
+SAM:
+
+| Field | How it failed | Found by |
+|---|---|---|
+| `description` | no IDOA case | Matt, trying to triage (D24) |
+| `closes_at` | `closes-at.ts` had only `case "SAM.gov"` — **0 of 71** rows got a deadline, and the queue *orders* by it | the live run |
+| `title` | `merge.ts` read `raw.title`; IDOA emits `raw.eventName` — **71 of 71** read `(untitled)` | the live run |
+| `org_id` | `org-chain.ts` had no IDOA case — **0 of 45** rows showed a buyer | the fix for the previous one |
+
+**None of these were caught by 653 passing tests**, because every fixture was SAM-shaped too.
+
+> 🔴 **And one of them is not fully repairable in place.** `titleUpdates` is only populated in the
+> `else if (Number(g.unlinked) > 0)` branch, so a title is recomputed **only for rows with unlinked
+> sightings**. Rows created before the fix have `(untitled)` baked in at insert, and re-import is
+> idempotent — so there is no path that re-derives their title. New rows are correct; existing ones
+> need a deliberate backfill or deletion and re-ingest. **Recorded rather than fixed: touching
+> merge's update logic is a slice of its own, not a footnote to this one.**
+
+**The generalisable lesson**, for `Proto2PRD`: *a layer is only proven source-agnostic by a second
+source.* Until then "generic" is a claim about intent, not about behaviour — and the tests written
+alongside a single source cannot distinguish the two, because they share its shape.

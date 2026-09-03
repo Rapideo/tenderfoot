@@ -41,6 +41,17 @@
  * The fallback to originalPublishDate is defensive only: publishDate was
  * present on every row measured, and if that ever stops being true a stale
  * date beats no date for a series that already reports its own exclusions.
+ *
+ * PROVENANCE (migration 016). A date is only half the fact -- the other half
+ * is whether the source STATED it or we merely OBSERVED the row on that day.
+ * `extracted_field` has carried origin since SP2; this listing-level date did
+ * not, so a first-seen-derived date (the shape IDOA and every other snapshot
+ * source will need, since none of them publish a posting date at all) would
+ * have been indistinguishable from SAM's own `publishDate` the moment it
+ * landed in the same bare column. Every branch below that returns a date
+ * returns 'published', because every one of them is read out of a field the
+ * source itself uses to state when the notice went live -- never a date this
+ * code derived from when we happened to see the row.
  */
 
 /** Bare YYYY-MM-DD, matching `solicitation.posted_at`'s existing shape. */
@@ -50,13 +61,24 @@ function isoDate(v: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
-export function postedAt(sourceName: string, raw: unknown): string | null {
+/** A posting date and where it came from -- see migration 016's CHECK
+ * constraint, which refuses to let one exist without the other. */
+export interface PostedAt {
+  date: string;
+  origin: "published" | "observed";
+}
+
+export function postedAt(sourceName: string, raw: unknown): PostedAt | null {
   const r = raw as Record<string, unknown> | null | undefined;
   if (!r) return null;
 
   switch (sourceName) {
-    case "SAM.gov":
-      return isoDate(r.publishDate) ?? isoDate(r.originalPublishDate);
+    case "SAM.gov": {
+      const date = isoDate(r.publishDate) ?? isoDate(r.originalPublishDate);
+      /* SAM.gov PUBLISHES this date; it is never derived from when we saw
+       * the row, so 'published' is not a guess. */
+      return date === null ? null : { date, origin: "published" };
+    }
 
     case "USASpending":
       /* Awards, not notices. `action_date` is when the award was made, which

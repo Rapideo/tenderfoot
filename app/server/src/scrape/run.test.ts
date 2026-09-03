@@ -6,15 +6,83 @@ import { runScrape } from "./run.js";
 import { fakeAdapter } from "./adapters/fake.js";
 import { readArtifact } from "./artifact.js";
 import { validateRun } from "./contract.js";
-import type { Adapter } from "./adapter.js";
+import type { WindowedAdapter } from "./adapter.js";
 
 function tmpPath() {
   return join(mkdtempSync(join(tmpdir(), "tf-run-")), "run.db");
 }
 
+/* Task 4 (spec §4, §4.1): a stub SnapshotAdapter that walks a fixed list of
+ * pages, mirroring fakeAdapter's role for the windowed tests above. */
+function stubSnapshot(pages: Array<{ ids: string[]; next: string | null }>) {
+  let i = 0;
+  return {
+    shape: "snapshot" as const,
+    name: "stub-snap",
+    async fetchSnapshot(_cursor: string | null) {
+      const p = pages[i++]!;
+      return {
+        items: p.ids.map((id) => ({ externalId: id, raw: { id } })),
+        nextCursor: p.next,
+        requestUrl: "https://example.test/page",
+        httpStatus: 200,
+        payload: JSON.stringify(p.ids),
+      };
+    },
+  };
+}
+
+test("a snapshot run walks its pages and reports no resume marker", async () => {
+  const adapter = stubSnapshot([
+    { ids: ["a", "b"], next: "p2" },
+    { ids: ["c"], next: null },
+  ]);
+  const res = await runScrape(
+    { source: "stub-snap", depth: "listing", budgetMs: 60_000 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.rows).toBe(3);
+  expect(res.done).toBe(true);
+  /* There is no window to narrow, so there is nothing to resume FROM.
+   * A date here would be an invented one. */
+  expect(res.nextUntil).toBeNull();
+  expect(res.noProgress).toBe(false);
+});
+
+test("a partial snapshot run does not offer a resume it cannot honour", async () => {
+  const adapter = stubSnapshot([{ ids: ["a"], next: "p2" }]);
+  const res = await runScrape(
+    { source: "stub-snap", depth: "listing", budgetMs: 0 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.done).toBe(false);
+  expect(res.nextUntil).toBeNull();
+});
+
+/* Backfills a gap left by Task 4: `runSnapshot`'s row-counting limit
+ * enforcement (run.ts) shipped with no test exercising it at all -- Task 3
+ * only tested that `limit` survives contract validation (contract.test.ts),
+ * never that a run actually stops there. Added here, alongside Task 5's
+ * windowed counterpart, so this file's mutation proof has something real to
+ * fail on both sides of the shape dispatch. */
+test("limit stops a snapshot run at the requested number of rows", async () => {
+  const adapter = stubSnapshot([{ ids: ["a", "b", "c"], next: null }]);
+  const res = await runScrape(
+    { source: "stub-snap", depth: "listing", budgetMs: 60_000, limit: 2 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.rows).toBe(2);
+  /* The budget is a platform rail; the limit is operator intent. Hitting
+   * the limit is a completed request, not a truncated one. */
+  expect(res.done).toBe(true);
+});
+
 test("a run that fits reports done and no next_until", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
   const res = await runScrape(req, fakeAdapter(5, 2), p);
   expect(res.done).toBe(true);
   expect(res.nextUntil).toBeNull();
@@ -34,7 +102,7 @@ test("a run that fits reports done and no next_until", async () => {
  * would have caught the direction defect. */
 test("a run that exhausts its budget commits what it has and reports a resume marker", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing", budgetMs: 1 });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing", budgetMs: 1 }, "windowed");
   let t = 0;
   const clock = () => (t += 10); // every check advances past the 1ms budget
   const res = await runScrape(req, fakeAdapter(100, 2), p, clock);
@@ -94,8 +162,13 @@ test("a run that exhausts its budget commits what it has and reports a resume ma
  * as it would with a real artifact writer and real wall-clock time. This
  * makes the defect and its fix observable deterministically, without any
  * dependence on real timing. */
-function withWriteCost(adapter: Adapter, elapsed: { value: number }, msPerItem: number): Adapter {
+function withWriteCost(
+  adapter: WindowedAdapter,
+  elapsed: { value: number },
+  msPerItem: number,
+): WindowedAdapter {
   return {
+    shape: "windowed",
     name: adapter.name,
     async fetchListing(since, until, cursor) {
       const page = await adapter.fetchListing(since, until, cursor);
@@ -124,7 +197,7 @@ test("two sequential runs resume correctly: the second reaches new ground and th
     until: "2026-12-31T00:00:00.000Z",
     depth: "listing",
     budgetMs: BUDGET_MS,
-  });
+  }, "windowed");
   const res1 = await runScrape(
     req1,
     withWriteCost(fakeAdapter(TOTAL, PAGE_SIZE), elapsed1, MS_PER_ITEM),
@@ -145,7 +218,7 @@ test("two sequential runs resume correctly: the second reaches new ground and th
     until: res1.nextUntil as string,
     depth: "listing",
     budgetMs: BUDGET_MS,
-  });
+  }, "windowed");
   const res2 = await runScrape(
     req2,
     withWriteCost(fakeAdapter(TOTAL, PAGE_SIZE), elapsed2, MS_PER_ITEM),
@@ -176,9 +249,10 @@ test("two sequential runs resume correctly: the second reaches new ground and th
  * CLI output, nor the response headers. This adapter fixture returns two
  * pages, each reporting a nonzero `undatedSkipped`, so the fix under test
  * is specifically the ACCUMULATION across pages, not just a single read. */
-function undatedFixtureAdapter(): Adapter {
+function undatedFixtureAdapter(): WindowedAdapter {
   let called = 0;
   return {
+    shape: "windowed",
     name: "undated-fixture",
     async fetchListing(): Promise<import("./adapter.js").ListingPage> {
       called++;
@@ -206,7 +280,7 @@ function undatedFixtureAdapter(): Adapter {
 
 test("undatedSkipped is accumulated across pages, onto RunResult and the artifact", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
   const res = await runScrape(req, undatedFixtureAdapter(), p);
 
   expect(res.done).toBe(true);
@@ -218,7 +292,7 @@ test("undatedSkipped is accumulated across pages, onto RunResult and the artifac
 
 test("a run with no undated records reports undatedSkipped: 0, not undefined", async () => {
   const p = tmpPath();
-  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" });
+  const req = validateRun({ source: "fake", since: "2026-01-01", depth: "listing" }, "windowed");
   const res = await runScrape(req, fakeAdapter(3, 3), p);
   expect(res.undatedSkipped).toBe(0);
   expect(readArtifact(p).run.undated_skipped).toBe(0);
@@ -241,9 +315,10 @@ test("a run with no undated records reports undatedSkipped: 0, not undefined", a
  * the budget is set to trip after that one page commits, before page 1
  * (whose items are NOT tied and WOULD make real progress) is ever
  * fetched. */
-function tieBlockAdapter(): Adapter {
+function tieBlockAdapter(): WindowedAdapter {
   const TIE = "2026-08-10T00:00:00.000Z";
   return {
+    shape: "windowed",
     name: "tie-block-fixture",
     async fetchListing(_since, _until, cursor): Promise<import("./adapter.js").ListingPage> {
       const page = cursor ? Number(cursor) : 0;
@@ -275,6 +350,48 @@ function tieBlockAdapter(): Adapter {
   };
 }
 
+/* Task 5 (spec §5): `limit` applies to the windowed path too, not just
+ * `runSnapshot`. `d` and `stubWindowed` mirror `stubSnapshot`'s role above
+ * -- a fixed list of pages walked by position -- for a WindowedAdapter. No
+ * test here exercises since/until filtering (fakeAdapter and the fixtures
+ * above already do), so `stubWindowed` ignores those arguments. */
+function d(id: string, modifiedAt: string) {
+  return { externalId: id, modifiedAt, raw: {} };
+}
+
+function stubWindowed(pages: Array<{ items: ReturnType<typeof d>[]; next: string | null }>): WindowedAdapter {
+  let i = 0;
+  return {
+    shape: "windowed" as const,
+    name: "stub-windowed",
+    async fetchListing(_since, _until, _cursor) {
+      const p = pages[i++]!;
+      return {
+        items: p.items,
+        nextCursor: p.next,
+        requestUrl: "https://example.test/listing",
+        httpStatus: 200,
+        payload: JSON.stringify(p.items),
+      };
+    },
+  };
+}
+
+test("limit stops a windowed run at the requested number of rows", async () => {
+  const adapter = stubWindowed([
+    { items: [d("a", "2026-01-03"), d("b", "2026-01-02"), d("c", "2026-01-01")], next: null },
+  ]);
+  const res = await runScrape(
+    { source: "stub", since: "2026-01-01", until: "2026-01-04", depth: "listing", budgetMs: 60_000, limit: 2 },
+    adapter,
+    tmpPath(),
+  );
+  expect(res.rows).toBe(2);
+  /* The budget is a platform rail; the limit is operator intent. Hitting the
+   * limit is a completed request, not a truncated one. */
+  expect(res.done).toBe(true);
+});
+
 test("a tie block wider than the budget is reported as noProgress, not a silent resume", async () => {
   const p = tmpPath();
   const TIE = "2026-08-10T00:00:00.000Z";
@@ -284,7 +401,7 @@ test("a tie block wider than the budget is reported as noProgress, not a silent 
     until: TIE,
     depth: "listing",
     budgetMs: 1,
-  });
+  }, "windowed");
   let t = 0;
   const clock = () => (t += 10); // trips the 1ms budget check after page 0 commits
 

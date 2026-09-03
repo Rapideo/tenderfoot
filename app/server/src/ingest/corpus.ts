@@ -54,6 +54,10 @@ interface PendingRow {
   kind: string | null;
   status: string;
   postedAt: string | null;
+  /* Migration 016: a date can never exist without saying where it came from.
+   * NULL exactly when postedAt is NULL -- see insertRows' own comment for why
+   * every non-null case here is 'published' rather than 'observed'. */
+  postedAtOrigin: "published" | "observed" | null;
   closesAt: string | null;
   codes: unknown | null;
   /* Per row, not per load: calibration encodes the enriched/unbiased split
@@ -158,14 +162,20 @@ async function insertRows(
   const inserted = await q.all<{ id: number; external_id: string }>(
     /* Migration 010: source_id is constant for the batch -- `srcId` is the
      * source this whole import is attributed to -- so it rides in as a scalar
-     * parameter rather than a tenth parallel array. */
-    `INSERT INTO solicitation (org_id, external_id, title, kind, status, posted_at,
+     * parameter rather than a tenth parallel array.
+     *
+     * Migration 016: posted_at_origin rides alongside posted_at in the SAME
+     * row of the SAME unnest, never a separate pass -- a date and its
+     * provenance must land together or the CHECK constraint rejects the row
+     * outright. Every corpus loader that populates postedAt sets
+     * postedAtOrigin in the same object literal, so the two cannot drift. */
+    `INSERT INTO solicitation (org_id, external_id, title, kind, status, posted_at, posted_at_origin,
                                closes_at, codes, source_note, source_id)
-     SELECT org_id, external_id, title, kind, status, posted_at, closes_at,
-            codes::jsonb, source_note, $10::int
+     SELECT org_id, external_id, title, kind, status, posted_at, posted_at_origin, closes_at,
+            codes::jsonb, source_note, $11::int
        FROM UNNEST($1::int[], $2::text[], $3::text[], $4::text[], $5::text[],
-                   $6::text[], $7::text[], $8::text[], $9::text[])
-         AS t(org_id, external_id, title, kind, status, posted_at, closes_at,
+                   $6::text[], $7::text[], $8::text[], $9::text[], $10::text[])
+         AS t(org_id, external_id, title, kind, status, posted_at, posted_at_origin, closes_at,
               codes, source_note)
      RETURNING id, external_id`,
     [
@@ -175,6 +185,7 @@ async function insertRows(
       rows.map((r) => r.kind),
       rows.map((r) => r.status),
       rows.map((r) => r.postedAt),
+      rows.map((r) => r.postedAtOrigin),
       rows.map((r) => r.closesAt),
       rows.map((r) => (r.codes === null ? null : JSON.stringify(r.codes))),
       rows.map((r) => r.note),
@@ -254,7 +265,12 @@ async function loadIndiana(srcId: number): Promise<number> {
       title,
       kind: "RFP",
       status: "open",
+      /* The manifest has no posting date at all -- exactly the IDOA shape
+       * migration 016 exists for. NULL, not 'observed': backfilling an
+       * observed date from when this corpus was fetched would invent a fact
+       * this one-off import never had reason to record. */
       postedAt: null,
+      postedAtOrigin: null,
       closesAt: `2026-${mm!.padStart(2, "0")}-${dd!.padStart(2, "0")}`,
       codes: null,
       note: NOTE,
@@ -292,7 +308,11 @@ async function loadCalibration(srcId: number): Promise<number> {
     title: r.title,
     kind: r.type ?? null,
     status: "closed",
+    /* `pub` is SAM.gov's own publishDate, carried through unchanged from the
+     * scrape this corpus was built from -- 'published', on the same grounds
+     * posted-at.ts uses for the live SAM.gov path, never 'observed'. */
     postedAt: r.pub ?? null,
+    postedAtOrigin: r.pub ? "published" : null,
     closesAt: r.resp ?? null,
     codes: { naics: r.naics ?? [], psc: r.psc_codes ?? [] },
     note: `corpus/calibration -- set=${r.set}`,

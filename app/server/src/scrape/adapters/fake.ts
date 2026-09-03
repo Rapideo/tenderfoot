@@ -10,14 +10,15 @@
  * resumed run keeps re-matching already-covered records because the filter
  * has no upper bound." Bounding here too, the same way sam.ts now does,
  * is what makes run.test.ts's two-invocation resume test meaningful. */
-import type { Adapter, ListingPage } from "../adapter.js";
+import type { WindowedAdapter, ListingPage } from "../adapter.js";
 
 /* Anchor instant for the fixture's modifiedAt values. Arbitrary, but fixed,
  * so the fixture is deterministic across runs. */
 const FAKE_BASE_MS = Date.parse("2026-08-15T00:00:00.000Z");
 
-export function fakeAdapter(total: number, pageSize = 100): Adapter {
+export function fakeAdapter(total: number, pageSize = 100): WindowedAdapter {
   return {
+    shape: "windowed" as const,
     name: "fake",
     async fetchListing(since, until, cursor): Promise<ListingPage> {
       const start = cursor ? Number(cursor) : 0;
