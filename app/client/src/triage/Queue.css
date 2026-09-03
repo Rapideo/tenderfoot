@@ -345,3 +345,17 @@
 
 .queue__sample-banner { padding: 10px 2px; }
 .queue__cleared { display: grid; gap: 14px; padding: 24px; max-width: 1080px; }
+
+/* WHERE THE WORK IS — the accent-toned sibling of .queue__chip.
+ * Matched against the bundle's own sourceLabel chip declaration (the same one
+ * Chip.css cites): --acc on --accbg, 10px mono, .1em, 4px radius. Geography is
+ * the strongest single filter on this card, so it gets the accent treatment
+ * the bundle reserves for a source label rather than the neutral tag fill. */
+.queue__chip-place {
+  font: var(--type-microlabel-queue);
+  letter-spacing: var(--tracking-label-tight);
+  color: var(--acc);
+  background: var(--accbg);
+  padding: 5px 8px;
+  border-radius: var(--radius-chip);
+}

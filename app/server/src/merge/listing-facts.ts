@@ -43,6 +43,22 @@
  *  SERVICES"). Both are kept verbatim -- see `kind` below on why this file
  *  does not clean up a source's vocabulary -- but nulls are dropped, because
  *  a null is the absence of a code rather than a code. */
+/* The human-readable half of the same array. Deliberately NOT zipped with
+ * codeList's output into pairs: the two are filtered independently (a code
+ * can be null while its value is present, and vice versa), so positional
+ * pairing would silently mis-associate a label with the wrong code. Two flat
+ * lists is honest about that; a reader wanting the label for a specific code
+ * should read the payload. */
+function labelList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const item of v) {
+    const value = (item as Record<string, unknown> | null)?.value;
+    if (typeof value === "string" && value.trim()) out.push(value.trim());
+  }
+  return [...new Set(out)];
+}
+
 function codeList(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v
@@ -96,7 +112,7 @@ export function noticeKind(sourceName: string, raw: unknown): string | null {
 export function listingCodes(
   sourceName: string,
   raw: unknown,
-): { naics: string[]; psc: string[] } | null {
+): { naics: string[]; psc: string[]; naics_labels: string[]; psc_labels: string[] } | null {
   const r = raw as Record<string, unknown> | null | undefined;
   if (!r) return null;
 
@@ -104,7 +120,21 @@ export function listingCodes(
     case "SAM.gov": {
       const naics = codeList(r.naics);
       const psc = codeList(r.psc);
-      return naics.length || psc.length ? { naics, psc } : null;
+      /* LABELS, added 2026-09-02 and ADDITIVELY on purpose.
+       *
+       * `codes` is jsonb and existing readers reach for `.naics` / `.psc`,
+       * so widening those arrays into objects would break them silently.
+       * New sibling keys leave every existing reader working untouched.
+       *
+       * Why bother: the card showed nothing about what a notice IS, and a
+       * bare "339116" only helps a reader who knows their codes by heart.
+       * "Dental Laboratories" is the same fact a person can act on. SAM has
+       * carried both all along -- `{code, value}` -- and we stored half. */
+      const naicsLabels = labelList(r.naics);
+      const pscLabels = labelList(r.psc);
+      return naics.length || psc.length
+        ? { naics, psc, naics_labels: naicsLabels, psc_labels: pscLabels }
+        : null;
     }
     default:
       return null;

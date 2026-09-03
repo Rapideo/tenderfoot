@@ -1,0 +1,33 @@
+-- WHERE IS THE WORK? The card never said, and it is the first question a
+-- geographically-bounded firm asks.
+--
+-- FOUND 2026-09-02, by Matt triaging sample 1 and reporting it unworkable. The
+-- card he was shown carried DEADLINE, EST. VALUE and POSTED. Meanwhile the
+-- payload behind one of those cards -- "Dental prosthetics - Blanket purchase
+-- agreement", whose whole stored description is the 80 characters "Dental
+-- prosthetics - BPA - Base + four years - see SOW and additional items list" --
+-- carried `placeOfPerformance[0].state = "AZ"`.
+--
+-- Arizona. For an Indiana consultancy that is an instant pass, decided in the
+-- time it takes to read two letters, and he could not see it. He read the
+-- description instead, found it said nothing, and concluded the product was
+-- unworkable. He was right about the experience and the cause was this column
+-- not existing.
+--
+-- ⚠️ COVERAGE IS 36%, MEASURED, NOT ASSUMED: `placeOfPerformance[0].state` is
+-- present on 3,549 of 9,883 production rows. So this is a strong signal when
+-- present and absent more often than not -- which is exactly why it is stored
+-- as its own nullable column and rendered only when it exists, rather than
+-- defaulted to anything. A blank is the truth here; "unknown" printed as a
+-- location would be worse than silence.
+--
+-- Top states on production: CA 254, VA 234, TX 229, MD 219, DC 184, WA 147 --
+-- Indiana does not appear in the top six, which is itself a finding about what
+-- a federal-only queue is showing a firm whose ground is Indiana.
+--
+-- TWO LETTERS, NOT A PLACE OBJECT. The payload also carries zip, city (as a
+-- numeric code, oddly), streetAddress and country. Only the state is stored:
+-- it is the field that decides, the rest is detail for a record view that can
+-- read the payload directly, and a column nobody reads is the fourth instance
+-- of a defect this project already logged four times today (D27).
+ALTER TABLE solicitation ADD COLUMN place_of_performance text;

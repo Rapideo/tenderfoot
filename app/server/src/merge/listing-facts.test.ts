@@ -46,12 +46,58 @@ test("a source with no notice type yields null rather than a guess", () => {
   expect(noticeKind("SAM.gov", null)).toBeNull();
 });
 
-/* ── codes: the shape ingest/corpus.ts already writes ─────────────────── */
+/* ── codes: the corpus path's shape, WIDENED 2026-09-02 ───────────────── */
 
+/* The `*_labels` keys were added after Matt found the triage card showed
+ * nothing about what a notice IS. A bare "339116" only helps a reader who
+ * knows their codes by heart; "Dental Laboratories" is the same fact a person
+ * can act on, and SAM has carried both all along as `{code, value}` -- we
+ * stored half of it.
+ *
+ * ADDITIVE ON PURPOSE. Widening `naics`/`psc` themselves into objects would
+ * have broken every reader reaching for `.naics[0]` silently. New sibling
+ * keys leave those untouched; a corpus row that carries no labels simply has
+ * no label chip, because the card reads them with optional chaining. */
 test("naics and psc are collected in the shape the corpus path already uses", () => {
   expect(listingCodes("SAM.gov", SAM)).toEqual({
     naics: ["541611"],
     psc: ["R410", "R4 - PROFESSIONAL SERVICES"],
+    /* The fixture's own labels, not empties -- SAM carries `{code, value}` and
+     * the second psc entry has `value: null`, so exactly one label survives
+     * there. That asymmetry is the point of keeping the lists flat and
+     * independent rather than zipping them into pairs. */
+    naics_labels: ["Administrative Management"],
+    psc_labels: ["SUPPORT- PROFESSIONAL"],
+  });
+});
+
+test("labels are carried alongside the codes, not instead of them", () => {
+  /* The regression this guards: someone "simplifying" the two flat lists into
+   * one array of {code, value} pairs. That is the tempting shape and it is
+   * wrong here -- a code can be null while its value is present and vice
+   * versa (the fixture below is real), so positional pairing would silently
+   * mis-associate a label with the wrong code. */
+  const withLabels = {
+    naics: [{ code: "339116", value: "Dental Laboratories" }],
+    psc: [{ code: "6520", value: "DENTAL INSTRUMENTS, EQUIPMENT, AND SUPPLIES" }],
+  };
+  expect(listingCodes("SAM.gov", withLabels)).toEqual({
+    naics: ["339116"],
+    psc: ["6520"],
+    naics_labels: ["Dental Laboratories"],
+    psc_labels: ["DENTAL INSTRUMENTS, EQUIPMENT, AND SUPPLIES"],
+  });
+});
+
+test("a label with no code, and a code with no label, both survive independently", () => {
+  const lopsided = {
+    naics: [{ code: null, value: "Dental Laboratories" }, { code: "541611", value: null }],
+  };
+  expect(listingCodes("SAM.gov", lopsided)).toEqual({
+    naics: ["541611"],
+    psc: [],
+    naics_labels: ["Dental Laboratories"],
+    psc_labels: [],
   });
 });
 
@@ -63,6 +109,8 @@ test("a null code is dropped, not carried as an entry", () => {
   expect(listingCodes("SAM.gov", { psc: [{ code: "AG11" }, { code: null }] })).toEqual({
     naics: [],
     psc: ["AG11"],
+    naics_labels: [],
+    psc_labels: [],
   });
 });
 
