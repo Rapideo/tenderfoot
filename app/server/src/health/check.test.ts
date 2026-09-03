@@ -216,6 +216,11 @@ test("a source that is eligible but has no probe target is reported as skipped, 
 
   expect(checked.map((c) => c.name)).not.toContain("Kentucky eMARS VSS");
   expect(skipped.map((s) => s.name).sort()).toEqual([
+    /* Migration 019. HigherGov is legally `in` and deliberately has no
+     * probe_url: one would embed the api_key in the database, and every call
+     * is metered. Skipped is the CORRECT outcome here, not a gap -- see
+     * health-schema.test.ts for the full reasoning. */
+    "HigherGov",
     "Kentucky eMARS VSS",
     "Michigan SIGMA VSS",
   ]);

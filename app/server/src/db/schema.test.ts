@@ -401,6 +401,111 @@ test("pursuit_latest index exists, because every read depends on it", async () =
   expect(idx.map((i) => i.indexname)).toContain("pursuit_latest");
 });
 
+/* ---------------------------------------------------------------------------
+ * Migration 018/019 -- the rubric's three missing columns, and the first
+ * source in this project's history that costs money.
+ * ------------------------------------------------------------------------ */
+
+test("018 gives the registry the rubric dimensions it lacked", async () => {
+  const cols = (
+    await all<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'source'
+          AND column_name IN
+              ('cost_posture','annual_cost_usd','field_completeness','watermark_field')
+        ORDER BY column_name`,
+      [SCHEMA],
+    )
+  ).map((c) => c.column_name);
+  expect(cols).toEqual([
+    "annual_cost_usd",
+    "cost_posture",
+    "field_completeness",
+    "watermark_field",
+  ]);
+});
+
+/* A source nobody has priced is not a free source. NULL on annual_cost_usd
+ * would mean "free" and "never priced" at once -- the exact conflation
+ * health='unknown' exists to avoid (migration 006). */
+test("cost_posture keeps free, paid and unknown apart and refuses anything else", async () => {
+  const id = await insert(
+    `INSERT INTO source (name, cost_posture) VALUES ('cost fixture', 'unknown') RETURNING id`,
+  );
+  expect(
+    (await one<{ cost_posture: string }>(`SELECT cost_posture FROM source WHERE id = $1`, [id]))
+      ?.cost_posture,
+  ).toBe("unknown");
+  await expect(
+    dbRun(`INSERT INTO source (name, cost_posture) VALUES ('bad cost', 'cheap')`),
+  ).rejects.toThrow();
+  await dbRun(`DELETE FROM source WHERE name = 'cost fixture'`);
+});
+
+test("every source seeded before 2026-09-03 is free -- none has ever cost money", async () => {
+  const paid = await all<{ name: string }>(
+    `SELECT name FROM source WHERE cost_posture <> 'free' AND name <> 'HigherGov'`,
+  );
+  expect(paid.map((r) => r.name)).toEqual([]);
+});
+
+test("019 registers HigherGov as the first paid source, disabled and evidenced", async () => {
+  const hg = await one<{
+    legal_posture: string;
+    legal_note: string | null;
+    adapter_tier: string | null;
+    cost_posture: string;
+    annual_cost_usd: number | null;
+    watermark_field: string | null;
+    enabled: boolean;
+    archive_depth: string | null;
+  }>(`SELECT legal_posture, legal_note, adapter_tier, cost_posture, annual_cost_usd,
+             watermark_field, enabled, archive_depth
+        FROM source WHERE name = 'HigherGov'`);
+
+  expect(hg, "HigherGov missing from the registry").toBeDefined();
+  /* §5.5.1: posture `in` requires DOCUMENTED PERMISSION recorded on the row. */
+  expect(hg!.legal_posture).toBe("in");
+  expect(hg!.legal_note).toMatch(/attorney/i);
+  expect(hg!.adapter_tier).toBe("1 api");
+  expect(hg!.cost_posture).toBe("paid");
+  expect(hg!.annual_cost_usd).toBe(500);
+  /* `since = last successful run` needs a field to resume on. */
+  expect(hg!.watermark_field).toBe("captured_date");
+  /* Nothing is ever seeded enabled. */
+  expect(hg!.enabled).toBe(false);
+  /* The archive is the finding that overturned §5.8 -- it must be on the row. */
+  expect(hg!.archive_depth).toMatch(/2013/);
+});
+
+/* §5.4. The most expensive thing to rediscover about this source is that three
+ * plausible state parameters are accepted and silently ignored. If that fact
+ * lives only in a document, the next person writes `pop_state=IN` and scores a
+ * national result set. */
+test("HigherGov's verified_facets record the silently-ignored state parameters", async () => {
+  const row = await one<{ verified_facets: Record<string, unknown> | null }>(
+    `SELECT verified_facets FROM source WHERE name = 'HigherGov'`,
+  );
+  const blob = JSON.stringify(row?.verified_facets ?? {});
+  for (const p of ["pop_state", "state", "place_of_performance_state"]) {
+    expect(blob, `${p} must be recorded as silently ignored`).toContain(p);
+  }
+  expect(blob).toContain("search_id");
+  expect(blob.toLowerCase()).toContain("silently_ignored");
+});
+
+/* The metered allowance is the only budget in this project, and an ingest
+ * cannot ask the API how much is left. The constraint has to travel with the
+ * row that spends it. */
+test("HigherGov's note carries the quota constraint, not just the capability", async () => {
+  const row = await one<{ source_note: string | null }>(
+    `SELECT source_note FROM source WHERE name = 'HigherGov'`,
+  );
+  expect(row?.source_note ?? "").toMatch(/10,?000/);
+  expect((row?.source_note ?? "").toLowerCase()).toContain("document");
+});
+
+
 /* ⏰ THE SCHEMA REGISTERS ITS OWN AGE, and this test exists because the
  * registration is deliberately BEST EFFORT -- resetSchema() swallows any error
  * from it so a developer running one test file against a branch with no

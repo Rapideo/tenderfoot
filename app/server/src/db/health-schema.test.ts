@@ -59,9 +59,13 @@ test("the six never-probeable rows are backfilled to excluded", async () => {
   ]);
 });
 
-test("the seven probeable rows keep unknown", async () => {
+/* EIGHT since migration 019 added HigherGov (`legal_posture = 'in'`). The
+ * count moved because a source was added, not because health behaviour
+ * changed -- and it is asserted as a number rather than a set precisely so
+ * that adding a source is a deliberate edit here. */
+test("the eight probeable rows keep unknown", async () => {
   const n = await one<{ n: number }>(`SELECT count(*) n FROM source WHERE health = 'unknown'`);
-  expect(n!.n).toBe(7);
+  expect(n!.n).toBe(8);
 });
 
 /* Task 7. Three of the five generic-probe sources got a hand-verified
@@ -76,13 +80,33 @@ test("the seven probeable rows keep unknown", async () => {
  * than the session-bootstrap landing page. Left NULL on purpose: an
  * unverifiable URL is worse than an honest gap. This exclusion list names
  * the gap rather than weakening the assertion into one that would pass
- * vacuously. */
+ * vacuously.
+ *
+ * 🔴 HIGHERGOV IS EXCLUDED FOR A DIFFERENT AND STRONGER REASON, added with
+ * migration 019. It must NEVER carry a probe_url, and this is not a gap to be
+ * filled later:
+ *
+ *   1. A probe_url is a URL the checker GETs. Every authenticated HigherGov
+ *      call carries `?api_key=...` in the QUERY STRING, so a working probe_url
+ *      would be a CREDENTIAL STORED IN THE DATABASE -- the same mistake as
+ *      logging `document_path`, which leaked a live key on 2026-09-03
+ *      (CLAUDE.md §5.3).
+ *   2. Every call is METERED against 10,000 records/month, and no call may be
+ *      made without Matt's explicit approval (CLAUDE.md §5.1). A check-all
+ *      that silently probes a paid source is exactly the loaded gun the test
+ *      below describes for excluded rows.
+ *
+ * Its health therefore needs a DEDICATED probe method reading the key from the
+ * environment -- the shape `method = 'sam'` already establishes -- and a
+ * parameterless call returning 400 would prove liveness at ZERO records. That
+ * method does not exist yet. Until it does, HigherGov is correctly reported as
+ * SKIPPED rather than probed. */
 test("every generic-probe source that CAN be GET-probed has a probe_url", async () => {
   const missing = await all<{ name: string }>(
     `SELECT name FROM source
       WHERE legal_posture = 'in'
         AND platform NOT IN ('Manual import', 'SAM', 'USASpending')
-        AND name NOT IN ('Kentucky eMARS VSS', 'Michigan SIGMA VSS')
+        AND name NOT IN ('Kentucky eMARS VSS', 'Michigan SIGMA VSS', 'HigherGov')
         AND (probe_url IS NULL OR probe_url = '')`,
   );
   expect(missing.map((m) => m.name)).toEqual([]);
