@@ -1,6 +1,12 @@
 # Tenderfoot — status
 
-**Updated 2026-09-01.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-09-03.** One screen. The reasoning lives elsewhere; this is only where things stand.
+
+> **NOW: the project turned data-first on 2026-09-03, and the data question is answered.** HigherGov was tested against a 71-item answer key and returned **99% coverage recall**, an **Indiana solicitation archive back to 2013** where the source itself publishes none, and **sub-state coverage no adapter strategy reaches** — for $500/yr. The verdict is a buy, and the adapter backlog (Illinois, Michigan, Kentucky, Ohio, the OpenGov municipalities) is **shelved pending a reliability test**. SAM.gov stays direct and free; HigherGov's metered allowance is spent only on what we cannot get free.
+>
+> **`npm run fitness` now gives a verdict rather than an opinion.** The floor fails five of seven predicates against production and **blocks GO/NO-GO by rule**. ⚠️ **A live API key was leaked and rotated during this work — CLAUDE.md §5 is binding on anyone touching that API.**
+>
+> **Read the RESUME HERE block below before the Plan of Action**, whose slice order no longer matches the sequence Matt set.
 
 > **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
 >
@@ -32,6 +38,11 @@
 
 ## 📌 PINNED — LAST UPDATED 2026-08-28 — READ THIS FIRST, THEN THE RESUME BLOCK BELOW
 
+> ⚠️ **2026-09-03: this pinned block is now SIX DAYS STALE and describes a project that has since
+> changed direction. Read `RESUME HERE` first.** Nothing pinned here was invalidated, but the
+> solicitation counts predate three ingests, and the whole "which sources do we scrape" frame it
+> assumes was answered on 2026-09-03 by buying one instead.
+>
 > *2026-08-29: the resume block below is newer than this one and carries the current state. Nothing pinned here was invalidated by the 08-28/29 run, but the solicitation counts here predate it — production now holds 7,644 SAM.gov deadlines that were null when this block was written.*
 
 **The production admin gate is LIVE (verified `401`), the demo criterion is MET, and RUN WORKS** — a real run landed on production 2026-08-28 (`200` in 2.7s, 2 rows), which also **removed the seven-day-window hazard** by stamping a genuine `last_run_at`. Run is now safe to press in the browser for the first time. Gate 301 tests / 43 files. Production holds **9,883 solicitations / 11,121 sightings / 1,214 organizations** after two real ingests on 2026-08-28 (12-hour, then seven-day), and **Run has been clicked in a browser on production and completed** — the first time ever. Gate **308 tests / 44 files**. **Nothing is outstanding.** Production is public **by decision** (§5), local development no longer touches production (§4), and the 2026-08-27 Run failure is **solved, attributed and fixed** (§3) — a 30-second `maxDuration` in `vercel.json` that every budget in the codebase had been reasoning past, now 300 and tied to the code by a test.
@@ -215,7 +226,239 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-02 (end of day)
+## 🔖 RESUME HERE — updated 2026-09-03
+
+## ▶️ NEXT SESSION — THE PROJECT CHANGED DIRECTION TODAY, AND THE DATA QUESTION IS ANSWERED.
+
+**Read this before the plan of action, because the plan's slice order no longer
+matches the sequence Matt set.**
+
+### 🔄 THE REVERSAL, in Matt's words
+
+> *"Once we have both our reliable upstreams defined, we can then flesh out the
+> rest of the app with real data and analysis methods, instead of just hoping
+> that the source meets our criteria."*
+
+**Data first, screens second.** The project's recorded history is the argument
+for it: every defect that mattered — the inert undo, the missing description,
+the unbiddable queue, D27's four SAM-shaped layers — was found by real data
+hitting a screen, and none was catchable by the tests passing at the time.
+
+⚠️ **This does NOT relax the fidelity mandate (CLAUDE.md §1).** It means screens
+get built ONCE, against data whose shape is known, rather than rebuilt when the
+source turns out different.
+⚠️ **And it must not become app-dark.** Ruling 3A keeps triage live because the
+app is the detector.
+
+**The sequence Matt set:** ① field mapping ✅ · ② the floor, measured ✅ ·
+③ a bounded reliability test ⏸ · ④ then the corpus pulls ⏸.
+
+---
+
+### 🔑 HIGHERGOV IS THE ANSWER, AND IT IS A BUY
+
+Trial key obtained and tested 2026-09-03. **~490 records of a 10,000/month
+allowance spent.** Everything measured, not quoted:
+
+| | |
+|---|---|
+| **Coverage recall** | **69 / 70 — 99%** against the 71-item IDOA answer key |
+| **Relevance recall** | **5 / 5** on the KP-shaped subset |
+| **Indiana archive** | **9,286 records back to 2013-06-19**, where IDOA publishes 71 open notices and none at all |
+| **Sub-state buyers** | **34 / 100**, 33 distinct agencies — Allen County, Fort Wayne, Fishers, Zionsville, Indianapolis Airport Authority, Ivy Tech |
+| Method | exact `source_id` lookup — **their `source_id` IS IDOA's 15-digit Event ID** |
+
+**Full evidence: [`docs/2026-09-03-platform-comparison.md`](docs/2026-09-03-platform-comparison.md) §R0–R11.**
+Field mapping: [`docs/2026-09-03-highergov-field-mapping.md`](docs/2026-09-03-highergov-field-mapping.md).
+
+**🔴 A LIVE API KEY WAS LEAKED INTO A TRANSCRIPT AND ROTATED.** Revocation
+**proved**, not asserted: the burned key answers `403` where a live one answers
+`400`. `document_path` embeds the api_key in every response, and a `scrub()`
+helper that guarded every error path printed a field *value* raw. **The three
+rules that follow are in CLAUDE.md §5.3 and bind any code written against this
+API.**
+
+**⚖️ CLAUDE.md GAINED §5, AND IT IS BINDING.** Never call this API without
+Matt's explicit approval — testing, verification, a quick check, all of it.
+A **standing budget of 500 records** was granted 2026-09-03; inside it calls may
+be made without asking each time, but every one is counted and reported.
+**Consumption cannot be read from the API at all** — no quota field, no usage
+endpoint, no header. The account dashboard is the only instrument.
+**The meter counts records RETURNED**, proved by an isolated test: 478 → 489 on
+one call returning 1 opportunity + 10 documents.
+
+**Staged retrieval, Matt's principle:** *everything needed to REJECT a notice is
+already in the listing record; documents are only needed to ACCEPT one.*
+Rejection is free; acceptance costs ~11 records. **A bulk document pass is
+structurally impossible** — 9,286 Indiana opportunities at 10–19 documents each
+is nine to seventeen months of allowance.
+
+---
+
+### ⚖️ THREE RULINGS, 2026-09-03
+
+| | Ruling | Consequence |
+|---|---|---|
+| **1A** | The contract corpus is **evidence toward a qualification design that does not yet exist** | Ingest proceeds. **Nothing scores, nothing filters, no control is wired.** §7.10 clause 2 intact |
+| **2C** | The fitness statement carries **both floor and target** | The gap between them *is* the roadmap |
+| **3A** | **Effort moves to data; triage stays live** | No new UI slices. Sample 2 keeps running as the detector |
+
+Spec: [`docs/superpowers/specs/2026-09-03-data-fitness-and-source-rubric-design.md`](docs/superpowers/specs/2026-09-03-data-fitness-and-source-rubric-design.md).
+Plan: [`docs/superpowers/plans/2026-09-03-data-fitness-and-source-rubric.md`](docs/superpowers/plans/2026-09-03-data-fitness-and-source-rubric.md).
+
+---
+
+### ✅ SHIPPED 2026-09-03 — gate 738 tests / 83 files, `main` == `origin/main`
+
+**`npm run fitness`** — the floor and the source profiles, read-only by
+construction (no `INSERT`/`UPDATE`/`DELETE` anywhere in `fitness/`), so it is
+safe to point at production:
+`DATABASE_URL="$DATABASE_URL_PRODUCTION" npm run fitness`
+
+**THE FLOOR'S FIRST VERDICT, against production:**
+
+```
+F1 FAIL  1 source has ever ingested (threshold 2)
+F2 FAIL  0 ingested sources in Indiana, the primary geography
+F3 PASS  0 rows hidden by an impossible deadline
+F4 PASS  no gap — across a span of only three weeks
+F5 FAIL  10 real decisions (threshold 100)
+F6 FAIL  p10 description = 57 chars over 7,271 biddable rows
+F7 FAIL  3 of 979 document-deferring rows have the document — 0.3%
+```
+
+**Two numbers worse than anything previously quoted.** Sample 2's median of 515
+chars hid a tenth of biddable rows at **57 characters or fewer**. And **979 rows
+explicitly say "see the attachment"**; we hold three.
+
+⚠️ **F4 passes and must be read carefully** — it measures the span we HAVE, not
+the span we should have. §8.2's adjudication window is still undefined.
+⚠️ **Thresholds are UNRATIFIED proposals** and the report says so on every run.
+
+**THE RUBRIC** — nine ordinal dimensions, **no aggregate score**, with a test
+asserting the absence. R1 (legal posture) is a GATE: a disqualified source
+returns with only R1 populated. `unknown` is never collapsed to `weak`.
+Five acceptance tests, including the one it exists for: **IDOA grades STRONG on
+geography and STRONG on cost and must still come out rejected** — a weighted
+total would have carried it.
+
+**Migrations 018–022.** 018 the rubric's three columns (cost is two columns:
+*a source nobody has priced is not a free source*). 019 HigherGov, the first
+paid source in the project's history. 020 the Indiana archive correction.
+021 `sole_source` + `source_key` + the watermarks the registry already knew.
+022 sighting identity — below.
+
+---
+
+### 🔴 THE FUSION merge.ts WARNED ABOUT SINCE SP3.5 — FIXED, migration 022
+
+merge.ts's own header carried it for a month: *"grouping is by external_id
+ALONE… this code fuses two UNRELATED opportunities into one canonical row, and
+nothing errors or logs: the merge reports one solicitation with two sightings,
+which **reads as corroboration**, not as corruption."*
+
+**Measured 2026-09-03: Allen County publishes external ids `132`, `134`, `135`.**
+
+`source.external_id_scope` declares whether a source's ids may be trusted
+globally, **defaulting to `local`**. SAM.gov and USASpending are `global`, so the
+demo criterion is untouched and production behaviour is unchanged.
+
+**Fixing the grouping alone would have MOVED the defect.** Three more places
+keyed on `external_id`: the link `UPDATE` (the actual fusion site), the insert's
+`RETURNING id, external_id` (which cannot tell two rows apart when both say
+"134"), and the `chains` Map. All now keyed by identity.
+
+**Two things the tests caught that were wrong first time.** The coalesce fell
+back to the scoped form unconditionally, so a directly-inserted sighting behaved
+differently from an imported one *for the same source* — `identity_key` is a
+CACHE of the declaration, not a second rule. And **mutating the DEFAULT from
+`local` to `global` left all 23 tests passing**: the default is the entire
+protection for a source nobody has thought about, and nothing exercised it.
+
+---
+
+### 🌿 `idoa-adapter` IS MERGED — Option A, and the parser stays as EVIDENCE
+
+Merged `--no-ff` at `b4d4b1e`. **`Indiana IDOA solicitations` stays
+`enabled = false` and is not expected to change.**
+
+**The parser is retained deliberately.** It is the only second source this
+codebase has, and D27 established what that is worth. Deleting it returns every
+source-agnostic test to SAM plus a string constant — in the weeks before adding
+a paid API whose payload resembles nothing here.
+
+**🗓️ NAMED DELETION TRIGGER**, recorded in `idoa.ts`'s header and `registry.ts`:
+**delete the parser, its fixture and its tests WHEN THE HIGHERGOV ADAPTER LANDS**
+and becomes the second live shape. Not before.
+
+⚠️ **The ledger's merge advice was WRONG by the time it was used.** It said "one
+conflict in `merge.ts`, take the branch's version, it is a strict superset."
+There were **four**, and taking the branch wholesale would have **silently
+deleted `place_of_performance`**, which shipped to production the same day.
+Resolved as a union.
+
+⚠️ **Migrations now interleave**: the branch's `016` applies after `017`–`020` on
+every existing database. Harmless — independent `ALTER`s — and already flagged
+once as Ruling 11.
+
+---
+
+### 📌 INDIANA HAS A SOLICITATION ARCHIVE AFTER ALL — three documents amended
+
+IDOA publishes none. **HigherGov holds 9,286 Indiana records back to 2013.**
+So the *finding* stands and the *consequence* drawn from it does not.
+
+Amended in place with originals struck through: design spec **§5.7**'s platform
+table, **§5.8**'s finding row and closing paragraph, **§10.2**'s "Indiana remains
+the exception", and the registry row via **migration 020**.
+
+**What did NOT change:** Indiana Phase 0 *may* still run on contract data and the
+contract side is independently valuable. §8.2 is untouched — there is still no
+answer key.
+
+---
+
+### 🅿️ WITH MATT — the blacklist
+
+[`docs/negative-profile.md`](docs/negative-profile.md) is a template awaiting his
+entries. `firm_profile.negative_profile` has been NULL since migration 002, and
+its note says why: *"lost its last source when the hand-run was retired
+2026-08-11."* **Empty because its source went away, not by decision** — unlike
+`past_performance` beside it. Matt is the new source; INDOA is entry one.
+
+**It does more for F6 and F7 than any document-fetch rule could**, because it
+removes unreadable rows by removing work we would never do rather than by paying
+to read it.
+
+---
+
+### 🔴 STILL OPEN
+
+- **The description ruling.** ~34% of rows carry no description, **58% among
+  sub-state buyers** — and the gap does NOT track work type: KP's own sector is
+  missing descriptions **42%** of the time, and 3 of 5 such rows were NAICS
+  541611, KP's primary code. All INDOT. **Four options costed in
+  `docs/2026-09-03-platform-comparison.md`; Option C (fetch on demand,
+  ~11 records per click) recommended and unruled.**
+- **The floor's thresholds are unratified** — F1=2, F5=100, F6=200, F7=0.8.
+- **The best-scoring source in the registry has never been run.** The Indiana
+  EDS contract register grades STRONG on five of nine — free, primary
+  geography, full archive to 2005, verified watermark — and is **exactly the fix
+  for F1 and F2**. Held back only because Matt put the corpus pulls at step ④.
+- **Michigan SIGMA is outside the firm profile entirely** (`IN` primary,
+  `IL/OH/KY` secondary — MI is neither). Worth knowing before anyone budgets an
+  adapter for it.
+- **`merge.ts` is not source-agnostic yet** — 021's header records that
+  `source_key` is the precondition, not the repair.
+- **The flaky gate's second cause is still unexplained.** Fired twice on
+  2026-09-03, passing on immediate re-run each time.
+- `accuracyByField` has no surface · `fields.ts` matches one date format · the
+  cleared-queue Metrics card goes to `/admin` · **the real GO/NO-GO adjudication
+  still has not happened** — and the floor now says it may not.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-09-02 (end of day)
 
 ## ▶️ NEXT SESSION — ONE DECISION BLOCKS THE NEXT SLICE. Everything else is shipped, parked, or written down.
 
