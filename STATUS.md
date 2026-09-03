@@ -215,7 +215,96 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-02
+## 🔖 RESUME HERE — updated 2026-09-02 (late)
+
+## ▶️ NEXT SESSION — IDOA INGESTS REAL DATA. The branch is unmerged, unpushed, and has one known conflict with a written-down resolution.
+
+### 🎯 WHAT A LIVE RUN ACTUALLY PRODUCED — branch `idoa-adapter`, against the real in.gov page
+| | |
+|---|---|
+| Hand count of the live page, taken **before** scraping | **71** |
+| `npm run scrape -- --source idoa --listings-only` | **71 rows**, `nextUntil: null`, `undatedSkipped: 0` |
+| Import | 71, **`ingestedThrough: null`** |
+| Buyer attached | **45/45** — *Natural Resources*, *State Police* |
+| Deadline | **44/45** |
+| Description | **45/45** |
+| 🔑 **Answer key** | **26 solicitations matched** by external_id against the 2026-08-04 corpus import of this same page |
+
+**That answer key is the strongest evidence in the slice.** 26 Event IDs the adapter produced today
+were already in the database from a hand-built corpus a month ago. Independent confirmation the
+parser reads the page the way a person did.
+
+### 🔴 THE FINDING THAT OUTRANKS THE FEATURE — D27, and it is about this codebase
+**Tenderfoot ingested exactly ONE real source for its entire life**, so every payload-reading layer
+looks source-agnostic and is actually SAM-shaped. **Nothing could reveal that until a second source
+existed.** Four instances, one root cause, none caught by 653 passing tests — because every fixture
+was SAM-shaped too:
+
+| Field | How it failed | Found by |
+|---|---|---|
+| `description` | no IDOA case | **Matt, trying to triage** |
+| `closes_at` | `case "SAM.gov":` and nothing else — and the queue ORDERS by it | the live run |
+| `title` | merge read `raw.title`; IDOA emits `raw.eventName` | the live run |
+| `org_id` | no IDOA case; `org-chain.test.ts` **did not exist** | the previous fix |
+
+All four are fixed. Generalised as **Proto2PRD lesson 2.26**: *a layer is only proven
+source-agnostic by a second source* — an elegant abstraction at N=1 is a hypothesis, not a property.
+
+### ⚠️ TWO THINGS DELIBERATELY NOT FIXED
+**1. 45 IDOA rows keep `(untitled)` permanently.** `titleUpdates` is populated only in the
+`else if (Number(g.unlinked) > 0)` branch, so a title is recomputed **only for rows with unlinked
+sightings**. These were inserted before the fix, and re-import is idempotent — there is no path
+that re-derives their title. **New rows are correct.** Existing ones need a deliberate backfill or
+deletion and re-ingest. Touching merge's update logic is a slice of its own.
+
+**2. Merge is TWO-PASS for newly created rows.** Its collectors skip groups whose
+`solicitation_id` is still null — which is every row being created in that run. First merge set 0
+descriptions for IDOA; the second set 45. **So a source's first ingest lands with empty fields, and
+a human would reasonably read that as the adapter failing.** Documented, not changed.
+
+### 🔀 THE BRANCH — 23 commits, unmerged, unpushed, ONE known conflict
+`git merge-tree` reports exactly one: **`app/server/src/merge/merge.ts`**. Cause is known and the
+resolution is written down: the description merge-layer work exists on BOTH branches — as
+`0dbe809` here and `ee31327` on `main` via the cherry-pick that unblocked triage — and the
+surrounding region has since diverged (provenance, then title). **Resolution: take this branch's
+version of that block. It is a strict superset — description AND provenance AND title. Nothing on
+`main` is lost.**
+
+**Gate: 673 tests / 79 files, exit 0** (run solo).
+
+### ⚠️ THE FLAKY GATE FIRED AGAIN, and my first diagnosis was wrong
+I saw `routes.test.ts` fail during a **concurrent** run and recorded that as evidence the still-open
+second cause is concurrency-specific. **It then fired on a SOLO run too.** So concurrency
+aggravates it and is not the cause. Symptom both times: the file fails to collect and its whole body
+reports as *skipped*. An immediate re-run passes. **Still unexplained.**
+
+### 🅿️ HIGHERGOV — parked, not rejected
+Matt: *"put a pin in this... we can live with [IDOA] as our primary data source throughout the
+development of the remainder of the application."* Everything found stands: **$500/yr with API at
+every tier**, server-side filtering via a saved-search `search_id` (State for state/local, NAICS,
+PSC, keywords, set-aside, value range, active), a dedicated **SLED** endpoint refreshed every 30
+minutes with `captured_date` as an incremental watermark, **10,000 records/month** standing, and
+**attorney sign-off on storing the data in our own store** — which is the §5.5.1 *documented
+permission* the registry requires.
+
+**The decisive test is designed and cannot run without a trial key** (Matt has emailed them; free
+accounts appear not to include API access). **Diff their Indiana SLED feed against Task 1's 71
+known solicitations**: how many they carry, how stale, and whether they carry the ZIP attachments.
+That turns "hard to gauge" into a percentage. The ground truth is committed at
+`app/server/src/scrape/adapters/fixtures/idoa-listing.html`.
+
+### 🟢 SHIPPED TO PRODUCTION EARLIER TODAY, all verified live
+The **discovery channel** (migration 013, seven required channels), the **undo toast** (D23), and
+the **description panel** (migration 015, D24) with its backfill — **0 → 8,484 of 9,883** rows.
+Sample 1 is drawn and clean: **100 of 6,893**, seed `gate-2026-09-02`, `decided 0`.
+
+### 🔴 STILL OPEN, unchanged
+`accuracyByField` has no surface · `fields.ts` matches one date format · the cleared-queue Metrics
+card goes to `/admin` · **and the real GO/NO-GO adjudication still has not happened.**
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-09-02
 
 ## ▶️ NEXT SESSION — everything is built and the sample is drawn. **The next move is Matt triaging it**, and then IDOA.
 
