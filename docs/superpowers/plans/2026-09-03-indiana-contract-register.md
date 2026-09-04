@@ -4,7 +4,7 @@
 
 **Goal:** Load ~204,991 Indiana awarded contracts into the `contract` table — the first row it will ever hold — clearing floor predicates F1 and F2.
 
-**Architecture:** A standalone module under `app/server/src/contracts/`, writing **direct to `contract`**. It deliberately does **not** use the `Adapter` interface, add a `SourceShape`, register in `adapters/registry.ts`, or produce an artifact — those all feed `sighting`, and §2 of the spec makes "a contract cannot reach the triage queue" a structural property rather than a filter. The fetcher splits date windows recursively and **asserts completeness against `totalResults`**, because the API's `page` parameter is silently ignored.
+**Architecture:** A standalone module under `app/server/src/contracts/`, writing **direct to `contract`**. It deliberately does **not** use the `Adapter` interface, add a `SourceShape`, register in `adapters/registry.ts`, or produce an artifact — those all feed `sighting`, and §2 of the spec makes "a contract cannot reach the triage queue" a structural property rather than a filter. The fetcher makes **two requests** — one to learn `totalResults`, one to fetch that many — and **asserts completeness against `totalResults`**. It does not paginate, because the API's `page` parameter is silently ignored, and it does not window, because `startDate`/`endDate` filters fully-contained-within and so cannot tile the register (Task 1; ledger Ruling 3).
 
 **Tech Stack:** TypeScript ESM (`.js` import specifiers), Postgres via `pg`, vitest with schema-per-file isolation, `tsx` for the CLI.
 
@@ -29,20 +29,20 @@
 | File | Responsibility |
 |---|---|
 | `app/server/migrations/023_contract_ingest.sql` | **Create.** `source_id`, `amendment`, `action_type`, `amount_cents`, and the unique natural key. |
-| `app/server/src/contracts/windows.ts` | **Create.** Window splitting. **PURE — no network, no database.** This is where the lesson lives, so it must be testable with a fake. |
-| `app/server/src/contracts/windows.test.ts` | **Create.** Including the completeness-assertion test. |
-| `app/server/src/contracts/eds-client.ts` | **Create.** One HTTP call. Politeness settings live here. |
+| `app/server/src/contracts/completeness.ts` | **Create.** Parse, and the assertion that the fetch arrived whole. **PURE — no network, no database.** This is where the lesson lives, so it must be testable with a fake. |
+| `app/server/src/contracts/completeness.test.ts` | **Create.** Including the short-response test. |
+| `app/server/src/contracts/eds-client.ts` | **Create.** Two HTTP calls. Politeness settings live here. |
 | `app/server/src/contracts/eds-client.test.ts` | **Create.** Against a committed fixture; never the network. |
-| `app/server/src/contracts/fixtures/eds-window.json` | **Create.** One real window's response. |
+| `app/server/src/contracts/fixtures/eds-sample.json` | **Create.** A small real slice — the full register is 78 MB. |
 | `app/server/src/contracts/import.ts` | **Create.** Row mapping and the idempotent write. |
 | `app/server/src/contracts/import.test.ts` | **Create.** Idempotency, the natural key, and the queue guard. |
-| `app/server/src/contracts/ingest.ts` | **Create.** Orchestration: windows → client → import → `ingest_run`. |
+| `app/server/src/contracts/ingest.ts` | **Create.** Orchestration: client → import → `ingest_run`. |
 | `app/server/src/contracts/ingest.test.ts` | **Create.** With a fake client. |
 | `app/server/src/contracts/contracts-cli.ts` | **Create.** Thin CLI, mirroring `merge/merge-cli.ts`. |
 | `package.json` | **Modify.** Add `contracts:ingest`. |
 | `app/server/migrations/024_eds_page_ignored.sql` | **Create (Task 9).** Record `page` in the registry's `silently_ignored`. |
 
-**Why `windows.ts` is pure and separate.** The completeness assertion is the one piece of logic that, if wrong, makes the whole ingest silently incomplete. Keeping it free of network and database means its tests are fast, deterministic, and can simulate a truncated response — which is impossible against a live API that never truncates on demand.
+**Why `completeness.ts` is pure and separate.** The assertion is the one piece of logic that, if wrong, makes the whole ingest silently incomplete. Keeping it free of network and database means its tests are fast, deterministic, and can simulate a truncated response — which is impossible against a live API that never truncates on demand.
 
 ---
 
@@ -253,264 +253,214 @@ git commit -m "Migration 023: a contract id is not unique, and amount is not a v
 
 ---
 
-## Task 3: `windows.ts` — splitting, and the assertion that makes it safe
+## Task 3: `completeness.ts` — the assertion, pure
+
+> ⚠️ **THIS TASK WAS REWRITTEN after Task 1. See Ruling 3 in the ledger.**
+> Task 1 established that `startDate`/`endDate` is a **fully-contained-within**
+> filter: a contract's own start AND end must both fall inside the window, so
+> every contract spanning a boundary is invisible to both neighbours. Year
+> windows recovered **24,933 of 204,991 — an 88% shortfall.** Verified
+> independently: 2019–2021 returns 16,801 while 2020 alone returns 1,334.
+>
+> **No date window can tile this register**, so window splitting is gone.
+> Measured instead: **one request returns all 204,991 rows in 47s at 78 MB.**
+> The completeness assertion survives and becomes the WHOLE guarantee.
 
 **Files:**
-- Create: `app/server/src/contracts/windows.ts`
-- Test: `app/server/src/contracts/windows.test.ts`
+- Create: `app/server/src/contracts/completeness.ts`
+- Test: `app/server/src/contracts/completeness.test.ts`
 
 **Interfaces:**
 - Consumes: nothing. **Pure — no network, no database.**
 - Produces:
-  - `interface Window { from: string; to: string }` — inclusive ISO dates
-  - `interface WindowFetch { total: number; rows: unknown[] }`
-  - `type FetchWindow = (w: Window) => Promise<WindowFetch>`
-  - `interface CollectResult { rows: unknown[]; windows: Window[]; requests: number }`
-  - `function yearWindows(fromYear: number, toYear: number): Window[]`
-  - `function splitWindow(w: Window): [Window, Window]`
-  - `async function collectAll(windows: Window[], fetch: FetchWindow): Promise<CollectResult>`
+  - `interface RegisterPage { total: number; rows: unknown[] }`
+  - `function parseRegister(payload: string): RegisterPage`
+  - `function assertComplete(page: RegisterPage): void` — throws when short
 
 - [ ] **Step 1: Write the failing test**
 
-Create `app/server/src/contracts/windows.test.ts`:
+Create `app/server/src/contracts/completeness.test.ts`:
 
 ```typescript
 import { expect, test } from "vitest";
-import { yearWindows, splitWindow, collectAll, type Window, type WindowFetch } from "./windows.js";
+import { parseRegister, assertComplete } from "./completeness.js";
 
-test("yearWindows produces one inclusive window per year", () => {
-  const ws = yearWindows(2004, 2006);
-  expect(ws).toEqual([
-    { from: "2004-01-01", to: "2004-12-31" },
-    { from: "2005-01-01", to: "2005-12-31" },
-    { from: "2006-01-01", to: "2006-12-31" },
-  ]);
+test("parseRegister reads the total and the rows from DIFFERENT places", () => {
+  /* pagination.totalResults and results.length. That separation IS the
+   * truncation check -- collapsing them makes it vacuous. */
+  const p = parseRegister(JSON.stringify({
+    results: [{ id: "a" }],
+    pagination: { totalResults: 9 },
+  }));
+  expect(p.total).toBe(9);
+  expect(p.rows).toHaveLength(1);
 });
 
-test("splitWindow halves a window without gapping or overlapping", () => {
-  const [a, b] = splitWindow({ from: "2020-01-01", to: "2020-12-31" });
-  expect(a.from).toBe("2020-01-01");
-  expect(b.to).toBe("2020-12-31");
-  /* The halves must MEET: b starts the day after a ends. A gap loses records
-   * silently; an overlap is merely wasteful. */
-  const dayAfter = new Date(Date.parse(a.to) + 86400000).toISOString().slice(0, 10);
-  expect(b.from).toBe(dayAfter);
+test("a complete page passes", () => {
+  expect(() =>
+    assertComplete({ total: 3, rows: [{ id: "a" }, { id: "b" }, { id: "c" }] }),
+  ).not.toThrow();
 });
 
-/* 🔴 THE TEST THIS WHOLE MODULE EXISTS FOR.
+/* 🔴 THE ASSERTION THIS MODULE EXISTS FOR.
  *
  * The API's `page` parameter is SILENTLY IGNORED -- pages 1, 2 and 100 return
- * identical records. So the only way to know a window arrived complete is to
- * compare the stated total against what came back. A response claiming 5,000
- * results while handing over 2,000 MUST split, not be accepted. */
-test("a truncated response splits the window instead of being accepted", async () => {
-  const seen: Window[] = [];
-  const fetch = async (w: Window): Promise<WindowFetch> => {
-    seen.push(w);
-    /* The full year claims 5,000 but yields 2,000. Its halves are honest. */
-    if (w.from === "2020-01-01" && w.to === "2020-12-31") {
-      return { total: 5000, rows: Array.from({ length: 2000 }, (_, i) => ({ id: "big-" + i })) };
-    }
-    return { total: 10, rows: Array.from({ length: 10 }, (_, i) => ({ id: w.from + "-" + i })) };
-  };
-
-  const out = await collectAll([{ from: "2020-01-01", to: "2020-12-31" }], fetch);
-
-  expect(seen.length).toBeGreaterThan(1);
-  /* The truncated 2,000 must NOT appear in the output -- only the honest
-   * halves. Accepting it is the silent-incompleteness failure. */
-  expect(out.rows).toHaveLength(20);
-  expect(out.rows.every((r) => !String((r as { id: string }).id).startsWith("big-"))).toBe(true);
+ * identical records -- so there is no cursor to follow and no second request
+ * that would fill a gap. If the single fetch comes back short, the ONLY safe
+ * outcome is a loud failure. A partial register that looks complete is the
+ * exact failure this whole design exists to prevent. */
+test("a short page throws, naming both numbers", () => {
+  const p = { total: 204991, rows: [{ id: "a" }] };
+  expect(() => assertComplete(p)).toThrow(/204991/);
+  expect(() => assertComplete(p)).toThrow(/returned 1/);
 });
 
-test("a complete window is accepted without splitting", async () => {
-  let calls = 0;
-  const fetch = async (): Promise<WindowFetch> => {
-    calls += 1;
-    return { total: 3, rows: [{ id: "a" }, { id: "b" }, { id: "c" }] };
-  };
-  const out = await collectAll([{ from: "2020-01-01", to: "2020-12-31" }], fetch);
-  expect(calls).toBe(1);
-  expect(out.rows).toHaveLength(3);
-  expect(out.windows).toEqual([{ from: "2020-01-01", to: "2020-12-31" }]);
+/* An empty request body returns a ZEROED pagination block rather than
+ * everything. Zero-and-zero is internally consistent so it must not throw --
+ * the caller checks the count separately. */
+test("a zeroed response is consistent and does not throw", () => {
+  expect(() => assertComplete({ total: 0, rows: [] })).not.toThrow();
 });
 
-/* A single day that still reports truncation cannot be split further. Throwing
- * is correct: silently returning a partial day is the failure this module
- * exists to prevent, and there is no honest smaller window to try. */
-test("a single day that still truncates throws rather than returning a partial", async () => {
-  const fetch = async (): Promise<WindowFetch> => ({ total: 99, rows: [{ id: "x" }] });
-  await expect(
-    collectAll([{ from: "2020-06-15", to: "2020-06-15" }], fetch),
-  ).rejects.toThrow(/cannot be split/i);
+/* More rows than claimed is also a contract violation. Never observed, and an
+ * assertion checking only one direction would not notice. */
+test("more rows than the stated total also throws", () => {
+  expect(() =>
+    assertComplete({ total: 1, rows: [{ id: "a" }, { id: "b" }] }),
+  ).toThrow();
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --env-file=.env node_modules/vitest/vitest.mjs run app/server/src/contracts/windows.test.ts`
-Expected: FAIL — `Cannot find module './windows.js'`
+Run: `node --env-file=.env node_modules/vitest/vitest.mjs run app/server/src/contracts/completeness.test.ts`
+Expected: FAIL — `Cannot find module './completeness.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `app/server/src/contracts/windows.ts`:
+Create `app/server/src/contracts/completeness.ts`:
 
 ```typescript
-/* WINDOW SPLITTING, and the completeness assertion that makes it safe.
+/* THE COMPLETENESS ASSERTION. It is the entire correctness guarantee of this
+ * ingest, which is why it lives alone, pure, and heavily tested.
  *
  * 🔴 THE API'S `page` PARAMETER IS SILENTLY IGNORED. Measured 2026-09-03:
  * pages 1, 2 and 100 at pageSize 50 returned IDENTICAL record sets -- 50 of 50
- * ids overlapping, same first id, same last. The sixth §5.4 instance in this
- * project and the fourth platform.
+ * ids overlapping, same first id, same last. So there is no cursor, no second
+ * request that could fill a gap, and no way to "continue" a short fetch.
  *
- * So there is no cursor to follow. The only safe pattern is to request a window
- * WHOLE and assert you got all of it: the response states `totalResults`, and
- * if that exceeds what arrived, the window is too big and must be split.
+ * 🔴 AND DATE WINDOWS CANNOT TILE THE REGISTER. `startDate`/`endDate` filters
+ * fully-contained-within -- a contract's own start AND end must both sit inside
+ * the window -- so everything spanning a boundary is invisible to both
+ * neighbours. Year windows recovered 24,933 of 204,991.
  *
- * PURE ON PURPOSE -- no network, no database. The completeness assertion is the
- * one piece of logic that, if wrong, makes the entire ingest silently
- * incomplete, and a live API will never truncate on demand to prove a test. */
+ * What is left is one request for everything, and one question: did we receive
+ * as many rows as the API says exist? A partial register that LOOKS complete is
+ * the failure this file exists to make impossible. */
 
-/** Inclusive ISO date bounds, `YYYY-MM-DD`. */
-export interface Window {
-  from: string;
-  to: string;
-}
-
-export interface WindowFetch {
-  /** What the API says exists for this window. */
+export interface RegisterPage {
+  /** What the API says exists: `pagination.totalResults`. */
   total: number;
-  /** What it actually handed over. */
+  /** What it actually handed over: `results`. */
   rows: unknown[];
 }
 
-export type FetchWindow = (w: Window) => Promise<WindowFetch>;
-
-export interface CollectResult {
-  rows: unknown[];
-  /** The windows that came back COMPLETE. Split parents are not included. */
-  windows: Window[];
-  requests: number;
+/* Read from two different places on purpose. Deriving `total` from
+ * `rows.length` would make assertComplete tautologically true. */
+export function parseRegister(payload: string): RegisterPage {
+  const j = JSON.parse(payload) as {
+    results?: unknown[];
+    pagination?: { totalResults?: number };
+  };
+  return {
+    total: Number(j.pagination?.totalResults ?? 0),
+    rows: j.results ?? [],
+  };
 }
 
-const DAY_MS = 86_400_000;
-const iso = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
-
-export function yearWindows(fromYear: number, toYear: number): Window[] {
-  const out: Window[] = [];
-  for (let y = fromYear; y <= toYear; y++) {
-    out.push({ from: `${y}-01-01`, to: `${y}-12-31` });
+export function assertComplete(page: RegisterPage): void {
+  if (page.rows.length !== page.total) {
+    throw new Error(
+      `Incomplete register fetch: the API reports ${page.total} contracts but ` +
+        `returned ${page.rows.length}. There is no cursor to continue with — ` +
+        `this source silently ignores its own page parameter — so this is a ` +
+        `hard stop rather than something to page past.`,
+    );
   }
-  return out;
-}
-
-/* The halves MEET: the second starts the day after the first ends. A gap loses
- * records silently, which is the failure mode this module exists to prevent;
- * an overlap merely costs a duplicate insert the natural key absorbs. */
-export function splitWindow(w: Window): [Window, Window] {
-  const a = Date.parse(w.from);
-  const b = Date.parse(w.to);
-  const mid = a + Math.floor((b - a) / 2 / DAY_MS) * DAY_MS;
-  return [
-    { from: w.from, to: iso(mid) },
-    { from: iso(mid + DAY_MS), to: w.to },
-  ];
-}
-
-export async function collectAll(
-  windows: Window[],
-  fetch: FetchWindow,
-): Promise<CollectResult> {
-  const rows: unknown[] = [];
-  const complete: Window[] = [];
-  let requests = 0;
-
-  const queue = [...windows];
-  while (queue.length) {
-    const w = queue.shift()!;
-    const { total, rows: got } = await fetch(w);
-    requests += 1;
-
-    if (total <= got.length) {
-      rows.push(...got);
-      complete.push(w);
-      continue;
-    }
-
-    /* Truncated. A single day has no smaller honest window to try, and
-     * returning the partial would be exactly the silent incompleteness this
-     * guards against. */
-    if (w.from === w.to) {
-      throw new Error(
-        `Window ${w.from} reports ${total} records but returned ${got.length}, ` +
-          `and a single day cannot be split further. Raise pageSize or ` +
-          `investigate the source.`,
-      );
-    }
-
-    const [x, y] = splitWindow(w);
-    queue.unshift(x, y);
-  }
-
-  return { rows, windows: complete, requests };
 }
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `node --env-file=.env node_modules/vitest/vitest.mjs run app/server/src/contracts/windows.test.ts`
+Run: `node --env-file=.env node_modules/vitest/vitest.mjs run app/server/src/contracts/completeness.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Mutation-prove the completeness assertion**
+- [ ] **Step 5: Mutation-prove the assertion, twice**
 
-Change `if (total <= got.length)` to `if (true)` — accept every response.
+**Mutation A.** In `parseRegister`, change `total` to `Number(j.results?.length ?? 0)` — derive it from the rows.
+Run the **whole file**. Expected: *"parseRegister reads the total and the rows from DIFFERENT places"* fails. Revert.
 
-Run the **whole file**. Expected: *"a truncated response splits the window instead of being accepted"* and *"a single day that still truncates throws"* both fail.
+**Mutation B.** Change `assertComplete`'s condition to `if (false)`.
+Run the **whole file**. Expected: *"a short page throws"* and *"more rows than the stated total also throws"* both fail. Revert.
 
-Revert and re-run.
+Confirm 5 pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add app/server/src/contracts/windows.ts app/server/src/contracts/windows.test.ts
-git commit -m "Window splitting, because the page parameter is silently ignored"
+git add app/server/src/contracts/completeness.ts app/server/src/contracts/completeness.test.ts
+git commit -m "The completeness assertion, because there is no cursor to continue with"
 ```
 
 ---
 
-## Task 4: `eds-client.ts` — one request, politely
+## Task 4: `eds-client.ts` — two requests, politely
+
+> ⚠️ **REWRITTEN after Task 1 — Ruling 3.** No windows, no pagination.
+> **Two requests total:** one with `pageSize: 1` to learn `totalResults`, then
+> one for that many rows plus a margin. The size comes from the API rather than
+> a hard-coded 204,991, so a growing register cannot silently truncate us.
 
 **Files:**
 - Create: `app/server/src/contracts/eds-client.ts`
-- Create: `app/server/src/contracts/fixtures/eds-window.json`
+- Create: `app/server/src/contracts/fixtures/eds-sample.json`
 - Test: `app/server/src/contracts/eds-client.test.ts`
 
 **Interfaces:**
-- Consumes: `Window`, `WindowFetch` from `./windows.js`.
+- Consumes: `parseRegister`, `assertComplete` from `./completeness.js`.
 - Produces:
   - `const EDS_URL: string`
   - `interface EdsRow { id: string; vendorName: string; agencyName: string; businessUnit: string; startDate: string; endDate: string; amount: number; actionType: string; amendment: number; zipCode: string; pdfUrl: string }`
-  - `function parseWindow(payload: string): WindowFetch`
-  - `function edsClient(opts?: { fetchImpl?: typeof fetch; delayMs?: number }): FetchWindow`
+  - `async function fetchRegister(opts?: { fetchImpl?: typeof fetch; delayMs?: number }): Promise<EdsRow[]>`
 
 - [ ] **Step 1: Capture the fixture**
+
+The real register is 78 MB — far too large to commit. Capture a small **real**
+slice instead:
 
 ```bash
 cd "C:/Users/matts/Desktop/Tenderfoot"
 node --input-type=module -e '
 import { writeFileSync } from "node:fs";
-const U="https://secure.in.gov/apps/idoa/contractsearch/api/contracts/search";
-const H={"content-type":"application/json",accept:"application/json",
-  "user-agent":"Tenderfoot/0.1 (Koehler Partners; procurement research)"};
-const r=await(await fetch(U,{method:"POST",headers:H,body:JSON.stringify(
-  {startDate:"2020-01-01",endDate:"2020-12-31",page:1,pageSize:25000})})).text();
-writeFileSync("app/server/src/contracts/fixtures/eds-window.json", r);
-const j=JSON.parse(r);
-console.log("captured "+j.results.length+" rows, totalResults "+j.pagination.totalResults);
+const U = "https://secure.in.gov/apps/idoa/contractsearch/api/contracts/search";
+const H = { "content-type": "application/json", accept: "application/json",
+  "user-agent": "Tenderfoot/0.1 (Koehler Partners; procurement research)" };
+const r = await (await fetch(U, { method: "POST", headers: H,
+  body: JSON.stringify({ page: 1, pageSize: 200 }) })).json();
+writeFileSync("app/server/src/contracts/fixtures/eds-sample.json",
+  JSON.stringify({ results: r.results,
+                   pagination: { totalResults: r.results.length } }, null, 1));
+console.log("captured " + r.results.length + " rows");
 '
 ```
 
-Expect ~1,334 rows. **Commit the fixture** — every parser test reads it instead of the network.
+⚠️ **Note what that rewrite does and why it is honest:** `totalResults` is set to
+the sample's own row count so the fixture is internally consistent and
+`assertComplete` passes on it. The register's real 204,991 is asserted against
+the live API in Task 8, never against a fixture.
+
+If the sandbox blocks outbound network to `secure.in.gov`, run the capture with
+the sandbox disabled — it is a read of a public endpoint.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -521,60 +471,72 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
-import { parseWindow, edsClient } from "./eds-client.js";
+import { fetchRegister } from "./eds-client.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FIXTURE = readFileSync(join(HERE, "fixtures/eds-window.json"), "utf8");
+const FIXTURE = readFileSync(join(HERE, "fixtures/eds-sample.json"), "utf8");
+const SAMPLE = JSON.parse(FIXTURE) as { results: unknown[] };
 
-test("parseWindow reads the total and the rows apart from each other", () => {
-  const out = parseWindow(FIXTURE);
-  expect(out.total).toBeGreaterThan(0);
-  expect(out.rows.length).toBeGreaterThan(0);
-  /* The 2020 fixture is complete, so these agree. They are read from DIFFERENT
-   * places -- pagination.totalResults and results.length -- and that
-   * separation is what lets collectAll detect truncation at all. */
-  expect(out.total).toBe(out.rows.length);
-});
-
-test("parseWindow keeps the fields the ingest maps", () => {
-  const r = parseWindow(FIXTURE).rows[0] as Record<string, unknown>;
-  for (const k of ["id", "vendorName", "agencyName", "startDate", "endDate", "amount",
-                   "actionType", "amendment"]) {
-    expect(r, `${k} missing`).toHaveProperty(k);
-  }
-});
-
-/* An empty body returns zero results with a ZEROED pagination block -- it does
- * not mean "everything". Recorded in the Indiana pin, and it would read as a
- * complete empty window rather than as a mistake. */
-test("parseWindow reports a zeroed response as zero, not as complete-and-empty", () => {
-  const out = parseWindow(JSON.stringify({ results: [], pagination: { totalResults: 0 } }));
-  expect(out.total).toBe(0);
-  expect(out.rows).toEqual([]);
-});
-
-test("the client sends the window as dates and never sends `page` as a cursor", async () => {
-  const calls: { url: string; body: any }[] = [];
-  const fake: typeof fetch = async (url, init) => {
-    calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+test("it asks for the count first, then for that many rows", async () => {
+  const bodies: Array<Record<string, number>> = [];
+  const fake: typeof fetch = async (_u, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
     return new Response(FIXTURE, { status: 200 });
   };
-  const client = edsClient({ fetchImpl: fake, delayMs: 0 });
-  await client({ from: "2020-01-01", to: "2020-12-31" });
+  const rows = await fetchRegister({ fetchImpl: fake, delayMs: 0 });
 
-  expect(calls).toHaveLength(1);
-  expect(calls[0]!.body.startDate).toBe("2020-01-01");
-  expect(calls[0]!.body.endDate).toBe("2020-12-31");
-  /* `page` is silently ignored by this API, so sending anything but 1 would be
-   * a lie about how the fetcher works. Completeness comes from the split. */
-  expect(calls[0]!.body.page).toBe(1);
-  expect(calls[0]!.body.pageSize).toBeGreaterThanOrEqual(25000);
+  expect(bodies).toHaveLength(2);
+  /* First: the cheapest possible question -- how many are there? */
+  expect(bodies[0]!.pageSize).toBe(1);
+  /* Second: at least that many. The count comes FROM THE API, never from a
+   * hard-coded 204,991, so a growing register cannot silently truncate us. */
+  expect(bodies[1]!.pageSize).toBeGreaterThanOrEqual(SAMPLE.results.length);
+  expect(rows).toHaveLength(SAMPLE.results.length);
 });
 
-test("a non-2xx stops rather than retrying into a rate limiter", async () => {
-  const fake: typeof fetch = async () => new Response("nope", { status: 429 });
-  const client = edsClient({ fetchImpl: fake, delayMs: 0 });
-  await expect(client({ from: "2020-01-01", to: "2020-12-31" })).rejects.toThrow(/429/);
+test("`page` is always 1 and is never used as a cursor", async () => {
+  const bodies: Array<Record<string, number>> = [];
+  const fake: typeof fetch = async (_u, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return new Response(FIXTURE, { status: 200 });
+  };
+  await fetchRegister({ fetchImpl: fake, delayMs: 0 });
+  /* This API ignores `page` entirely, so sending anything but 1 would be a lie
+   * about how the fetcher works. Both keys must still always be present: an
+   * empty body returns a ZEROED pagination block, not everything. */
+  for (const b of bodies) expect(b.page).toBe(1);
+});
+
+test("it sends an identifying user-agent", async () => {
+  let ua = "";
+  const fake: typeof fetch = async (_u, init) => {
+    ua = String((init?.headers as Record<string, string>)["user-agent"] ?? "");
+    return new Response(FIXTURE, { status: 200 });
+  };
+  await fetchRegister({ fetchImpl: fake, delayMs: 0 });
+  expect(ua).toMatch(/Tenderfoot/);
+});
+
+test("a non-2xx stops on the first failure rather than retrying", async () => {
+  let calls = 0;
+  const fake: typeof fetch = async () => {
+    calls += 1;
+    return new Response("no", { status: 429 });
+  };
+  await expect(fetchRegister({ fetchImpl: fake, delayMs: 0 })).rejects.toThrow(/429/);
+  /* Retrying into a rate limiter is how a guest gets blocked. */
+  expect(calls).toBe(1);
+});
+
+/* 🔴 The completeness assertion must fire THROUGH the client, not only in its
+ * own unit test. A response shorter than its stated total is the silent
+ * truncation case, and there is no cursor to recover with. */
+test("a short response throws instead of returning a partial register", async () => {
+  const short = JSON.stringify({ results: [{ id: "x" }], pagination: { totalResults: 500 } });
+  const fake: typeof fetch = async () => new Response(short, { status: 200 });
+  await expect(fetchRegister({ fetchImpl: fake, delayMs: 0 })).rejects.toThrow(
+    /Incomplete register/,
+  );
 });
 ```
 
@@ -588,24 +550,30 @@ Expected: FAIL — `Cannot find module './eds-client.js'`
 Create `app/server/src/contracts/eds-client.ts`:
 
 ```typescript
-/* One HTTP call against Indiana's public contract register, politely.
+/* Two requests against Indiana's public contract register, politely.
  *
  * A state transparency API is an intended-use resource, not something to be
- * squeezed: concurrency 1, a fixed delay between requests, an identifying
- * User-Agent, and STOP on the first non-2xx rather than retrying into a rate
- * limiter. The polite failure is to stop. */
-import type { FetchWindow, Window, WindowFetch } from "./windows.js";
+ * squeezed: an identifying User-Agent, a pause between the two calls, and STOP
+ * on the first non-2xx rather than retrying into a rate limiter. The polite
+ * failure is to stop.
+ *
+ * WHY TWO REQUESTS AND NOT MANY. `page` is silently ignored by this source, and
+ * date windows cannot tile it -- they filter fully-contained-within, so
+ * anything spanning a boundary vanishes from both neighbours. What works is
+ * asking for everything at once: measured 2026-09-03, 204,991 rows in 47s at
+ * 78 MB. The first request costs one row and says how many to ask for; the
+ * second gets them. */
+import { parseRegister, assertComplete, type RegisterPage } from "./completeness.js";
 
 export const EDS_URL =
   "https://secure.in.gov/apps/idoa/contractsearch/api/contracts/search";
 
-/* Measured 2026-09-03: 25,000 rows came back in 6.2s at 9.4MB, and no ceiling
- * was found. 25,000 comfortably holds any single year -- the densest sampled
- * was well under it -- so a year needs one request and the split in windows.ts
- * only fires where the data is genuinely dense. */
-const PAGE_SIZE = 25_000;
-
 const UA = "Tenderfoot/0.1 (Koehler Partners; procurement research)";
+
+/* Asked for on top of the reported total, so a handful of contracts filed
+ * between the count and the fetch cannot truncate the run. If that margin is
+ * ever not enough, assertComplete catches it loudly. */
+const MARGIN = 5_000;
 
 export interface EdsRow {
   id: string;
@@ -621,61 +589,46 @@ export interface EdsRow {
   pdfUrl: string;
 }
 
-/* `total` and `rows` are read from DIFFERENT places on purpose --
- * pagination.totalResults and results.length. That separation is the entire
- * truncation check in windows.ts; collapsing them would make it vacuous. */
-export function parseWindow(payload: string): WindowFetch {
-  const j = JSON.parse(payload) as {
-    results?: unknown[];
-    pagination?: { totalResults?: number };
-  };
-  return {
-    total: Number(j.pagination?.totalResults ?? 0),
-    rows: j.results ?? [],
-  };
-}
-
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
-export function edsClient(
+async function ask(doFetch: typeof fetch, pageSize: number): Promise<RegisterPage> {
+  const res = await doFetch(EDS_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+      "user-agent": UA,
+    },
+    /* page is ALWAYS 1 and is not a cursor -- this API ignores it. Both keys
+     * must be present regardless: an empty body returns a zeroed pagination
+     * block rather than everything. */
+    body: JSON.stringify({ page: 1, pageSize }),
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `EDS returned ${res.status}. Stopping rather than retrying — see the ` +
+        `politeness note in this file's header.`,
+    );
+  }
+  return parseRegister(await res.text());
+}
+
+export async function fetchRegister(
   opts: { fetchImpl?: typeof fetch; delayMs?: number } = {},
-): FetchWindow {
+): Promise<EdsRow[]> {
   const doFetch = opts.fetchImpl ?? fetch;
-  const delayMs = opts.delayMs ?? 800;
+  const delayMs = opts.delayMs ?? 1000;
 
-  return async (w: Window): Promise<WindowFetch> => {
-    const res = await doFetch(EDS_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "user-agent": UA,
-      },
-      /* ⚠️ page is ALWAYS 1 and is not a cursor. This API ignores it entirely
-       * (pages 1, 2 and 100 return identical records), and an empty body
-       * returns a zeroed pagination block rather than everything -- so both
-       * page and pageSize must be present. Completeness comes from the window
-       * split, never from paging. */
-      body: JSON.stringify({
-        startDate: w.from,
-        endDate: w.to,
-        page: 1,
-        pageSize: PAGE_SIZE,
-      }),
-    });
+  /* One row, purely to read pagination.totalResults. Cheap, and it means the
+   * size comes from the API rather than a constant that rots. */
+  const probe = await ask(doFetch, 1);
+  if (delayMs > 0) await sleep(delayMs);
 
-    if (!res.ok) {
-      throw new Error(
-        `EDS returned ${res.status} for ${w.from}..${w.to}. Stopping rather ` +
-          `than retrying — see the politeness note in this file's header.`,
-      );
-    }
-
-    const out = parseWindow(await res.text());
-    if (delayMs > 0) await sleep(delayMs);
-    return out;
-  };
+  const full = await ask(doFetch, probe.total + MARGIN);
+  assertComplete(full);
+  return full.rows as EdsRow[];
 }
 ```
 
@@ -684,27 +637,19 @@ export function edsClient(
 Run: `node --env-file=.env node_modules/vitest/vitest.mjs run app/server/src/contracts/eds-client.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 6: Mutation-prove the total/rows separation**
+- [ ] **Step 6: Mutation-prove the stop-on-error**
 
-In `parseWindow`, change `total` to `Number(j.results?.length ?? 0)` — read both from the same place.
+Change the `if (!res.ok)` block so it falls through instead of throwing.
 
-Run the **whole file** plus `windows.test.ts`. The eds-client tests still pass (the fixture is complete, so the numbers agree) — **which is the point.** Then confirm the real protection is in `windows.test.ts`'s truncation test, and add this assertion to `parseWindow reads the total and the rows apart`:
+Run the **whole file**. Expected: *"a non-2xx stops on the first failure"* fails.
 
-```typescript
-  /* Proves they are read from different places: a payload whose stated total
-   * EXCEEDS its rows must report the discrepancy, not hide it. */
-  const short = parseWindow(JSON.stringify({ results: [{ id: "a" }], pagination: { totalResults: 9 } }));
-  expect(short.total).toBe(9);
-  expect(short.rows).toHaveLength(1);
-```
-
-Re-run with the mutation: that assertion now fails. Revert and re-run.
+Revert and re-run.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add app/server/src/contracts/eds-client.ts app/server/src/contracts/eds-client.test.ts app/server/src/contracts/fixtures/eds-window.json
-git commit -m "The EDS client: one request, politely, and page is never a cursor"
+git add app/server/src/contracts/eds-client.ts app/server/src/contracts/eds-client.test.ts app/server/src/contracts/fixtures/eds-sample.json
+git commit -m "Two requests: ask how many, then ask for them"
 ```
 
 ---
@@ -716,7 +661,27 @@ git commit -m "The EDS client: one request, politely, and page is never a cursor
 - Test: `app/server/src/contracts/import.test.ts`
 
 **Interfaces:**
-- Consumes: `EdsRow` from `./eds-client.js`; `orgChain` from `../merge/org-chain.js`; `all`, `one`, `run`, `tx` from `../db/index.js`.
+- Consumes: `EdsRow` from `./eds-client.js`; `tx` from `../db/index.js`.
+
+> ⚠️ **TWO CONTROLLER RULINGS BIND THIS TASK — they override the code below.**
+>
+> **Ruling 1: do NOT use `ON CONFLICT (name)` on `organization`.** That table's
+> `name` column has **no unique constraint** (the only UNIQUE in migration 002 is
+> `organization_alias (alias, org_id)`), so Postgres rejects it as a conflict
+> target and the statement fails at runtime. **Use the pattern `merge.ts` already
+> uses at `merge/merge.ts:610`:** `SELECT id, name FROM organization WHERE name =
+> ANY($1::text[])`, then insert only the names not found. Measured: 698
+> organizations, 0 duplicate names.
+>
+> **Ruling 2: do NOT import `orgChain`.** The EDS payload publishes a flat
+> `agencyName` with no hierarchy, so there is no chain to read. Insert the name
+> directly and leave the import out entirely.
+>
+> **Ruling 4: INSERT IN BATCHES OF 5,000.** After Task 1, the whole register
+> arrives in ONE fetch of 204,991 rows. A single `unnest` insert would carry
+> eight arrays of 204,991 elements — roughly 50 MB of bind parameters in one
+> statement. Chunk the rows and run one insert per chunk inside the same
+> transaction. `written` and `skipped` accumulate across chunks.
 - Produces:
   - `interface ImportResult { written: number; skipped: number }`
   - `async function importContracts(sourceId: number, rows: EdsRow[]): Promise<ImportResult>`
@@ -991,7 +956,17 @@ git commit -m "Contracts write direct, and the queue guard is a test not a promi
 - Test: `app/server/src/contracts/ingest.test.ts`
 
 **Interfaces:**
-- Consumes: `collectAll`, `yearWindows`, `FetchWindow` from `./windows.js`; `importContracts` from `./import.js`; `EdsRow` from `./eds-client.js`.
+- Consumes: `importContracts` from `./import.js`; `EdsRow`, `fetchRegister` from `./eds-client.js`.
+
+> ⚠️ **REWRITTEN after Task 1 — Ruling 3. There is no year loop.**
+> The register arrives in ONE fetch. `ingestContracts` takes a `fetchAll: () =>
+> Promise<EdsRow[]>` instead of `fetchWindow`, drops `fromYear`/`toYear`, and
+> records **one** `ingest_run` for the whole register rather than one per window.
+> `IngestReport` becomes `{ fetched, written, skipped }` — `windows` and
+> `requests` no longer exist. Update the tests in this task to match: the
+> two-year walk test becomes a single-fetch test, and the "window that cannot be
+> split" test becomes "a short fetch aborts the ingest", driven by a `fetchAll`
+> that rejects with `/Incomplete register/`.
 - Produces:
   - `interface IngestReport { windows: number; requests: number; fetched: number; written: number; skipped: number }`
   - `async function ingestContracts(opts: { sourceName: string; fromYear: number; toYear: number; fetchWindow: FetchWindow }): Promise<IngestReport>`
@@ -1199,7 +1174,13 @@ git commit -m "One ingest_run per window, so an interrupted run keeps its progre
 - Modify: `package.json`
 
 **Interfaces:**
-- Consumes: `ingestContracts` from `./ingest.js`; `edsClient` from `./eds-client.js`.
+- Consumes: `ingestContracts` from `./ingest.js`; `fetchRegister` from `./eds-client.js`.
+
+> ⚠️ **REWRITTEN after Task 1 — Ruling 3.** The CLI takes **no year arguments**;
+> the register is fetched whole. Drop the `fromYear`/`toYear` parsing and its
+> usage error, drop the `windows` and `requests` lines from the printed report,
+> and pass `fetchAll: () => fetchRegister()`. Keep the elapsed-time line — the
+> real fetch takes about 47 seconds and a silent minute reads as a hang.
 - Produces: `main(): Promise<void>`; the npm script `contracts:ingest`.
 
 - [ ] **Step 1: Write the CLI**
