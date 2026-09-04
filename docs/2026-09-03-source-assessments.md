@@ -35,7 +35,7 @@ It was right, and the map is more specific than that.
 
 ## Four findings, in the order they matter
 
-### 1. 🔴 The best-scoring free source has never been run
+### 1. ✅ RESOLVED THE SAME DAY — the best-scoring free source has now been run
 
 **Indiana EDS contract register: five STRONGs — more than any other source,
 including the one we are about to pay for.** Full archive to 2005, tier-1 API,
@@ -44,8 +44,12 @@ the Profile's **primary** geography, a verified watermark, and no recurring cost
 **It is also exactly the fix for the two floor predicates that block everything:**
 F1 (one source has ever ingested) and F2 (zero ingested sources in Indiana).
 
-It has never been ingested. Nothing technical prevents it; it sits at step ④ of
-the sequence Matt set on 2026-09-03, behind the reliability test.
+~~It has never been ingested.~~ **It was ingested hours after this was written**:
+204,920 contracts, 86 seconds, two requests, merged as `bd80e45`. **F1 and F2
+both flipped to PASS** — see `docs/2026-09-03-eds-ingest-run.md`.
+
+The line below is kept because it was the point: the cost of holding it was two
+failing floor predicates, and that is what the run bought back.
 
 > **This is the single most actionable line in the file.** Not a
 > recommendation to jump the sequence — a note that the cost of holding it is

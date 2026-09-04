@@ -1,6 +1,27 @@
 # PINNED — the Indiana contract register, found 2026-09-02
 
-**Nothing is built. This file exists so the findings survive the session that produced them.**
+> ## ✅ BUILT AND RUN — 2026-09-03. This pin is now history, not a plan.
+>
+> **204,920 contracts are loaded**, in 86 seconds, two HTTP requests. **F1 and F2
+> both PASS** — the two floor predicates that blocked any GO/NO-GO adjudication.
+> Merged to `main` as `bd80e45`.
+>
+> **Three things below were overtaken by measurement**, and the corrections
+> matter more than the original guesses:
+> - The pin says pagination works. **It does not.** `page` is silently ignored —
+>   pages 1, 2 and 100 return identical records. Sixth §5.4 instance, fourth
+>   platform.
+> - It implies date filtering could window the register. **It cannot.**
+>   `startDate`/`endDate` filters fully-contained-within, so year windows
+>   recovered **24,933 of 204,991 — an 88% shortfall.**
+> - It reports 204,991 records. **204,920 loaded**; 71 rows share an
+>   `(id, amendment)` pair, none byte-identical.
+>
+> Design: `docs/superpowers/specs/2026-09-03-indiana-contract-register-design.md`
+> · Run: `docs/2026-09-03-eds-ingest-run.md`
+> · Filter semantics: `docs/2026-09-03-eds-window-semantics.md`
+
+~~**Nothing is built. This file exists so the findings survive the session that produced them.**~~ *(True when written on 2026-09-02. The findings did survive — that is what this file was for.)*
 
 Matt's direction, verbatim, and it is the frame for all of it:
 
