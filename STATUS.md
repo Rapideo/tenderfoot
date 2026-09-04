@@ -6,6 +6,8 @@
 >
 > **`npm run fitness` now gives a verdict rather than an opinion.** The floor fails five of seven predicates against production and **blocks GO/NO-GO by rule**. ⚠️ **A live API key was leaked and rotated during this work — CLAUDE.md §5 is binding on anyone touching that API.**
 >
+> **The Indiana EDS contract register is loaded: 204,920 contracts, two requests, 86 seconds — and floor predicates F1 and F2 flipped to PASS.** It is the highest-scoring free source we hold and the first row the `contract` table has ever held. ⚠️ **That is the `test` branch only. Production holds zero contracts**, so the five-of-seven figure above is still production's number; loading it is a deliberate 86-second act nobody has taken. `docs/2026-09-03-eds-ingest-run.md`.
+>
 > **Read the RESUME HERE block below before the Plan of Action**, whose slice order no longer matches the sequence Matt set.
 
 > **Now: the repo is public at `Rapideo/tenderfoot`, pushed, and CI IS GREEN on both branches (2026-08-15).** First-ever CI execution failed on the one predicted cause — `DATABASE_URL_TEST` missing as an Actions secret — **and there was no Windows-vs-Linux problem at all.** Secret set from `.env` on Matt's ruling, both runs re-run: **92 tests, 20 files, success.** Identical to local, so **green-on-CI now means what green-on-laptop means.**
@@ -796,6 +798,8 @@ score — is the parked qualification question above, and it is the one that nee
 
 ### ⚠️ THE PRECONDITION STILL FAILS, and it is not an outage
 **Only SAM.gov has ever been ingested.** `Indiana IDOA solicitations` and `Indiana EDS` are health `ok`, `enabled=no`, `last_run=never` — arguably KP's core ground, contributing nothing. **Any GO/NO-GO taken now is a verdict on federal SAM.gov alone and must say so in those words.** Turning state sources on is a separate decision and was not taken.
+
+**⚠️ OVERTAKEN ON `test`, STILL BINDING ON PRODUCTION — 2026-09-03.** The Indiana EDS contract register has since been ingested: **204,920 contracts against the `test` branch**, so `Indiana EDS` is no longer `last_run=never` there and floor predicates F1/F2 pass. *Production is untouched and this entry's verdict still binds it* — a GO/NO-GO taken against production remains a verdict on federal SAM.gov alone. See `docs/2026-09-03-eds-ingest-run.md`.
 
 ### ✅ WHAT LANDED TODAY, all on `main`, gate green at 71 files
 - **Matt's five fidelity rulings** — score strip back (D13 reversed), conflicts inline (§6.1 amended), seven-item nav with stubs, tabs disclosed, CONFIDENCE held at a flat 0.6. Deviations **D17–D20**.

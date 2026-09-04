@@ -27,6 +27,8 @@ A real example, live at the time of writing: the prototype renders an extraction
 
 `STATUS.md` — current state, read first. `DOOGIE - TENDERFOOT.md` — Matt's hand-written session log; **AI-written entries must be marked as such.** `docs/Tenderfoot-Plan-of-Action.md` — the slice sequence and its reasoning. `docs/Proto2PRD.md` — the reusable playbook; `docs/Proto2PRD-Lessons.md` — lessons staged for it, **folded in continuously rather than at the end.** `docs/superpowers/specs/` and `docs/superpowers/plans/`. `reference/Tenderfoot SVRC.md` — the frozen screen outline. `docs/admin-deviations.md` — the continuous deviation series.
 
+**The two operator commands, neither of which is reachable from any screen.** `npm run fitness` measures the data floor and scores every source from recorded evidence — read-only, no arguments. `npm run contracts:ingest` loads the Indiana EDS contract register (~205k rows, 86 seconds). **Both act on whatever `DATABASE_URL` names**, so check which branch you are pointed at before the second one — ingesting production is a deliberate act and never a default.
+
 ## 3. What SP6 got wrong, kept here because it is the cheapest way to not repeat it
 
 **SP6 was the first slice to compose real screens, and neither its spec nor its plan referenced §7.10 even once.** The consequence is visible: the queue screen, assembled from SP2's bundle-matched primitives, looks like the product. The record screen, hand-rolled from bare `<div>`/`<span>` with CSS invented in the plan, did not — its field rows were a `display: grid` with no `grid-template-columns`, so four values stacked as four unlabelled lines while `TableRow`, whose entire interface is a column template, sat unused.
