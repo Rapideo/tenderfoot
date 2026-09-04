@@ -634,19 +634,27 @@ test("023 leaves value_cents alone -- it is not where the delta goes", async () 
  * only in a spec, the next person writes a pagination loop and silently loads
  * the same 2,000 records twenty-one times. */
 test("024 records that the EDS `page` parameter is silently ignored", async () => {
-  const row = await one<{ verified_facets: Record<string, unknown> | null }>(
-    `SELECT verified_facets FROM source WHERE name = 'Indiana EDS contract register'`,
-  );
+  const row = await one<{
+    verified_facets: { silently_ignored?: string[]; page_note?: string } | null;
+  }>(`SELECT verified_facets FROM source WHERE name = 'Indiana EDS contract register'`);
   /* Not just "does the blob mention page" -- a renamed or deleted source row
    * makes the migration's UPDATE a silent no-op (0 rows affected, no error),
    * and this asserts the row itself is still there before trusting anything
    * pulled from it. */
   expect(row).toBeDefined();
-  const blob = JSON.stringify(row?.verified_facets ?? {});
-  expect(blob).toContain("page");
-  expect(blob.toLowerCase()).toContain("silently_ignored");
+  /* FIXED (review round 1): checking the whole JSON blob for the substring
+   * "page" and the key "silently_ignored" both pass against PRE-migration 003
+   * data too -- 003's own `works` array already contains "pageSize" (which
+   * contains "page"), and 003 already seeds a `silently_ignored` key. Neither
+   * assertion depended on 024 having run. Reading the array itself and
+   * checking its exact element and full contents does. */
+  expect(row?.verified_facets?.silently_ignored).toContain("page");
+  expect(row?.verified_facets?.silently_ignored).toEqual(
+    expect.arrayContaining(["sort=-publishDate", "page", "vendorName", "agencyName"]),
+  );
+  expect(row?.verified_facets?.silently_ignored).toHaveLength(4);
   /* And the evidence, not just the claim. */
-  expect(blob).toMatch(/identical|same records|pages 1/i);
+  expect(row?.verified_facets?.page_note).toMatch(/identical|same records|pages 1/i);
 });
 
 /* ⏰ THE SCHEMA REGISTERS ITS OWN AGE, and this test exists because the
