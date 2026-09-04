@@ -131,6 +131,82 @@ test("primary geography outranks federal, which outranks secondary's neighbours"
   expect(scoreSource(subject({ jurisdiction: "MI" })).dimensions.R6!.grade).toBe("weak");
 });
 
+/* ------------------------------------------------------------------- R7 -- */
+
+/* 🔴 THE DEFECT THESE TESTS EXIST TO PREVENT.
+ *
+ * Until 2026-09-04 R7 was `field_completeness === null ? unknown : adequate` --
+ * a NULL CHECK, not a grade. Recording SAM.gov's real numbers (p10 description
+ * of 57 characters, 0 of 9,883 rows carrying a value, 0.3% of document-
+ * deferring rows reachable) would therefore have graded it `adequate` and put
+ * it level with HigherGov on the one dimension where they differ most.
+ *
+ * §5.3 forbids collapsing `unknown` into `weak` because that turns absence of
+ * evidence into evidence of absence. This is the same error running the other
+ * way: collapsing MEASURED into `adequate` turns evidence of absence into
+ * evidence of adequacy. */
+
+test("a bad measurement grades `weak` — recording a number is not worth `adequate`", () => {
+  /* SAM.gov's real production shape. */
+  const p = scoreSource(
+    subject({
+      field_completeness: {
+        P6: "weak",
+        P7: "weak",
+        P8: "weak",
+        measured_on: "2026-09-04",
+        population_n: 9883,
+      },
+    }),
+  );
+  expect(p.dimensions.R7!.grade).toBe("weak");
+});
+
+test("R7 takes the WEAKEST property — a rich description cannot compensate for an absent value", () => {
+  const p = scoreSource(
+    subject({
+      field_completeness: { P6: "strong", P7: "strong", P8: "weak", population_n: 9883 },
+    }),
+  );
+  expect(p.dimensions.R7!.grade).toBe("weak");
+  /* The note must name the property that set the grade, or a reader cannot act
+   * on it -- "weak" alone does not say which field is missing. */
+  expect(p.dimensions.R7!.note).toContain("P8");
+});
+
+test("an `unknown` property is SKIPPED, never counted as weak (§5.3)", () => {
+  const p = scoreSource(
+    subject({
+      field_completeness: { P6: "strong", P8: "strong", P14: "unknown", population_n: 500 },
+    }),
+  );
+  expect(p.dimensions.R7!.grade).toBe("strong");
+});
+
+test("one measured property is not a measurement — R7 stays `unknown`", () => {
+  const p = scoreSource(
+    subject({
+      field_completeness: { P6: "strong", P7: "unknown", P8: "unknown", population_n: 9883 },
+    }),
+  );
+  expect(p.dimensions.R7!.grade).toBe("unknown");
+});
+
+test("a measurement carrying no property grades at all is `unknown`, not `adequate`", () => {
+  /* HigherGov's row held exactly this shape from migration 019 until 026: rich
+   * prose, real numbers, and not one property grade a rubric could read. */
+  const p = scoreSource(
+    subject({ field_completeness: { measured_on: "2026-09-03", quirks: "titles carry an artifact" } }),
+  );
+  expect(p.dimensions.R7!.grade).toBe("unknown");
+});
+
+test("field_completeness null is `unknown` — never measured is not the same as measured badly", () => {
+  const p = scoreSource(subject({ field_completeness: null }));
+  expect(p.dimensions.R7!.grade).toBe("unknown");
+  expect(p.dimensions.R7!.note).toContain("never been measured");
+});
+
 /* ------------------------------------------------------------------- R8 -- */
 
 test("cost `unknown` is not graded as free", () => {

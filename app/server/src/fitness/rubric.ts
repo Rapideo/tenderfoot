@@ -17,6 +17,8 @@
  * re-runnable, because it is the only thing proving the rubric reproduces
  * judgements already made by hand. */
 
+import { R7 as R7_THRESHOLDS } from "./thresholds.js";
+
 export type Grade = "strong" | "adequate" | "weak" | "unknown";
 
 export interface RubricSubject {
@@ -53,6 +55,66 @@ export interface SourceProfile {
  * IDOA.", "FULL --", "DEEP", "Assume none", "Unknown --". Anything unmatched
  * grades `unknown`, which is the safe direction: a depth nobody can parse has
  * not been established. */
+/* R7 — FIELD COMPLETENESS, AND IT GRADES THE MEASUREMENT RATHER THAN ITS
+ * PRESENCE.
+ *
+ * 🔴 WHAT THIS REPLACED, because the next person will be tempted to simplify it
+ * back. Until 2026-09-04 R7 was `field_completeness === null ? unknown :
+ * adequate` -- a null check. Recording SAM.gov's real numbers under that rule
+ * would have graded it `adequate` on a p10 description of 57 characters, 0 of
+ * 9,883 rows carrying a value, and 3 of 979 document-deferring rows readable,
+ * putting it level with HigherGov on the dimension where they differ most.
+ * §5.3 forbids collapsing `unknown` into `weak`; this is the same error
+ * inverted, and it flatters every source it touches.
+ *
+ * THE COMBINING RULE IS WEAKEST-WINS, AND IT IS NOT A SUM. §5.3 rejects a
+ * weighted total across dimensions because it lets a strength compensate for a
+ * failure. The same reasoning applies inside a dimension: a source with superb
+ * descriptions and no value at all is not `adequate` on field completeness --
+ * it is missing a field, and the note has to say which one. A minimum, unlike
+ * an average, cannot be talked up by adding strengths.
+ *
+ * `unknown` PROPERTIES ARE SKIPPED, NOT COUNTED. A property nobody measured is
+ * not a property the source lacks. But skipping them means a row with one
+ * known property would be graded on that alone, so below
+ * `minKnownProperties` the dimension reports `unknown` instead. */
+const R7_PROPERTIES = ["P6", "P7", "P8", "P11", "P14"] as const;
+
+const GRADE_ORDER: Record<Grade, number> = { unknown: 0, weak: 1, adequate: 2, strong: 3 };
+
+function isGrade(v: unknown): v is Grade {
+  return v === "strong" || v === "adequate" || v === "weak" || v === "unknown";
+}
+
+export function gradeCompleteness(fc: Record<string, unknown> | null): Dimension {
+  if (fc === null) {
+    return { grade: "unknown", note: "Field completeness has never been measured." };
+  }
+  const known = R7_PROPERTIES.flatMap((id) => {
+    const g = fc[id];
+    return isGrade(g) && g !== "unknown" ? [{ id, grade: g }] : [];
+  });
+
+  if (known.length < R7_THRESHOLDS.minKnownProperties) {
+    /* Name the population when the row carries one -- it is almost always the
+     * reason, and "measured, and still unknown" is otherwise baffling. */
+    const n = typeof fc.population_n === "number" ? fc.population_n : null;
+    const why =
+      n !== null && n < R7_THRESHOLDS.minPopulation
+        ? `Population ${n} is below ${R7_THRESHOLDS.minPopulation}; too few rows to grade.`
+        : `${known.length} of ${R7_PROPERTIES.length} properties measured; ` +
+          `${R7_THRESHOLDS.minKnownProperties} needed before a profile is asserted.`;
+    return { grade: "unknown", note: `Not enough measured to grade. ${why}` };
+  }
+
+  const weakest = known.reduce((a, b) => (GRADE_ORDER[b.grade] < GRADE_ORDER[a.grade] ? b : a));
+  const measured = known.map((k) => `${k.id} ${k.grade}`).join(", ");
+  return {
+    grade: weakest.grade,
+    note: `Weakest of ${known.length} measured properties sets the grade: ${weakest.id}. (${measured}.)`,
+  };
+}
+
 function gradeArchive(depth: string | null): Dimension {
   if (depth === null) {
     return { grade: "unknown", note: "archive_depth is null — never established." };
@@ -171,10 +233,7 @@ export function scoreSource(s: RubricSubject): SourceProfile {
               note: `Platform ${s.platform}. §5.7: one adapter may reach other jurisdictions.`,
             },
       R6: gradeGeography(s.jurisdiction, s.primaryGeography, s.secondaryGeography),
-      R7:
-        s.field_completeness === null
-          ? { grade: "unknown", note: "Field completeness has never been measured." }
-          : { grade: "adequate", note: "Measured — see field_completeness on the row." },
+      R7: gradeCompleteness(s.field_completeness),
       R8: gradeCost(s.cost_posture, s.annual_cost_usd),
       R9:
         s.watermark_field === null
