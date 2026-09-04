@@ -327,6 +327,24 @@ F6 FAIL  p10 description = 57 chars over 7,271 biddable rows
 F7 FAIL  3 of 979 document-deferring rows have the document — 0.3%
 ```
 
+**⚠️ F1 and F2 no longer read this way — UPDATED 2026-09-03, later the same day.**
+The Indiana EDS contract register (§ below, "STILL OPEN") has since been
+ingested against the `test` branch: **204,920 contracts loaded**, two requests,
+86 seconds. That flips both:
+
+```
+F1  PASS   3 sources have completed a real ingest   (threshold 2)
+F2  PASS   2 ingested sources in Indiana             (threshold 1)
+```
+
+Both were failing when this section was first written and are the two
+predicates that blocked any GO/NO-GO adjudication. Full run report, including
+the 71-row shortfall against the register's advertised 204,991 and why it was
+accepted: [`docs/2026-09-03-eds-ingest-run.md`](docs/2026-09-03-eds-ingest-run.md).
+The block above is left as originally printed rather than edited in place —
+this project's convention is that a reader meets the correction, not a
+silently-changed number.
+
 **Two numbers worse than anything previously quoted.** Sample 2's median of 515
 chars hid a tenth of biddable rows at **57 characters or fewer**. And **979 rows
 explicitly say "see the attachment"**; we hold three.
@@ -441,10 +459,14 @@ to read it.
   `docs/2026-09-03-platform-comparison.md`; Option C (fetch on demand,
   ~11 records per click) recommended and unruled.**
 - **The floor's thresholds are unratified** — F1=2, F5=100, F6=200, F7=0.8.
-- **The best-scoring source in the registry has never been run.** The Indiana
+- ~~**The best-scoring source in the registry has never been run.** The Indiana
   EDS contract register grades STRONG on five of nine — free, primary
   geography, full archive to 2005, verified watermark — and is **exactly the fix
-  for F1 and F2**. Held back only because Matt put the corpus pulls at step ④.
+  for F1 and F2**. Held back only because Matt put the corpus pulls at step ④.~~
+  **RUN, 2026-09-03.** 204,920 contracts loaded against `test`, two requests,
+  86 seconds. **F1 and F2 now PASS** (3 sources ingested, threshold 2; 2 in
+  Indiana, threshold 1). See
+  [`docs/2026-09-03-eds-ingest-run.md`](docs/2026-09-03-eds-ingest-run.md).
 - **Michigan SIGMA is outside the firm profile entirely** (`IN` primary,
   `IL/OH/KY` secondary — MI is neither). Worth knowing before anyone budgets an
   adapter for it.
@@ -452,6 +474,17 @@ to read it.
   `source_key` is the precondition, not the repair.
 - **The flaky gate's second cause is still unexplained.** Fired twice on
   2026-09-03, passing on immediate re-run each time.
+  **A lead, found incidentally during the EDS ingest branch's review
+  (`.superpowers/sdd/2026-09-03-indiana-contract-register/progress.md`):** a
+  bare `vitest run` outside `npm run check` resolves its scratch schema to the
+  FIXED name `test_schema_local` rather than one keyed to a per-invocation run
+  id, so two such runs against the shared Neon `test` branch can collide.
+  `resetSchema()` does `DROP SCHEMA ... CASCADE`, so the second run drops the
+  first's tables mid-run. That is a plausible cause of the unexplained
+  "collect failure reporting the file's whole body as skipped" seen above, and
+  it means any flake hunt run via bare `vitest` — rather than through
+  `npm run check`, which mints a real `TENDERFOOT_RUN_ID` — proves less than
+  it appears to. Not yet chased down to a fix.
 - `accuracyByField` has no surface · `fields.ts` matches one date format · the
   cleared-queue Metrics card goes to `/admin` · **the real GO/NO-GO adjudication
   still has not happened** — and the floor now says it may not.

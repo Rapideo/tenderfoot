@@ -572,6 +572,119 @@ test("HigherGov's note carries the quota constraint, not just the capability", a
   expect((row?.source_note ?? "").toLowerCase()).toContain("document");
 });
 
+test("023 gives contract the columns an ingest needs", async () => {
+  const cols = (
+    await all<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'contract'
+          AND column_name IN ('source_id','amendment','action_type','amount_cents')
+        ORDER BY column_name`,
+      [SCHEMA],
+    )
+  ).map((c) => c.column_name);
+  expect(cols).toEqual(["action_type", "amendment", "amount_cents", "source_id"]);
+});
+
+/* The contract id is NOT unique: A337-6-CWI-104 appears as amendment 0 (New,
+ * $40,000) and amendment 1 (Amendment, $70,000). Keying on external_id alone
+ * would collapse a contract's history into one row -- the same class of error
+ * as the external_id fusion fixed in migration 022. */
+test("023's natural key is (source_id, external_id, amendment)", async () => {
+  const src = await insert(`INSERT INTO source (name) VALUES ('023 fixture') RETURNING id`);
+
+  const a = await insert(
+    `INSERT INTO contract (source_id, external_id, amendment, amount_cents)
+     VALUES ($1, 'A337-6-CWI-104', 0, 4000000) RETURNING id`, [src],
+  );
+  /* Same contract, different amendment -> a SECOND row, not a conflict. */
+  const b = await insert(
+    `INSERT INTO contract (source_id, external_id, amendment, amount_cents)
+     VALUES ($1, 'A337-6-CWI-104', 1, 7000000) RETURNING id`, [src],
+  );
+  expect(a).not.toBe(b);
+
+  /* The same amendment twice IS a conflict -- that is what makes a re-run
+   * idempotent instead of duplicating. */
+  await expect(
+    dbRun(
+      `INSERT INTO contract (source_id, external_id, amendment, amount_cents)
+       VALUES ($1, 'A337-6-CWI-104', 0, 4000000)`, [src],
+    ),
+  ).rejects.toThrow();
+
+  await dbRun(`DELETE FROM contract WHERE source_id = $1`, [src]);
+  await dbRun(`DELETE FROM source WHERE id = $1`, [src]);
+});
+
+/* DELETED (final whole-branch review, 2026-09-03): "023 leaves value_cents
+ * alone -- it is not where the delta goes" asserted only that a column named
+ * value_cents appears in information_schema, which is true both before and
+ * after 023 -- value_cents predates this migration (migration 002). It would
+ * pass identically against pre-023 state, so it discriminated nothing.
+ * import.test.ts's "a contract lands with its amount in amount_cents and
+ * value_cents NULL" already makes the real check -- that value_cents stays
+ * NULL after an actual import -- so this was redundant as well as vacuous.
+ * Removed rather than strengthened. */
+
+/* The single most expensive thing to rediscover about this source. If it lives
+ * only in a spec, the next person writes a pagination loop and silently loads
+ * the same 2,000 records twenty-one times. */
+test("024 records that the EDS `page` parameter is silently ignored", async () => {
+  const row = await one<{
+    verified_facets: { silently_ignored?: string[]; page_note?: string } | null;
+  }>(`SELECT verified_facets FROM source WHERE name = 'Indiana EDS contract register'`);
+  /* Not just "does the blob mention page" -- a renamed or deleted source row
+   * makes the migration's UPDATE a silent no-op (0 rows affected, no error),
+   * and this asserts the row itself is still there before trusting anything
+   * pulled from it. */
+  expect(row).toBeDefined();
+  /* FIXED (review round 1): checking the whole JSON blob for the substring
+   * "page" and the key "silently_ignored" both pass against PRE-migration 003
+   * data too -- 003's own `works` array already contains "pageSize" (which
+   * contains "page"), and 003 already seeds a `silently_ignored` key. Neither
+   * assertion depended on 024 having run. Reading the array itself and
+   * checking its exact element and full contents does. */
+  expect(row?.verified_facets?.silently_ignored).toContain("page");
+  expect(row?.verified_facets?.silently_ignored).toEqual(
+    expect.arrayContaining(["sort=-publishDate", "page", "vendorName", "agencyName"]),
+  );
+  expect(row?.verified_facets?.silently_ignored).toHaveLength(4);
+  /* And the evidence, not just the claim. */
+  expect(row?.verified_facets?.page_note).toMatch(/identical|same records|pages 1/i);
+});
+
+/* 025 corrects 024's `page_note`, which described the fetch strategy the
+ * DESIGN SPEC proposed -- date-window splitting -- rather than the one that
+ * shipped. Ruling 3 abandoned date windows the same day: startDate/endDate
+ * filters fully-contained-within, so single-year windows recovered only
+ * 24,933 of 204,991 (an 88% shortfall). Left uncorrected, the note points the
+ * next ingest author at the exact approach that loses 88% of the register.
+ *
+ * 024 is NOT edited -- it is already applied, and migrate.ts tracks
+ * migrations by filename with no checksum, so editing an applied file would
+ * leave already-migrated databases unchanged while a fresh one diverged. This
+ * test asserts the CORRECTED wording and would fail if 025 were removed:
+ * without it, page_note still reads "splitting a date window", which this
+ * test explicitly refuses. */
+test("025 corrects 024's page_note away from the abandoned date-window approach", async () => {
+  const row = await one<{
+    verified_facets: { silently_ignored?: string[]; page_note?: string } | null;
+  }>(`SELECT verified_facets FROM source WHERE name = 'Indiana EDS contract register'`);
+  expect(row).toBeDefined();
+
+  const note = row?.verified_facets?.page_note ?? "";
+  /* The wording 024 shipped with, and that 025 exists to retract. If this
+   * still matches, 025 either did not run or did not take effect. */
+  expect(note).not.toMatch(/splitting a date window/i);
+  /* What actually shipped: two requests, no windows, a total read first. */
+  expect(note).toMatch(/two requests/i);
+  expect(note).toMatch(/pageSize 1/i);
+  expect(note).toMatch(/24,933/);
+  /* 024's other keys must survive the merge untouched. */
+  expect(row?.verified_facets?.silently_ignored).toEqual(
+    expect.arrayContaining(["sort=-publishDate", "page", "vendorName", "agencyName"]),
+  );
+});
 
 /* ⏰ THE SCHEMA REGISTERS ITS OWN AGE, and this test exists because the
  * registration is deliberately BEST EFFORT -- resetSchema() swallows any error
