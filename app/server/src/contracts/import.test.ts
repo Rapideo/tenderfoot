@@ -57,6 +57,29 @@ test("a contract lands with its amount in amount_cents and value_cents NULL", as
   expect(c?.ends_at).toBe("2007-04-30");
 });
 
+/* 🔴 unknown must never collapse into something that reads as measured.
+ * Number(null) is 0 and Number("") is also 0, so a naive coercion would store
+ * a null/blank amount as $0.00 -- indistinguishable from a genuine $0 row,
+ * and this corpus has real ones (E8-1-JA015,
+ * docs/2026-09-03-eds-ingest-run.md). cents() must return NULL instead. */
+test("a null or blank amount stores amount_cents NULL, not $0.00", async () => {
+  await importContracts(src, [
+    row({ id: "AMOUNT-NULL-1", amendment: 0, amount: null }) as any,
+    row({ id: "AMOUNT-BLANK-1", amendment: 0, amount: "" }) as any,
+    row({ id: "AMOUNT-ZERO-1", amendment: 0, amount: 0 }) as any,
+  ]);
+
+  const rows = await all<{ external_id: string; amount_cents: string | null }>(
+    `SELECT external_id, amount_cents FROM contract
+      WHERE source_id = $1 AND external_id LIKE 'AMOUNT-%' ORDER BY external_id`,
+    [src],
+  );
+  expect(rows.find((r) => r.external_id === "AMOUNT-NULL-1")?.amount_cents).toBeNull();
+  expect(rows.find((r) => r.external_id === "AMOUNT-BLANK-1")?.amount_cents).toBeNull();
+  /* A genuine zero must stay distinguishable -- 0, not null. */
+  expect(Number(rows.find((r) => r.external_id === "AMOUNT-ZERO-1")?.amount_cents)).toBe(0);
+});
+
 test("re-importing the same rows writes nothing new", async () => {
   const before = await one<{ n: string }>(
     `SELECT count(*) n FROM contract WHERE source_id = $1`, [src]);
@@ -83,7 +106,13 @@ test("a second amendment of the same contract is a second row", async () => {
   expect(rows.map((r) => Number(r.amount_cents))).toEqual([4_000_000, 7_000_000]);
 });
 
-test("the agency becomes an organization via the shared org chain", async () => {
+/* Renamed (final whole-branch review, 2026-09-03) -- the old name said "via
+ * the shared org chain", but Ruling 2 (progress.md) dropped the orgChain
+ * import entirely: the EDS payload publishes a flat agencyName with no
+ * hierarchy to walk, so v1 resolves it directly by name (resolveOrgIds,
+ * mirroring merge.ts's read-then-insert pattern) rather than through
+ * org-chain.ts. This test verifies THAT resolution, not a chain walk. */
+test("the agency name resolves to an organization by direct lookup, not org-chain", async () => {
   const c = await one<{ org_id: number | null }>(
     `SELECT org_id FROM contract WHERE source_id = $1 AND amendment = 0`, [src]);
   expect(c?.org_id).not.toBeNull();

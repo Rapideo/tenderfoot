@@ -29,8 +29,19 @@ const day = (v: unknown): string | null => {
 
 /* Dollars in, CENTS stored. The column name says cents; the source says
  * dollars. Math.round rather than truncation because a source that ever ships
- * 1234.56 should not silently lose the change. */
+ * 1234.56 should not silently lose the change.
+ *
+ * 🔴 null/undefined/blank must stay null, NOT become 0. `Number(null)` is
+ * `0` and `Number("")` is also `0`, so a naive `Number(v)` collapses "the
+ * source did not state an amount" into "the source stated zero dollars" --
+ * indistinguishable from a genuine $0 row, and this corpus has real ones
+ * (e.g. E8-1-JA015, docs/2026-09-03-eds-ingest-run.md). This codebase's
+ * convention is that `unknown` is never collapsed into something that reads
+ * as measured, so null/undefined/blank/non-numeric input is checked FIRST
+ * and returns null explicitly, before Number() ever runs on it. */
 const cents = (v: unknown): number | null => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string" && v.trim() === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 };
@@ -124,6 +135,15 @@ export async function importContracts(
         [
           sourceId,
           part.map((r) => String(r.id)),
+          /* ⚠️ CONTROLLER RULING (final whole-branch review, 2026-09-03):
+           * left as `Number(r.amendment ?? 0)` on purpose, even though it has
+           * the same null-collapses-to-0 shape that cents() above was fixed
+           * for. `amendment` is HALF THE NATURAL KEY, and migration 023's
+           * unique index is PARTIAL -- `WHERE ... amendment IS NOT NULL`. A
+           * null amendment would fall outside that index entirely, so a
+           * re-run could insert the same row again instead of hitting
+           * ON CONFLICT DO NOTHING: a duplicate is a worse failure than the
+           * ambiguity of a coerced 0. Not changed. */
           part.map((r) => Number(r.amendment ?? 0)),
           part.map((r) => (r.actionType ? String(r.actionType) : null)),
           part.map((r) => cents(r.amount)),

@@ -95,37 +95,70 @@ being dropped, not merely misspelled by us.
 
 ---
 
-## 4. The fetcher: window-split with a completeness assertion
+## 4. ~~The fetcher: window-split with a completeness assertion~~ → single-fetch with a completeness assertion
 
-Because `page` lies, the only safe pattern is **request a window whole and assert
-you got all of it**:
+> **⚠️ AMENDED 2026-09-03, after execution. This section describes the design
+> BEFORE implementation and is WRONG about the fetch strategy — left struck
+> through rather than deleted, per this project's convention that a reader
+> meets the correction rather than a silently-changed spec.**
+>
+> Task 1 measured that `startDate`/`endDate` filters **fully-contained-within**,
+> not overlaps-with: a contract's own start AND end must both fall inside the
+> query window. Most contracts here cross a calendar-year boundary (76% of a
+> 2,000-row sample), so single-year windows are invisible to exactly the
+> contracts that span them. Measured recovery: **24,933 of 204,991 — an 88%
+> shortfall.** Full measurement: `docs/2026-09-03-eds-window-semantics.md`.
+>
+> **No date window can tile this register — the GAP branch this section itself
+> named as the outcome that would force a redesign (see the original text
+> below) fired.** Ruling 3
+> (`.superpowers/sdd/2026-09-03-indiana-contract-register/progress.md`)
+> abandoned window-splitting entirely. What shipped instead: **one request to
+> learn `pagination.totalResults`, then one request for that many rows plus a
+> fixed margin**, asserting `results.length === totalResults`. Measured:
+> 204,991 of 204,991 rows in 47s at 78 MB, in a single fetch. The completeness
+> assertion survives unchanged — it is simpler and strictly stronger now,
+> since there is nothing left to tile incorrectly. See
+> `app/server/src/contracts/eds-client.ts`, `completeness.ts`, and the real run:
+> `docs/2026-09-03-eds-ingest-run.md`.
+
+~~Because `page` lies, the only safe pattern is **request a window whole and assert
+you got all of it**:~~
 
 ```
-fetch(window):
+~~fetch(window):
     ask { startDate, endDate, pageSize: 25000 }
     if totalResults > results.length  →  split the window in half, recurse
-    else                              →  window complete, write it
+    else                              →  window complete, write it~~
 ```
 
-Start at one window per year, **2004–2027**. Dense years split automatically into
+~~Start at one window per year, **2004–2027**. Dense years split automatically into
 halves, then quarters; sparse years never split. Measured density is uneven —
 pages sampled across the register returned start years 2004–2010, while 2020
-holds only 1,334 — so automatic splitting is doing real work, not ceremony.
+holds only 1,334 — so automatic splitting is doing real work, not ceremony.~~
 
 **Truncation cannot be silent.** The response states the total; we compare it to
-what arrived.
+what arrived. *(This sentence still holds — only the mechanism above it does not.)*
 
-### Overlap is harmless; gaps are caught
+### ~~Overlap is harmless; gaps are caught~~
 
-- **Overlap** — a contract appearing in two windows re-inserts against the unique
-  key in §6 and is a no-op.
-- **Gaps** — caught by arithmetic: **distinct rows loaded must equal 204,991.**
+- ~~**Overlap** — a contract appearing in two windows re-inserts against the unique
+  key in §6 and is a no-op.~~
+- ~~**Gaps** — caught by arithmetic: **distinct rows loaded must equal 204,991.**~~
+  **Superseded:** there are no windows to overlap or gap between any more. The
+  arithmetic check survives as `assertComplete()` over the single fetch — see
+  the amendment callout above.
 
 That is the acceptance test, and it is the exact failure this source has already
 produced once: *"Pagination sorted on publishDate silently dropped ~33% of a
 window."*
 
 ### ⚠️ The first thing implementation must resolve
+
+**RESOLVED, see the amendment callout above.** `startDate`/`endDate` bound on a
+fully-contained-within interval, not a single date and not an overlap — full
+measurement in `docs/2026-09-03-eds-window-semantics.md`. The resolution is
+what made windowing unusable at all, not what fixed it.
 
 **`startDate` and `endDate` were proven to MOVE the count. What they MEAN was not
 established.** A contract running 2019→2021 might land in either window, both, or
@@ -214,11 +247,18 @@ of error as the `external_id` fusion fixed in migration 022 the same day.
 limiter — a state transparency API is an intended-use resource, and the polite
 failure is to stop.
 
-At roughly 25 windows the request count is trivial; **the delay exists for
-manners, not throughput.**
+~~At roughly 25 windows the request count is trivial;~~ **⚠️ AMENDED — see §4's
+callout: there are no windows.** Ruling 3 replaced the window loop with two
+requests total, which is gentler on the API than the ~25-window plan this
+sentence described, not less so; **the delay exists for manners, not
+throughput** still holds.
 
-**One `ingest_run` per window**, so a failure costs one window and progress is
-durable.
+~~**One `ingest_run` per window**, so a failure costs one window and progress is
+durable.~~ **Superseded:** one `ingest_run` row for the whole fetch — there is
+exactly one fetch, not one per window. A failed fetch retries from scratch
+(~47s), trading per-window resumability for the simplicity of nothing left to
+tile incorrectly. See `app/server/src/contracts/ingest.ts` and the real run:
+`docs/2026-09-03-eds-ingest-run.md`.
 
 **Runs LOCALLY**, per Matt's standing ruling of 2026-09-03 — *"we should always
 do scraping locally unless otherwise specified"* — which supersedes the
@@ -230,15 +270,27 @@ is a separate deliberate act.
 
 ## 8. Testing
 
-**The test that carries the lesson:** a fake fetch returning
+> **⚠️ AMENDED — see §4.** "Split" and "window" below describe the pre-Ruling-3
+> design. What shipped: a short fetch (`results.length < totalResults`) throws
+> via `assertComplete()` rather than being silently accepted — no split,
+> because there is nothing left to split into. The lesson the test carries is
+> unchanged; the mechanism it drives is not.
+
+~~**The test that carries the lesson:** a fake fetch returning
 `totalResults: 5000` with 2,000 rows **must trigger a split, not a silent
-accept.** Mutation-provable — remove the comparison and it fails.
+accept.** Mutation-provable — remove the comparison and it fails.~~ **What
+shipped:** a fake fetch returning `totalResults` greater than `results.length`
+must throw, not return the short array. Mutation-provable — remove the
+comparison in `assertComplete()` and it fails. See `completeness.test.ts` and
+`eds-client.test.ts`.
 
 Plus:
 
 - A **committed fixture** from one real window, following the
   `idoa-listing.html` pattern, so parser tests never touch the network.
-- **Idempotency:** run the same window twice, row count unchanged.
+- ~~**Idempotency:** run the same window twice, row count unchanged.~~
+  **Idempotency:** run the same fetch twice, row count unchanged (see
+  `import.test.ts`).
 - **The natural key:** two rows sharing an `external_id` with different
   `amendment` values must produce **two** contracts, not one.
 - **The queue guard:** after a full ingest, the triage queue's row count is
@@ -249,12 +301,34 @@ Plus:
 
 ## 9. Success criteria
 
-1. **`distinct contracts loaded == 204,991`**, or the shortfall is explained.
+> **⚠️ AMENDED 2026-09-03, after the real run.** Criteria 1 and 4 below still
+> read as originally written — struck through, not deleted — because they
+> predate Ruling 3's abandonment of windowing. Results:
+> `docs/2026-09-03-eds-ingest-run.md`.
+
+1. ~~**`distinct contracts loaded == 204,991`**, or the shortfall is
+   explained.~~ **Result: 204,920 of 204,991 loaded (99.965%). The 71-row
+   shortfall IS explained**, not merely allowed for: `(external_id, amendment)`
+   turns out not to be unique in the source itself — 71 pairs collide with a
+   different row (different amount, dates, vendor, or agency; zero
+   byte-identical), and the natural key silently keeps whichever arrived
+   first. Accepted as immaterial (0.035%); the cheap fix (extend the key with
+   `pdf_url`, which differs on all 71) is named but deferred to its own slice.
+   Full analysis: `docs/2026-09-03-eds-ingest-run.md`.
 2. **`npm run fitness` shows F1 and F2 PASS** — the point of doing this now.
-3. **The triage queue is unchanged**, measured before and after.
-4. **A second run of the same windows writes zero new rows.**
+   **Result: PASS.** F1 3 sources (threshold 2), F2 2 in Indiana (threshold 1).
+   Both were FAIL before this ingest.
+3. **The triage queue is unchanged**, measured before and after. **Result:
+   confirmed** — solicitation/sighting/pursuit counts identical before and
+   after (1,970 / 1,996 / 9).
+4. ~~**A second run of the same windows writes zero new rows.**~~ There are no
+   windows — see §4. **What was actually verified:** a second run of the same
+   fetch writes zero new rows; the 71 collisions above are that mechanism
+   working as designed, not a defect in it.
 5. **`003`'s `verified_facets` records `page` as silently ignored**, so the next
-   person meets the finding rather than rediscovering it.
+   person meets the finding rather than rediscovering it. **Result: done, via
+   migration 024** (and corrected by 025 — see the final-review note in
+   `.superpowers/sdd/2026-09-03-indiana-contract-register/progress.md`).
 
 ---
 

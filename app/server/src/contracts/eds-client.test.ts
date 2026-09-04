@@ -69,3 +69,18 @@ test("a short response throws instead of returning a partial register", async ()
     /Incomplete register/,
   );
 });
+
+/* 🔴 THE ASSERTION THIS FIX EXISTS FOR. {total: 0, rows: []} passes
+ * assertComplete by design -- zero-and-zero is internally consistent, and
+ * that stays true (completeness.test.ts covers it). But this API returns
+ * exactly that zeroed shape for a malformed body, per this file's own `ask()`
+ * comment, and a register known to hold ~205,000 contracts coming back empty
+ * is a broken fetch, not a real result. fetchRegister must refuse it rather
+ * than handing the caller [] to write as a "successful" zero-row ingest. */
+test("an empty register is refused, not returned as a successful zero-row fetch", async () => {
+  const empty = JSON.stringify({ results: [], pagination: { totalResults: 0 } });
+  const fake: typeof fetch = async () => new Response(empty, { status: 200 });
+  await expect(fetchRegister({ fetchImpl: fake, delayMs: 0 })).rejects.toThrow(
+    /zero contracts|empty/i,
+  );
+});

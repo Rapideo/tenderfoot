@@ -76,5 +76,25 @@ export async function fetchRegister(
 
   const full = await ask(doFetch, probe.total + MARGIN);
   assertComplete(full);
+
+  /* 🔴 assertComplete alone is not enough. {total: 0, rows: []} is internally
+   * consistent -- that is deliberate, see completeness.ts -- but a register
+   * KNOWN to hold ~205,000 contracts returning zero is not a real empty state.
+   * It is this API's own documented failure shape for a malformed body (see
+   * the `ask()` comment above: an empty body zeroes the pagination block
+   * rather than returning everything). Writing zero rows would still insert
+   * an ingest_run row (ingest.ts counts a run as complete on that alone), and
+   * floor.ts counts a source as "ingested" on an ingest_run row's mere
+   * existence -- so a single bad response would permanently flip F1 and F2 to
+   * PASS with nothing loaded. Refuse instead. */
+  if (full.rows.length === 0) {
+    throw new Error(
+      "EDS returned zero contracts. This register is known to hold roughly " +
+        "205,000, so a 200 response with an empty result set means the " +
+        "request was malformed or the source is broken -- not a legitimate " +
+        "empty register. Refusing rather than recording a silent success.",
+    );
+  }
+
   return full.rows as EdsRow[];
 }
