@@ -2,7 +2,9 @@
 
 **Updated 2026-09-04.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **NEWEST, 2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Merged `--no-ff` at `b173ea8`, gate 781/88 on the merged result. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
+> **⚖️ SEVEN DECISIONS ARE WAITING ON MATT, AND NONE OF THEM COSTS AN API RECORD.** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>. His answers save into the artifact's own store — **read it back before assuming any of them is still open.** Two need only permission, not thinking: **D6** loads the contract register into production (86 seconds) and **D7** pushes five local commits and applies migrations 026/027, which are `test`-only.
+>
+> **2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Merged `--no-ff` at `b173ea8`, gate 781/88 on the merged result. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
 >
 > **The project turned data-first on 2026-09-03, and the data question is answered.** HigherGov was tested against a 71-item answer key and returned **99% coverage recall**, an **Indiana solicitation archive back to 2013** where the source itself publishes none, and **sub-state coverage no adapter strategy reaches** — for $500/yr. The verdict is a buy, and the adapter backlog (Illinois, Michigan, Kentucky, Ohio, the OpenGov municipalities) is **shelved pending a reliability test**. SAM.gov stays direct and free; HigherGov's metered allowance is spent only on what we cannot get free.
 >
@@ -295,7 +297,79 @@ still a judgement about a purchase, read out of prose, so it goes to Matt.
 **Full detail: [`docs/2026-09-03-source-assessments.md`](docs/2026-09-03-source-assessments.md), amended in place.**
 **Probe list: P1 ✅ · P2 ◐ (one closed, one below floor) · P5 ✅ and it turned out
 FREE** — the register is already ingested, so it was a query, not the probe it
-was costed as. **P3 and P4 remain, one free probe each.**
+was costed as. ~~**P3 and P4 remain, one free probe each.**~~ **✅ BOTH RAN
+2026-09-04 — migration 027.**
+
+---
+
+## ✅ 2026-09-04 — P3 AND P4, AND THEY RETURNED OPPOSITE ANSWERS
+
+**Both free, both local, no API key involved. Pass 2's free probes are now spent.**
+
+**USASpending closes R4 AND R9, and it is the best-behaved source we have
+measured.** §5.4 ran **with a control**, which no previous run in this project
+did: FY2025 contracts unconstrained **5,782,489**, `place_of_performance` IN
+**28,958**, bogus state `ZZ` **0**. The control is the whole point — a silently
+ignored filter returns the *baseline* for a nonsense value, and that is what the
+five recorded silent-ignore instances across four platforms all did.
+**A bogus `date_type` is rejected with HTTP 400** naming the valid enum. Nothing
+else in this registry has been shown to fail loudly.
+
+**R9 closes on `last_modified_date`**, which works both ways — a `date_type` the
+search filters on *and* a per-row field with timestamp precision. ⚠️ **The
+omitted default matches none of the named types (5,828 vs 2,018 / 1,826 / 1,865),
+so an adapter MUST pass `date_type` explicitly.**
+
+📌 **`probe_url` is deliberately not the endpoint the probe used.** The count
+endpoint is POST-only and answers GET with **405**, which would have made the
+health prober report this source `failing` forever — checked before writing. It
+carries `/api/v2/awards/last_updated/`, whose **stale value would itself be the
+§5.4 rot signal.**
+
+**Illinois BidBuy has NO watermark, on any surface.** Two date controls, both
+opening dates; *"modified"* appears **0 times in 263,822 bytes**; the
+results-grid sort offers nothing better. **`watermark_field` stays NULL by
+ruling** (Matt, 2026-09-04) — `openingDateFrom` is already in its verified
+`works` list, so writing it would have graded R9 `strong` while a resume on it
+**silently drops every amendment** to an already-open solicitation.
+
+> **🔴 AND THAT EXPOSES THE SAME DEFECT R7 HAD, ONE DIMENSION OVER.** R9 is
+> `watermark_field IS NULL ? unknown : strong` — a null check. BidBuy, now
+> *probed*, grades identically to Kentucky eMARS, which nobody has ever looked
+> at. **Not fixed — out of the approved scope of these probes.** It is **D3** on
+> the ruling sheet.
+
+---
+
+## ⚖️ THE RULING SHEET — seven decisions, none of which costs a record
+
+**<https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>**
+
+Matt's answers save into the artifact's own store and can be read back with the
+Artifact tool's `read_db` on collection `rulings` — so a later session should
+**read it before assuming any of these is still open.**
+
+| | Decision | Why it is his |
+|---|---|---|
+| **D1** | HigherGov's R7 translation | free, and it decides how a $500/yr source reads |
+| **D2** | The description ruling | decides where the quota actually goes |
+| **D3** | R9's null check | same defect as R7; P4 made it bite |
+| **D4** | Floor thresholds F1/F5/F6/F7 | the floor's verdict is an opinion until ratified |
+| **D5** | R7's new thresholds | proposed 2026-09-04, unratified |
+| **D6** | EDS register → production | CLAUDE.md §2 makes it a deliberate act |
+| **D7** | Push + migrate production | 5 commits on one laptop; 026/027 are `test`-only |
+
+⚠️ **CORRECTION carried into D1.** HigherGov's description problem is one of
+**PRESENCE, not LENGTH** — 34% of rows carry none, but where one exists the
+median is **579–815 chars**, healthier than our own sample-2 median of 515.
+A p10 character count therefore reads **0**, which is arithmetically right and
+arguably the wrong instrument for a bimodal field. That is D1 option B.
+
+⚠️ **AND A STALE POINTER, found while building it.** STATUS says the description
+ruling has *"four options costed in `docs/2026-09-03-platform-comparison.md`"*.
+**They are not in that document under those labels** — it argues the consequence
+and never enumerates A–D. D2's options were rebuilt from the evidence that is
+recorded.
 
 ---
 
