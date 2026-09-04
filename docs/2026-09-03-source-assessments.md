@@ -17,15 +17,15 @@ It was right, and the map is more specific than that.
 
 `S` strong · `a` adequate · `w` weak · `?` unknown
 
-| Source | R1 legal | R2 archive | R3 tier | R4 filters | R5 platform | R6 geo | R7 fields ✏️ | R8 cost | R9 watermark | ? |
+| Source | R1 legal | R2 archive | R3 tier | R4 filters ✏️ | R5 platform | R6 geo | R7 fields ✏️ | R8 cost | R9 watermark ✏️ | ? |
 |---|---|---|---|---|---|---|---|---|---|---|
 | **HigherGov** | S | **S** | **S** | a | a | a | ~~a~~ **?** | a | **S** | ~~0~~ 1 |
 | **Indiana EDS contract register** | S | **S** | **S** | a | a | **S** | ~~?~~ **S** | **S** | **S** | ~~1~~ **0** |
 | SAM.gov | S | a | **S** | a | a | a | ~~?~~ **w** | **S** | **S** | ~~1~~ **0** |
-| Illinois BidBuy | S | **S** | w | **S** | a | a | ? | **S** | ? | 2 |
+| Illinois BidBuy | S | **S** | w | **S** | a | a | ? | **S** | ? ✔ | 2 |
 | Indiana IDOA solicitations | S | w | w | a | a | **S** | ? | **S** | ? | 2 |
 | Kentucky eMARS VSS | S | w | w | a | a | a | ? | **S** | ? | 2 |
-| USASpending | S | a | **S** | ? | a | a | ? | **S** | ? | 3 |
+| USASpending | S | a | **S** | ~~?~~ **S** | a | a | ? | **S** | ~~?~~ **S** | ~~3~~ **1** |
 | Michigan SIGMA VSS | S | w | w | ? | a | **w** | ? | **S** | ? | 3 |
 | Corpus import — Indiana open | S | a | w | ? | a | a | ? | **S** | ? | 3 |
 | Corpus import — federal calibration | S | a | w | ? | a | a | ~~?~~ **w** | **S** | ? | ~~3~~ 2 |
@@ -180,12 +180,88 @@ Ordered by cost. **Two standing constraints bind every line:**
 |---|---|---|---|
 | ~~**P1**~~ | ~~Measure `field_completeness` for SAM.gov from data already held~~ **✅ DONE 2026-09-04, migration 026. R7 = `weak`** — p10 84 chars, **0 of 7,070 rows valued**, 3 of 979 documents reachable | **zero, as costed** | ✅ R7 closed for the source we actually run |
 | ~~**P2**~~ | ~~Same for the two corpus imports~~ **◐ ONE CLOSED, ONE CANNOT BE.** Federal calibration (140 rows) = `weak`: not one description in the set. Indiana open holds **61 rows — below the population floor**, so §5.3 keeps it `unknown` and the measurement is recorded saying so | **zero, as costed** | ◐ R7 ×1. The second is a measured `unknown`, not an unmeasured one |
-| **P3** | Record USASpending's watermark and run §5.4's vary-a-parameter check | one probe, free source | R4 + R9 |
-| **P4** | Illinois BidBuy: confirm a watermark exists on the Periscope search | one probe, free source | R9, and it is the only non-federal solicitation archive we have |
+| ~~**P3**~~ | ~~Record USASpending's watermark and run §5.4's vary-a-parameter check~~ **✅ DONE 2026-09-04, migration 027. BOTH CLOSE — and it is the best-behaved source we have measured.** §5.4 passed *with a control*; `last_modified_date` is a true watermark | **zero**, as costed | ✅ **R4 STRONG + R9 STRONG** |
+| ~~**P4**~~ | ~~Illinois BidBuy: confirm a watermark exists on the Periscope search~~ **✅ DONE 2026-09-04, migration 027 — and the answer is NO.** Neither the filter surface nor the sort surface exposes a modification time | **zero**, as costed | ⚖️ **R9 stays `unknown` — now by measurement.** R4 was already closed |
 | ~~**P5**~~ | ~~Indiana EDS register: measure field completeness on a small page~~ **✅ DONE 2026-09-04, and it was FREE — no probe.** The register's 204,920 rows are already ingested on `test`, so this was a query over the whole corpus rather than a sample of one page. **R7 = `strong`** | ~~one probe~~ **zero** | ✅ R7 on the highest-scoring source |
 | **P6** | ~~HigherGov: `field_completeness` is `adequate` on a **2026-09-03 measurement of 100 records**~~ **⚖️ NEEDS A RULING, NOT A PROBE — see below.** Its measurement is rich and real; nobody has translated it into the rubric's vocabulary, and doing so from prose would decide something about a $500/yr purchase | **zero** to translate; **≤300 records**, needs approval, to re-measure | R7, once Matt rules |
 | — | **Kentucky eMARS** | — | ⚠️ **Do not probe to close R2.** Its row says "INFERRED FROM PLATFORM, not tested". Verifying it costs a tier-3 adapter against a source **outside the firm profile** — see finding 4. The honest action is to leave it `unknown` |
 | — | **Michigan SIGMA** | — | ⚠️ **R4 cannot be closed at all.** Totals are withheld, so §5.4's vary-a-parameter check has no number to watch move. `unknown` is the permanent and correct answer here, not a gap |
+
+---
+
+### ✅ P3 AND P4 RAN 2026-09-04 — and they returned opposite answers
+
+**Both free, both local, no API key involved. Migration 027 records them.**
+
+#### USASpending passes §5.4 *with a control*, and it is the first source that does
+
+| | contracts, FY2025 |
+|---|---|
+| no location filter | **5,782,489** |
+| `place_of_performance` state = `IN` | **28,958** |
+| state = `ZZ` — **the control** | **0** |
+
+**The control is the part that matters.** A silently-ignored filter returns the
+*baseline* for a nonsense value. This returned zero, so the parameter is
+genuinely applied and not merely accepted. Every previous §5.4 run in this
+project measured a filter that was accepted and ignored — **five instances
+across four platforms**, HigherGov included.
+
+**🔴 And a bogus enum is REJECTED, not swallowed.** `date_type=bogus_date_type`
+returns **HTTP 400** naming the valid values. Nothing else in this registry has
+been shown to fail loudly, and a source that does is worth more than one that
+does not.
+
+**R9 closes with a real watermark.** `last_modified_date` works *both* ways —
+it is a `date_type` the search filters on, and it is exposed per row as
+`Last Modified Date` with timestamp precision:
+
+| `date_type` | Indiana contracts, Jan 2025 |
+|---|---|
+| *omitted* | 5,828 |
+| `action_date` | 2,018 |
+| **`last_modified_date`** | **1,826** |
+| `date_signed` | 1,865 |
+
+> ⚠️ **The omitted default matches NONE of the three named types.** Whatever it
+> means, it is not one of the documented values. **An adapter must pass
+> `date_type` explicitly** — omitting it filters on semantics nobody here has
+> established.
+
+**📌 `probe_url` is not the endpoint the probe used**, and that was checked
+before writing: `/search/spending_by_award_count/` is POST-only and answers GET
+with **405**, so recording it would have made the health prober report this
+source `failing` forever. It carries `/api/v2/awards/last_updated/` instead,
+which returns `{"last_updated":"09/04/2026"}` — **a stale value there is itself
+the §5.4 rot signal**, which is better than a reachability ping.
+
+#### Illinois BidBuy has no watermark, and `openingDateFrom` is the trap
+
+The advanced search offers **exactly two date controls** — `Opening Date From`
+and `Opening Date To` — and *"modified"* appears **0 times in 263,822 bytes**.
+The results-grid sort is equally complete and equally unhelpful: Bid
+Solicitation #, Organization Name, Buyer, Description, Bid Opening Date, Status,
+Alternate Id.
+
+**⚖️ `openingDateFrom` was ruled out before the probe ran** (Matt, 2026-09-04).
+It is already in this row's verified `works` list, so writing it into
+`watermark_field` would cost nothing and would grade **R9 `strong`**. **An
+opening date is not a modified date.** A run resuming on it collects
+newly-opened solicitations and **silently misses every amendment** — addenda,
+deadline changes, cancellations — which is exactly the quiet loss §5.4 exists to
+catch. A column that makes the rubric say `strong` about a resume that loses
+data is worse than a null.
+
+> #### 🔴 AND THAT EXPOSES THE SAME DEFECT R7 HAD, ONE DIMENSION OVER
+>
+> R9 reads `watermark_field IS NULL ? unknown : strong` — **a null check.** So
+> BidBuy, where we have now *established* no watermark exists, is graded
+> identically to Kentucky eMARS, which nobody has ever looked at. **Measured
+> absence and never-looked are not the same fact**, and R7 carried exactly this
+> defect until 2026-09-04.
+>
+> **Not fixed here, deliberately** — it is a second dimension's grading rule and
+> was not in the approved scope of these probes. Flagged rather than folded in.
 
 ---
 
