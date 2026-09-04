@@ -572,6 +572,63 @@ test("HigherGov's note carries the quota constraint, not just the capability", a
   expect((row?.source_note ?? "").toLowerCase()).toContain("document");
 });
 
+test("023 gives contract the columns an ingest needs", async () => {
+  const cols = (
+    await all<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'contract'
+          AND column_name IN ('source_id','amendment','action_type','amount_cents')
+        ORDER BY column_name`,
+      [SCHEMA],
+    )
+  ).map((c) => c.column_name);
+  expect(cols).toEqual(["action_type", "amendment", "amount_cents", "source_id"]);
+});
+
+/* The contract id is NOT unique: A337-6-CWI-104 appears as amendment 0 (New,
+ * $40,000) and amendment 1 (Amendment, $70,000). Keying on external_id alone
+ * would collapse a contract's history into one row -- the same class of error
+ * as the external_id fusion fixed in migration 022. */
+test("023's natural key is (source_id, external_id, amendment)", async () => {
+  const src = await insert(`INSERT INTO source (name) VALUES ('023 fixture') RETURNING id`);
+
+  const a = await insert(
+    `INSERT INTO contract (source_id, external_id, amendment, amount_cents)
+     VALUES ($1, 'A337-6-CWI-104', 0, 4000000) RETURNING id`, [src],
+  );
+  /* Same contract, different amendment -> a SECOND row, not a conflict. */
+  const b = await insert(
+    `INSERT INTO contract (source_id, external_id, amendment, amount_cents)
+     VALUES ($1, 'A337-6-CWI-104', 1, 7000000) RETURNING id`, [src],
+  );
+  expect(a).not.toBe(b);
+
+  /* The same amendment twice IS a conflict -- that is what makes a re-run
+   * idempotent instead of duplicating. */
+  await expect(
+    dbRun(
+      `INSERT INTO contract (source_id, external_id, amendment, amount_cents)
+       VALUES ($1, 'A337-6-CWI-104', 0, 4000000)`, [src],
+    ),
+  ).rejects.toThrow();
+
+  await dbRun(`DELETE FROM contract WHERE source_id = $1`, [src]);
+  await dbRun(`DELETE FROM source WHERE id = $1`, [src]);
+});
+
+/* value_cents is the column that will one day hold PUBLISHED figures from
+ * HigherGov's /sl-contract/. amount_cents holds what THIS source states, which
+ * is a per-amendment delta and not a contract value. Keeping them apart is the
+ * whole reason there are two columns. */
+test("023 leaves value_cents alone -- it is not where the delta goes", async () => {
+  const col = await one<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = 'contract' AND column_name = 'value_cents'`,
+    [SCHEMA],
+  );
+  expect(col?.column_name).toBe("value_cents");
+});
+
 
 /* ⏰ THE SCHEMA REGISTERS ITS OWN AGE, and this test exists because the
  * registration is deliberately BEST EFFORT -- resetSchema() swallows any error
