@@ -2,7 +2,7 @@
 
 **Updated 2026-09-04.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **⚖️ SEVEN DECISIONS ARE WAITING ON MATT, AND NONE OF THEM COSTS AN API RECORD.** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>. His answers save into the artifact's own store — **read it back before assuming any of them is still open.** Two need only permission, not thinking: **D6** loads the contract register into production (86 seconds) and **D7** pushes five local commits and applies migrations 026/027, which are `test`-only.
+> **⚖️ SEVEN DECISIONS ARE WAITING ON MATT, AND NONE OF THEM COSTS AN API RECORD.** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>. His answers save into the artifact's own store — **read it back before assuming any of them is still open.** Two need only permission, not thinking: **D6** loads the contract register into production (86 seconds) and **D7** pushes 2026-09-04's local commits (`git log origin/main..main` for the count) and applies migrations 026/027, which are `test`-only.
 >
 > **2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Merged `--no-ff` at `b173ea8`, gate 781/88 on the merged result. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
 >
@@ -345,9 +345,12 @@ ruling** (Matt, 2026-09-04) — `openingDateFrom` is already in its verified
 
 **<https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>**
 
-Matt's answers save into the artifact's own store and can be read back with the
-Artifact tool's `read_db` on collection `rulings` — so a later session should
-**read it before assuming any of these is still open.**
+Matt's answers save into the artifact's own store. **Read them back before
+assuming any of these is still open** — Artifact tool, `action: "read_db"`,
+`db_op: "list"`, `collection: "rulings"`, with that URL as `url`. Documents are
+`d1`…`d7`; each carries `{choice, label, note, decided_at}` where `choice` is the
+option letter shown below. An empty collection means he has not answered yet, not
+that the questions went away.
 
 | | Decision | Why it is his |
 |---|---|---|
