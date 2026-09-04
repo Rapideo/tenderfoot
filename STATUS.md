@@ -1,8 +1,10 @@
 # Tenderfoot — status
 
-**Updated 2026-09-03.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-09-04.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **NOW: the project turned data-first on 2026-09-03, and the data question is answered.** HigherGov was tested against a 71-item answer key and returned **99% coverage recall**, an **Indiana solicitation archive back to 2013** where the source itself publishes none, and **sub-state coverage no adapter strategy reaches** — for $500/yr. The verdict is a buy, and the adapter backlog (Illinois, Michigan, Kentucky, Ohio, the OpenGov municipalities) is **shelved pending a reliability test**. SAM.gov stays direct and free; HigherGov's metered allowance is spent only on what we cannot get free.
+> **NEWEST, 2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Branch `field-completeness-r7`, gate 781/88, **not merged**. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
+>
+> **The project turned data-first on 2026-09-03, and the data question is answered.** HigherGov was tested against a 71-item answer key and returned **99% coverage recall**, an **Indiana solicitation archive back to 2013** where the source itself publishes none, and **sub-state coverage no adapter strategy reaches** — for $500/yr. The verdict is a buy, and the adapter backlog (Illinois, Michigan, Kentucky, Ohio, the OpenGov municipalities) is **shelved pending a reliability test**. SAM.gov stays direct and free; HigherGov's metered allowance is spent only on what we cannot get free.
 >
 > **`npm run fitness` now gives a verdict rather than an opinion.** The floor fails five of seven predicates against production and **blocks GO/NO-GO by rule**. ⚠️ **A live API key was leaked and rotated during this work — CLAUDE.md §5 is binding on anyone touching that API.**
 >
@@ -228,7 +230,74 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-03
+## 🔖 RESUME HERE — updated 2026-09-04
+
+## ✅ 2026-09-04 — R7 IS MEASURED, AND CLOSING IT FOUND THE DIMENSION WAS BROKEN
+
+**Branch `field-completeness-r7`, gate 781 tests / 88 files, exit 0. NOT MERGED.**
+
+Pass 1 called R7 *"the cheapest gap on the page to close"* — the numbers were
+already in the database. They were. **Recording them would also have made the
+matrix worse, because R7 was a null check rather than a grade:**
+`field_completeness === null ? unknown : adequate`. Writing SAM.gov's real
+figures under that rule grades it **`adequate`** on a p10 of 84 characters,
+**0 of 7,070 rows carrying a value**, and 3 of 979 documents reachable —
+**level with HigherGov on the one dimension where they differ most.** §5.3
+forbids collapsing `unknown` into `weak`; this was the same error inverted.
+
+**R7 now grades the measurement and takes the WEAKEST property** — a minimum,
+unlike an average, cannot be talked up by adding strengths. Boundaries are in
+`fitness/thresholds.ts`, every one `UNRATIFIED`, on the same footing as the
+floor's.
+
+| Source | R7 | measured |
+|---|---|---|
+| **Indiana EDS contract register** | ~~?~~ **STRONG** | 204,920 contracts; value and end date on every row |
+| SAM.gov | ~~?~~ **WEAK** | p10 84 chars · **0 of 7,070 valued** · 0.003 document reachability |
+| Corpus — federal calibration | ~~?~~ **WEAK** | 140 rows, **not one description** |
+| Corpus — Indiana open | **?** | 61 rows — **below the population floor of 100**, measured and recorded as such |
+| **HigherGov** | ~~a~~ **?** | ⚖️ **see the ruling below — this is a correction, not a downgrade** |
+
+**📌 SAM's p10 IS 84 WHERE F6 SAYS 57, AND BOTH ARE RIGHT.** F6 measures our
+HOLDINGS — all 7,271 biddable rows. R7 measures A SOURCE — SAM's own 7,070. The
+201-row difference is the two corpus imports, which carry **no descriptions at
+all**, and they drag the global p10 from 84 to 57. **The published 57 is a
+blend, not SAM's number.**
+
+**🔴 TWO DEFECTS THE FIRST RUN FOUND, BEFORE ANYTHING WAS WRITTEN.** P14 measured
+vendor presence as `vendor_id IS NOT NULL` and graded the EDS register `weak` on
+**204,920 rows that all carry a vendor** — the ingest lands the raw name in
+`source_note` by a documented v1 ruling, so the measurement was punishing a
+deliberate decision. And **`posted_at`/`closes_at` are `text`, not timestamps**;
+comparing them to `now()` raises, and every other caller binds an ISO string.
+
+### ⚖️ WITH MATT — HigherGov's R7, and it is free to answer
+
+**Migration 026 deliberately leaves HigherGov alone**, so its R7 reads `unknown`.
+**Nothing about the source changed** — the old `adequate` was the null check
+firing on prose no grader can read. Translating it needs **no API call and no
+records**, but two of three judgements decide what a $500/yr source looks like:
+
+- **P6** — 34 of 100 feed rows carry **no description**, so the feed's p10 is
+  **0 characters** and P6 grades `weak`. Migration 019's own comment forbids the
+  flattering alternative: quoting the answer-key subset's p10 of 436 as if it
+  described the feed is *"the error this column exists to prevent."*
+- **P8** — `val_est` on 92 of 100 would grade `strong`, **but 019's caveat says
+  those are INFERRED BANDS, not published figures**, and must never sit beside
+  sourced facts.
+
+**Under weakest-wins those give HigherGov R7 `weak`** — which may be the truth,
+since the missing-description rate *is* the open "description ruling". It is
+still a judgement about a purchase, read out of prose, so it goes to Matt.
+
+**Full detail: [`docs/2026-09-03-source-assessments.md`](docs/2026-09-03-source-assessments.md), amended in place.**
+**Probe list: P1 ✅ · P2 ◐ (one closed, one below floor) · P5 ✅ and it turned out
+FREE** — the register is already ingested, so it was a query, not the probe it
+was costed as. **P3 and P4 remain, one free probe each.**
+
+---
+
+## 🔖 Earlier resume block — updated 2026-09-03
 
 ## ▶️ NEXT SESSION — THE PROJECT CHANGED DIRECTION TODAY, AND THE DATA QUESTION IS ANSWERED.
 

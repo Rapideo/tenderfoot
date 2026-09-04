@@ -15,7 +15,9 @@
 import { pathToFileURL } from "node:url";
 import { all, one } from "../db/index.js";
 import { measureFloor, type PredicateResult } from "./floor.js";
+import { R7 } from "./thresholds.js";
 import { scoreSource, type RubricSubject, type SourceProfile } from "./rubric.js";
+import { measureAllSources, type SourceMeasurement } from "./field-completeness.js";
 
 const MARK: Record<string, string> = {
   pass: "PASS",
@@ -67,6 +69,23 @@ function renderProfile(p: SourceProfile): string {
   return [head, ...lines].join("\n");
 }
 
+/* R7's measurement, printed so it can be COPIED INTO A MIGRATION. fitness/ is
+ * read-only by construction, so this report is how a measured value gets from
+ * the database into the registry -- a person reads it, and migration 026 (and
+ * its successors) record it. That is the route migration 021's watermarks took,
+ * and it is what keeps `npm run fitness` safe to point at production. */
+function renderMeasurement(m: SourceMeasurement): string {
+  const g = m.measurement;
+  const grades = (["P6", "P7", "P8", "P11", "P14"] as const)
+    .map((k) => `${k} ${g[k]}`)
+    .join(" · ");
+  const evidence = Object.entries(g.evidence)
+    .filter(([, v]) => v !== null)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("  ");
+  return [`  ${m.name}`, `      ${grades}`, `      n=${g.population_n}  ${evidence}`].join("\n");
+}
+
 export async function main(): Promise<void> {
   const floor = await measureFloor();
 
@@ -88,6 +107,16 @@ export async function main(): Promise<void> {
     console.log(renderProfile(scoreSource(s)));
     console.log("");
   }
+
+  console.log("\n\nR7 — FIELD COMPLETENESS AS MEASURED RIGHT NOW\n");
+  console.log(
+    "  What a source SUPPLIES, measured per source from rows we already hold.\n" +
+      "  Nothing here is written anywhere — to record a value, copy it into a\n" +
+      `  migration. Below a population of ${R7.minPopulation} every property reads\n` +
+      "  `unknown`: too few rows to grade is not the same as graded badly (§5.3).\n" +
+      "  ⚠️  These thresholds are UNRATIFIED proposals, exactly as the floor's are.\n",
+  );
+  for (const m of await measureAllSources()) console.log(renderMeasurement(m) + "\n");
 }
 
 /* Only run when invoked directly, so importing this file in a test does not
