@@ -2,7 +2,7 @@
 
 **Updated 2026-09-04.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **NEWEST, 2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Branch `field-completeness-r7`, gate 781/88, **not merged**. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
+> **NEWEST, 2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Merged `--no-ff` at `b173ea8`, gate 781/88 on the merged result. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
 >
 > **The project turned data-first on 2026-09-03, and the data question is answered.** HigherGov was tested against a 71-item answer key and returned **99% coverage recall**, an **Indiana solicitation archive back to 2013** where the source itself publishes none, and **sub-state coverage no adapter strategy reaches** — for $500/yr. The verdict is a buy, and the adapter backlog (Illinois, Michigan, Kentucky, Ohio, the OpenGov municipalities) is **shelved pending a reliability test**. SAM.gov stays direct and free; HigherGov's metered allowance is spent only on what we cannot get free.
 >
@@ -234,7 +234,9 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## ✅ 2026-09-04 — R7 IS MEASURED, AND CLOSING IT FOUND THE DIMENSION WAS BROKEN
 
-**Branch `field-completeness-r7`, gate 781 tests / 88 files, exit 0. NOT MERGED.**
+**Merged to `main` `--no-ff` at `b173ea8`; gate re-run on the merged result: 781 tests / 88 files, exit 0.**
+⚠️ **Not pushed** — `main` is ahead of `origin/main` by this work.
+⚠️ **Migration 026 is applied to `test` only.** Production gets it on the next deploy.
 
 Pass 1 called R7 *"the cheapest gap on the page to close"* — the numbers were
 already in the database. They were. **Recording them would also have made the
