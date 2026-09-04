@@ -1377,6 +1377,15 @@ Expected: FAIL — `page` is not in `verified_facets`.
 
 - [ ] **Step 3: Write the migration**
 
+> ⚠️ **This migration ALSO drops a duplicate index — controller Ruling 5.**
+> Migration 023 created `contract_ends_at ON contract (ends_at)`, duplicating
+> `contract_ends` from `002_entity_graph.sql:146`. That was a defect in the
+> plan's own SQL; Task 2's implementer copied it verbatim and flagged it, and
+> Task 2's reviewer independently found it. **023 is already applied and must
+> not be edited** — `migrate.ts` tracks by filename with no checksum, so editing
+> an applied file diverges silently. Add the `DROP INDEX` here, with a comment
+> saying why it exists.
+
 Create `app/server/migrations/024_eds_page_ignored.sql`:
 
 ```sql
@@ -1408,6 +1417,18 @@ UPDATE source
          'works_verified_2026_09_03', jsonb_build_array(
              'pageSize', 'startDate', 'endDate', 'businessUnit'))
  WHERE name = 'Indiana EDS contract register';
+
+-- Ruling 5. Migration 023 created contract_ends_at on contract(ends_at),
+-- duplicating contract_ends created by 002_entity_graph.sql:146 on the same
+-- column. Two btrees on one column cost write throughput and disk for no read
+-- benefit, and this table has just taken 204,991 rows.
+--
+-- It is dropped HERE rather than edited out of 023 because 023 has already been
+-- applied: migrate.ts tracks migrations by filename with no checksum, so
+-- editing an applied file leaves every database that ran it unchanged while a
+-- fresh one gets different text. Silent, permanent divergence. Corrections come
+-- after, never in place.
+DROP INDEX IF EXISTS contract_ends_at;
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
