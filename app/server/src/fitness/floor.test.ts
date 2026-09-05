@@ -327,8 +327,17 @@ test("an UNKNOWN predicate blocks adjudication with no FAIL anywhere to explain 
   expect(report.blocksAdjudication).toBe(true);
 });
 
-test("the report says out loud that the thresholds are unratified", async () => {
+/* ⚖️ RATIFIED BY MATT 2026-09-04 (ruling sheet D4, option A): "Approve them as
+ * proposed." This test previously asserted the opposite and it was right to --
+ * the floor's verdict WAS an opinion with a number attached until he signed
+ * the pass marks off. It is kept, inverted, rather than deleted, because the
+ * thing worth pinning is that the report states its own standing either way.
+ *
+ * ⚠️ APPROVING CHANGED NO VERDICT. The floor still blocks; four predicates
+ * still fail. What moved is that the block is now legitimate rather than
+ * arbitrary, which is what lets it survive being challenged. */
+test("the report no longer calls the floor's thresholds unratified", async () => {
   const report = await measureFloor();
-  expect(report.thresholdsRatified).toBe(false);
-  expect(report.summary).toContain("UNRATIFIED");
+  expect(report.thresholdsRatified).toBe(true);
+  expect(report.summary).not.toContain("UNRATIFIED");
 });

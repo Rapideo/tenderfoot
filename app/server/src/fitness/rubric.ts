@@ -17,7 +17,22 @@
  * re-runnable, because it is the only thing proving the rubric reproduces
  * judgements already made by hand. */
 
-import { R7 as R7_THRESHOLDS } from "./thresholds.js";
+import { R7 as R7_THRESHOLDS, R7_RATIFIED } from "./thresholds.js";
+
+/* ⚖️ D5 OPTION C, AND IT IS THE WHOLE POINT OF THAT RULING. Matt left R7's
+ * boundaries provisional on 2026-09-04 while ratifying the floor's (D4), and
+ * option C's stated consequence was that "grades keep shipping with the 'not
+ * approved' caveat."
+ *
+ * 🔴 THAT CAVEAT HAD TO BE BUILT, because it did not exist here. Before
+ * 2026-09-05 the only "unratified" text in the system was in the floor's
+ * summary, driven by the single flag that governed both blocks — so ratifying
+ * D4 would have removed the last trace of it and R7's grades would have
+ * shipped looking settled. Answering D4 and D5 differently is exactly what
+ * exposed it. */
+const R7_CAVEAT = R7_RATIFIED
+  ? ""
+  : " ⚠️ R7 boundaries are UNRATIFIED proposals (D5), so this grade is provisional.";
 
 export type Grade = "strong" | "adequate" | "weak" | "unknown";
 
@@ -121,7 +136,10 @@ export function gradeCompleteness(fc: Record<string, unknown> | null): Dimension
   const measured = known.map((k) => `${k.id} ${k.grade}`).join(", ");
   return {
     grade: weakest.grade,
-    note: `Weakest of ${known.length} measured properties sets the grade: ${weakest.id}. (${measured}.)`,
+    /* The caveat rides on an ASSERTED GRADE only. The `unknown` returns above
+     * are a refusal to grade, and marking a refusal "provisional" says nothing
+     * a reader can act on. */
+    note: `Weakest of ${known.length} measured properties sets the grade: ${weakest.id}. (${measured}.)${R7_CAVEAT}`,
   };
 }
 

@@ -115,7 +115,11 @@ export async function main(): Promise<void> {
       "  Nothing here is written anywhere — to record a value, copy it into a\n" +
       `  migration. Below a population of ${R7.minPopulation} every property reads\n` +
       "  `unknown`: too few rows to grade is not the same as graded badly (§5.3).\n" +
-      "  ⚠️  These thresholds are UNRATIFIED proposals, exactly as the floor's are.\n",
+      /* ⚖️ This line said "exactly as the floor's are" until 2026-09-05, and
+       * that stopped being true the moment D4 and D5 were answered
+       * differently: the floor's thresholds are ratified, these are not. */
+      "  ⚠️  These thresholds are UNRATIFIED proposals (D5), unlike the floor's,\n" +
+        "      which Matt ratified on 2026-09-04 (D4).\n",
   );
   for (const m of await measureAllSources()) console.log(renderMeasurement(m) + "\n");
 }

@@ -1,45 +1,82 @@
 /* THE FLOOR'S NUMBERS LIVE HERE AND NOWHERE ELSE.
  *
  * Design spec §3.2 (2026-09-03 data-fitness spec): "The predicates are the
- * design. The thresholds are a RULING." Every value below is a PROPOSAL that
- * Matt has not ratified, and §8.1 carries them as an open question.
+ * design. The thresholds are a RULING." Both rulings have now been made, and
+ * they went DIFFERENT WAYS: the floor's thresholds are RATIFIED (D4), the R7
+ * block below is still PROVISIONAL (D5). Each block carries its own flag, and
+ * §8.1's open question is closed for the first and open for the second.
  *
  * They are collected in one file so that ratifying them is a single visible
  * edit rather than a hunt through seven query modules -- and so nobody can
  * quietly introduce an eighth number by hard-coding it at a call site.
  *
  * ⚠️ A FLOOR WITH UNRATIFIED THRESHOLDS IS NOT YET BINDING. measureFloor()
- * reports `thresholdsRatified: false` while the flag below is false, so a
- * caller cannot mistake a provisional verdict for the real one. */
-export const THRESHOLDS_RATIFIED = false;
+ * reports `thresholdsRatified` from the flag below, so a caller cannot mistake
+ * a provisional verdict for the real one.
+ *
+ * ⚖️ RATIFIED 2026-09-04 BY MATT — ruling sheet D4, option A, "approve them as
+ * proposed". The six values below are no longer proposals; they are the
+ * standard the floor's verdict is measured against.
+ *
+ * ⚠️ APPROVING UNBLOCKED NOTHING, and that was said plainly when he was asked.
+ * The floor still fails four predicates. What changed is that the block is now
+ * a legitimate finding rather than one person's opinion with a number attached
+ * — which is what lets it survive being challenged. */
+export const THRESHOLDS_RATIFIED = true;
 
 export const THRESHOLDS = {
-  /** F1 — sources with at least one completed ingest. UNRATIFIED. */
+  /** F1 — sources with at least one completed ingest. RATIFIED 2026-09-04 (D4). */
   minIngestedSources: 2,
-  /** F2 — ingested sources inside the Profile's primary geography. UNRATIFIED. */
+  /** F2 — ingested sources inside the Profile's primary geography. RATIFIED 2026-09-04 (D4). */
   minPrimaryGeographySources: 1,
-  /** F4 — longest run of consecutive ISO weeks with no ingest. UNRATIFIED. */
+  /** F4 — longest run of consecutive ISO weeks with no ingest. RATIFIED 2026-09-04 (D4). */
   maxIngestGapWeeks: 1,
-  /** F5 — real triage decisions needed for Interested-per-hundred. UNRATIFIED. */
+  /** F5 — real triage decisions needed for Interested-per-hundred. RATIFIED 2026-09-04 (D4). */
   minDecisions: 100,
-  /** F6 — 10th-percentile description length on biddable rows, chars. UNRATIFIED. */
+  /** F6 — 10th-percentile description length on biddable rows, chars. RATIFIED 2026-09-04 (D4). */
   minDescriptionP10Chars: 200,
-  /** F7 — share of document-deferring rows for which we hold a document. UNRATIFIED. */
+  /** F7 — share of document-deferring rows for which we hold a document. RATIFIED 2026-09-04 (D4). */
   minDocumentReachability: 0.8,
 } as const;
 
 /* ---------------------------------------------------------------- R7 -- */
 
-/* THE RUBRIC'S R7 BOUNDARIES. Added 2026-09-04, and UNRATIFIED exactly as the
- * floor's are.
+/* THE RUBRIC'S R7 BOUNDARIES. Added 2026-09-04, and STILL UNRATIFIED -- unlike
+ * the floor's, which Matt ratified on 2026-09-04 (D4) while leaving these
+ * provisional (D5).
  *
  * R7 asks how much of the property list a source actually SUPPLIES. Until this
  * block existed the dimension was a null check -- any recorded measurement,
  * however bad, graded `adequate`. These numbers are what turn a measurement
- * into a grade, so they carry the same status as the floor's: a PROPOSAL, one
- * visible edit away from being ratified, and never hard-coded at a call site.
+ * into a grade. They are a PROPOSAL, one visible edit away from being
+ * ratified, and never hard-coded at a call site. They no longer share the
+ * floor's status — see the D5 note below.
  *
- * ⚠️ TWO OF THEM DELIBERATELY MIRROR THE FLOOR. `p6DescriptionP10Adequate`
+ * ⚖️ LEFT PROVISIONAL 2026-09-04 BY MATT — ruling sheet D5, option C, "leave
+ * them provisional". He ratified the FLOOR's thresholds the same day (D4), so
+ * the two blocks in this file now have DIFFERENT STANDING, which is why the
+ * flag below exists at all: until 2026-09-05 a single `THRESHOLDS_RATIFIED`
+ * governed both, and his split answer was literally inexpressible.
+ *
+ * ⚠️ THE MIRROR IS NOW ASYMMETRIC BY RULING, NOT BY OVERSIGHT. F6's
+ * `minDescriptionP10Chars: 200` is ratified; `p6DescriptionP10Adequate: 200`,
+ * written to mirror it, is not. The warning below anticipated exactly this —
+ * "if they drift apart that is a decision, and it will be visible here" — and
+ * this is that decision. The numbers still agree; only their standing differs.
+ *
+ * D5 option C's stated consequence is that "grades keep shipping with the 'not
+ * approved' caveat", so gradeCompleteness appends it to every R7 note while
+ * this is false. Before the split that caveat lived ONLY in the floor's
+ * summary, and ratifying D4 would have erased the last trace of it.
+ *
+ * ⚠️ ONE THING HE WAS TOLD AND SHOULD BE TOLD AGAIN IF THIS IS REVISITED: the
+ * sheet argued C was "consistent with the floor's current status, so the two
+ * match." D4 removed that reason. The choice still stands on its own — these
+ * boundaries are a day old and two sources sit below their population floor —
+ * but the argument he was shown for it is gone. */
+export const R7_RATIFIED = false;
+
+/* ⚠️ TWO OF THEM DELIBERATELY MIRROR THE FLOOR. `p6DescriptionP10Adequate`
  * repeats F6's `minDescriptionP10Chars` and `p7ReachabilityAdequate` repeats
  * F7's `minDocumentReachability`. They are stated separately rather than
  * aliased because the floor measures OUR HOLDINGS and the rubric measures A

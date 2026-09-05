@@ -111,6 +111,19 @@ Target.** It returns to the floor only if a source is admitted that supplies it.
 > ⚠️ **The predicates are the design. The thresholds are a RULING and are marked
 > `proposed` below.** A floor with unratified thresholds is not yet binding.
 > Matt rules the numbers; nothing here presumes them.
+>
+> ⚖️ **RATIFIED 2026-09-04 by Matt — ruling sheet D4, option A, "approve them as
+> proposed".** Every `proposed:` value in the table below is now the standard,
+> and `THRESHOLDS_RATIFIED` is `true`, so the floor's verdict no longer ships
+> with a provisional caveat. **Approving unblocked nothing** — the floor still
+> blocks, and that was stated plainly when he was asked. What changed is that
+> the block is a legitimate finding rather than one person's opinion with a
+> number attached.
+>
+> ⚠️ **This does NOT extend to R7's grading boundaries**, which he left
+> provisional the same day (**D5, option C**). They carry their own
+> `R7_RATIFIED` flag and every R7 grade still ships marked provisional. The two
+> blocks in `fitness/thresholds.ts` now have different standing, deliberately.
 
 | | Predicate | Property | Threshold | Measured 2026-09-02 | Verdict |
 |---|---|---|---|---|---|

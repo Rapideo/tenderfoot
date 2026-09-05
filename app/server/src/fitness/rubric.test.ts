@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { scoreSource, type RubricSubject } from "./rubric.js";
+import { THRESHOLDS_RATIFIED, R7_RATIFIED } from "./thresholds.js";
 
 const GEO = { primaryGeography: ["IN"], secondaryGeography: ["IL", "OH", "KY"] };
 
@@ -206,6 +207,38 @@ test("field_completeness null is `unknown` — never measured is not the same as
   const p = scoreSource(subject({ field_completeness: null }));
   expect(p.dimensions.R7!.grade).toBe("unknown");
   expect(p.dimensions.R7!.note).toContain("never been measured");
+});
+
+/* ⚖️ D4 AND D5 WENT DIFFERENT WAYS, AND THE CODE HAD ONE FLAG FOR BOTH.
+ *
+ * Matt ratified the FLOOR's pass marks on 2026-09-04 (D4, option A) and left
+ * R7's grading boundaries PROVISIONAL (D5, option C). thresholds.ts carried a
+ * single `THRESHOLDS_RATIFIED` covering both blocks, so his split answer was
+ * literally inexpressible -- ratifying the floor would have silently ratified
+ * R7 too. The file's own warning anticipated the divergence: "ratifying one
+ * should not silently move the other. If they drift apart that is a decision,
+ * and it will be visible here." This is that decision, and these two tests are
+ * where it is now visible.
+ *
+ * D5 option C's whole point is that "grades keep shipping with the 'not
+ * approved' caveat". Before this, that caveat existed ONLY in the floor's
+ * summary -- so ratifying the floor would have removed the last trace of it
+ * and R7's grades would have shipped looking settled. */
+test("an R7 grade ships with its boundaries marked unratified (D5 option C)", () => {
+  const p = scoreSource(
+    subject({
+      field_completeness: { P6: "strong", P7: "strong", P8: "weak", population_n: 9883 },
+    }),
+  );
+  expect(p.dimensions.R7!.grade).toBe("weak");
+  expect(p.dimensions.R7!.note).toContain("UNRATIFIED");
+});
+
+test("ratifying the floor did NOT ratify R7 — the two flags are independent", () => {
+  /* Read from the module rather than restated, so this fails if someone
+   * collapses the two back into one constant. */
+  expect(THRESHOLDS_RATIFIED).toBe(true);
+  expect(R7_RATIFIED).toBe(false);
 });
 
 /* ------------------------------------------------------------------- R8 -- */
