@@ -16,6 +16,7 @@ function subject(over: Partial<RubricSubject> = {}): RubricSubject {
     annual_cost_usd: null,
     field_completeness: null,
     watermark_field: null,
+    watermark_probed_at: null,
     ...GEO,
     ...over,
   };
@@ -217,6 +218,81 @@ test("cost `unknown` is not graded as free", () => {
   expect(paid.dimensions.R8!.note).toContain("500");
 });
 
+/* ------------------------------------------------------------------- R9 -- */
+
+/* 🔴 THE DEFECT D3 EXISTS TO FIX, AND IT IS R7's DEFECT ONE DIMENSION OVER.
+ * Until 2026-09-05 R9 was `watermark_field === null ? unknown : strong` -- a
+ * null check, exactly the shape R7 carried until migration 026. Illinois
+ * BidBuy was PROBED on 2026-09-04 across both its filter and sort surfaces and
+ * no modification time exists on either (migration 027); Kentucky eMARS VSS
+ * has never been looked at. Both produced `unknown` carrying the same note, so
+ * a day's probing was invisible to every reader of the matrix.
+ *
+ * R2 has drawn this distinction correctly since it was written -- "an archive
+ * documented as absent is `weak` — that IS evidence" sits forty lines above.
+ * R9 is brought into line with it, not given a new idea.
+ *
+ * ⚠️ AND THIS DOES NOT BREACH §5.3. That clause forbids converting an ABSENCE
+ * OF EVIDENCE into evidence of absence -- Kentucky, inferred from platform and
+ * never tested, must stay `unknown`. BidBuy is the inverse: evidence of
+ * absence, gathered deliberately. Grading it `weak` is the clause's own logic,
+ * not an exception to it. */
+test("R9 does not show a probed absence and an unexamined source alike", () => {
+  const probed = scoreSource(
+    subject({ name: "Illinois BidBuy", watermark_probed_at: "2026-09-04T00:00:00.000Z" }),
+  );
+  const unexamined = scoreSource(subject({ name: "Kentucky eMARS VSS" }));
+
+  expect(probed.dimensions.R9!.grade).not.toBe(unexamined.dimensions.R9!.grade);
+  expect(probed.dimensions.R9!.note).not.toBe(unexamined.dimensions.R9!.note);
+});
+
+test("a watermark probed for and not found is `weak` — that IS evidence", () => {
+  const p = scoreSource(subject({ watermark_probed_at: "2026-09-04T00:00:00.000Z" }));
+  expect(p.dimensions.R9!.grade).toBe("weak");
+  /* The consequence, not the fact: an adapter here re-reads its window every
+   * run, which on a metered source is a bill. */
+  expect(p.dimensions.R9!.note).toContain("re-read");
+});
+
+test("a source nobody has probed stays `unknown`, never `weak` (§5.3)", () => {
+  const p = scoreSource(subject({ watermark_probed_at: null }));
+  expect(p.dimensions.R9!.grade).toBe("unknown");
+  expect(p.dimensions.R9!.note).toContain("not been probed");
+});
+
+/* 🔴 THE SHAPE THE UNIT TESTS ABOVE CANNOT CATCH, AND IT CRASHED THE CLI.
+ *
+ * Every test in this file hands `watermark_probed_at` a string, because a
+ * hand-written fixture naturally does. `timestamptz` does not arrive as one --
+ * node-postgres parses it into a Date, so the first real `npm run fitness`
+ * after 028 died with "probedAt.slice is not a function" AFTER the gate had
+ * gone green at 785 tests. The rubric is pure over a row, but the row is
+ * whatever the driver produced, and that is the shape it must survive. */
+test("R9 survives the Date that Postgres actually returns, not just an ISO string", () => {
+  const asDate = scoreSource(subject({ watermark_probed_at: new Date("2026-09-04T00:00:00Z") }));
+  const asText = scoreSource(subject({ watermark_probed_at: "2026-09-04T00:00:00.000Z" }));
+
+  expect(asDate.dimensions.R9!.grade).toBe("weak");
+  expect(asDate.dimensions.R9!.note).toContain("2026-09-04");
+  /* The two spellings of the same instant must read identically, or the matrix
+   * says something different depending on where the row came from. */
+  expect(asDate.dimensions.R9!.note).toBe(asText.dimensions.R9!.note);
+});
+
+/* Migration 021 wrote watermarks for SAM.gov and the EDS register without any
+ * probe stamp, because the stamp did not exist yet. Those rows must keep
+ * grading `strong` -- a found watermark is its own evidence, and requiring a
+ * stamp beside it would silently downgrade two working sources. */
+test("a known watermark grades `strong` whether or not a probe was stamped", () => {
+  for (const stamp of [null, "2026-09-04T00:00:00.000Z"]) {
+    const p = scoreSource(
+      subject({ watermark_field: "modifiedDate", watermark_probed_at: stamp }),
+    );
+    expect(p.dimensions.R9!.grade, `stamp=${stamp}`).toBe("strong");
+  }
+});
+
 /* --------------------------------------------------------- the scope guard -- */
 
 test("no aggregate score is produced, and adding one must break this test", () => {
@@ -250,6 +326,7 @@ test("ACCEPTANCE: it rejects Indiana IDOA solicitations, as Matt did on 2026-09-
     annual_cost_usd: null,
     field_completeness: null,
     watermark_field: null,
+    watermark_probed_at: null,
     ...GEO,
   });
 
@@ -280,6 +357,7 @@ test("ACCEPTANCE: it ranks the Indiana EDS contract register highly", () => {
     annual_cost_usd: null,
     field_completeness: null,
     watermark_field: "modifiedDate",
+    watermark_probed_at: null,
     ...GEO,
   });
 
@@ -305,6 +383,7 @@ test("ACCEPTANCE: HigherGov scores well, and its known weaknesses still show", (
     annual_cost_usd: 500,
     field_completeness: { measured_on: "2026-09-03" },
     watermark_field: "captured_date",
+    watermark_probed_at: null,
     ...GEO,
   });
 
@@ -335,6 +414,7 @@ test("ACCEPTANCE: the three paid aggregators fail on R1 alone, reaching no other
       annual_cost_usd: null,
       field_completeness: null,
       watermark_field: null,
+      watermark_probed_at: null,
       ...GEO,
     });
     expect(p.disqualified, name).toBe(true);
@@ -353,7 +433,7 @@ test("ACCEPTANCE: the EDS register out-profiles IDOA on every deciding dimension
     adapter_tier: "3 html", legal_posture: "in",
     archive_depth: "NONE AT IDOA. Closed solicitations are not published.",
     verified_facets: null, cost_posture: "free", annual_cost_usd: null,
-    field_completeness: null, watermark_field: null, ...GEO,
+    field_completeness: null, watermark_field: null, watermark_probed_at: null, ...GEO,
   });
   const eds = scoreSource({
     name: "Indiana EDS contract register", jurisdiction: "IN", platform: "IDOA contract search",
@@ -361,7 +441,7 @@ test("ACCEPTANCE: the EDS register out-profiles IDOA on every deciding dimension
     archive_depth: "FULL -- 204,439 contracts back to 2005.",
     verified_facets: { works: ["endDate"], silently_ignored: [] },
     cost_posture: "free", annual_cost_usd: null, field_completeness: null,
-    watermark_field: "modifiedDate", ...GEO,
+    watermark_field: "modifiedDate", watermark_probed_at: null, ...GEO,
   });
 
   for (const d of ["R2", "R3", "R4", "R9"]) {

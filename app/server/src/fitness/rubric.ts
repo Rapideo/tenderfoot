@@ -33,6 +33,16 @@ export interface RubricSubject {
   annual_cost_usd: number | null;
   field_completeness: Record<string, unknown> | null;
   watermark_field: string | null;
+  /** When a watermark was DELIBERATELY LOOKED FOR. Null means nobody has
+   * looked; set with `watermark_field` still null means one was looked for and
+   * none exists. See R9 below.
+   *
+   * ⚠️ `Date` IS NOT DEFENSIVE TYPING, IT IS THE SHAPE THE DRIVER RETURNS.
+   * node-postgres parses `timestamptz` into a Date; a hand-written fixture
+   * naturally supplies a string. Both reach this function, and typing only the
+   * fixture's shape is what crashed `npm run fitness` on 2026-09-05 with a
+   * green 785-test gate behind it. */
+  watermark_probed_at: Date | string | null;
   /** From firm_profile.geography — never constant-folded (§1A). */
   primaryGeography: string[];
   secondaryGeography: string[];
@@ -194,6 +204,42 @@ function gradeCost(posture: string, usd: number | null): Dimension {
   };
 }
 
+/* R9 — INCREMENTAL RESUME, AND IT HAS THREE STATES RATHER THAN TWO.
+ *
+ * Until 2026-09-05 this was `watermark_field === null ? unknown : strong`, so
+ * a source we had PROBED and found to have no watermark read identically to
+ * one nobody had ever opened. Illinois BidBuy (probed 2026-09-04, migration
+ * 027: no modification time on the filter surface or the sort surface, in
+ * 263,822 bytes) graded the same as Kentucky eMARS VSS, which is inferred from
+ * its platform and has never been tested. A day of probing left no trace.
+ *
+ * gradeArchive forty lines up has always drawn this distinction — "Documented
+ * as retaining nothing. That is evidence, not an absence of it." This brings
+ * R9 into line with R2; it is not a new idea, it is the one already here.
+ *
+ * ⚠️ §5.3 IS NOT BREACHED, IT IS APPLIED. The clause forbids recording an
+ * absence of evidence as `weak`. `unknown` is still what an unprobed source
+ * gets, and that is the branch §5.3 protects. A measured absence is evidence,
+ * and grading it `weak` is the same move R2 makes. */
+function gradeWatermark(field: string | null, probedAt: Date | string | null): Dimension {
+  if (field !== null) {
+    return { grade: "strong", note: `Incremental on \`${field}\`.` };
+  }
+  if (probedAt === null || probedAt === undefined) {
+    return {
+      grade: "unknown",
+      note: "No watermark recorded, and one has not been probed for — whether any exists is not established.",
+    };
+  }
+  /* The day, not the instant. A probe is a thing someone did on a date, and the
+   * matrix is read by a person. */
+  const day = (probedAt instanceof Date ? probedAt.toISOString() : String(probedAt)).slice(0, 10);
+  return {
+    grade: "weak",
+    note: `Probed ${day} and no watermark exists — every run must re-read its whole window. That is evidence, not an absence of it.`,
+  };
+}
+
 export function scoreSource(s: RubricSubject): SourceProfile {
   /* R1 IS A GATE. It runs first and returns first. A disqualified source must
    * not present a full profile -- a profile invites comparison, and there is
@@ -235,13 +281,7 @@ export function scoreSource(s: RubricSubject): SourceProfile {
       R6: gradeGeography(s.jurisdiction, s.primaryGeography, s.secondaryGeography),
       R7: gradeCompleteness(s.field_completeness),
       R8: gradeCost(s.cost_posture, s.annual_cost_usd),
-      R9:
-        s.watermark_field === null
-          ? {
-              grade: "unknown",
-              note: "No watermark known — a run may have to re-read everything.",
-            }
-          : { grade: "strong", note: `Incremental on \`${s.watermark_field}\`.` },
+      R9: gradeWatermark(s.watermark_field, s.watermark_probed_at),
     },
   };
 }

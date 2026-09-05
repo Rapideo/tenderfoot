@@ -47,7 +47,8 @@ export async function loadSubjects(): Promise<RubricSubject[]> {
 
   const rows = await all<Omit<RubricSubject, "primaryGeography" | "secondaryGeography">>(
     `SELECT name, jurisdiction, platform, adapter_tier, legal_posture, archive_depth,
-            verified_facets, cost_posture, annual_cost_usd, field_completeness, watermark_field
+            verified_facets, cost_posture, annual_cost_usd, field_completeness, watermark_field,
+            watermark_probed_at
        FROM source
       ORDER BY name`,
   );
