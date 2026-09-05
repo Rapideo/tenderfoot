@@ -59,7 +59,7 @@ purpose.
 
 | State | Meaning | Cost to open |
 |---|---|---|
-| `documents_fetched_at` NULL | Nobody has looked | **~11 records**, once |
+| `attachments_checked_at` NULL | Nobody has looked | **~11 records**, once |
 | Set, documents present | We looked and found them | **0** |
 | Set, zero documents | **We looked and there are none** | **0** |
 | Fetch threw | Nothing recorded; retried on next open | **0** — errors do not meter |
@@ -77,10 +77,32 @@ with browsing rather than with data.
 
 ## 4. Schema
 
-### 4.1 `solicitation.documents_fetched_at timestamptz`
+### 4.1 The stamp — `solicitation.attachments_checked_at`, WHICH ALREADY EXISTS
 
-Null means nobody has looked. Set means a fetch completed — whatever it
-returned.
+> ✅ **CORRECTED 2026-09-05, BEFORE ANY CODE WAS WRITTEN.** This section
+> originally specified a new column, `documents_fetched_at`. **It already
+> exists** as `attachments_checked_at` — migration 011, indexed
+> `(source_id, attachments_checked_at)` — and `discoverAttachments` already
+> stamps it. **No migration is needed for the stamp.**
+
+Its recorded semantics are the ones §3 requires, arrived at independently on
+2026-08-30 (discover.ts, "REVIEW FINDING 2 (Major)"):
+
+> *"Every `continue` above this line leaves the stamp NULL on purpose: a request
+> that timed out, 502'd, or returned unparseable JSON has not answered anything,
+> and retiring a notice on the strength of one bad minute would hide its
+> attachments permanently. Only the path that got a real attachment list gets
+> here."*
+
+That is exactly §3's table: **answered-with-nothing is stamped; failed is not.**
+The batch path found this the expensive way — ten attachment-less notices at the
+head of the queue stalled discovery completely, and the 2026-08-30 click-through
+read the stuck case as the benign one.
+
+**The design does not change; one column of it was already built.** The lesson
+this project has now learned three times — `health_checked_at` (006),
+`attachments_checked_at` (011), `watermark_probed_at` (028) — is the same one,
+and D2's guard is its fourth application rather than a new idea.
 
 ### 4.2 `api_spend`
 
@@ -180,7 +202,7 @@ the D5 style until he sets it.
 **The bundle region already exists** — `Record.tsx:302` renders
 `BUNDLE — N FILES` and the document list. This adds no region. It adds:
 
-1. **One call after render**, when `documents_fetched_at` is null.
+1. **One call after render**, when `attachments_checked_at` is null.
 2. **A fetching state** while it is in flight.
 3. **A looked-and-none state**, distinct from not-yet-looked.
 
@@ -218,8 +240,8 @@ called done — SP3.6 passed every server test with both its buttons broken.
 
 ## 10. Scope
 
-**In:** the stamp, `api_spend`, the service, the route, the two client states,
-the ceiling.
+**In:** `api_spend`, the service, the route, the two client states, the
+ceiling. **Not the stamp — it exists (§4.1).**
 
 **Out, and deliberately:**
 
@@ -235,10 +257,11 @@ the ceiling.
 ## 11. Open questions
 
 1. **N, the monthly ceiling.** Ships `UNRATIFIED`.
-2. **Does the batch pass adopt the stamp?** `discoverAttachments` has its own
-   candidate query and does not stamp. Making both write it is right, but it
-   changes batch behaviour and is not required by D2. **Proposed: the service
-   stamps; the batch pass is left alone and the divergence is recorded here.**
+2. ~~**Does the batch pass adopt the stamp?**~~ ✅ **CLOSED 2026-09-05 by
+   reading the code.** It already stamps `attachments_checked_at`, with the
+   semantics §3 needs. Both paths share one column, so there is no divergence
+   to record and nothing to reconcile. The question was written on the
+   assumption that the stamp was new; it was not.
 3. **Re-fetch.** Nothing re-opens a stamped solicitation. An amended
    solicitation with new documents will not be noticed. That is correct for D2
    and wrong eventually; it belongs with the reliability test at ③, not here.
