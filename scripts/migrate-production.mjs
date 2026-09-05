@@ -14,51 +14,25 @@
  *
  * The connection string is never printed. The HOST is, because the host is
  * how §4 says to tell the two branches apart, and it carries no secret.
+ *
+ * ⚠️ THE GUARD MOVED OUT ON 2026-09-05 and now lives in production-target.mjs,
+ * because D6 added a second production door and this file's own warning --
+ * "a stale guard that is edited away in a hurry is worse than no guard" --
+ * argues against a second copy of it. Behaviour here is unchanged; it is
+ * covered by production-target.test.mjs, which it never was inline.
  */
 import { spawn } from "node:child_process";
+import { resolveProductionTarget, PRODUCTION_ENDPOINT } from "./production-target.mjs";
 
-const url = process.env.DATABASE_URL_PRODUCTION;
-if (!url) {
-  console.error(
-    "DATABASE_URL_PRODUCTION is not set.\n" +
-      "It lives in .env (§4 preserved the production string under that explicit\n" +
-      "name). Run this with --env-file-if-exists=.env.",
-  );
+let target;
+try {
+  target = resolveProductionTarget(process.env);
+} catch (e) {
+  console.error(e.message);
   process.exit(1);
 }
 
-const host = new URL(url).host;
-
-/* The production endpoint, recorded in STATUS §4 alongside test's. Checked
- * rather than assumed: the whole point of this file is that "I meant to
- * migrate production" and "I migrated production" should not be two different
- * facts. */
-const PRODUCTION_ENDPOINT = "ep-super-bonus-auoe43hj";
-const TEST_ENDPOINT = "ep-withered-base-au6l4cjf";
-
-console.log(`DATABASE_URL_PRODUCTION host : ${host}`);
-
-if (host.startsWith(TEST_ENDPOINT)) {
-  console.error(
-    `\nREFUSING: that is the TEST endpoint (${TEST_ENDPOINT}).\n` +
-      "DATABASE_URL_PRODUCTION has been repointed at test at some point. Fix\n" +
-      ".env before running this -- migrating test through the production door\n" +
-      "would print success and prove nothing.",
-  );
-  process.exit(1);
-}
-
-if (!host.startsWith(PRODUCTION_ENDPOINT)) {
-  console.error(
-    `\nREFUSING: expected the production endpoint ${PRODUCTION_ENDPOINT}\n` +
-      `(STATUS §4), got ${host}.\n` +
-      "If production has legitimately moved, update this file and STATUS §4 in\n" +
-      "the same commit -- a stale guard that is edited away in a hurry is worse\n" +
-      "than no guard.",
-  );
-  process.exit(1);
-}
-
+console.log(`DATABASE_URL_PRODUCTION host : ${target.host}`);
 console.log(`confirmed production (${PRODUCTION_ENDPOINT}). Running migrations…\n`);
 
 /* Spawned rather than imported so migrate.ts reads DATABASE_URL from its own
@@ -66,6 +40,6 @@ console.log(`confirmed production (${PRODUCTION_ENDPOINT}). Running migrations�
 const child = spawn(
   process.execPath,
   ["--import", "tsx", "app/server/src/db/migrate.ts"],
-  { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } },
+  { stdio: "inherit", env: { ...process.env, DATABASE_URL: target.url } },
 );
 child.on("exit", (code) => process.exit(code ?? 0));
