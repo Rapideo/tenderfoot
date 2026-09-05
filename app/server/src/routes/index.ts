@@ -4,6 +4,7 @@ import { asyncHandler } from "../lib/asyncHandler.js";
 import { requireAdminSecret } from "../lib/adminSecret.js";
 import { resolveField, type FieldRow } from "../extract/precedence.js";
 import { latestPursuitFor } from "../triage/latest.js";
+import { fetchDocumentsFor } from "../extract/fetch-documents-for.js";
 
 /* SP1 T5-T8. The API surface is deliberately small: read and edit the two
  * configuration objects, and read what has been collected. No scoring, no
@@ -366,5 +367,35 @@ api.get(
     const [decision] = await latestPursuitFor([id]);
 
     res.json({ ...row, sightings, documents, fields, timeline, decision: decision ?? null });
+  }),
+);
+
+/* ⚖️ RULING D2 (Matt, 2026-09-04): documents are fetched when a listing is
+ * OPENED, never in bulk. A bulk pass over Indiana would be 93,000-176,000
+ * records -- nine to seventeen months of allowance -- so it is structurally
+ * impossible rather than merely expensive (CLAUDE.md §5.2).
+ *
+ * 🔴 POST, NOT GET, AND NOT FOR REST TIDINESS. This endpoint can spend
+ * money. A GET that spends is triggered by browser prefetch, a retry, a
+ * double-render and any crawler -- none of which is a decision anyone made.
+ * The stamp makes a duplicate call free; POST makes it rare. */
+api.post(
+  "/solicitations/:id/documents",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "id must be an integer" });
+      return;
+    }
+    try {
+      res.json(await fetchDocumentsFor(id));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.startsWith("No solicitation ")) {
+        res.status(404).json({ error: message });
+        return;
+      }
+      throw e;
+    }
   }),
 );
