@@ -2,7 +2,9 @@
 
 **Updated 2026-09-04.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **⚖️ SEVEN DECISIONS ARE WAITING ON MATT, AND NONE OF THEM COSTS AN API RECORD.** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>. His answers save into the artifact's own store — **read it back before assuming any of them is still open.** Two need only permission, not thinking: **D6** loads the contract register into production (86 seconds) and **D7** pushes 2026-09-04's local commits (`git log origin/main..main` for the count) and applies migrations 026/027, which are `test`-only.
+> **⚖️ ALL SEVEN DECISIONS ARE ANSWERED (2026-09-04), AND FIVE ARE BUILT (2026-09-05).** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>; the answers live in its own store (`read_db`, collection `rulings`, docs `d1`…`d7`). **Do not re-ask any of them.** Built and pushed: **D3** (R9's null check — Illinois BidBuy now grades `weak` by measurement where Kentucky stays `unknown`), **D1** (HigherGov's R7 ruled, narrow reading — data only, no grading code moved), **D4/D5** (the single ratification flag split in two: the floor is RATIFIED, R7 stays PROVISIONAL and every R7 grade now says so), and **D7's first half** (everything pushed; `origin/main` is level).
+>
+> ⛔ **TWO HALVES REMAIN, AND BOTH NEED MATT'S OWN HANDS.** **D7's second half** — migrations 026–029 applied to production; and **D6** — the contract register loaded into production. Both were **blocked by the auto-mode permission classifier** on 2026-09-05, which is a harness gate, not a code problem: `Bash(npm run *)` is already allowed in `.claude/settings.local.json`, so this is NOT a missing permission rule and adding one changes nothing. The knob is `autoMode.allow`. **Run them by hand instead:** `npm run migrate:production`, then the new `npm run contracts:ingest:production`. ⚠️ **Migrations 026–029 are `test`-only until that first command runs**, so production's registry still predates R7, both probes, D3's column and D1's ruling.
 >
 > **2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Merged `--no-ff` at `b173ea8`, gate 781/88 on the merged result. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
 >
@@ -352,15 +354,18 @@ assuming any of these is still open** — Artifact tool, `action: "read_db"`,
 option letter shown below. An empty collection means he has not answered yet, not
 that the questions went away.
 
-| | Decision | Why it is his |
-|---|---|---|
-| **D1** | HigherGov's R7 translation | free, and it decides how a $500/yr source reads |
-| **D2** | The description ruling | decides where the quota actually goes |
-| **D3** | R9's null check | same defect as R7; P4 made it bite |
-| **D4** | Floor thresholds F1/F5/F6/F7 | the floor's verdict is an opinion until ratified |
-| **D5** | R7's new thresholds | proposed 2026-09-04, unratified |
-| **D6** | EDS register → production | CLAUDE.md §2 makes it a deliberate act |
-| **D7** | Push + migrate production | 5 commits on one laptop; 026/027 are `test`-only |
+**✅ ALL SEVEN ANSWERED 2026-09-04.** Five are built and pushed; the two
+production halves are blocked on the harness, not on him.
+
+| | Decision | He ruled | State |
+|---|---|---|---|
+| **D1** | HigherGov's R7 translation | **C** — rate only the unambiguous | ✅ migration 029. **The matrix line is unchanged and that is the ruling working as chosen** — `unknown` properties are skipped per §5.3, so the ruling lives on the row, not in the note. Narrow reading confirmed 2026-09-05; two wider readings offered and declined |
+| **D2** | The description ruling | **A** — fetch documents on open | ⏸ **not built.** ~11 records per open ≈ 900 opens/month. Needs a cache so a second open is free, and a tally in `ingest_run`, because the API will never tell us |
+| **D3** | R9's null check | **A** — fix it | ✅ migration 028 + `watermark_probed_at`. Illinois BidBuy `weak` by measurement, Kentucky `unknown`. **Option C (audit every dimension) was declined, so only R9 moved** |
+| **D4** | Floor thresholds | **A** — approve as proposed | ✅ `THRESHOLDS_RATIFIED = true`. Unblocked nothing, as promised: F5/F6/F7 still fail |
+| **D5** | R7's new thresholds | **C** — leave provisional | ✅ new `R7_RATIFIED = false`. ⚠️ **The sheet's stated reason for C — "consistent with the floor's status" — was removed by D4.** The choice stands on its own; the argument he was shown is gone |
+| **D6** | EDS register → production | **A** — load it now | ⛔ **blocked by the classifier.** A guarded door now exists: `npm run contracts:ingest:production` |
+| **D7** | Push + migrate production | **A** — back up and update | ◐ **half done.** Push ✅ (the count was 7, not the 5 this table used to claim). Migrations ⛔ blocked |
 
 ⚠️ **CORRECTION carried into D1.** HigherGov's description problem is one of
 **PRESENCE, not LENGTH** — 34% of rows carry none, but where one exists the
