@@ -835,7 +835,7 @@ export async function fetchDocumentsFor(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run app/server/src/extract/fetch-documents-for.test.ts`
-Expected: PASS, 10 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Prove the guard by mutation**
 
