@@ -299,8 +299,11 @@ forbids collapsing `unknown` into `weak`; this was the same error inverted.
 
 **R7 now grades the measurement and takes the WEAKEST property** — a minimum,
 unlike an average, cannot be talked up by adding strengths. Boundaries are in
-`fitness/thresholds.ts`, every one `UNRATIFIED`, on the same footing as the
-floor's.
+`fitness/thresholds.ts`, every one `UNRATIFIED`, ~~on the same footing as the
+floor's~~ **— true as written, same day D4/D5 split that footing in two: the
+floor's own thresholds were ratified later on 2026-09-04, R7's were not (D5),
+and they are no longer on the same footing.** R7's boundaries stay
+UNRATIFIED/PROVISIONAL today; the floor's do not.
 
 | Source | R7 | measured |
 |---|---|---|
@@ -563,7 +566,13 @@ explicitly say "see the attachment"**; we hold three.
 
 ⚠️ **F4 passes and must be read carefully** — it measures the span we HAVE, not
 the span we should have. §8.2's adjudication window is still undefined.
-⚠️ **Thresholds are UNRATIFIED proposals** and the report says so on every run.
+⚠️ ~~**Thresholds are UNRATIFIED proposals** and the report says so on every run.~~
+✅ **CORRECTED 2026-09-05 — the FLOOR's thresholds were ratified 2026-09-04
+(D4), and `floor.ts` no longer emits that note** (`THRESHOLDS_RATIFIED`
+gates it off). **This does not extend to R7** — D5 deliberately left R7's
+grading boundaries PROVISIONAL (`R7_RATIFIED = false`), and every R7 grade
+still ships marked provisional. Ratified and provisional are two different
+flags now, not one; see D4/D5 in the ruling table above.
 
 **THE RUBRIC** — nine ordinal dimensions, **no aggregate score**, with a test
 asserting the absence. R1 (legal posture) is a GATE: a disqualified source
