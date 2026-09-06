@@ -2016,9 +2016,9 @@ export async function gradedItems() {
        JOIN coverage_run cr ON cr.id = ci.run_id
       ORDER BY ci.external_id,
                /* carried beats missing beats unchecked, THEN newest. Once the
-                * budget cap can leave a notice `unchecked`, ordering by
+                * budget cap can leave a notice \`unchecked\`, ordering by
                 * recency alone would let a later run OVERWRITE an earlier
-                * `carried` with "we didn't look" -- a settled finding erased
+                * \`carried\` with "we didn't look" -- a settled finding erased
                 * by a budget stop, biasing C1/C2 toward decay. */
                CASE ci.carried WHEN 'carried' THEN 0 WHEN 'missing' THEN 1 ELSE 2 END,
                cr.run_at DESC`,
