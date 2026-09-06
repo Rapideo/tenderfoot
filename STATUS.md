@@ -1,18 +1,18 @@
 # Tenderfoot — status
 
-**Updated 2026-09-04.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-09-05.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
-> **⚖️ ALL SEVEN DECISIONS ARE ANSWERED (2026-09-04), AND FIVE ARE BUILT (2026-09-05).** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>; the answers live in its own store (`read_db`, collection `rulings`, docs `d1`…`d7`). **Do not re-ask any of them.** Built and pushed: **D3** (R9's null check — Illinois BidBuy now grades `weak` by measurement where Kentucky stays `unknown`), **D1** (HigherGov's R7 ruled, narrow reading — data only, no grading code moved), **D4/D5** (the single ratification flag split in two: the floor is RATIFIED, R7 stays PROVISIONAL and every R7 grade now says so), and **D7's first half** (everything pushed; `origin/main` is level).
+> **⚖️ ALL SEVEN DECISIONS ARE ANSWERED (2026-09-04), AND ~~FIVE ARE BUILT~~ ALL SEVEN ARE BUILT (2026-09-05).** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>; the answers live in its own store (`read_db`, collection `rulings`, docs `d1`…`d7`). **Do not re-ask any of them.** Built and pushed to `main`: **D3** (R9's null check — Illinois BidBuy now grades `weak` by measurement where Kentucky stays `unknown`), **D1** (HigherGov's R7 ruled, narrow reading — data only, no grading code moved), **D4/D5** (the single ratification flag split in two: the floor is RATIFIED, R7 stays PROVISIONAL and every R7 grade now says so), **D6** and **D7** (both now fully DONE, not just pushed — see the correction directly below). **D2 is also built** — the on-demand-documents mechanism, proven against SAM.gov at zero metered cost — but on branch `d2-on-demand-documents`, not yet merged; see the ruling table and the 2026-09-05 RESUME HERE entry for what it does and does not cover.
 >
-> ⛔ **TWO HALVES REMAIN, AND BOTH NEED MATT'S OWN HANDS.** **D7's second half** — migrations 026–029 applied to production; and **D6** — the contract register loaded into production. Both were **blocked by the auto-mode permission classifier** on 2026-09-05, which is a harness gate, not a code problem: `Bash(npm run *)` is already allowed in `.claude/settings.local.json`, so this is NOT a missing permission rule and adding one changes nothing. The knob is `autoMode.allow`. **Run them by hand instead:** `npm run migrate:production`, then the new `npm run contracts:ingest:production`. ⚠️ **Migrations 026–029 are `test`-only until that first command runs**, so production's registry still predates R7, both probes, D3's column and D1's ruling.
+> ⛔ ~~**TWO HALVES REMAIN, AND BOTH NEED MATT'S OWN HANDS.**~~ ✅ **RESOLVED 2026-09-05 — BOTH HALVES ARE DONE, AND A THIRD THING CHANGED WITH THEM.** **D6**: production now holds **204,920 contracts** (was 0) — run by hand 2026-09-05, 204,991 fetched, 204,920 written, 71 already held (the same duplicate-within-Indiana's-own-data gap `test` already carried — not pre-existing production rows). **D7's second half**: production is migrated through `030_api_spend.sql`, verified by a second run reporting *"no pending migrations."* **Migrations 026–029 are NOT `test`-only any more** — every line in this file that said so is superseded. **And F1 (and F2) have flipped in production too, verified by direct read-only query, not inferred**: `source` JOIN `ingest_run` now returns **two** rows (`SAM.gov`, `Indiana EDS contract register`) against `THRESHOLDS.minIngestedSources = 2`, and one of them carries jurisdiction `IN` against `minPrimaryGeographySources = 1`. **This is the first time the floor's PRODUCTION verdict has improved by measurement rather than assumption** — the "fails five of seven" line below is now three of seven (F5, F6, F7; unchanged, since D6 added `contract` rows, not `solicitation` rows). 🔴 **See the 2026-09-05 entry in RESUME HERE for how 026–029 reached production without the guarded command ever running for them** — only 030 was applied by hand. That finding is recorded there and deliberately not resolved.
 >
 > **2026-09-04: R7 — field completeness — is measured for the first time, and closing it exposed that the dimension did not work.** R7 graded `adequate` for *any* non-null value, so recording SAM.gov's real numbers would have put it level with HigherGov on the dimension where they differ most. It now grades the measurement and takes the **weakest** property. **EDS register STRONG · SAM.gov WEAK · HigherGov moves to `unknown`, which is a correction, not a downgrade.** Merged `--no-ff` at `b173ea8`, gate 781/88 on the merged result. ⚖️ **One free ruling waiting: HigherGov's R7.** See RESUME HERE.
 >
 > **The project turned data-first on 2026-09-03, and the data question is answered.** HigherGov was tested against a 71-item answer key and returned **99% coverage recall**, an **Indiana solicitation archive back to 2013** where the source itself publishes none, and **sub-state coverage no adapter strategy reaches** — for $500/yr. The verdict is a buy, and the adapter backlog (Illinois, Michigan, Kentucky, Ohio, the OpenGov municipalities) is **shelved pending a reliability test**. SAM.gov stays direct and free; HigherGov's metered allowance is spent only on what we cannot get free.
 >
-> **`npm run fitness` now gives a verdict rather than an opinion.** The floor fails five of seven predicates against production and **blocks GO/NO-GO by rule**. ⚠️ **A live API key was leaked and rotated during this work — CLAUDE.md §5 is binding on anyone touching that API.**
+> **`npm run fitness` now gives a verdict rather than an opinion.** ~~The floor fails five of seven predicates against production~~ **UPDATED 2026-09-05: F1 and F2 have since flipped in production too (see above) — the floor now fails three of seven there (F5, F6, F7)** and **still blocks GO/NO-GO by rule**. ⚠️ **A live API key was leaked and rotated during this work — CLAUDE.md §5 is binding on anyone touching that API.**
 >
-> **The Indiana EDS contract register is loaded: 204,920 contracts, two requests, 86 seconds — and floor predicates F1 and F2 flipped to PASS.** It is the highest-scoring free source we hold and the first row the `contract` table has ever held. ⚠️ **That is the `test` branch only. Production holds zero contracts**, so the five-of-seven figure above is still production's number; loading it is a deliberate 86-second act nobody has taken. `docs/2026-09-03-eds-ingest-run.md`.
+> **The Indiana EDS contract register is loaded: 204,920 contracts, two requests, 86 seconds — and floor predicates F1 and F2 flipped to PASS.** It is the highest-scoring free source we hold and the first row the `contract` table has ever held. ⚠️ ~~That is the `test` branch only. Production holds zero contracts~~ **CORRECTED 2026-09-05 — production now holds the same 204,920** (loaded by hand, see above); the sentence this replaced was true from 2026-09-03 until then. `docs/2026-09-03-eds-ingest-run.md`.
 >
 > **Read the RESUME HERE block below before the Plan of Action**, whose slice order no longer matches the sequence Matt set.
 
@@ -234,13 +234,59 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-04
+## 🔖 RESUME HERE — updated 2026-09-05
+
+## ✅ 2026-09-05 — D2 IS BUILT, D6 AND D7 ARE DONE IN PRODUCTION, F1 HAS FLIPPED THERE — AND A FINDING THAT NEEDS MATT, NOT A FIX
+
+**Branch `d2-on-demand-documents`, six tasks, all built.** This entry is the accurate replacement for everything the 2026-09-04 block below says about D2/D6/D7 being blocked or half-done — none of that is true any more.
+
+### What D2 actually built (Task 6 is this file's own correction)
+
+**The mechanism only, proven against SAM.gov at zero metered cost.** SAM's `DocumentClient.fetchFor` (`app/server/src/extract/document-clients.ts`) always returns `records: 0`, so the whole on-open-fetch path — `POST /api/solicitations/:id/documents` → the spend-decision service → the fetch → the write — has been exercised for real without spending a single HigherGov record.
+
+**`api_spend` was created** (migration 030) to answer "what have we spent this month", because `ingest_run.artifact_sha256` is `NOT NULL UNIQUE` and an on-demand fetch has no artifact to hash. That is the CLAUDE.md §5.1 amendment this same task makes, below.
+
+**The stamp was NOT added — it was REUSED.** `attachments_checked_at` already existed (migration 011, from the batch discovery pass, arrived at independently on 2026-08-30) and is now shared by the batch pass and the on-demand path. That is the fourth time this project has independently built "have we asked this source about this yet" (`health_checked_at`, `attachments_checked_at`, `watermark_probed_at`, and now this reuse) — see the new Proto2PRD lesson.
+
+⚖️ **The ceiling ships UNRATIFIED.** `MONTHLY_RECORD_CEILING = 1000` in `app/server/src/extract/api-spend.ts` is a proposal awaiting Matt's number, in exactly the style of `fitness/thresholds.ts`'s R7 block — not a ruling yet.
+
+**Explicitly out of scope, per spec §10: the HigherGov adapter.** `DOCUMENT_CLIENTS` holds exactly one entry, `SAM.gov`. Wiring HigherGov in is a `DocumentClient` implementation plus one more entry in that map — which is the whole reason the mechanism was proven against the free source first.
+
+**Not yet merged to `main`** — this is the state of branch `d2-on-demand-documents`, six commits of implementation plus this paperwork task.
+
+### D6 and D7, done in production — verified by direct query, not asserted
+
+**D6: production `contract` holds 204,920 rows (was 0).** Run by hand 2026-09-05: **204,991 fetched, 204,920 written, 71 already held**, 86 seconds. The 71 are duplicate rows **within Indiana's own source data** — the identical gap already appeared on `test` (`docs/2026-09-03-eds-ingest-run.md`) — not pre-existing production rows colliding with the load. Verified: `SELECT count(*) FROM contract` → `204920`; `ingest_run` for the EDS source shows `rows_imported: 204991`.
+
+**D7: production is fully migrated, through `030_api_spend.sql`.** `schema_migrations` on production carries every migration up to and including 030, and a second run of the migrate command reports *"no pending migrations"* — the script's own idle message (`db/migrate.ts`). Migrations 026–029 are **not** `test`-only, and no line in this file should say so any more.
+
+**F1 has flipped in production, and F2 with it — the first time the floor's PRODUCTION verdict has improved by measurement rather than assumption.** `measureF1`'s own query, run read-only against production, now returns **two** rows: `SAM.gov` and `Indiana EDS contract register`, against `THRESHOLDS.minIngestedSources = 2` — **F1 PASS**. One of those two carries jurisdiction `IN`, against `minPrimaryGeographySources = 1` — **F2 PASS**. Both verified directly, not carried over from the `test`-branch figure this file has cited since 2026-09-03. F5, F6 and F7 are unchanged (D6 added `contract` rows, not `solicitation` rows), so the floor now fails **three** of seven against production, not five.
+
+### 🔴 THE FINDING THIS FILE RECORDS AND DOES NOT RESOLVE
+
+**When the guarded production migration was finally run by hand, it applied ONLY migration 030 — 026 through 029 were already present.**
+
+That is not what the guarded doors built for D6/D7 were for: `npm run migrate:production` refuses the `test` endpoint by name precisely so that migrating production stays a deliberate, hand-run act (CLAUDE.md §2). Run by hand, it should have applied everything pending. It applied one file.
+
+**The likely mechanism.** `package.json`'s `build` script is `npm run migrate:deploy && npm run build --workspace app/client`. On Vercel, `DATABASE_URL` **is** production. **If that build script runs on every deploy, then every push to `main` that triggers a deploy migrates production automatically** — no guard, no hand, no CLAUDE.md §2 deliberateness. That fits what `schema_migrations.applied_at` shows: 026 and 027 landed together at one timestamp, 028 landed within about a minute of D3's push, 029 within about ten minutes of D1's — four different times across 2026-09-05, not the one clustered timestamp a single hand-run of four files would leave. 030 has no corresponding push (it lives only on this un-merged branch), which is consistent with it having reached production by the hand-run alone.
+
+**What is VERIFIED versus INFERRED, stated plainly:**
+- **VERIFIED — the STATE.** `schema_migrations` on production carries 026–029 with four distinct timestamps, all predating the hand-run that applied 030, each close in time to the push that introduced the corresponding migration file. Read directly from the table, not assumed.
+- **INFERRED — the CAUSE.** No Vercel deployment was confirmed to have actually fired for any of those four pushes. The build-script mechanism is the explanation that fits the timestamps; it is not the only conceivable one. STATUS §1 already warns that the deployments list is not evidence of what the runtime holds — the same caution applies here, in reverse: an unconfirmed deploy is not evidence it DIDN'T run either.
+
+**This sits oddly beside CLAUDE.md §2's framing of production changes as deliberate acts.** The door built for D6 checks the endpoint by name and refuses `test` by construction; the door for D7 exists at all because migrating production was meant to require a hand. If `main`'s own build script migrates production on every deploy, neither door is the only way in — there has been an open one sitting next to both, since before this slice started.
+
+**This is Matt's design decision, not this session's.** Presented, not resolved: leave the build script as is (migrations here are additive and mostly idempotent, so the risk is silent drift rather than corruption), gate `migrate:deploy` behind a flag Vercel's build does not set by default, or something else entirely. No option is chosen here.
+
+---
+
+## 🔖 Earlier resume block — updated 2026-09-04
 
 ## ✅ 2026-09-04 — R7 IS MEASURED, AND CLOSING IT FOUND THE DIMENSION WAS BROKEN
 
 **Merged to `main` `--no-ff` at `b173ea8`; gate re-run on the merged result: 781 tests / 88 files, exit 0.**
-⚠️ **Not pushed** — `main` is ahead of `origin/main` by this work.
-⚠️ **Migration 026 is applied to `test` only.** Production gets it on the next deploy.
+⚠️ ~~**Not pushed** — `main` is ahead of `origin/main` by this work.~~ ✅ **Pushed since — `origin/main` is level (D7).**
+⚠️ ~~**Migration 026 is applied to `test` only.** Production gets it on the next deploy.~~ ✅ **CORRECTED 2026-09-05: migration 026, and everything through 030, is now applied to production too** — see the 2026-09-05 finding in RESUME HERE for how 026–029 got there.
 
 Pass 1 called R7 *"the cheapest gap on the page to close"* — the numbers were
 already in the database. They were. **Recording them would also have made the
@@ -360,12 +406,12 @@ production halves are blocked on the harness, not on him.
 | | Decision | He ruled | State |
 |---|---|---|---|
 | **D1** | HigherGov's R7 translation | **C** — rate only the unambiguous | ✅ migration 029. **The matrix line is unchanged and that is the ruling working as chosen** — `unknown` properties are skipped per §5.3, so the ruling lives on the row, not in the note. Narrow reading confirmed 2026-09-05; two wider readings offered and declined |
-| **D2** | The description ruling | **A** — fetch documents on open | ⏸ **not built.** ~11 records per open ≈ 900 opens/month. Needs a cache so a second open is free, and a tally in `ingest_run`, because the API will never tell us |
+| **D2** | The description ruling | **A** — fetch documents on open | ✅ **BUILT 2026-09-05, mechanism only.** Proven against SAM.gov at zero metered cost (its `DocumentClient` always reports `records: 0`). `api_spend` created (migration 030) — **not** a tally in `ingest_run`; CLAUDE.md §5.1 amended for exactly this (Task 6, §1 below). The stamp was **not** added, it was **reused**: `attachments_checked_at` already existed (migration 011) and is now shared by the batch pass and this on-demand path. ⚖️ **`MONTHLY_RECORD_CEILING = 1000` in `api-spend.ts` ships UNRATIFIED** — a proposal awaiting Matt's number, same style as `fitness/thresholds.ts`'s R7 block. **The HigherGov adapter was NOT built, deliberately out of scope** — `DOCUMENT_CLIENTS` holds one entry, `SAM.gov`; wiring HigherGov in is a `DocumentClient` implementation plus one more entry. Built on branch `d2-on-demand-documents`, not yet merged |
 | **D3** | R9's null check | **A** — fix it | ✅ migration 028 + `watermark_probed_at`. Illinois BidBuy `weak` by measurement, Kentucky `unknown`. **Option C (audit every dimension) was declined, so only R9 moved** |
 | **D4** | Floor thresholds | **A** — approve as proposed | ✅ `THRESHOLDS_RATIFIED = true`. Unblocked nothing, as promised: F5/F6/F7 still fail |
 | **D5** | R7's new thresholds | **C** — leave provisional | ✅ new `R7_RATIFIED = false`. ⚠️ **The sheet's stated reason for C — "consistent with the floor's status" — was removed by D4.** The choice stands on its own; the argument he was shown is gone |
-| **D6** | EDS register → production | **A** — load it now | ⛔ **blocked by the classifier.** A guarded door now exists: `npm run contracts:ingest:production` |
-| **D7** | Push + migrate production | **A** — back up and update | ◐ **half done.** Push ✅ (the count was 7, not the 5 this table used to claim). Migrations ⛔ blocked |
+| **D6** | EDS register → production | **A** — load it now | ✅ **DONE 2026-09-05.** ~~blocked by the classifier~~ — run by hand: 204,991 fetched, 204,920 written, 71 already held, 86 seconds. Production `contract` table: 0 → **204,920**, verified by direct query. The 71 are duplicate rows within Indiana's own source data (same gap `test` already carried), not pre-existing production rows |
+| **D7** | Push + migrate production | **A** — back up and update | ✅ **FULLY DONE 2026-09-05.** Push ✅ (the count was 7, not the 5 this table used to claim). Migrations ✅ — production is migrated through `030_api_spend.sql`, verified by a second run reporting "no pending migrations". 🔴 **See the 2026-09-05 RESUME HERE entry: the guarded hand-run applied ONLY 030 — 026–029 were already present**, likely via the build script's own `migrate:deploy`, not the guarded door. Recorded, not resolved |
 
 ⚠️ **CORRECTION carried into D1.** HigherGov's description problem is one of
 **PRESENCE, not LENGTH** — 34% of rows carry none, but where one exists the
