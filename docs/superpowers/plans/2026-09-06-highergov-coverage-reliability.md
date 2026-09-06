@@ -50,8 +50,9 @@ export interface FeedNotice {
 }
 export interface FeedResult {
   notices: FeedNotice[];
-  records: number;               // what the VENDOR billed = notices.length
+  records: number;               // what the VENDOR billed = raw row count
   feedCount: number | null;      // meta.pagination.count
+  pages: number | null;          // meta.pagination.pages -- >1 means truncated
 }
 export interface HigherGovClient {
   fetchDay(capturedDate: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
@@ -1505,10 +1506,10 @@ const { COVERAGE } = await import("./thresholds.js");
 function fakeClient(byDay: Record<string, FeedResult>): HigherGovClient {
   return {
     async fetchDay(capturedDate) {
-      return byDay[capturedDate] ?? { notices: [], records: 0, feedCount: 0 };
+      return byDay[capturedDate] ?? { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
   };
 }
@@ -1538,6 +1539,7 @@ test("a run records what the vendor billed in api_spend", async () => {
         ],
         records: 5,
         feedCount: 5,
+        pages: 1,
       },
     }),
   });
@@ -1560,10 +1562,11 @@ test("the spend is recorded even when the item write fails", async () => {
         notices: [{ externalId: "A", capturedDate: "2026-09-03", versionKey: null, title: null }],
         records: 7,
         feedCount: 7,
+        pages: 1,
       };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
   };
   /* Force the item write to fail by dropping the check constraint's target
@@ -1587,6 +1590,7 @@ test("a run aborts at maxRecordsPerRun rather than continuing", async () => {
     notices: [],
     records: COVERAGE.maxRecordsPerRun + 1,
     feedCount: 9999,
+    pages: 1,
   };
   const out = await runCoverage({
     from: "2026-09-03",
@@ -1608,7 +1612,7 @@ const keyOf = (...ids: string[]): KeyEntry[] =>
   }));
 
 test("an aborted run's unqueried days leave no misses behind", async () => {
-  const heavy: FeedResult = { notices: [], records: COVERAGE.maxRecordsPerRun + 1, feedCount: 1 };
+  const heavy: FeedResult = { notices: [], records: COVERAGE.maxRecordsPerRun + 1, feedCount: 1, pages: 1 };
   await runCoverage({
     from: "2026-09-03",
     to: "2026-09-05",
@@ -1631,7 +1635,7 @@ test("an aborted run's unqueried days leave no misses behind", async () => {
 test("a notice absent from the window is looked up by id before being called missing", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
-      return { notices: [], records: 0, feedCount: 0 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
     async fetchBySourceId(sourceId) {
       return {
@@ -1640,6 +1644,7 @@ test("a notice absent from the window is looked up by id before being called mis
         ],
         records: 1,
         feedCount: 1,
+        pages: 1,
       };
     },
   };
@@ -1657,10 +1662,10 @@ test("a notice absent from the window is looked up by id before being called mis
 test("a notice in neither the window nor the id lookup is a real miss, and cost nothing", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
-      return { notices: [], records: 0, feedCount: 0 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
   };
   const out = await runCoverage({
@@ -1676,6 +1681,25 @@ test("a notice in neither the window nor the id lookup is a real miss, and cost 
   expect(out.recordsSpent).toBe(0);
 });
 
+/* 🔴 A day the client could only half-read must not be graded. Page one of
+ * three means two pages of notices we never saw, and every one of them would
+ * read downstream as a notice HigherGov does not carry. */
+test("a day whose feed spans more than one page aborts rather than grading a truncation", async () => {
+  const out = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    key: keyOf("003000000088067"),
+    client: fakeClient({
+      "2026-09-03": { notices: [], records: 5, feedCount: 500, pages: 3 },
+    }),
+  });
+  expect(out.aborted).toBe(true);
+  expect(out.abortReason).toContain("page 1 of 3");
+  /* Unchecked, NOT missing -- we did not establish anything about this notice. */
+  const row = await one<{ carried: string }>(`SELECT carried FROM coverage_item`);
+  expect(row!.carried).toBe("unchecked");
+});
+
 /* 🔴 THE SAVED-SEARCH DETECTOR. R1: state filtering exists ONLY through a
  * saved search living in HigherGov's account, not our code. feed_count is
  * how a silent edit becomes visible. */
@@ -1684,7 +1708,7 @@ test("the run records the feed count for the saved-search detector", async () =>
     from: "2026-09-03",
     to: "2026-09-03",
     client: fakeClient({
-      "2026-09-03": { notices: [], records: 0, feedCount: 4242 },
+      "2026-09-03": { notices: [], records: 0, feedCount: 4242, pages: 1 },
     }),
   });
   const row = await one<{ feed_count: number }>(`SELECT feed_count FROM coverage_run LIMIT 1`);
@@ -1844,6 +1868,21 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
 
     feed.push(...result.notices);
 
+    /* 🔴 A TRUNCATED DAY MUST NOT BE GRADED. The client reads page one and
+     * cannot request page two -- deliberately, because paging spends records.
+     * But rows we never received are indistinguishable downstream from rows
+     * HigherGov does not carry: they become FALSE MISSES, the same defect the
+     * id-lookup guard below exists to prevent. Refusing to grade is the safe
+     * direction; narrowing the window is the operator's fix. */
+    if (result.pages !== null && result.pages > 1) {
+      aborted = true;
+      abortReason =
+        `Day ${day} returned page 1 of ${result.pages}. This client does not page, ` +
+        `so grading would count rows we never received as rows HigherGov does not ` +
+        `carry. Narrow the window and re-run.`;
+      break;
+    }
+
     if (spent > COVERAGE.maxRecordsPerRun) {
       aborted = true;
       abortReason =
@@ -1990,7 +2029,7 @@ export async function gradedItems() {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run app/server/src/coverage/run.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Prove the abort by mutation**
 
