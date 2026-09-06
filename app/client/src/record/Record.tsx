@@ -204,11 +204,28 @@ export function Record() {
    * and is never otherwise refreshed, so reading it for the label after a
    * successful fetch rendered "NO DOCUMENTS" over a record the database had
    * just recorded 7 documents against -- a false claim, not merely a stale
-   * one. Null means "trust `body.documents.length`" (true whenever the
-   * record was already checked before this component mounted, or nothing
-   * has resolved yet); non-null means "this session's own fetch just found
-   * this many," and overrides. Reset to null on every id change below, so a
-   * previous record's count cannot leak onto a newly opened one. */
+   * one.
+   *
+   * FINAL-REVIEW FIX: `documents` is a number on EVERY outcome, not only
+   * "fetched" -- it is 0 for "unsupported", "ceiling", and a racing
+   * "already-looked", and none of those mean "we looked and found none," they
+   * mean "we did not ask this time." Overriding on any of them clobbers a
+   * real, already-known count with a stray 0. This is live: discover-idoa.ts
+   * writes `document` rows but never stamps `attachments_checked_at`, and IDOA
+   * has no `DOCUMENT_CLIENTS` entry, so opening an IDOA record that HOLDS
+   * files used to settle from CHECKING straight to "BUNDLE — 0 FILES" over the
+   * very file list it had just rendered. The override below is now gated on
+   * `reason === "fetched"` -- the only outcome that actually asked the source
+   * something new. Every other settled outcome still clears the CHECKING
+   * state (the stamp, below) but leaves the count to `body.documents.length`,
+   * the pre-branch rendering.
+   *
+   * Null means "trust `body.documents.length`" (true whenever the record was
+   * already checked before this component mounted, whenever this outcome
+   * wasn't a fresh fetch, or nothing has resolved yet); non-null means "this
+   * session's own FETCHED outcome just found this many," and overrides. Reset
+   * to null on every id change below, so a previous record's count cannot
+   * leak onto a newly opened one. */
   const [freshDocCount, setFreshDocCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -244,10 +261,16 @@ export function Record() {
     let live = true;
     fetch(`/api/solicitations/${id}/documents`, { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((outcome: { documents?: number } | null) => {
+      .then((outcome: { reason?: string; documents?: number } | null) => {
         if (!live) return;
         setBody((prev) => (prev ? { ...prev, attachments_checked_at: new Date().toISOString() } : prev));
-        if (outcome && typeof outcome.documents === "number") setFreshDocCount(outcome.documents);
+        /* Gated on `reason`, not merely on `documents` being a number -- see
+         * the comment on `freshDocCount`'s declaration above. Only "fetched"
+         * means the source was actually asked; every other outcome's 0 is not
+         * a count, it is the absence of one. */
+        if (outcome && outcome.reason === "fetched" && typeof outcome.documents === "number") {
+          setFreshDocCount(outcome.documents);
+        }
       })
       .catch(() => {
         /* Left null. A network failure is not "we looked" -- the bundle

@@ -6,14 +6,27 @@
  * and unlike the dashboard it can be queried by the code that is about to
  * spend.
  *
- * ⚠️ WRITES TAKE A `Querier`, NOT THE POOL. Every caller records spend
- * inside the same transaction that writes the documents and the stamp. A
+ * ⚖️ FINAL-REVIEW CORRECTION: this comment used to say writes belong INSIDE
+ * the same transaction that writes the documents and the stamp, "because a
  * tally written outside that transaction can survive a rollback that
- * discarded the work it was counting, and then over-reports forever. */
+ * discarded the work it was counting, and then over-reports forever." That
+ * reasoning was backwards. By the time `fetchFor` returns, the VENDOR has
+ * already billed the call -- nothing that happens afterward, including a
+ * failed document write, un-bills it. Migration 030's own header says the
+ * same thing about this table: "records IS WHAT THE VENDOR BILLED, NOT WHAT
+ * WE KEPT." Tallying inside the transaction meant a rolled-back write erased
+ * a spend that genuinely happened, which is UNDER-reporting -- and against a
+ * ceiling whose true consumption cannot be read back from the vendor at all
+ * (CLAUDE.md §5.1), under-reporting is the dangerous direction: it is what
+ * lets an operator believe there is budget left when there is not. A tally
+ * that outlives a rolled-back document write is over-reporting, which is
+ * merely conservative, not wrong. fetch-documents-for.ts now records the
+ * spend in its own committed write, before its transaction opens. */
 import { all, type Querier } from "../db/index.js";
 
 /* ⚖️ UNRATIFIED. Matt sets this number; it ships as a proposal in exactly
- * the style of fitness/thresholds.ts's R7 block (D5, 2026-09-04).
+ * the style of fitness/thresholds.ts's R7 block (D5, 2026-09-04) -- see
+ * `CEILING_RATIFIED` immediately below for what "exactly the style" means.
  *
  * The proposal is 1,000 -- 10% of the 10,000/month allowance, about 90
  * document fetches. The reasoning, which is what he is actually ruling on:
@@ -24,6 +37,20 @@ import { all, type Querier } from "../db/index.js";
  * days later. */
 export const MONTHLY_RECORD_CEILING = 1000;
 
+/* ⚠️ FINAL-REVIEW FIX: "exactly the style of ... R7's block" was a claim, not
+ * yet a fact. R7's style is `R7_RATIFIED`, an EXPORTED BOOLEAN that changes
+ * runtime output (rubric.ts's caveat) and is PINNED BY A TEST
+ * (rubric.test.ts). What stood here before this flag was only the word
+ * UNRATIFIED inside a comment, and the test named "the ceiling is a positive
+ * number and is marked unratified in source" asserted `toBeGreaterThan(0)`
+ * and nothing else -- delete the word from the comment above and that test
+ * stayed green, which means nothing was actually pinning the claim. This is
+ * the one number in the branch that governs money, so it gets the real
+ * mechanism rather than a comment that a paraphrase can quietly drop.
+ * `false` until Matt rules on 1,000 (or any other value) the way he ruled D4
+ * for the floor's thresholds. */
+export const CEILING_RATIFIED = false;
+
 export interface Spend {
   sourceId: number;
   endpoint: "opportunity" | "document";
@@ -32,7 +59,14 @@ export interface Spend {
   solicitationId?: number;
 }
 
-export async function recordSpend(q: Querier, s: Spend): Promise<void> {
+/* `Pick<Querier, "run">`, not the full `Querier`: `run` is the only method
+ * this ever calls, and narrowing to it is what lets a caller outside any
+ * transaction -- fetch-documents-for.ts's committed spend write, see its own
+ * comment -- pass the pool-level `run` directly (`{ run }`) rather than
+ * assembling `all`/`one`/`insert` it will never use just to satisfy the
+ * type. A full `Querier`, such as a `tx()` callback's `q`, still satisfies
+ * this narrower type without change. */
+export async function recordSpend(q: Pick<Querier, "run">, s: Spend): Promise<void> {
   await q.run(
     `INSERT INTO api_spend (source_id, endpoint, records, solicitation_id)
      VALUES ($1, $2, $3, $4)`,

@@ -10,7 +10,7 @@
  * "have we looked · spend · write · stamp · tally", so the HTTP layer stays
  * a thin caller and nothing about spending policy lives in a request
  * handler. */
-import { all, one, tx } from "../db/index.js";
+import { one, run, tx } from "../db/index.js";
 import { DOCUMENT_CLIENTS } from "./document-clients.js";
 import { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING } from "./api-spend.js";
 
@@ -63,10 +63,32 @@ export async function fetchDocumentsFor(
   /* Page one and stop -- CLAUDE.md §5.2. The client does not page. */
   const fetched = await client.fetchFor(row.external_id, fetchImpl);
 
-  /* ONE TRANSACTION, and the reason is the failure it prevents: documents
+  /* FINAL-REVIEW FIX: the spend is recorded HERE, in its own committed write,
+   * before `tx()` even opens -- not inside the transaction below. By the time
+   * `fetchFor` has returned, the vendor has already metered the call; nothing
+   * that happens next can un-bill it. Tallying inside the transaction meant a
+   * later failure writing documents rolled the tally back too, so the vendor
+   * had charged us for a call our own records showed as free. Against a
+   * ceiling whose true consumption CANNOT be read back from the vendor
+   * (CLAUDE.md §5.1), under-reporting is the dangerous direction: it is what
+   * lets an operator believe there is budget left when there is not. A
+   * spend row that outlives a rolled-back document write is simply
+   * over-reporting, which is safe, not a bug -- migration 030's own header
+   * says it plainly: "records IS WHAT THE VENDOR BILLED, NOT WHAT WE KEPT." */
+  await recordSpend(
+    { run },
+    {
+      sourceId: row.source_id,
+      endpoint: "document",
+      records: fetched.records,
+      solicitationId: row.id,
+    },
+  );
+
+  /* ONE TRANSACTION for the two writes that must commit together: documents
    * written but the stamp lost means the next open pays again for rows we
-   * already hold. The tally is inside for the mirror-image reason -- a tally
-   * that survives a rolled-back write over-reports forever. */
+   * already hold. The spend above is deliberately NOT part of this -- see the
+   * comment there. */
   await tx(async (q) => {
     for (const d of fetched.documents) {
       await q.run(
@@ -76,12 +98,6 @@ export async function fetchDocumentsFor(
       );
     }
     await q.run(`UPDATE solicitation SET attachments_checked_at = now() WHERE id = $1`, [row.id]);
-    await recordSpend(q, {
-      sourceId: row.source_id,
-      endpoint: "document",
-      records: fetched.records,
-      solicitationId: row.id,
-    });
   });
 
   return { reason: "fetched", spent: fetched.records, documents: fetched.documents.length };

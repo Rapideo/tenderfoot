@@ -10,7 +10,8 @@ await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
 const { close, insert, run, tx } = await import("../db/index.js");
-const { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING } = await import("./api-spend.js");
+const { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING, CEILING_RATIFIED } =
+  await import("./api-spend.js");
 
 let sourceId: number;
 
@@ -67,6 +68,13 @@ test("a source that has never spent reads zero, not null", async () => {
   expect(await spentThisMonth("spend fixture")).toBe(0);
 });
 
+/* FINAL-REVIEW FIX: this used to assert only `toBeGreaterThan(0)` while its
+ * own name claimed the ceiling was "marked unratified in source" -- a claim
+ * a comment alone cannot make a test fail on, so deleting the word UNRATIFIED
+ * from api-spend.ts would have left this green. `CEILING_RATIFIED` is the
+ * flag that actually pins it, in the same style rubric.test.ts pins
+ * `R7_RATIFIED` and `THRESHOLDS_RATIFIED`. */
 test("the ceiling is a positive number and is marked unratified in source", () => {
   expect(MONTHLY_RECORD_CEILING).toBeGreaterThan(0);
+  expect(CEILING_RATIFIED).toBe(false);
 });

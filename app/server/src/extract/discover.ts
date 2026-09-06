@@ -217,7 +217,21 @@ async function writeListingRows(c: Candidate): Promise<number> {
  *
  * Defaulted generously rather than required, which is the shape scrape/run.ts
  * established and STATUS records: "the CLI passes a generous budget, the HTTP
- * handler one below 300s, and the same code serves both." */
+ * handler one below 300s, and the same code serves both."
+ *
+ * ⚠️ FINAL-REVIEW NOTE, D2: THIS PATH IS SAM-ONLY, AND DELIBERATELY. The loop
+ * below calls `samDocumentClient.fetchFor` directly -- not `DOCUMENT_CLIENTS`,
+ * not a source-keyed lookup -- because it has NO CEILING and NO TALLY. That
+ * is fine for SAM.gov, which is free, but design spec §10 tells the next
+ * implementer that wiring a paid source in is "a document client plus a
+ * registry entry," and generalising this batch pass to index
+ * `DOCUMENT_CLIENTS` is the obvious-looking next edit. Doing that here would
+ * silently build the bulk pass CLAUDE.md §5.2 calls structurally impossible
+ * (93,000-176,000 records for Indiana alone), and the 24-hour re-check above
+ * would re-pay it daily for every document-less notice on top. A metered
+ * client belongs behind `fetchDocumentsFor` (fetch-documents-for.ts) instead,
+ * which has both: the ceiling, checked before the source is ever called, and
+ * the tally, committed the moment the vendor has billed it. */
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,

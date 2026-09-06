@@ -156,10 +156,21 @@ test("at the ceiling the fetch refuses, without calling the source", async () =>
   expect(s!.attachments_checked_at).toBeNull();
 });
 
-/* 🔴 SPEC §9 ROW 4 — THE TRANSACTION. Documents written but the stamp lost
- * means the next open pays again for rows we already hold. The three writes
- * commit together or not at all, and this is the only test that proves it. */
-test("a failure while writing leaves no documents, no stamp and no tally", async () => {
+/* 🔴 SPEC §9 ROW 4 — THE TRANSACTION, AND THE SPEND OUTSIDE IT.
+ *
+ * FINAL-REVIEW CORRECTION: this test used to assert `api_spend` was EMPTY
+ * after this failure, on the premise that the tally was written inside the
+ * same transaction as the documents and the stamp. It no longer is (see
+ * fetch-documents-for.ts's own comment) -- `client.fetchFor` has already
+ * returned by the time `tx()` opens, which means the vendor has already
+ * billed the call, and the spend is now recorded in its own committed write
+ * BEFORE the transaction that writes documents and the stamp even begins.
+ * A failure inside that transaction must still roll back the documents and
+ * the stamp together (that half of the guarantee is unchanged, and still
+ * the point of this test), but it can no longer roll back a spend that was
+ * never part of it. The call happened; the tally must say so regardless of
+ * what happened afterward while writing what it found. */
+test("a failure while writing leaves no documents, no stamp, but DOES leave the tally", async () => {
   /* A filename of NULL violates document.filename NOT NULL, so the INSERT
    * raises INSIDE the transaction -- after some work, before the commit.
    * That is the crash shape the transaction exists for. */
@@ -185,7 +196,11 @@ test("a failure while writing leaves no documents, no stamp and no tally", async
 
   expect(await all(`SELECT id FROM document WHERE solicitation_id = $1`, [solicitationId]))
     .toHaveLength(0);
-  expect(await all(`SELECT id FROM api_spend`)).toHaveLength(0);
+  /* THE ONE ASSERTION THIS FIX CHANGES. `client.fetchFor` already answered
+   * before the failing transaction ever opened, so the spend it recorded is
+   * NOT inside that transaction and must survive its rollback -- the call
+   * happened, whatever went wrong writing the documents afterward. */
+  expect(await all(`SELECT id FROM api_spend`)).toHaveLength(1);
   const s = await one<{ attachments_checked_at: Date | null }>(
     `SELECT attachments_checked_at FROM solicitation WHERE id = $1`,
     [solicitationId],

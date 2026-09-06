@@ -130,6 +130,11 @@ function renderRecordCounting(body: unknown, postBody: unknown = { reason: "fetc
 
 const UNCHECKED = { ...RECORD, attachments_checked_at: null, documents: [] };
 const CHECKED_EMPTY = { ...RECORD, attachments_checked_at: "2026-09-05T00:00:00Z", documents: [] };
+/* RECORD already carries one document (SCOPE OF WORK.docx) -- this fixture
+ * is that same record, just not yet checked, so it exercises "the GET
+ * already found real documents, and the POST is about to answer with an
+ * outcome that isn't 'fetched'". */
+const UNCHECKED_WITH_DOCS = { ...RECORD, attachments_checked_at: null };
 
 /* 🔴 ONCE PER RECORD, NOT ONCE PER RENDER. React re-renders freely and
  * StrictMode double-invokes effects in development. The stamp makes a
@@ -198,6 +203,24 @@ test("a successful fetch that finds documents renders the count immediately, not
   await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
   await openTab(/documents/i);
   await waitFor(() => expect(screen.getByText(/BUNDLE — 7 FILES/)).toBeTruthy());
+  expect(screen.queryByText(/BUNDLE — 0 FILES/)).toBeNull();
+});
+
+/* 🔴 FINAL-REVIEW REGRESSION. `documents` is 0 on "unsupported" (no
+ * DOCUMENT_CLIENTS entry -- IDOA's actual shape today), "ceiling", and a
+ * racing "already-looked", and none of those mean "we looked and found
+ * none." Before this fix, `outcome.documents` was read whenever it was a
+ * number, with no check on `reason` -- so this exact outcome clobbered a
+ * REAL count (the GET already found 1 document) with the stray 0 an
+ * unsupported source's outcome carries. The bundle region would have
+ * settled from CHECKING straight to "BUNDLE — 0 FILES" over the very file
+ * list it had just rendered below it. Confirmed failing before the fix
+ * (asserted "BUNDLE — 1 FILE", actually rendered "BUNDLE — 0 FILES"). */
+test("an unsupported outcome does not override a real, already-known document count", async () => {
+  renderRecordCounting(UNCHECKED_WITH_DOCS, { reason: "unsupported", spent: 0, documents: 0 });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/BUNDLE — 1 FILE\b/)).toBeTruthy());
   expect(screen.queryByText(/BUNDLE — 0 FILES/)).toBeNull();
 });
 
