@@ -21,7 +21,7 @@ import {
   spentThisMonth,
 } from "../extract/api-spend.js";
 import { higherGovClient, HIGHERGOV_SOURCE_NAME, type HigherGovClient } from "./highergov-client.js";
-import { idoaKeyFrom, IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
+import { IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
 import { dedupBySourceId, observe, type Observation } from "./compare.js";
 import { COVERAGE } from "./thresholds.js";
 import type { FeedNotice } from "./highergov-client.js";
@@ -136,10 +136,15 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
       break;
     }
 
-    if (spent > COVERAGE.maxRecordsPerRun) {
+    /* 🔴 FIXED (post-review): this was `>`, while the per-key loop below uses
+     * `>=` for the SAME constant -- at exactly maxRecordsPerRun they
+     * disagreed about whether the cap had been reached. `>=` stops AT the
+     * cap rather than one record past it, so it is the one kept in both
+     * places. */
+    if (spent >= COVERAGE.maxRecordsPerRun) {
       aborted = true;
       abortReason =
-        `Stopped at maxRecordsPerRun: ${spent} records exceeds ${COVERAGE.maxRecordsPerRun}. ` +
+        `Stopped at maxRecordsPerRun: ${spent} of ${COVERAGE.maxRecordsPerRun} records. ` +
         `Remaining days were not queried, and their notices stay 'unchecked' rather than ` +
         `becoming misses.`;
       break;
@@ -167,10 +172,24 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
 
   if (!aborted) {
     for (const entry of key) {
-      if (found.has(entry.externalId) || settledIds.has(entry.externalId)) {
+      if (found.has(entry.externalId)) {
         checkedIds.add(entry.externalId);
         continue;
       }
+      /* 🔴 FIXED (post-review, ruled by the controller): this used to fold
+       * into the branch above -- `checkedIds.add(entry.externalId); continue;`
+       * -- which added a settled id to `checkedIds` WITHOUT ever adding it to
+       * `found`. `found` holds only THIS run's feed and THIS run's probes, and
+       * `observe()` grades "not in feed AND in checked" as `missing`. So every
+       * notice an earlier run had already settled as `carried` -- exactly the
+       * notices this guard exists to avoid re-asking -- got written into
+       * coverage_item as a MISS for a record we deliberately did not query,
+       * once per run, forever. That is invariant 3 and invariant 4 violated
+       * simultaneously by the same line. `continue` alone leaves the entry
+       * `unchecked` for THIS run, which is what actually happened; the
+       * earlier `carried` row still exists and gradedItems() still surfaces
+       * it (informativeness-before-recency ordering). */
+      if (settledIds.has(entry.externalId)) continue;
       if (spent >= COVERAGE.maxRecordsPerRun) {
         /* Out of budget. Everything still unresolved stays `unchecked` and is
          * re-asked next run -- which is what the accumulating cohort is for.
@@ -191,7 +210,12 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
       spent += probe.records;
       checkedIds.add(entry.externalId);
       const hit = dedupBySourceId(probe.notices).notices[0];
-      if (hit) found.set(entry.externalId, hit);
+      /* The probe is trusted to echo the id we asked for, and only that --
+       * checked, not assumed. `observe()` re-keys off `n.externalId`, so an
+       * unverified hit for a DIFFERENT id would produce a false `missing` for
+       * this entry AND a spurious `carried` for whatever id it actually
+       * carried. */
+      if (hit && hit.externalId === entry.externalId) found.set(entry.externalId, hit);
     }
   }
 

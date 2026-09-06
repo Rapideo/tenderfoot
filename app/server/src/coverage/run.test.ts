@@ -8,8 +8,8 @@ useTestSchema("test_coverage_run");
 await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
-const { all, close, one, run } = await import("../db/index.js");
-const { runCoverage } = await import("./run.js");
+const { all, close, insert, one, run } = await import("../db/index.js");
+const { runCoverage, gradedItems } = await import("./run.js");
 const { COVERAGE } = await import("./thresholds.js");
 
 function fakeClient(byDay: Record<string, FeedResult>): HigherGovClient {
@@ -78,11 +78,13 @@ test("the spend is recorded even when the item write fails", async () => {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
   };
-  /* Force the item write to fail by dropping the check constraint's target
-   * value into an impossible state: a run row that does not exist. */
-  /* `failItemWriteForTest` is a declared field on RunOptions, not a cast:
-   * a test-only escape hatch is named for what it is rather than smuggled
-   * past the type system. */
+  /* Force the item write to fail. `failItemWriteForTest` makes runCoverage
+   * throw a plain Error immediately after observations are computed and
+   * before any coverage_item row is written -- there is no constraint
+   * trick here, just a deliberate throw at the point where the item loop
+   * would otherwise begin. `failItemWriteForTest` is a declared field on
+   * RunOptions, not a cast: a test-only escape hatch is named for what it
+   * is rather than smuggled past the type system. */
   await expect(
     runCoverage({ from: "2026-09-03", to: "2026-09-03", client, failItemWriteForTest: true }),
   ).rejects.toThrow();
@@ -241,4 +243,118 @@ test("the monthly ceiling refuses a run before it spends", async () => {
   expect(out.aborted).toBe(true);
   expect(out.abortReason).toContain("ceiling");
   expect(out.recordsSpent).toBe(0);
+});
+
+/* 🔴 CRITICAL REGRESSION (review 2026-09-06, ruled by the controller).
+ *
+ * run.ts used to fold the settled branch into the found branch:
+ *   if (found.has(id) || settledIds.has(id)) { checkedIds.add(id); continue; }
+ * That added a settled id to `checkedIds` WITHOUT ever adding it to `found`.
+ * `found` holds only THIS run's feed and THIS run's probes, and observe()
+ * grades "not in feed AND in checked" as `missing`. So every notice an
+ * earlier run had already settled as `carried` -- exactly the notices this
+ * guard exists to avoid re-asking -- got written into coverage_item as a
+ * MISS for a record this run deliberately did not query, and it compounded:
+ * every later run still saw the original `carried` row in settledIds and
+ * wrote another spurious miss.
+ *
+ * This is the ONLY test in the file that does not delete coverage_item
+ * between two `runCoverage` calls -- every other test starts from an empty
+ * table via `beforeEach`, so `settledIds` is always empty there and this
+ * path gets zero coverage from them. Two consecutive calls, no delete
+ * between them, is the only way to exercise it. */
+test("a notice settled as carried by an earlier run is not re-asked, and does not become a miss", async () => {
+  const key = keyOf("X");
+
+  const carryingClient: HigherGovClient = {
+    async fetchDay(capturedDate) {
+      if (capturedDate === "2026-09-03") {
+        return {
+          notices: [{ externalId: "X", capturedDate: "2026-09-03", versionKey: null, title: null }],
+          records: 1,
+          feedCount: 1,
+          pages: 1,
+        };
+      }
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+  };
+  const first = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    key,
+    client: carryingClient,
+  });
+  const firstRow = await one<{ carried: string }>(
+    `SELECT carried FROM coverage_item WHERE run_id = $1 AND external_id = 'X'`,
+    [first.runId],
+  );
+  expect(firstRow!.carried).toBe("carried");
+
+  const mustNotAskAgain: HigherGovClient = {
+    async fetchDay() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+    async fetchBySourceId() {
+      /* X is already settled as carried -- reaching this at all is the bug. */
+      throw new Error("must not be called: X is already settled as carried");
+    },
+  };
+  const second = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    key,
+    client: mustNotAskAgain,
+  });
+  const secondRow = await one<{ carried: string }>(
+    `SELECT carried FROM coverage_item WHERE run_id = $1 AND external_id = 'X'`,
+    [second.runId],
+  );
+  /* NOT 'missing' -- this run deliberately did not ask about X again. */
+  expect(secondRow!.carried).toBe("unchecked");
+  const misses = await all(
+    `SELECT 1 FROM coverage_item WHERE external_id = 'X' AND carried = 'missing'`,
+  );
+  expect(misses).toHaveLength(0);
+  expect(second.recordsSpent).toBe(0);
+});
+
+/* 🔴 gradedItems() had no test at all -- its backtick fix (review
+ * 2026-09-06) was verified only by "the file now parses", never by the
+ * query actually running against Postgres, and its stated ordering
+ * constraint (informativeness before recency) was unpinned. This inserts
+ * directly rather than through two runCoverage calls so the OLDER row can be
+ * `carried` and the NEWER row can be `unchecked` -- the one arrangement a
+ * recency-only ORDER BY would get wrong. */
+test("gradedItems() takes an older carried over a newer unchecked for the same notice", async () => {
+  const sourceId = await one<{ id: number }>(`SELECT id FROM source WHERE name = 'HigherGov'`);
+  const olderRun = await insert(
+    `INSERT INTO coverage_run (source_id, cohort_from, cohort_to, run_at)
+     VALUES ($1, '2026-09-01', '2026-09-01', now() - interval '1 day') RETURNING id`,
+    [sourceId!.id],
+  );
+  const newerRun = await insert(
+    `INSERT INTO coverage_run (source_id, cohort_from, cohort_to, run_at)
+     VALUES ($1, '2026-09-03', '2026-09-03', now()) RETURNING id`,
+    [sourceId!.id],
+  );
+  await run(
+    `INSERT INTO coverage_item (run_id, external_id, segment, key_origin, key_seen_at, deadline, carried)
+     VALUES ($1, 'Z', 'state_agency', 'Indiana IDOA solicitations', now(), '2026-09-30', 'carried')`,
+    [olderRun],
+  );
+  await run(
+    `INSERT INTO coverage_item (run_id, external_id, segment, key_origin, key_seen_at, deadline, carried)
+     VALUES ($1, 'Z', 'state_agency', 'Indiana IDOA solicitations', now(), '2026-09-30', 'unchecked')`,
+    [newerRun],
+  );
+  const graded = await gradedItems();
+  const z = graded.find((g) => g.externalId === "Z");
+  /* Ordering by recency alone would return the newer 'unchecked' row and
+   * erase the settled 'carried' finding underneath it. */
+  expect(z).toBeDefined();
+  expect(z!.carried).toBe("carried");
 });
