@@ -180,6 +180,15 @@
   text-align: left;
   cursor: pointer;
 }
+/* D28: no bundle declaration to match -- the mockup's Documents tab always
+ * has files. Borrows `.record__reader-empty`'s own type and colour rather
+ * than inventing a third empty-state voice for one screen. */
+.record__doclist-empty {
+  padding: 12px 14px;
+  font: var(--type-body-note);
+  color: var(--text6);
+  border-bottom: 1px solid var(--brdrow);
+}
 .record__docrow--on { background: var(--accbg2); }
 .record__ext {
   font: var(--type-data-badge-sm);

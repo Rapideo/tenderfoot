@@ -100,6 +100,120 @@ function renderRecord(body: unknown = RECORD) {
   );
 }
 
+/* `renderRecord` stubs one fetch for every URL and returns the body. The
+ * documents POST needs a different answer from the record GET, and the
+ * tests below need to COUNT calls, so this variant keeps a log. */
+function renderRecordCounting(body: unknown, postBody: unknown = { reason: "fetched", spent: 0, documents: 0 }) {
+  const calls: { url: string; method: string }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url: String(url), method });
+      if (method === "POST") return new Response(JSON.stringify(postBody), { status: 200 });
+      return new Response(
+        JSON.stringify(String(url).includes("/api/sources") ? [] : body),
+        { status: 200 },
+      );
+    }),
+  );
+  const utils = render(
+    <MemoryRouter initialEntries={["/solicitation/7"]}>
+      <Routes>
+        <Route path="/solicitation/:id" element={<Record />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const posts = () => calls.filter((c) => c.method === "POST" && c.url.includes("/documents"));
+  return { ...utils, posts };
+}
+
+const UNCHECKED = { ...RECORD, attachments_checked_at: null, documents: [] };
+const CHECKED_EMPTY = { ...RECORD, attachments_checked_at: "2026-09-05T00:00:00Z", documents: [] };
+
+/* 🔴 ONCE PER RECORD, NOT ONCE PER RENDER. React re-renders freely and
+ * StrictMode double-invokes effects in development. The stamp makes a
+ * duplicate call free rather than harmful, but the client must not lean on
+ * that -- "the server will forgive us" is how a spend loop gets shipped. */
+test("the documents fetch is requested once, not once per render", async () => {
+  const { posts, rerender } = renderRecordCounting(UNCHECKED);
+  await waitFor(() => expect(posts()).toHaveLength(1));
+
+  rerender(
+    <MemoryRouter initialEntries={["/solicitation/7"]}>
+      <Routes>
+        <Route path="/solicitation/:id" element={<Record />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByText(RECORD.title)).toBeTruthy());
+  expect(posts()).toHaveLength(1);
+});
+
+/* The guard exists on the server too, but a client that POSTs on every open
+ * of an already-checked record turns a free action into a round trip per
+ * view -- and, for a metered source, into an audit question nobody can
+ * answer from the tally. */
+test("a record that has already been checked issues no POST at all", async () => {
+  const { posts } = renderRecordCounting(CHECKED_EMPTY);
+  await waitFor(() => expect(screen.getByText(RECORD.title)).toBeTruthy());
+  expect(posts()).toHaveLength(0);
+});
+
+/* Checked-and-none must not render as not-yet-looked. This is the D3
+ * distinction reaching the screen: a reader has to be able to tell "there
+ * are no documents" from "we have not asked yet".
+ *
+ * The brief's own template didn't switch to the Documents tab before
+ * asserting -- but the bundle region it is checking (`record__doclist-head`)
+ * only renders while that tab is active (every other docs-tab test in this
+ * file opens it first; a screen that showed every tab's content at once
+ * would fail "the record is tabbed" a few tests up). Added here so the
+ * assertion actually exercises what it claims to. */
+test("the bundle region shows the looked-and-none state, not an empty panel", async () => {
+  renderRecordCounting(CHECKED_EMPTY);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  /* Replace with the bundle's own words from Step 1. If the bundle was
+   * silent, use the copy recorded in the numbered deviation -- and use it
+   * verbatim in both places. */
+  await waitFor(() => expect(screen.getByText(/NO DOCUMENTS/i)).toBeTruthy());
+});
+
+/* Design spec §8's OTHER client state. Not in the brief's three tests, and
+ * added because the browser click-through (CLAUDE.md §4) could not catch it
+ * on screen: a real SAM.gov round trip resolved faster than a screenshot
+ * round trip, across three separate solicitations, so "shows the fetching
+ * state" was never actually seen rendered in that session even though the
+ * mechanism plainly ran (a real notice's document count moved 0 -> 7 in the
+ * test database). The POST below never resolves, which freezes the
+ * component here long enough to assert the state a live run couldn't catch. */
+test("the bundle region shows CHECKING while the fetch is outstanding", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST") return new Promise<Response>(() => {}); // never settles
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(String(url).includes("/api/sources") ? [] : UNCHECKED),
+          { status: 200 },
+        ),
+      );
+    }),
+  );
+  render(
+    <MemoryRouter initialEntries={["/solicitation/7"]}>
+      <Routes>
+        <Route path="/solicitation/:id" element={<Record />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/CHECKING FOR DOCUMENTS/i)).toBeTruthy());
+});
+
 /* SP4 criterion bullet 2, deferred here by ruling. Until this renders, SP4
  * proves a citation is STORED, never that it is READABLE.
  *

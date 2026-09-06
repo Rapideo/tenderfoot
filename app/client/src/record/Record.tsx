@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import { Button, Callout, MicroLabel, Section, TableRow } from "../primitives";
@@ -51,6 +51,11 @@ interface RecordBody {
   fields: Field[];
   documents: Doc[];
   timeline: Event[];
+  /* Null means "we have never asked the source for its documents." Non-null
+   * means we have -- which is a different fact from whether it found any
+   * (D2, design spec §8). `GET /solicitations/:id` already returns this: the
+   * handler does `SELECT s.*`, and migration 011 put the column there. */
+  attachments_checked_at: string | null;
 }
 
 /* The bundle's own column template for the tabFields panel (V1.2), copied
@@ -101,6 +106,23 @@ function extColour(mediaType: string | null): string {
 }
 
 const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%`);
+
+/* D28: the bundle's Documents tab is a static fixture that always has files,
+ * so it never needed a rendering for "we have not looked yet" or "we looked
+ * and there is nothing" -- both are new with D2's on-demand fetch. Numbered
+ * deviation in docs/admin-deviations.md; this is the smallest thing that
+ * works, in the same slot the bundle already draws (`Record.tsx:302`'s
+ * `record__doclist-head`), not a new region.
+ *
+ * `checkedAt` is compared with `=== null` on purpose, not `?? falsy`: a
+ * fixture that omits the field entirely (every OLDER test in this file)
+ * reads `undefined`, which must fall through to the ordinary count below,
+ * not into CHECKING -- there is nothing to check for those records. */
+function doclistHead(checkedAt: string | null | undefined, count: number): string {
+  if (checkedAt === null) return "CHECKING FOR DOCUMENTS…";
+  if (count === 0) return "NO DOCUMENTS — CHECKED, NONE FOUND";
+  return `BUNDLE — ${count} FILE${count === 1 ? "" : "S"}`;
+}
 
 /* THREE STATES, NOT TWO. "We looked and it is not there" is a different fact
  * from "we never looked", and collapsing them is how a missing ceiling
@@ -181,6 +203,38 @@ export function Record() {
       live = false;
     };
   }, [id]);
+
+  /* ⚖️ D2, design spec §8: a solicitation's documents are fetched once, the
+   * first time it is opened with `attachments_checked_at` still null --
+   * never in bulk (CLAUDE.md §5.2). Guarded by a REF keyed to `id`, not by
+   * re-reading `body.attachments_checked_at`: React re-renders freely and
+   * StrictMode double-invokes effects in development, and "the stamp makes a
+   * duplicate call free rather than harmful" is a SERVER fact the client
+   * must not lean on (spec §8). The ref is what actually holds that line. */
+  const checkedDocsFor = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!body || body.attachments_checked_at !== null) return;
+    if (checkedDocsFor.current === id) return;
+    checkedDocsFor.current = id;
+
+    fetch(`/api/solicitations/${id}/documents`, { method: "POST" })
+      .then(() => {
+        /* Only the STAMP is merged. The response is `{reason, spent,
+         * documents}` (Task 4) and `documents` is a COUNT, not the fetched
+         * rows -- there is nothing to splice into `body.documents` without
+         * inventing filenames the API never sent. Reopening this record (or
+         * reloading now) reads the real rows straight off the `document`
+         * table via the ordinary GET above. */
+        setBody((prev) => (prev ? { ...prev, attachments_checked_at: new Date().toISOString() } : prev));
+      })
+      .catch(() => {
+        /* Left null. A network failure is not "we looked" -- the bundle
+         * region stays on CHECKING rather than lying into NO DOCUMENTS. The
+         * ref set above still holds: this record will not retry itself into
+         * a spend loop just because the first attempt failed. */
+      });
+  }, [id, body]);
 
   const selected =
     body?.documents.find((d) => d.id === openDoc) ?? body?.documents[0] ?? null;
@@ -299,8 +353,17 @@ export function Record() {
         <div className="record__docs">
           <div className="record__doclist">
             <div className="record__doclist-head">
-              {`BUNDLE — ${body.documents.length} FILE${body.documents.length === 1 ? "" : "S"}`}
+              {doclistHead(body.attachments_checked_at, body.documents.length)}
             </div>
+            {body.attachments_checked_at !== null && body.documents.length === 0 && (
+              <div className="record__doclist-empty">
+                {/* Deliberately does not repeat "no documents" -- the head
+                  * line above already says that, and Record.test.tsx's
+                  * looked-and-none query matches on that substring. Two
+                  * elements carrying it would make the query ambiguous. */}
+                This solicitation has been checked; the source has nothing attached.
+              </div>
+            )}
             {body.documents.map((d) => (
               <button
                 key={d.id}
