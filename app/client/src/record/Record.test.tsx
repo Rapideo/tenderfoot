@@ -164,6 +164,12 @@ test("a record that has already been checked issues no POST at all", async () =>
  * distinction reaching the screen: a reader has to be able to tell "there
  * are no documents" from "we have not asked yet".
  *
+ * CORRECTED on review (fix round 1): the invented "NO DOCUMENTS" string is
+ * gone -- D28 was wrong that a second string needed inventing. CHECKING FOR
+ * DOCUMENTS already reads distinctly from the bundle's own unconditional
+ * `"BUNDLE — " + N + " FILES"` head, so `BUNDLE — 0 FILES` alone already
+ * satisfies "a reader can tell the two states apart," with no new copy.
+ *
  * The brief's own template didn't switch to the Documents tab before
  * asserting -- but the bundle region it is checking (`record__doclist-head`)
  * only renders while that tab is active (every other docs-tab test in this
@@ -174,10 +180,25 @@ test("the bundle region shows the looked-and-none state, not an empty panel", as
   renderRecordCounting(CHECKED_EMPTY);
   await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
   await openTab(/documents/i);
-  /* Replace with the bundle's own words from Step 1. If the bundle was
-   * silent, use the copy recorded in the numbered deviation -- and use it
-   * verbatim in both places. */
-  await waitFor(() => expect(screen.getByText(/NO DOCUMENTS/i)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/BUNDLE — 0 FILES/)).toBeTruthy());
+});
+
+/* 🔴 THE CRITICAL FIX, review round 1. Before this, the head kept reading
+ * `body.documents.length` -- the ORIGINAL GET's count, never refreshed --
+ * so a successful fetch that found real documents still rendered the
+ * empty-state label until the page was reloaded. Caught by the click-through
+ * report, not by any test: production data showed `doc_count 7` immediately
+ * after the POST while the screen still read the empty state. This test
+ * would have caught it: the POST resolves with a non-zero `documents` count
+ * and the mocked GET never changes (it always answers UNCHECKED, count 0),
+ * so passing requires the head to read the POST's own count rather than the
+ * stale body. */
+test("a successful fetch that finds documents renders the count immediately, not the empty state", async () => {
+  renderRecordCounting(UNCHECKED, { reason: "fetched", spent: 0, documents: 7 });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/BUNDLE — 7 FILES/)).toBeTruthy());
+  expect(screen.queryByText(/BUNDLE — 0 FILES/)).toBeNull();
 });
 
 /* Design spec §8's OTHER client state. Not in the brief's three tests, and

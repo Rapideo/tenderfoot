@@ -1168,40 +1168,79 @@ alongside a single source cannot distinguish the two, because they share its sha
 
 ---
 
-## D28 — the bundle has no fetching or empty-documents treatment, because its fixture never needed one
+## D28 — the bundle has no fetching treatment, because its fixture never needed one
 
-**On-demand documents (D2, 2026-09-05), Task 5.** Before writing any markup, the record screen's
-Documents tab (`tabDocs`, V1.2 index ~581620) was searched for a loading/fetching treatment and an
-empty-documents treatment. **Neither exists.** The template is a static `sc-for` over `docs` with
-`hint-placeholder-count="6"` and no `sc-if` branch for a zero-length list — the mockup's five fixture
-solicitations always carry files, so the bundle never had a reason to draw either state. A
-case-insensitive search of the whole ~700 KB bundle for `loading`, `fetching`, `empty`, `no documents`
-and `0 files` returns nothing outside the self-extracting bundler's own chrome
-(`#__bundler_loading`, "Unpacking..."), which is the artifact wrapper and not app content.
+**On-demand documents (D2, 2026-09-05), Task 5. Corrected in fix round 1 of review — see the note
+below the original text; both are kept, because the correction is itself worth a reader tripping
+over the same reasoning twice.**
 
-D2 makes both states real for the first time: documents are now fetched **when the record is
-opened**, not shipped pre-attached, so "we have not asked yet" and "we asked and there is nothing"
-both need a rendering that has never existed on this screen before.
+Before writing any markup, the record screen's Documents tab (`tabDocs`, V1.2 index ~581620) was
+searched for a loading/fetching treatment and an empty-documents treatment. **Neither exists.** The
+template is a static `sc-for` over `docs` with `hint-placeholder-count="6"` and no `sc-if` branch for
+a zero-length list — the mockup's five fixture solicitations always carry files, so the bundle never
+had a reason to draw either state. A case-insensitive search of the whole ~700 KB bundle for
+`loading`, `fetching`, `empty`, `no documents` and `0 files` returns nothing outside the
+self-extracting bundler's own chrome (`#__bundler_loading`, "Unpacking..."), which is the artifact
+wrapper and not app content.
+
+D2 makes on-open fetching real for the first time: documents are now fetched **when the record is
+opened**, not shipped pre-attached, so "we have not asked yet" needs a rendering that has never
+existed on this screen before.
 
 **The smallest thing that works, added to the existing slot rather than a new region** — the
 doclist head at `Record.tsx:302` (`record__doclist-head`), which already carries the bundle's own
 `BUNDLE — N FILES` string:
 
 - **CHECKING FOR DOCUMENTS…** — replaces the head while `attachments_checked_at` is null and the
-  on-open fetch is outstanding.
-- **NO DOCUMENTS — CHECKED, NONE FOUND** — replaces it once `attachments_checked_at` is non-null and
-  the source returned zero documents, with one line underneath borrowing
-  `.record__reader-empty`'s own type and colour (`--type-body-note` / `--text6`) rather than inventing
-  a third empty-state voice for one screen. That second line deliberately does not repeat "no
-  documents" — *"the source has nothing attached"* — because the test asserting this state matches on
-  that substring, and two elements carrying it make the query ambiguous rather than more thorough.
+  on-open fetch is outstanding. This is the ONE genuinely new string.
+- Once `attachments_checked_at` is non-null, the head reverts to the bundle's own unconditional
+  `BUNDLE — N FILES` — including `BUNDLE — 0 FILES` when the source returned nothing. No second
+  string was needed: CHECKING already reads distinctly from it, so the bundle's own zero-count
+  rendering already satisfies "a reader can tell not-yet-looked from looked-and-none" (D3's
+  distinction, reaching this screen) without inventing anything further. See the correction below —
+  this repository shipped an invented `NO DOCUMENTS — CHECKED, NONE FOUND` string first, and review
+  caught that it was unnecessary.
 
-Both are inert copy in the same mono microlabel slot the bundle already draws
-(`--type-microlabel`, `--text5`/`--text7`) — no new visual language, no new grid track.
+CHECKING is inert copy in the same mono microlabel slot the bundle already draws
+(`--type-microlabel`), no new visual language, no new grid track.
 
-**What is deliberately NOT built.** The POST's own response (`{reason, spent, documents}`, Task 4) is
-`documents: number` — a count, not the fetched rows. There is nothing to splice into
-`RecordBody.documents` without inventing filenames the API never sent, so the merge on success touches
-only `attachments_checked_at`. A record that is reopened, or the same record after a page reload,
-reads the real document rows straight off the `document` table via the ordinary `GET` — this screen
-does not attempt to paint them from the POST response in the same tick they were written.
+> ### ⚖️ CORRECTED, review round 1 (fix round 1 of 5), same day.
+>
+> **This entry originally claimed the bundle had NO empty-documents treatment either, and shipped a
+> second invented string — `NO DOCUMENTS — CHECKED, NONE FOUND` plus an explanatory line — to cover
+> it.** That was wrong on its own terms: the bundle's Documents head is computed **unconditionally**
+> as `"BUNDLE — " + D.docs.length + " FILES"` (same index, `docsCount`, rendered via
+> `{{ docsCount }}` with no zero branch) — it already HAS a zero-count rendering, this repository
+> just hadn't noticed that CHECKING already made it unambiguous. §7.10 asks for the smallest thing
+> that works and warns against a richer treatment than the bundle implies; two invented strings where
+> one bundle string plus one invented string sufficed was exactly that richer treatment.
+>
+> **Removed:** the `NO DOCUMENTS — CHECKED, NONE FOUND` string, its explanatory line ("the source has
+> nothing attached"), and the CSS rule that styled it (`.record__doclist-empty`). Nothing replaces
+> them — `BUNDLE — 0 FILES` needs no help distinguishing itself from `CHECKING FOR DOCUMENTS…`.
+>
+> **A second, more serious defect was found alongside it and fixed in the same pass.** The head was
+> reading `body.documents.length`, which is the ORIGINAL `GET`'s count and is never refreshed. A
+> successful fetch that found real documents therefore kept rendering the empty-state label until the
+> page was reloaded — not merely stale, actively **false**: the click-through in the original task
+> report observed `doc_count 7` in the database immediately after the POST while the screen still read
+> the empty state, and did not flag it as a defect. Fixed by tracking the POST response's own
+> `documents` count in a separate piece of state (`freshDocCount`), which overrides
+> `body.documents.length` for the head's purposes only, reset to null on every `id` change so one
+> record's count cannot leak onto the next. Covered by
+> `Record.test.tsx`'s "a successful fetch that finds documents renders the count immediately, not the
+> empty state" — a test that fails if the head reads the stale count instead.
+>
+> **What is still deliberately NOT built, now that the label is honest.** The POST's own response
+> (`{reason, spent, documents}`, Task 4) carries `documents` as a count, not the fetched rows — there
+> is nothing to splice into `RecordBody.documents` without inventing filenames the API never sent, so
+> the file LIST below the head still does not repaint until a reopen or a reload reads the real rows
+> off the `document` table via the ordinary `GET`. The head's own COUNT is correct immediately; the
+> individual rows underneath it are not, and that half of the original gap stands as originally
+> disclosed. A record can therefore legitimately show `BUNDLE — 7 FILES` over an empty-looking list
+> for the rest of that session — accurate, not yet complete, which is the disclosed trade rather than
+> the false one review caught.
+>
+> **The POST effect also gained the live-record guard the sibling GET effect already had** (the exact
+> pattern, reused rather than reinvented): a slow POST for a record the user has since navigated away
+> from can no longer stamp or merge onto whatever record is now displayed.
