@@ -47,6 +47,12 @@ export interface FeedResult {
   records: number;
   /** meta.pagination.count -- the saved-search change detector. */
   feedCount: number | null;
+  /** meta.pagination.pages. This client fetches page one only and never
+   * pages further -- spending more records is a design decision, not this
+   * client's to make. Exposing this is the minimum fix for the alternative:
+   * a caller silently treating a truncated day as HigherGov not having the
+   * rows, which is a false miss. */
+  pages: number | null;
 }
 
 export interface HigherGovClient {
@@ -83,7 +89,7 @@ interface RawResult {
 }
 
 interface RawBody {
-  meta?: { pagination?: { count?: unknown } };
+  meta?: { pagination?: { count?: unknown; pages?: unknown } };
   results?: RawResult[];
 }
 
@@ -116,7 +122,40 @@ function apiKey(): string {
   return key;
 }
 
+/* /opportunity/ has no location parameter -- the saved search IS the
+ * geographic filter (R1, recorded on fetchDay below). A missing api_key
+ * costs nothing and fails closed; a missing search_id costs MONEY and would
+ * fail open, silently billing every row nationwide for the day. That
+ * asymmetry is why this throws unconditionally rather than falling back to
+ * an unfiltered call the way a `if (searchId)` guard once did. */
+function searchId(): string {
+  const id = process.env.HIGHERGOV_SEARCH_ID;
+  if (!id) {
+    throw new Error(
+      "HIGHERGOV_SEARCH_ID is not set. /opportunity/ has no location " +
+        "parameter -- the saved search is the ONLY geographic filter, so an " +
+        "unscoped fetchDay call would ask for every opportunity captured " +
+        "nationwide that day and pay for every row (measured: 5,266 records " +
+        "for one unfiltered Indiana day, against a 10,000/month allowance " +
+        "that cannot be read back from the vendor).",
+    );
+  }
+  return id;
+}
+
 async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+  /* Structural, not merely discipline. Every test in this file injects
+   * fetchImpl; a future test that forgets the argument would fall through to
+   * the real global fetch and make a live, billed call against the API that
+   * leaked a key on 2026-09-03 (CLAUDE.md §5.1). Only the untouched default
+   * -- reference equality against the real global fetch -- trips this; any
+   * injected fake fetchImpl never does. */
+  if (fetchImpl === fetch && process.env.VITEST) {
+    throw new Error(
+      "highergov-client: refusing a live fetch under vitest. Inject a fake " +
+        "fetchImpl -- CLAUDE.md §5.1 forbids a live call from a test.",
+    );
+  }
   const res = await fetchImpl(url.toString(), {
     headers: { accept: "application/json" },
   });
@@ -127,6 +166,7 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
   const body = (await res.json()) as RawBody;
   const notices = (body.results ?? []).map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
+  const pages = body.meta?.pagination?.pages;
   return {
     notices,
     /* The row count, not notices.length: a row we could not parse was still
@@ -134,6 +174,7 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
      * that cannot be read back (api-spend.ts). */
     records: (body.results ?? []).length,
     feedCount: typeof count === "number" ? count : null,
+    pages: typeof pages === "number" ? pages : null,
   };
 }
 
@@ -147,9 +188,10 @@ export const higherGovClient: HigherGovClient = {
      * SILENTLY IGNORED. State filtering exists only through a saved search,
      * so HIGHERGOV_SEARCH_ID is the Indiana filter -- and it lives in their
      * account, not in our code. run.ts records it per run for exactly that
-     * reason. */
-    const searchId = process.env.HIGHERGOV_SEARCH_ID;
-    if (searchId) url.searchParams.set("search_id", searchId);
+     * reason. Unconditional, not `if (searchId)`: an unset scope must fail
+     * LOUD (searchId() throws) rather than silently billing every row
+     * nationwide -- see searchId()'s own comment. */
+    url.searchParams.set("search_id", searchId());
     return get(url, fetchImpl);
   },
 
