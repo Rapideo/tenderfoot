@@ -18,9 +18,15 @@ export interface GradedItem {
 /* D5's stated consequence, applied here: while the numbers are unratified,
  * EVERY verdict carries the caveat -- exactly as gradeCompleteness appends it
  * to every R7 note. A provisional verdict a reader could mistake for the real
- * one is the failure this prevents. */
-const CAVEAT = "Thresholds are not approved (COVERAGE_RATIFIED = false).";
-const note = (s?: string) => (s ? `${s} ${CAVEAT}` : CAVEAT);
+ * one is the failure this prevents.
+ *
+ * CAVEAT is DERIVED from the live COVERAGE_RATIFIED boolean, not hard-coded.
+ * The moment the thresholds are ratified, every predicate stops announcing
+ * "not approved" without requiring hand-edits to literals. */
+const CAVEAT = COVERAGE_RATIFIED
+  ? null
+  : `Thresholds are not approved (COVERAGE_RATIFIED = ${COVERAGE_RATIFIED}).`;
+const note = (s?: string) => (CAVEAT ? (s ? `${s} ${CAVEAT}` : CAVEAT) : s);
 
 const SEGMENTS: Segment[] = ["state_agency", "sub_state"];
 
