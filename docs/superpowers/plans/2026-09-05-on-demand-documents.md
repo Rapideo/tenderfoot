@@ -367,7 +367,18 @@ Expected: FAIL — `Failed to load url ./document-clients.js`.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `app/server/src/extract/document-clients.ts`. Move `resourcesUrl` and `downloadUrl` usage and the attachment-walking logic out of `discover.ts`; import those two URL helpers from where they already live in `discover.ts` (export them if they are not already exported).
+Create `app/server/src/extract/document-clients.ts`.
+
+> ⚖️ **RULING (preflight, 2026-09-05): MOVE `resourcesUrl`, `downloadUrl` and the
+> `AttachmentsResponse` interface OUT of `discover.ts` and INTO this file.** Do
+> not leave them in `discover.ts` and export them — that creates a circular
+> import, because `discover.ts` must import `samDocumentClient` from here.
+> All three are module-private in `discover.ts` (lines 18, 20, 158) and used
+> **nowhere else in the codebase** (verified by grep). They describe how to talk
+> to SAM.gov, which is what a document client is. After this task the dependency
+> runs one way: `discover.ts` → `document-clients.ts`.
+
+Copy the three definitions across verbatim, then delete them from `discover.ts`.
 
 ```typescript
 /* ASKING A SOURCE FOR ONE NOTICE'S DOCUMENTS, AND NOTHING ELSE.
@@ -384,7 +395,23 @@ Create `app/server/src/extract/document-clients.ts`. Move `resourcesUrl` and `do
  * ⚠️ NO DATABASE ACCESS HERE, DELIBERATELY. A client fetches and parses; the
  * caller decides what to write, when to stamp, and what it cost. That is
  * what lets fetch-documents-for.ts put all three in ONE transaction. */
-import { resourcesUrl, downloadUrl, type AttachmentsResponse } from "./discover.js";
+import { SAM_HOST } from "../scrape/adapters/sam.js";
+/* Moved here from discover.ts by the preflight ruling: these three describe
+ * how to talk to SAM.gov, and leaving them behind would make discover.ts and
+ * this module import each other.
+ *
+ * discover.ts's own note on the URLs, which is why they are worth moving
+ * rather than rewriting: "The response SHAPE this file already parses
+ * (_embedded.opportunityAttachmentList[].attachments[]) was correct from the
+ * start; only the URL was wrong." */
+const resourcesUrl = (noticeId: string): string =>
+  `${SAM_HOST}/opps/v3/opportunities/${encodeURIComponent(noticeId)}/resources`;
+const downloadUrl = (resourceId: string): string =>
+  `${SAM_HOST}/opps/v3/opportunities/resources/files/${encodeURIComponent(resourceId)}/download`;
+
+interface AttachmentsResponse {
+  _embedded?: { opportunityAttachmentList?: { attachments?: Record<string, string>[] }[] };
+}
 
 export interface FetchedDocument {
   filename: string;
@@ -808,7 +835,7 @@ export async function fetchDocumentsFor(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run app/server/src/extract/fetch-documents-for.test.ts`
-Expected: PASS, 10 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Prove the guard by mutation**
 
@@ -847,13 +874,35 @@ await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
 const { one, close, insert, run } = await import("../db/index.js");
-const { app } = await import("../index.js");
-const request = (await import("supertest")).default;
+const { api } = await import("./index.js");
+const express = (await import("express")).default;
 
 let solicitationId: number;
+let server: any;
+let base: string;
+
+/* ⚖️ RULING (preflight, 2026-09-05): NO `supertest`. It is not a dependency of
+ * this repo, and `routes.test.ts` already establishes the house harness --
+ * `app.listen(0)` on an ephemeral port, then real `fetch`. Adding a dependency
+ * so one new test can differ from every existing route test is the wrong
+ * trade. This block mirrors routes.test.ts:18-32 deliberately. */
+type Res = [status: number, body: any];
+const post = (p: string): Promise<Res> =>
+  fetch(base + p, { method: "POST" }).then(async (r) => [r.status, await r.json()] as Res);
+const get = (p: string): Promise<Res> =>
+  fetch(base + p).then(async (r) => [r.status, await r.json()] as Res);
 
 beforeAll(async () => {
   await migrate(false);
+  const app = express();
+  app.use(express.json());
+  app.use("/api", api);
+  await new Promise<void>((r) => {
+    server = app.listen(0, () => {
+      base = `http://127.0.0.1:${server.address().port}/api`;
+      r();
+    });
+  });
 }, 120000);
 
 beforeEach(async () => {
@@ -868,6 +917,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await new Promise<void>((r) => server.close(() => r()));
   await close();
 });
 
@@ -878,23 +928,23 @@ test("an already-checked solicitation returns already-looked and spends nothing"
   await run(`UPDATE solicitation SET attachments_checked_at = now() WHERE id = $1`, [
     solicitationId,
   ]);
-  const res = await request(app).post(`/api/solicitations/${solicitationId}/documents`);
-  expect(res.status).toBe(200);
-  expect(res.body.reason).toBe("already-looked");
-  expect(res.body.spent).toBe(0);
+  const [status, body] = await post(`/solicitations/${solicitationId}/documents`);
+  expect(status).toBe(200);
+  expect(body.reason).toBe("already-looked");
+  expect(body.spent).toBe(0);
 });
 
 test("an unknown solicitation is a 404, not a 500", async () => {
-  const res = await request(app).post(`/api/solicitations/999999/documents`);
-  expect(res.status).toBe(404);
+  const [status] = await post(`/solicitations/999999/documents`);
+  expect(status).toBe(404);
 });
 
 /* 🔴 GET MUST STAY FREE. This is the reason the fetch is a POST at all:
  * prefetch, retries, double-renders and crawlers all issue GETs, and none
  * of them is a decision anyone made. */
 test("GET on the record does not fetch documents or write a tally", async () => {
-  const res = await request(app).get(`/api/solicitations/${solicitationId}`);
-  expect(res.status).toBe(200);
+  const [status] = await get(`/solicitations/${solicitationId}`);
+  expect(status).toBe(200);
   const s = await one<{ attachments_checked_at: Date | null }>(
     `SELECT attachments_checked_at FROM solicitation WHERE id = $1`,
     [solicitationId],
@@ -903,7 +953,7 @@ test("GET on the record does not fetch documents or write a tally", async () => 
 });
 ```
 
-If `supertest` is not already a devDependency, use the same HTTP-calling style the existing `app/server/src/routes/routes.test.ts` uses instead, and mirror its imports exactly.
+The harness above mirrors `app/server/src/routes/routes.test.ts:18-32`. Do not add `supertest`.
 
 - [ ] **Step 2: Run the test to verify it fails**
 

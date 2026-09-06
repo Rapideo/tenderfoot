@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Shell } from "../shell/Shell";
 import { Button, Callout, MicroLabel, Section, TableRow } from "../primitives";
@@ -51,6 +51,11 @@ interface RecordBody {
   fields: Field[];
   documents: Doc[];
   timeline: Event[];
+  /* Null means "we have never asked the source for its documents." Non-null
+   * means we have -- which is a different fact from whether it found any
+   * (D2, design spec §8). `GET /solicitations/:id` already returns this: the
+   * handler does `SELECT s.*`, and migration 011 put the column there. */
+  attachments_checked_at: string | null;
 }
 
 /* The bundle's own column template for the tabFields panel (V1.2), copied
@@ -101,6 +106,26 @@ function extColour(mediaType: string | null): string {
 }
 
 const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%`);
+
+/* D28 (corrected on review, fix round 1): only ONE state needed inventing.
+ * The bundle's Documents tab is a static fixture that always has files, so
+ * it never needed a "not yet looked" rendering -- CHECKING FOR DOCUMENTS is
+ * genuinely new. The checked-and-zero case is NOT new copy: the bundle
+ * computes its own head unconditionally as `"BUNDLE — " + D.docs.length +
+ * " FILES"` (V1.2 ~581620, no zero branch), and because CHECKING already
+ * reads distinctly from it, `BUNDLE — 0 FILES` already satisfies "a reader
+ * can tell not-yet-looked from looked-and-none" with zero invented copy.
+ * Inventing a second string here would have been the richer-than-the-bundle
+ * treatment §7.10 warns against.
+ *
+ * `checkedAt` is compared with `=== null` on purpose, not `?? falsy`: a
+ * fixture that omits the field entirely (every OLDER test in this file)
+ * reads `undefined`, which must fall through to the ordinary count below,
+ * not into CHECKING -- there is nothing to check for those records. */
+function doclistHead(checkedAt: string | null | undefined, count: number): string {
+  if (checkedAt === null) return "CHECKING FOR DOCUMENTS…";
+  return `BUNDLE — ${count} FILE${count === 1 ? "" : "S"}`;
+}
 
 /* THREE STATES, NOT TWO. "We looked and it is not there" is a different fact
  * from "we never looked", and collapsing them is how a missing ceiling
@@ -170,9 +195,42 @@ export function Record() {
    * deferred criterion bullets, and the only one with a citation to read. */
   const [tab, setTab] = useState<TabKey>("fields");
   const [openDoc, setOpenDoc] = useState<number | null>(null);
+  /* CRITICAL FIX, review round 1: the on-demand POST's own response carries
+   * `documents` as a COUNT (Task 4's interface) -- there is nothing to splice
+   * into `body.documents` without inventing filenames the API never sent,
+   * but the COUNT itself is real and is what the head label needs right now,
+   * not after a reload. `body.documents.length` stays whatever the ORIGINAL
+   * GET returned (0, for a record fetched for the first time this session)
+   * and is never otherwise refreshed, so reading it for the label after a
+   * successful fetch rendered "NO DOCUMENTS" over a record the database had
+   * just recorded 7 documents against -- a false claim, not merely a stale
+   * one.
+   *
+   * FINAL-REVIEW FIX: `documents` is a number on EVERY outcome, not only
+   * "fetched" -- it is 0 for "unsupported", "ceiling", and a racing
+   * "already-looked", and none of those mean "we looked and found none," they
+   * mean "we did not ask this time." Overriding on any of them clobbers a
+   * real, already-known count with a stray 0. This is live: discover-idoa.ts
+   * writes `document` rows but never stamps `attachments_checked_at`, and IDOA
+   * has no `DOCUMENT_CLIENTS` entry, so opening an IDOA record that HOLDS
+   * files used to settle from CHECKING straight to "BUNDLE — 0 FILES" over the
+   * very file list it had just rendered. The override below is now gated on
+   * `reason === "fetched"` -- the only outcome that actually asked the source
+   * something new. Every other settled outcome still clears the CHECKING
+   * state (the stamp, below) but leaves the count to `body.documents.length`,
+   * the pre-branch rendering.
+   *
+   * Null means "trust `body.documents.length`" (true whenever the record was
+   * already checked before this component mounted, whenever this outcome
+   * wasn't a fresh fetch, or nothing has resolved yet); non-null means "this
+   * session's own FETCHED outcome just found this many," and overrides. Reset
+   * to null on every id change below, so a previous record's count cannot
+   * leak onto a newly opened one. */
+  const [freshDocCount, setFreshDocCount] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
+    setFreshDocCount(null);
     fetch(`/api/solicitations/${id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => live && setBody(b as RecordBody))
@@ -181,6 +239,49 @@ export function Record() {
       live = false;
     };
   }, [id]);
+
+  /* ⚖️ D2, design spec §8: a solicitation's documents are fetched once, the
+   * first time it is opened with `attachments_checked_at` still null --
+   * never in bulk (CLAUDE.md §5.2). Guarded by a REF keyed to `id`, not by
+   * re-reading `body.attachments_checked_at`: React re-renders freely and
+   * StrictMode double-invokes effects in development, and "the stamp makes a
+   * duplicate call free rather than harmful" is a SERVER fact the client
+   * must not lean on (spec §8). The ref is what actually holds that line. */
+  const checkedDocsFor = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!body || body.attachments_checked_at !== null) return;
+    if (checkedDocsFor.current === id) return;
+    checkedDocsFor.current = id;
+
+    /* IMPORTANT FIX, review round 1: reused verbatim from the GET effect
+     * above. Without it, a POST for a record the user has since navigated
+     * away from can land after `id` (and `body`) have already moved on, and
+     * stamp/merge onto whatever record is now displayed. */
+    let live = true;
+    fetch(`/api/solicitations/${id}/documents`, { method: "POST" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((outcome: { reason?: string; documents?: number } | null) => {
+        if (!live) return;
+        setBody((prev) => (prev ? { ...prev, attachments_checked_at: new Date().toISOString() } : prev));
+        /* Gated on `reason`, not merely on `documents` being a number -- see
+         * the comment on `freshDocCount`'s declaration above. Only "fetched"
+         * means the source was actually asked; every other outcome's 0 is not
+         * a count, it is the absence of one. */
+        if (outcome && outcome.reason === "fetched" && typeof outcome.documents === "number") {
+          setFreshDocCount(outcome.documents);
+        }
+      })
+      .catch(() => {
+        /* Left null. A network failure is not "we looked" -- the bundle
+         * region stays on CHECKING rather than lying into a file count. The
+         * ref set above still holds: this record will not retry itself into
+         * a spend loop just because the first attempt failed. */
+      });
+    return () => {
+      live = false;
+    };
+  }, [id, body]);
 
   const selected =
     body?.documents.find((d) => d.id === openDoc) ?? body?.documents[0] ?? null;
@@ -299,7 +400,7 @@ export function Record() {
         <div className="record__docs">
           <div className="record__doclist">
             <div className="record__doclist-head">
-              {`BUNDLE — ${body.documents.length} FILE${body.documents.length === 1 ? "" : "S"}`}
+              {doclistHead(body.attachments_checked_at, freshDocCount ?? body.documents.length)}
             </div>
             {body.documents.map((d) => (
               <button

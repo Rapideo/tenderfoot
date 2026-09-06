@@ -1,24 +1,5 @@
 import { all, run, insert } from "../db/index.js";
-import { SAM_HOST } from "../scrape/adapters/sam.js";
-
-/* Task 9 fix round 1 (CRITICAL): the original host here was
- * `https://api.sam.gov/prod/opportunity/v1/api/`, written from memory and
- * never verified -- it 404s on every id shape, so this function inserted
- * zero documents, ever. The real, working, unauthenticated endpoints (same
- * host the scrape adapter and health probe already use -- see SAM_HOST's
- * own comment) are:
- *
- *   {SAM_HOST}/opps/v3/opportunities/{noticeId}/resources           -- list
- *   {SAM_HOST}/opps/v3/opportunities/resources/files/{resourceId}/download
- *                                                    -- 303 -> signed S3
- *
- * The response SHAPE this file already parses (_embedded.
- * opportunityAttachmentList[].attachments[]) was correct from the start;
- * only the URL was wrong. */
-const resourcesUrl = (noticeId: string): string =>
-  `${SAM_HOST}/opps/v3/opportunities/${encodeURIComponent(noticeId)}/resources`;
-const downloadUrl = (resourceId: string): string =>
-  `${SAM_HOST}/opps/v3/opportunities/resources/files/${encodeURIComponent(resourceId)}/download`;
+import { samDocumentClient } from "./document-clients.js";
 
 /* Two fix-round-1 defects live in this query, and they compound, so they
  * are documented together.
@@ -155,10 +136,6 @@ interface Candidate {
   value_cents: number | null;
 }
 
-interface AttachmentsResponse {
-  _embedded?: { opportunityAttachmentList?: { attachments?: Record<string, string>[] }[] };
-}
-
 /* THE GROUND TRUTH ROWS. corpus/FINDINGS.md §1 established that the portal's
  * structured field was right where all three documents were unreliable, so the
  * listing is what document extraction is measured AGAINST. Nothing else in this
@@ -240,7 +217,21 @@ async function writeListingRows(c: Candidate): Promise<number> {
  *
  * Defaulted generously rather than required, which is the shape scrape/run.ts
  * established and STATUS records: "the CLI passes a generous budget, the HTTP
- * handler one below 300s, and the same code serves both." */
+ * handler one below 300s, and the same code serves both."
+ *
+ * ⚠️ FINAL-REVIEW NOTE, D2: THIS PATH IS SAM-ONLY, AND DELIBERATELY. The loop
+ * below calls `samDocumentClient.fetchFor` directly -- not `DOCUMENT_CLIENTS`,
+ * not a source-keyed lookup -- because it has NO CEILING and NO TALLY. That
+ * is fine for SAM.gov, which is free, but design spec §10 tells the next
+ * implementer that wiring a paid source in is "a document client plus a
+ * registry entry," and generalising this batch pass to index
+ * `DOCUMENT_CLIENTS` is the obvious-looking next edit. Doing that here would
+ * silently build the bulk pass CLAUDE.md §5.2 calls structurally impossible
+ * (93,000-176,000 records for Indiana alone), and the 24-hour re-check above
+ * would re-pay it daily for every document-less notice on top. A metered
+ * client belongs behind `fetchDocumentsFor` (fetch-documents-for.ts) instead,
+ * which has both: the ceiling, checked before the source is ever called, and
+ * the tally, committed the moment the vendor has billed it. */
 export async function discoverAttachments(
   limit: number,
   fetchImpl: typeof fetch = fetch,
@@ -271,56 +262,26 @@ export async function discoverAttachments(
      * solicitation -- an inconsistency, not a deliberate distinction. Both
      * now skip just this solicitation and are counted the same way, so an
      * operator can tell "nothing to fetch" (skipped: 0) from "every request
-     * failed" (skipped === solicitations) once this fix lands. The
-     * User-Agent is not decoration -- sam.ts's adapter and probe both treat
-     * it as mandatory; the default Node agent is rejected. */
-    const url = resourcesUrl(s.external_id);
-    let res: Response;
+     * failed" (skipped === solicitations) once this fix lands. */
+    let fetched;
     try {
-      res = await fetchImpl(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+      fetched = await samDocumentClient.fetchFor(s.external_id, fetchImpl);
     } catch {
-      skipped++;
-      continue;
-    }
-    if (!res.ok) {
+      /* A thrown fetch and a non-OK response both skip THIS solicitation
+       * only, and are counted the same way -- fix round 1, item 4. The
+       * stamp below is not reached, which is the point: a bad minute must
+       * not retire a notice. */
       skipped++;
       continue;
     }
 
-    let body: AttachmentsResponse;
-    try {
-      body = (await res.json()) as AttachmentsResponse;
-    } catch {
-      skipped++;
-      continue;
-    }
-
-    const list = body._embedded?.opportunityAttachmentList ?? [];
-    for (const group of list) {
-      for (const a of group.attachments ?? []) {
-        if (a.fileExists !== "1") continue;
-        /* Fix round 1, item 3: `a.name` is typed as string but SAM.gov can
-         * hand back an attachment with no name at runtime. document.filename
-         * is NOT NULL, so an unguarded insert throws 23502 with no
-         * try/catch around this loop -- which aborted this solicitation's
-         * WHOLE remaining attachment list AND every candidate after it in
-         * the batch. Skip just the malformed attachment instead; it is
-         * simply never counted as a document.
-         *
-         * `a.resourceId` needs the SAME guard for a quieter reason: it is
-         * NOT NULL-constrained by anything, so a missing one produces the
-         * perfectly well-formed URL `.../files/undefined/download` and a
-         * document row that Task 10 then fetches, fails, and marks failed
-         * forever. tsconfig's noUncheckedIndexedAccess is what forces the
-         * check to be written; the runtime reason is the one that matters. */
-        if (!a.name || !a.resourceId) continue;
-        await insert(
-          `INSERT INTO document (solicitation_id, filename, source_url, extract_status)
-           VALUES ($1, $2, $3, 'pending') RETURNING id`,
-          [s.id, a.name, downloadUrl(a.resourceId)],
-        );
-        documents++;
-      }
+    for (const d of fetched.documents) {
+      await insert(
+        `INSERT INTO document (solicitation_id, filename, source_url, extract_status)
+         VALUES ($1, $2, $3, 'pending') RETURNING id`,
+        [s.id, d.filename, d.sourceUrl],
+      );
+      documents++;
     }
 
     /* REVIEW FINDING 2 (Major, 2026-08-30). STAMPED HERE, AND ONLY HERE:

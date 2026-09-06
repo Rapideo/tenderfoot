@@ -67,6 +67,15 @@ A real example, live at the time of writing: the prototype renders an extraction
 
 ⚠️ **Consumption cannot be measured from the API.** There is no quota field, no usage endpoint, no header — `meta` carries only `{pagination}`. **Only the account dashboard shows it** (gear icon → API, admin only), which means **a person reading a number is the sole instrument.** Anything unattended must keep its own tally in `ingest_run`, because the vendor will not tell us and a run cannot ask how much is left before it starts.
 
+> ⚠️ **AMENDED 2026-09-05 (ruling D2).** On-demand document fetches tally in
+> **`api_spend`**, not `ingest_run`. `ingest_run.artifact_sha256` is
+> `NOT NULL UNIQUE` and an on-demand fetch has no artifact, so a synthetic hash
+> would fight both the column's meaning and its uniqueness — and every reader of
+> `ingest_run`, the admin run history included, would start seeing rows that are
+> not ingests. **`SELECT sum(records) FROM api_spend WHERE called_at >=
+> date_trunc('month', now())` is now the question's answer.** Approved by Matt
+> 2026-09-05.
+
 **The meter counts records RETURNED** — verified 2026-09-03 by an isolated test: 478 → 489 on a call returning 1 opportunity + 10 documents. Errors and zero-result calls appear not to count. Filtering therefore protects the allowance, and **paging is a real cost**: the first document page returned 10 of 19, so pulling the rest nearly doubles the price.
 
 ### 5.2 Stage retrieval so that rejection is free and only acceptance costs

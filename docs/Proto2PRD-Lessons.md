@@ -531,6 +531,24 @@ shows the same shape.
 
 ---
 
+### 2.27 A spec can specify something the repo already has
+
+**Observed 2026-09-05.** The on-demand documents spec proposed a `documents_fetched_at` column.
+`attachments_checked_at` already existed — migration 011, indexed, stamped by the batch pass, with
+exactly the semantics the spec argued for, arrived at independently on 2026-08-30. It was found
+while writing the implementation plan, because the plan had to name real signatures rather than
+describe the concept in the abstract.
+
+**Proposed generalisation.** Grep the schema for the CONCEPT, not the name you chose for it. The
+same idea had already been built three times in this project (`health_checked_at`,
+`attachments_checked_at`, `watermark_probed_at`) before this was its fourth — a spec written from
+first principles, without that grep, would have shipped a second column meaning the same thing.
+
+**Why not promoted.** One project, though four instances of the same drift within it. Promote if a
+second project shows a spec re-inventing something its own schema already has.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
