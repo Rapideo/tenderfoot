@@ -1569,8 +1569,9 @@ test("the spend is recorded even when the item write fails", async () => {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
   };
-  /* Force the item write to fail by dropping the check constraint's target
-   * value into an impossible state: a run row that does not exist. */
+  /* `failItemWriteForTest` throws a plain Error after the fetches and after
+   * the spend is recorded, but before any coverage_item is written -- which
+   * is exactly the window this test exists to probe. */
   /* `failItemWriteForTest` is a declared field on RunOptions, not a cast:
    * a test-only escape hatch is named for what it is rather than smuggled
    * past the type system. */
@@ -1768,7 +1769,7 @@ import {
   spentThisMonth,
 } from "../extract/api-spend.js";
 import { higherGovClient, HIGHERGOV_SOURCE_NAME, type HigherGovClient } from "./highergov-client.js";
-import { idoaKeyFrom, IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
+import { IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
 import { dedupBySourceId, observe, type Observation } from "./compare.js";
 import { COVERAGE } from "./thresholds.js";
 import type { FeedNotice } from "./highergov-client.js";
@@ -1883,7 +1884,7 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
       break;
     }
 
-    if (spent > COVERAGE.maxRecordsPerRun) {
+    if (spent >= COVERAGE.maxRecordsPerRun) {
       aborted = true;
       abortReason =
         `Stopped at maxRecordsPerRun: ${spent} records exceeds ${COVERAGE.maxRecordsPerRun}. ` +
@@ -1914,10 +1915,21 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
 
   if (!aborted) {
     for (const entry of key) {
-      if (found.has(entry.externalId) || settledIds.has(entry.externalId)) {
+      if (found.has(entry.externalId)) {
         checkedIds.add(entry.externalId);
         continue;
       }
+      /* 🔴 SETTLED EARLIER, SO WE DID NOT LOOK -- AND MUST NOT SAY WE DID.
+       * This used to be folded into the condition above, adding the id to
+       * `checkedIds`. That was a false-miss generator: `checkedIds` means "we
+       * asked", `found` means "they have it", and `observe` grades
+       * not-in-found + in-checked as MISSING. A notice settled `carried` by an
+       * earlier run is in neither this run's feed nor its probes, so every
+       * later run wrote it as a miss -- one per settled notice per run,
+       * compounding forever, for a record we deliberately did not spend.
+       * Leaving it out of `checkedIds` records `unchecked`, which is what
+       * actually happened; gradedItems() still surfaces the earlier `carried`. */
+      if (settledIds.has(entry.externalId)) continue;
       if (spent >= COVERAGE.maxRecordsPerRun) {
         /* Out of budget. Everything still unresolved stays `unchecked` and is
          * re-asked next run -- which is what the accumulating cohort is for.
@@ -1938,7 +1950,11 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
       spent += probe.records;
       checkedIds.add(entry.externalId);
       const hit = dedupBySourceId(probe.notices).notices[0];
-      if (hit) found.set(entry.externalId, hit);
+      /* The id is VERIFIED, not assumed. observe() re-keys off n.externalId, so
+       * a probe answering with a different notice would write a miss here and
+       * a spurious carried elsewhere -- and the "unique by construction"
+       * property this map relies on would quietly stop holding. */
+      if (hit && hit.externalId === entry.externalId) found.set(entry.externalId, hit);
     }
   }
 
