@@ -1,0 +1,166 @@
+/* ASKING HIGHERGOV WHAT IT CARRIED, AND NOTHING ELSE.
+ *
+ * ⚠️ NO DATABASE ACCESS HERE, DELIBERATELY -- same posture as
+ * extract/document-clients.ts. A client fetches and parses; the caller
+ * decides what to write and what it cost. That is what lets run.ts own the
+ * spend guard, the tally and the abort in one place.
+ *
+ * 🛑 THIS IS THE FIRST COMMITTED CODE IN THIS PROJECT TO CALL THIS API. The
+ * 2026-09-03 work ran in throwaway scripts, and it leaked a live key. All
+ * three CLAUDE.md §5.3 rules are structural here rather than remembered:
+ *
+ *   1. document_path is a CREDENTIAL. It is dropped at parse time -- it
+ *      never enters a FeedNotice, so no caller can persist or print it.
+ *   2. Scrubbing happens at the BOUNDARY. redact() walks every value, and it
+ *      is what any diagnostic path must pass through. The leak happened
+ *      because a scrub() helper covered every ERROR path while field VALUES
+ *      printed raw -- the key was thought of as something in the REQUEST,
+ *      not something that comes BACK.
+ *   3. The URL is built HERE, from the environment. Never in a shell
+ *      command, where it would land in history and process listings.
+ *
+ * ⚠️ NOT REGISTERED IN scrape/adapters/registry.ts, AND THAT IS DELIBERATE
+ * (spec §7.1). Registering it would make a source still under test reachable
+ * by the real ingest path, which is the whole argument of spec §5.1. */
+
+const HOST = "https://www.highergov.com/api-external";
+
+/* Seeded by migration 019 as the first source in this project that costs
+ * money. Hand-typed here because HigherGov has no ADAPTERS entry to derive
+ * it from -- see the header. run.ts asserts this row exists before spending,
+ * which is what turns a rename into a loud failure rather than a silent
+ * miscount against the wrong source_id. */
+export const HIGHERGOV_SOURCE_NAME = "HigherGov";
+
+export interface FeedNotice {
+  /** Their `source_id`. For Indiana this IS IDOA's own 15-digit Event ID,
+   * which is what makes exact-match comparison possible at all. */
+  externalId: string;
+  capturedDate: string | null;
+  versionKey: string | null;
+  title: string | null;
+}
+
+export interface FeedResult {
+  notices: FeedNotice[];
+  /** What the VENDOR billed: the row count, BEFORE dedup. */
+  records: number;
+  /** meta.pagination.count -- the saved-search change detector. */
+  feedCount: number | null;
+}
+
+export interface HigherGovClient {
+  fetchDay(capturedDate: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
+  fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
+}
+
+/* Matches an api_key wherever it appears in a string, in any nesting. Broad
+ * on purpose: the failure mode of over-redacting is an unreadable diagnostic,
+ * and the failure mode of under-redacting is a rotated credential and an
+ * incident. */
+const KEY_IN_STRING = /api_key=[^&\s"']+/gi;
+
+export function redact<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(KEY_IN_STRING, "api_key=REDACTED") as unknown as T;
+  }
+  if (Array.isArray(value)) return value.map(redact) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redact(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
+interface RawResult {
+  source_id?: unknown;
+  captured_date?: unknown;
+  version_key?: unknown;
+  title?: unknown;
+}
+
+interface RawBody {
+  meta?: { pagination?: { count?: unknown } };
+  results?: RawResult[];
+}
+
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/* document_path is READ BY NOBODY. Dropping it here, at parse, is rule 1
+ * made structural: there is no later point at which a caller could leak
+ * what it never received. */
+function toNotice(r: RawResult): FeedNotice | null {
+  const externalId = str(r.source_id);
+  if (!externalId) return null;
+  return {
+    externalId,
+    capturedDate: str(r.captured_date),
+    versionKey: str(r.version_key),
+    title: str(r.title),
+  };
+}
+
+function apiKey(): string {
+  const key = process.env.HIGHERGOV_API_KEY;
+  if (!key) {
+    throw new Error(
+      "HIGHERGOV_API_KEY is not set. It is a URL parameter for this API -- " +
+        "build the URL in this module, never in a shell command (CLAUDE.md §5.3).",
+    );
+  }
+  return key;
+}
+
+async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+  const res = await fetchImpl(url.toString(), {
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) {
+    /* The URL is NOT in this message: it carries the api_key. */
+    throw new Error(`HigherGov answered ${res.status}`);
+  }
+  const body = (await res.json()) as RawBody;
+  const notices = (body.results ?? []).map(toNotice).filter((n): n is FeedNotice => n !== null);
+  const count = body.meta?.pagination?.count;
+  return {
+    notices,
+    /* The row count, not notices.length: a row we could not parse was still
+     * billed. Under-reporting is the dangerous direction against a ceiling
+     * that cannot be read back (api-spend.ts). */
+    records: (body.results ?? []).length,
+    feedCount: typeof count === "number" ? count : null,
+  };
+}
+
+export const higherGovClient: HigherGovClient = {
+  async fetchDay(capturedDate, fetchImpl = fetch) {
+    const url = new URL(`${HOST}/opportunity/`);
+    url.searchParams.set("api_key", apiKey());
+    url.searchParams.set("captured_date", capturedDate);
+    /* 🔴 R1: /opportunity/ takes twelve parameters and NONE is a location.
+     * pop_state, state and place_of_performance_state were all accepted and
+     * SILENTLY IGNORED. State filtering exists only through a saved search,
+     * so HIGHERGOV_SEARCH_ID is the Indiana filter -- and it lives in their
+     * account, not in our code. run.ts records it per run for exactly that
+     * reason. */
+    const searchId = process.env.HIGHERGOV_SEARCH_ID;
+    if (searchId) url.searchParams.set("search_id", searchId);
+    return get(url, fetchImpl);
+  },
+
+  async fetchBySourceId(sourceId, fetchImpl = fetch) {
+    const url = new URL(`${HOST}/opportunity/`);
+    url.searchParams.set("api_key", apiKey());
+    url.searchParams.set("source_id", sourceId);
+    /* No search_id: an exact-id lookup must not be narrowed by a saved
+     * search, or a notice outside the search would read as a MISS when it
+     * was merely out of scope -- a false miss is the one error that would
+     * un-shelve the adapter backlog for no reason. */
+    return get(url, fetchImpl);
+  },
+};
