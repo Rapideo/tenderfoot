@@ -400,8 +400,11 @@ assuming any of these is still open** — Artifact tool, `action: "read_db"`,
 option letter shown below. An empty collection means he has not answered yet, not
 that the questions went away.
 
-**✅ ALL SEVEN ANSWERED 2026-09-04.** Five are built and pushed; the two
-production halves are blocked on the harness, not on him.
+**✅ ALL SEVEN ANSWERED 2026-09-04.** ~~Five are built and pushed; the two
+production halves are blocked on the harness, not on him.~~ ✅ **CORRECTED
+2026-09-05 — all seven are now built.** The two production halves (D6, D7) are
+DONE, not blocked: see their rows immediately below, and the 2026-09-05 RESUME
+HERE entry above for the verified detail.
 
 | | Decision | He ruled | State |
 |---|---|---|---|
@@ -546,6 +549,14 @@ The block above is left as originally printed rather than edited in place —
 this project's convention is that a reader meets the correction, not a
 silently-changed number.
 
+**✅ PRODUCTION CAUGHT UP TOO — 2026-09-05, and the correction above is now
+half-stale in turn.** It reads as though the `test`-branch flip is where this
+stands; it is not. The same 204,920 contracts are now loaded into
+**production** (D6), and **F1 and F2 pass there too — verified by direct
+query, not carried over from the `test` figure above.** See the 2026-09-05
+RESUME HERE entry. F5, F6 and F7 are what still block production's
+GO/NO-GO, not F1/F2.
+
 **Two numbers worse than anything previously quoted.** Sample 2's median of 515
 chars hid a tenth of biddable rows at **57 characters or fewer**. And **979 rows
 explicitly say "see the attachment"**; we hold three.
@@ -656,10 +667,14 @@ to read it.
 - **The description ruling.** ~34% of rows carry no description, **58% among
   sub-state buyers** — and the gap does NOT track work type: KP's own sector is
   missing descriptions **42%** of the time, and 3 of 5 such rows were NAICS
-  541611, KP's primary code. All INDOT. **Four options costed in
+  541611, KP's primary code. All INDOT. ~~Four options costed in
   `docs/2026-09-03-platform-comparison.md`; Option C (fetch on demand,
-  ~11 records per click) recommended and unruled.**
-- **The floor's thresholds are unratified** — F1=2, F5=100, F6=200, F7=0.8.
+  ~11 records per click) recommended and unruled.~~ ✅ **RULED AND BUILT.**
+  Matt chose **A** — fetch on open (D2, ruling table above) — and the
+  mechanism is built, proven against SAM.gov at zero cost: see the 2026-09-05
+  RESUME HERE entry.
+- ~~**The floor's thresholds are unratified** — F1=2, F5=100, F6=200, F7=0.8.~~
+  ✅ **RATIFIED 2026-09-04 (D4)** — `THRESHOLDS_RATIFIED = true`.
 - ~~**The best-scoring source in the registry has never been run.** The Indiana
   EDS contract register grades STRONG on five of nine — free, primary
   geography, full archive to 2005, verified watermark — and is **exactly the fix
@@ -668,6 +683,9 @@ to read it.
   86 seconds. **F1 and F2 now PASS** (3 sources ingested, threshold 2; 2 in
   Indiana, threshold 1). See
   [`docs/2026-09-03-eds-ingest-run.md`](docs/2026-09-03-eds-ingest-run.md).
+  ✅ **PRODUCTION CAUGHT UP 2026-09-05** — the same load, by hand, against
+  production (D6); F1/F2 pass there too, verified directly. See the
+  2026-09-05 RESUME HERE entry.
 - **Michigan SIGMA is outside the firm profile entirely** (`IN` primary,
   `IL/OH/KY` secondary — MI is neither). Worth knowing before anyone budgets an
   adapter for it.
@@ -999,6 +1017,8 @@ score — is the parked qualification question above, and it is the one that nee
 **Only SAM.gov has ever been ingested.** `Indiana IDOA solicitations` and `Indiana EDS` are health `ok`, `enabled=no`, `last_run=never` — arguably KP's core ground, contributing nothing. **Any GO/NO-GO taken now is a verdict on federal SAM.gov alone and must say so in those words.** Turning state sources on is a separate decision and was not taken.
 
 **⚠️ OVERTAKEN ON `test`, STILL BINDING ON PRODUCTION — 2026-09-03.** The Indiana EDS contract register has since been ingested: **204,920 contracts against the `test` branch**, so `Indiana EDS` is no longer `last_run=never` there and floor predicates F1/F2 pass. *Production is untouched and this entry's verdict still binds it* — a GO/NO-GO taken against production remains a verdict on federal SAM.gov alone. See `docs/2026-09-03-eds-ingest-run.md`.
+
+**✅ OVERTAKEN AGAIN, ON PRODUCTION THIS TIME — 2026-09-05.** *Production is untouched* stopped being true the same way `test` did: D6 loaded the same **204,920 contracts** into production by hand, and F1/F2 now pass there too, verified by direct query — see the 2026-09-05 RESUME HERE entry. **This paragraph's verdict — "a GO/NO-GO taken now is a verdict on federal SAM.gov alone" — is binding for its date and no longer binding today.** Left as originally printed, per this file's own convention, rather than edited in place.
 
 ### ✅ WHAT LANDED TODAY, all on `main`, gate green at 71 files
 - **Matt's five fidelity rulings** — score strip back (D13 reversed), conflicts inline (§6.1 amended), seven-item nav with stubs, tabs disclosed, CONFIDENCE held at a flat 0.6. Deviations **D17–D20**.
