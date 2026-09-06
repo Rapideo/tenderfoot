@@ -69,6 +69,7 @@ export interface KeyEntry {
   keyOrigin: string;             // e.g. "Indiana IDOA solicitations"
   deadline: string | null;       // YYYY-MM-DD, from merge/closes-at.ts
 }
+export const IDOA_SOURCE_NAME: string;
 export function idoaKeyFrom(html: string): KeyEntry[];
 
 // Task 5 — coverage/compare.ts
@@ -517,6 +518,15 @@ Create `app/server/src/coverage/highergov-client.test.ts`:
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+
+/* fetchDay builds its URL BEFORE it calls the injected fetchImpl, so apiKey()
+ * runs even here -- without this the suite fails wherever the key is absent,
+ * and CI has no .env at all. HARD-SET rather than `??=`: if .env carries a
+ * real key, defaulting would interpolate the real credential into a URL
+ * string. It is never sent anywhere, but CLAUDE.md §5.3's posture is that
+ * this value is not handled casually. */
+process.env.HIGHERGOV_API_KEY = "TESTKEYTESTKEYTESTKEYTESTKEY0000";
+
 import { higherGovClient, redact } from "./highergov-client.js";
 
 const FIXTURE = readFileSync(
@@ -789,7 +799,7 @@ git commit -m "Coverage: the first committed code to call the API that leaked a 
 
 **Interfaces:**
 - Consumes: `parseIdoaPage` from `../scrape/adapters/idoa.js`; `closesAt` from `../merge/closes-at.js`.
-- Produces: `Segment`, `KeyEntry`, `idoaKeyFrom` — used by Tasks 5, 6 and 7.
+- Produces: `Segment`, `KeyEntry`, `IDOA_SOURCE_NAME`, `idoaKeyFrom` — used by Tasks 5, 6 and 7.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -840,7 +850,7 @@ test("deadlines are parsed to bare ISO dates, not invented timestamps", () => {
 test("an unparseable due date yields null rather than a guess", () => {
   const key = idoaKeyFrom(
     `<table><thead><tr><th>Event Name</th><th>Agency</th><th>Event ID</th>` +
-      `<th>Description</th><th>Response Due By</th><th>Contact</th></tr></thead>` +
+      `<th>Event Description</th><th>Response Due By</th><th>Contact</th></tr></thead>` +
       `<tbody><tr><td>Thing</td><td>DNR</td><td>003000000099999</td>` +
       `<td>d</td><td>TBD</td><td>c</td></tr></tbody></table>`,
   );
@@ -1482,6 +1492,7 @@ Create `app/server/src/coverage/run.test.ts`:
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { useTestSchema, resetSchema } from "../db/testdb.js";
 import type { HigherGovClient, FeedResult } from "./highergov-client.js";
+import type { KeyEntry } from "./answer-key.js";
 
 useTestSchema("test_coverage_run");
 await resetSchema();
@@ -1588,15 +1599,81 @@ test("a run aborts at maxRecordsPerRun rather than continuing", async () => {
   expect(row!.aborted).toBe(true);
 });
 
+const keyOf = (...ids: string[]): KeyEntry[] =>
+  ids.map((externalId) => ({
+    externalId,
+    segment: "state_agency" as const,
+    keyOrigin: "Indiana IDOA solicitations",
+    deadline: "2026-09-30",
+  }));
+
 test("an aborted run's unqueried days leave no misses behind", async () => {
   const heavy: FeedResult = { notices: [], records: COVERAGE.maxRecordsPerRun + 1, feedCount: 1 };
   await runCoverage({
     from: "2026-09-03",
     to: "2026-09-05",
+    key: keyOf("A", "B", "C"),
     client: fakeClient({ "2026-09-03": heavy }),
   });
+  /* Three notices we never resolved. Every one must be `unchecked`; a single
+   * `missing` here is coverage decay manufactured out of our own budget cap.
+   * The key is non-empty ON PURPOSE -- with no key the assertion holds even
+   * if the abort logic were deleted, and would prove nothing. */
   const misses = await all(`SELECT 1 FROM coverage_item WHERE carried = 'missing'`);
   expect(misses).toHaveLength(0);
+  const unchecked = await all(`SELECT 1 FROM coverage_item WHERE carried = 'unchecked'`);
+  expect(unchecked).toHaveLength(3);
+});
+
+/* 🔴 THE FALSE-MISS GUARD. fetchDay answers "what did you capture in this
+ * window", not "do you carry this notice" -- and most of the answer key was
+ * captured before the window opens. */
+test("a notice absent from the window is looked up by id before being called missing", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      return { notices: [], records: 0, feedCount: 0 };
+    },
+    async fetchBySourceId(sourceId) {
+      return {
+        notices: [
+          { externalId: sourceId, capturedDate: "2026-08-01", versionKey: null, title: null },
+        ],
+        records: 1,
+        feedCount: 1,
+      };
+    },
+  };
+  await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    key: keyOf("003000000088067"),
+    client,
+  });
+  /* Captured 2026-08-01 -- BEFORE the window. Window-absence is not absence. */
+  const row = await one<{ carried: string }>(`SELECT carried FROM coverage_item`);
+  expect(row!.carried).toBe("carried");
+});
+
+test("a notice in neither the window nor the id lookup is a real miss, and cost nothing", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      return { notices: [], records: 0, feedCount: 0 };
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0 };
+    },
+  };
+  const out = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    key: keyOf("003000000088067"),
+    client,
+  });
+  const row = await one<{ carried: string }>(`SELECT carried FROM coverage_item`);
+  expect(row!.carried).toBe("missing");
+  /* The zero is the point: a miss is free to establish and free to re-check,
+   * because the meter counts records RETURNED. */
+  expect(out.recordsSpent).toBe(0);
 });
 
 /* 🔴 THE SAVED-SEARCH DETECTOR. R1: state filtering exists ONLY through a
@@ -1737,8 +1814,15 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
 
   const key = opts.key ?? [];
   const feed: FeedNotice[] = [];
-  const checked = new Set<string>();
   let spent = 0;
+
+  /* Notices an earlier run already saw carried. Spec §5.5: a notice enters
+   * the cohort once and SETTLES when carried -- re-asking would spend a
+   * record to learn what we already know. */
+  const settledRows = await all<{ external_id: string }>(
+    `SELECT DISTINCT external_id FROM coverage_item WHERE carried = 'carried'`,
+  );
+  const settledIds = new Set(settledRows.map((r) => r.external_id));
   let feedCount: number | null = null;
   let aborted = false;
   let abortReason: string | undefined;
@@ -1759,9 +1843,6 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
     if (feedCount === null) feedCount = result.feedCount;
 
     feed.push(...result.notices);
-    /* Every key entry in this day's window is now ANSWERED -- present in the
-     * feed or genuinely absent from it. */
-    for (const entry of key) checked.add(entry.externalId);
 
     if (spent > COVERAGE.maxRecordsPerRun) {
       aborted = true;
@@ -1769,16 +1850,60 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
         `Stopped at maxRecordsPerRun: ${spent} records exceeds ${COVERAGE.maxRecordsPerRun}. ` +
         `Remaining days were not queried, and their notices stay 'unchecked' rather than ` +
         `becoming misses.`;
-      /* An aborted run has answered NOTHING reliably: a notice might have
-       * appeared in a day we never pulled. Clearing `checked` is what makes
-       * every item 'unchecked' rather than a manufactured miss. */
-      checked.clear();
       break;
     }
   }
 
   const { notices, collapsed } = dedupBySourceId(feed);
-  const observations: Observation[] = observe(key, notices, checked);
+
+  /* 🔴 THE FALSE-MISS GUARD, AND THE RUN IS WRONG WITHOUT IT.
+   *
+   * fetchDay answers "what did you CAPTURE in this window", not "do you CARRY
+   * this notice". Most of the answer key was captured before the window
+   * opens, so treating window-absence as a miss would manufacture coverage
+   * decay out of our own choice of dates -- the exact mirror of the
+   * `unchecked`-counted-as-miss defect compare.ts guards against, and in the
+   * direction that wrongly un-shelves the adapter backlog.
+   *
+   * Nearly free by construction: the meter counts records RETURNED
+   * (CLAUDE.md §5.1), so a lookup for a notice they genuinely do not carry
+   * returns nothing and bills nothing. It costs one record precisely when it
+   * converts a false miss into a real find -- the case where we learn
+   * something. */
+  const found = new Map(notices.map((n) => [n.externalId, n]));
+  const checkedIds = new Set<string>();
+
+  if (!aborted) {
+    for (const entry of key) {
+      if (found.has(entry.externalId) || settledIds.has(entry.externalId)) {
+        checkedIds.add(entry.externalId);
+        continue;
+      }
+      if (spent >= COVERAGE.maxRecordsPerRun) {
+        /* Out of budget. Everything still unresolved stays `unchecked` and is
+         * re-asked next run -- which is what the accumulating cohort is for.
+         * The cap is deliberately NOT raised here: it governs money, it ships
+         * unratified, and raising it is Matt's ruling to make. */
+        aborted = true;
+        abortReason =
+          `Stopped at maxRecordsPerRun: ${spent} of ${COVERAGE.maxRecordsPerRun} records. ` +
+          `Unresolved notices stay 'unchecked' and are re-asked next run.`;
+        break;
+      }
+      const probe = await client.fetchBySourceId(entry.externalId, opts.fetchImpl);
+      await recordSpend({ run: exec }, {
+        sourceId: source.id,
+        endpoint: "opportunity",
+        records: probe.records,
+      });
+      spent += probe.records;
+      checkedIds.add(entry.externalId);
+      const hit = dedupBySourceId(probe.notices).notices[0];
+      if (hit) found.set(entry.externalId, hit);
+    }
+  }
+
+  const observations: Observation[] = observe(key, [...found.values()], checkedIds);
 
   if (opts.failItemWriteForTest) {
     throw new Error("forced item-write failure (test only)");
@@ -1850,7 +1975,14 @@ export async function gradedItems() {
             ci.carried, ci.lead_days AS "leadDays"
        FROM coverage_item ci
        JOIN coverage_run cr ON cr.id = ci.run_id
-      ORDER BY ci.external_id, cr.run_at DESC`,
+      ORDER BY ci.external_id,
+               /* carried beats missing beats unchecked, THEN newest. Once the
+                * budget cap can leave a notice `unchecked`, ordering by
+                * recency alone would let a later run OVERWRITE an earlier
+                * `carried` with "we didn't look" -- a settled finding erased
+                * by a budget stop, biasing C1/C2 toward decay. */
+               CASE ci.carried WHEN 'carried' THEN 0 WHEN 'missing' THEN 1 ELSE 2 END,
+               cr.run_at DESC`,
   );
 }
 ```
@@ -1858,7 +1990,7 @@ export async function gradedItems() {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run app/server/src/coverage/run.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Prove the abort by mutation**
 
@@ -2015,6 +2147,8 @@ Insert immediately after the `## 🔖 RESUME HERE` heading, above the 2026-09-05
 **What it measures:** coverage decay — does HigherGov keep finding things? Four predicates, C1–C4, all with UNRATIFIED thresholds. **C2 is the gate**: a notice carried too late to bid is a miss with a tick beside it.
 
 ⚖️ **FOUR RULINGS WAITING, none of which costs a record.** The four C-thresholds; `minCohortSize: 30` in particular, which is BELOW R7's population floor of 100 and traded down to keep the test bounded; `MONTHLY_RECORD_CEILING`, which D2 left unratified at 1,000 and which this slice makes load-bearing for a second actor; and the forward cadence. **And one thing to fill in: the sub-state buyer list** — spec §8.1 carries an empty template, because the right buyers are the ones in KP's working geography and that is Matt's knowledge, not a lookup.
+
+⚠️ **The first run will not resolve the whole answer key.** Confirming ~71 notices costs about one record each where HigherGov carries them, against a per-run cap of 40. Everything unresolved stays `unchecked` — **not** a miss — and is re-asked next run. **A complete first census therefore takes two or three runs**, which is the accumulating cohort working as designed rather than a fault. The cap was deliberately NOT raised to cover it: it governs money, it is unratified, and raising it is Matt's ruling to make.
 
 ⚠️ **The sub-state half of the answer key is NOT BUILT.** `idoaKeyFrom` covers the state-agency segment only. Until the sub-state key exists, `measureCoverage` sees one segment, and **weakest-segment-wins is measuring the segment we did not buy HigherGov for.** The predicate machinery is ready for it; the pages are not chosen. This is the largest open gap in the slice and it is named rather than discovered later.
 
