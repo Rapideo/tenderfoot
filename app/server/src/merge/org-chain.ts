@@ -38,9 +38,19 @@
  *
  * Once, not per row: a merge walks every group, and if the nested shape is
  * the real one this would otherwise print thousands of identical lines and
- * bury the rest of the run's output. Non-fatal by construction -- the name
- * has already been read successfully by the time this is called; the warning
- * is a note to a reader, never a control-flow decision. */
+ * bury the rest of the run's output.
+ *
+ * NON-FATAL, AND ENFORCED, NOT MERELY ASSERTED (final review, fix 1): the
+ * name has already been read into `names` by the time this is called, and
+ * the call itself is wrapped in a try/catch at its call site below -- a
+ * console.warn that throws (a broken stream, a hijacked global) is swallowed
+ * there, not left to propagate out of orgChain and take the whole merge down
+ * with it. As first written this call sat one line BEFORE the assignment and
+ * unguarded, so the claim below used to be false; it is checked by
+ * org-chain.test.ts's "the warning never changes what the chain resolves to"
+ * with a console.warn that actually throws, not just one that is mocked
+ * quiet. The warning is a note to a reader, never a control-flow
+ * decision. */
 let nestedAgencyWarned = false;
 
 function warnNestedAgency(name: string): void {
@@ -123,12 +133,27 @@ export function orgChain(sourceName: string, raw: unknown): string[] {
       const agency = r.agency;
       const nested =
         agency && typeof agency === "object" ? (agency as Record<string, any>).agency_name : undefined;
-      /* Only the NESTED branch actually deciding the name is worth a word --
+      names = [flat || nested];
+      /* MOVED AFTER `names` IS ASSIGNED, AND WRAPPED (final review, fix 1).
+       * Only the NESTED branch actually deciding the name is worth a word --
        * see warnNestedAgency above for why that asymmetry is the whole
        * point. `flat` is already trimmed to "" when unusable, so this fires
-       * on exactly the rows the fallback rescued and on no others. */
-      if (!flat && typeof nested === "string" && nested.trim()) warnNestedAgency(nested.trim());
-      names = [flat || nested];
+       * on exactly the rows the fallback rescued and on no others.
+       *
+       * The try/catch is not defence in depth -- it is the whole point. This
+       * call used to sit one line ABOVE the `names` assignment, unwrapped:
+       * a throwing console.warn would have propagated straight out of
+       * orgChain, past this switch, past the loop below that builds `chain`,
+       * and out of the function entirely -- taking the row's organisation,
+       * and the whole merge run calling it, down with a diagnostic. A
+       * warning must never be able to do that. */
+      if (!flat && typeof nested === "string" && nested.trim()) {
+        try {
+          warnNestedAgency(nested.trim());
+        } catch {
+          /* Swallowed on purpose: see the comment above. */
+        }
+      }
       break;
     }
 

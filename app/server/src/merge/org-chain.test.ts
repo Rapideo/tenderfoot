@@ -228,13 +228,34 @@ test("neither the flat shape nor an absent agency warns", async () => {
   expect(warn).not.toHaveBeenCalled();
 });
 
-/* Non-fatal, and not a control-flow decision: the name has already been read
- * by the time the warning is emitted, so a console that throws (or a caller
- * that has silenced it) cannot cost a row its organisation. */
+/* Non-fatal, and not a control-flow decision: the warning fires only after
+ * `names` is already assigned (org-chain.ts's HigherGov case), and the call
+ * is wrapped in its own try/catch there -- so neither a caller that has
+ * silenced console.warn nor one whose console.warn actively throws can cost
+ * a row its organisation. This test covers the silenced case; the one below
+ * covers the throwing case, which is the half that actually needs pinning. */
 test("the warning never changes what the chain resolves to", async () => {
   const chain = await freshOrgChain();
   vi.spyOn(console, "warn").mockImplementation(() => {});
   expect(chain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
   /* Second call, warning already spent -- the answer is identical. */
+  expect(chain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
+});
+
+/* 🔴 THE HALF THAT ACTUALLY NEEDED PINNING (final review, fix 1). As first
+ * written, warnNestedAgency was called ONE LINE BEFORE `names = [flat ||
+ * nested]`, unwrapped -- a throwing console.warn (a broken stream, a
+ * hijacked global) would have propagated straight out of orgChain, past the
+ * chain-building loop, and out of the function entirely, taking the row's
+ * organisation down with it. Neither test above would have caught that: both
+ * mock console.warn to succeed quietly. This one makes it throw. Fresh
+ * module instance, because the warning is once-per-process and this must be
+ * the row that FIRES it, not one where it already fired and the call site
+ * is never reached. */
+test("a console.warn that throws does not prevent the row from getting its organisation", async () => {
+  const chain = await freshOrgChain();
+  vi.spyOn(console, "warn").mockImplementation(() => {
+    throw new Error("console.warn exploded");
+  });
   expect(chain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
 });
