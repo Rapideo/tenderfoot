@@ -253,3 +253,97 @@ test("redact() removes key-shaped values nested deeply in raw", async () => {
   expect(serialized).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0099");
   expect(serialized).toContain("api_key=REDACTED");
 });
+
+/* Task 7: fetchDocuments. Verified 2026-09-03: 478 -> 489 on one call
+ * returning 1 opportunity + 10 documents -- ~11 records per call, the single
+ * most expensive thing in this codebase per invocation. Every one of
+ * fetchDay's protections (apiKey(), the VITEST guard, the redact()-wrapped
+ * parse) must hold for it too. */
+
+const DOCUMENTS_BODY = JSON.stringify({
+  meta: { pagination: { count: 2, pages: 1 } },
+  results: [
+    {
+      file_name: "sow.pdf",
+      document_path: "https://x/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0003",
+    },
+    {
+      file_name: "addendum.docx",
+      document_path: "https://x/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0003",
+    },
+  ],
+});
+
+test("fetchDocuments returns one FetchedDoc per document row", async () => {
+  const out = await higherGovClient.fetchDocuments("003000000088067", fakeFetch(DOCUMENTS_BODY));
+  expect(out.docs).toHaveLength(2);
+  expect(out.docs[0]!.fileName).toBe("sow.pdf");
+  expect(out.docs[1]!.fileName).toBe("addendum.docx");
+});
+
+/* 🔴 records IS WHAT THE VENDOR BILLED, not what this client kept. */
+test("fetchDocuments reports what the vendor billed, not what we kept", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 2 } },
+    results: [
+      { file_name: "sow.pdf", document_path: "https://x/?api_key=FAKEKEYFAKEKEY0002" },
+      { file_name: "", document_path: "https://x/?api_key=FAKEKEYFAKEKEY0002" },
+    ],
+  });
+  const out = await higherGovClient.fetchDocuments("003000000088067", fakeFetch(body));
+  /* The empty file_name is unusable and dropped, but both rows were billed. */
+  expect(out.docs).toHaveLength(1);
+  expect(out.records).toBe(2);
+});
+
+/* 🔴 THE HARD CONSTRAINT. An exact-id lookup narrowed by a saved search
+ * would report a notice's documents as absent when they were merely out of
+ * scope -- the same reasoning fetchBySourceId already carries. */
+test("fetchDocuments sends source_id and no search_id", async () => {
+  const fetchImpl = fakeFetch(DOCUMENTS_BODY);
+  await higherGovClient.fetchDocuments("003000000088067", fetchImpl);
+  expect(fetchImpl.calls).toHaveLength(1);
+  expect(fetchImpl.calls[0]).toContain("source_id=003000000088067");
+  expect(fetchImpl.calls[0]).not.toContain("search_id");
+});
+
+/* Same guard as fetchDay's own test: no fetchImpl injected, so this falls
+ * through to the real global fetch -- the "one forgotten argument" scenario
+ * the guard exists to catch on the single most expensive call in the app. */
+test("fetchDocuments refuses a live fetch when fetchImpl is left at its default under vitest", async () => {
+  await expect(higherGovClient.fetchDocuments("003000000088067")).rejects.toThrow(
+    /refusing a live fetch/,
+  );
+});
+
+/* document_path is a CREDENTIAL (CLAUDE.md §5.3) and must not survive into
+ * anything a caller could persist or print, same as it must not for a
+ * FeedNotice. */
+test("a fetched doc carries no document_path or api_key", async () => {
+  const out = await higherGovClient.fetchDocuments("003000000088067", fakeFetch(DOCUMENTS_BODY));
+  expect(JSON.stringify(out)).not.toContain("api_key");
+  expect(JSON.stringify(out)).not.toContain("document_path");
+  expect(JSON.stringify(out)).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0003");
+});
+
+/* docs/2026-09-03-highergov-field-mapping.md §2 names the /document/ field
+ * `download_url`, not `document_path` -- the schema doc and this repo's own
+ * opportunity fixtures disagree on the name. Whichever the live API uses,
+ * the key must never survive. */
+test("fetchDocuments also drops a download_url field, whichever name the vendor uses", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1 } },
+    results: [
+      {
+        file_name: "sow.pdf",
+        download_url: "https://x/signed?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0004",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDocuments("003000000088067", fakeFetch(body));
+  expect(JSON.stringify(out)).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0004");
+});
+
+test("a non-OK response throws for fetchDocuments too", async () => {
+  await expect(higherGovClient.fetchDocuments("x", fakeFetch("nope", 500))).rejects.toThrow();
+});

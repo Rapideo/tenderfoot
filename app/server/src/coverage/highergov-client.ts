@@ -56,9 +56,39 @@ export interface FeedResult {
   pages: number | null;
 }
 
+/* Task 7. The vendor's OWN schema doc for /document/ (docs/2026-09-03-
+ * highergov-field-mapping.md §2, written from their published OpenAPI schema,
+ * zero live calls) lists only seven fields: file_name, file_type, file_size,
+ * text_extract, posted_date, summary, download_url. No stable per-document id
+ * is documented -- download_url IS the address, and that doc's own
+ * conclusion is explicit: "download_url (expires in 60 minutes)" must never
+ * be stored, same as document_path. This repo's own /opportunity/ fixtures
+ * instead show `document_path` carrying a URL that points AT /document/ (see
+ * highergov-opportunity.json), so the live per-document field name is not
+ * fully pinned down between the two -- but the outcome is identical either
+ * way: nothing URL-shaped from this endpoint is fit to persist, so
+ * FetchedDoc carries only the one fact that IS safe and IS documented: the
+ * filename. There is deliberately no `documentId` field here (the plan's own
+ * sketch proposed one) -- inventing a field the vendor's schema does not
+ * name would be exactly the guessed-shape failure CLAUDE.md warns against. */
+export interface FetchedDoc {
+  fileName: string;
+}
+
+export interface DocumentsResult {
+  docs: FetchedDoc[];
+  /** What the VENDOR billed: the raw result count, before we discard any
+   * (mirrors FeedResult.records above). */
+  records: number;
+}
+
 export interface HigherGovClient {
   fetchDay(capturedDate: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
+  /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
+   * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
+   * the single most expensive thing in the codebase per invocation. */
+  fetchDocuments(sourceId: string, fetchImpl?: typeof fetch): Promise<DocumentsResult>;
 }
 
 /* Matches an api_key wherever it appears in a string, in any nesting. Broad
@@ -151,7 +181,16 @@ function searchId(): string {
   return id;
 }
 
-async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+/* Extracted from the original `get()` for Task 7: fetchDocuments needs the
+ * exact same fetch-and-validate plumbing (the VITEST guard, the OK check, the
+ * redact()-wrapped parse, the non-array "results" guard) against a different
+ * endpoint whose rows map to a different shape. Duplicating this instead of
+ * sharing it would be the drift document-clients.ts's own header warns
+ * against -- two implementations of "how do we safely talk to this API"
+ * silently diverging. `get()` and `getDocuments()` below are now both a thin
+ * map over this. Every error message here is UNCHANGED from the pre-Task-7
+ * `get()` -- this is a pure extraction, not a rewrite. */
+async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBody & { results: RawResult[] }> {
   /* Structural, not merely discipline. Every test in this file injects
    * fetchImpl; a future test that forgets the argument would fall through to
    * the real global fetch and make a live, billed call against the API that
@@ -211,8 +250,12 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
         `Refusing to grade a shape this client does not recognise.`,
     );
   }
+  return { ...body, results };
+}
 
-  const notices = results.map(toNotice).filter((n): n is FeedNotice => n !== null);
+async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+  const body = await fetchValidated(url, fetchImpl);
+  const notices = body.results.map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
   const pages = body.meta?.pagination?.pages;
   return {
@@ -220,9 +263,32 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
     /* The row count, not notices.length: a row we could not parse was still
      * billed. Under-reporting is the dangerous direction against a ceiling
      * that cannot be read back (api-spend.ts). */
-    records: results.length,
+    records: body.results.length,
     feedCount: typeof count === "number" ? count : null,
     pages: typeof pages === "number" ? pages : null,
+  };
+}
+
+/* 🔴 See the FetchedDoc comment above: whatever URL-shaped field this row
+ * carries (document_path or download_url) is never read here, on purpose --
+ * not read-and-discarded, simply never touched. The only field this client
+ * trusts from a /document/ row is file_name. */
+function toFetchedDoc(r: RawResult): FetchedDoc | null {
+  const fileName = str(r.file_name);
+  if (!fileName) return null;
+  return { fileName };
+}
+
+async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<DocumentsResult> {
+  const body = await fetchValidated(url, fetchImpl);
+  const docs = body.results.map(toFetchedDoc).filter((d): d is FetchedDoc => d !== null);
+  return {
+    docs,
+    /* Same reasoning as get()'s `records` above: the row count billed, not
+     * docs.length -- a row we dropped (no usable file_name) was still
+     * billed, and under-reporting against a ceiling that cannot be read back
+     * from the vendor is the dangerous direction. */
+    records: body.results.length,
   };
 }
 
@@ -252,5 +318,16 @@ export const higherGovClient: HigherGovClient = {
      * was merely out of scope -- a false miss is the one error that would
      * un-shelve the adapter backlog for no reason. */
     return get(url, fetchImpl);
+  },
+
+  async fetchDocuments(sourceId, fetchImpl = fetch) {
+    const url = new URL(`${HOST}/document/`);
+    url.searchParams.set("api_key", apiKey());
+    url.searchParams.set("source_id", sourceId);
+    /* 🔴 No search_id, for the exact reason fetchBySourceId gives above: this
+     * is a lookup by a specific notice's id, and narrowing it by a saved
+     * search would report real documents as absent merely because the
+     * opportunity fell outside that search's scope. */
+    return getDocuments(url, fetchImpl);
   },
 };

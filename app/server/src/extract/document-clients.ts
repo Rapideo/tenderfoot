@@ -14,6 +14,12 @@
  * what lets fetch-documents-for.ts put all three in ONE transaction. */
 import { SAM_HOST } from "../scrape/adapters/sam.js";
 import { ADAPTERS } from "../scrape/adapters/registry.js";
+/* Task 7. This is the ONLY thing this module takes from highergov-client.ts:
+ * a function to call and a name to key the registry with. It never imports
+ * apiKey(), never builds a URL, and never sees document_path -- the whole
+ * point of the one-client rule (CLAUDE.md §5.3) is that the credential stays
+ * inside coverage/highergov-client.ts. */
+import { higherGovClient, HIGHERGOV_SOURCE_NAME } from "../coverage/highergov-client.js";
 /* Moved here from discover.ts by the preflight ruling: these three describe
  * how to talk to SAM.gov, and leaving them behind would make discover.ts and
  * this module import each other.
@@ -49,7 +55,13 @@ interface AttachmentsResponse {
 
 export interface FetchedDocument {
   filename: string;
-  sourceUrl: string;
+  /* Task 7 widens this from `string` to `string | null`: HigherGov's
+   * documents cannot always be handed a persistable address (see
+   * higherGovDocumentClient below) -- and a document we know exists but
+   * cannot fetch is a different fact from one that does not exist. The
+   * document.source_url column is already nullable (migration 008); the
+   * record screen already renders on a null source_url (Record.tsx). */
+  sourceUrl: string | null;
 }
 
 export interface DocumentFetchResult {
@@ -90,6 +102,36 @@ export const samDocumentClient: DocumentClient = {
   },
 };
 
+/* Task 7: the document client D2 deliberately left out (its own header
+ * above: "so the whole path could be proven against SAM.gov at zero metered
+ * cost"). This is a THIN MAPPER, and nothing else -- it never builds a URL,
+ * never reads HIGHERGOV_API_KEY, and never sees a document_path or
+ * download_url value. All of that stays inside coverage/highergov-client.ts,
+ * behind fetchDocuments(). */
+export const higherGovDocumentClient: DocumentClient = {
+  async fetchFor(externalId, fetchImpl = fetch) {
+    const { docs, records } = await higherGovClient.fetchDocuments(externalId, fetchImpl);
+    /* 🔴 CASE HIT: "a document with no reachable URL is still a document."
+     * docs/2026-09-03-highergov-field-mapping.md §2 says the /document/
+     * endpoint's own address field (`download_url`, or `document_path` per
+     * this repo's /opportunity/ fixtures -- the two disagree on the name)
+     * must never be stored: one embeds the api_key outright, the other
+     * expires in 60 minutes and would fill source_url with a dead link that
+     * looks valid. highergov-client.ts -- the one file allowed to see either
+     * field -- therefore never returns it, and there is no separate stable
+     * per-document id in HigherGov's documented schema to reconstruct a
+     * fresh address from later. That makes this NOT "the document does not
+     * exist" -- we have its filename, proof it exists -- it is "we cannot
+     * hand back an address for it." sourceUrl is recorded as null rather
+     * than the document being dropped, per D2's three-state discipline. */
+    const documents: FetchedDocument[] = docs.map((d) => ({
+      filename: d.fileName,
+      sourceUrl: null,
+    }));
+    return { documents, records };
+  },
+};
+
 /* FINAL-REVIEW FIX: this used to hand-type `"SAM.gov"` here, and
  * document-clients.test.ts pinned it against ANOTHER hand-typed copy of the
  * same literal -- so a matched typo in both places would have passed both.
@@ -120,4 +162,10 @@ const SAM_SOURCE_NAME = samEntry.sourceName;
 
 export const DOCUMENT_CLIENTS: Record<string, DocumentClient> = {
   [SAM_SOURCE_NAME]: samDocumentClient,
+  /* ⚠️ THE FIRST METERED DOCUMENT CLIENT. ~11 records per open (verified
+   * 2026-09-03), against a 1,000/month ceiling shared with the ingest --
+   * roughly 90 opens a month before the ceiling refuses. Keyed by the same
+   * constant highergov-client.ts exports, not a retyped literal -- the exact
+   * defect class SAM_SOURCE_NAME's own derivation above guards against. */
+  [HIGHERGOV_SOURCE_NAME]: higherGovDocumentClient,
 };

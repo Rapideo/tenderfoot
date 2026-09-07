@@ -12,6 +12,14 @@ const { all, close, insert, one, run } = await import("../db/index.js");
 const { runCoverage, gradedItems } = await import("./run.js");
 const { COVERAGE } = await import("./thresholds.js");
 
+/* Task 7 added fetchDocuments to HigherGovClient. Nothing in run.ts calls it
+ * (that is fetch-documents-for.ts's job, a separate on-demand path) -- every
+ * fake client below carries this trivial stub purely to keep the type
+ * honest, never to be exercised. */
+async function noDocuments() {
+  return { docs: [], records: 0 };
+}
+
 function fakeClient(byDay: Record<string, FeedResult>): HigherGovClient {
   return {
     async fetchDay(capturedDate) {
@@ -20,6 +28,7 @@ function fakeClient(byDay: Record<string, FeedResult>): HigherGovClient {
     async fetchBySourceId() {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
+    fetchDocuments: noDocuments,
   };
 }
 
@@ -77,6 +86,7 @@ test("the spend is recorded even when the item write fails", async () => {
     async fetchBySourceId() {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
+    fetchDocuments: noDocuments,
   };
   /* Force the item write to fail. `failItemWriteForTest` makes runCoverage
    * throw a plain Error immediately after observations are computed and
@@ -112,6 +122,7 @@ test("a fetchDay throw still tallies a conservative spend before the error propa
     async fetchBySourceId() {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
+    fetchDocuments: noDocuments,
   };
   await expect(
     runCoverage({ from: "2026-09-03", to: "2026-09-03", client }),
@@ -134,6 +145,7 @@ test("a fetchBySourceId throw still tallies a conservative spend before the erro
     async fetchBySourceId() {
       throw new Error("HigherGov returned a malformed JSON body (test double)");
     },
+    fetchDocuments: noDocuments,
   };
   await expect(
     runCoverage({
@@ -220,6 +232,7 @@ test("a notice absent from the window is looked up by id before being called mis
         pages: 1,
       };
     },
+    fetchDocuments: noDocuments,
   };
   await runCoverage({
     from: "2026-09-03",
@@ -240,6 +253,7 @@ test("a notice in neither the window nor the id lookup is a real miss, and cost 
     async fetchBySourceId() {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
+    fetchDocuments: noDocuments,
   };
   const out = await runCoverage({
     from: "2026-09-03",
@@ -364,6 +378,7 @@ test(
       async fetchBySourceId() {
         return { notices: [], records: 0, feedCount: 0, pages: 1 };
       },
+      fetchDocuments: noDocuments,
     };
     const out = await runCoverage({
       from: "2026-01-01",
@@ -416,6 +431,7 @@ test("a notice settled as carried by an earlier run is not re-asked, and does no
     async fetchBySourceId() {
       return { notices: [], records: 0, feedCount: 0, pages: 1 };
     },
+    fetchDocuments: noDocuments,
   };
   const first = await runCoverage({
     from: "2026-09-03",
@@ -437,6 +453,7 @@ test("a notice settled as carried by an earlier run is not re-asked, and does no
       /* X is already settled as carried -- reaching this at all is the bug. */
       throw new Error("must not be called: X is already settled as carried");
     },
+    fetchDocuments: noDocuments,
   };
   const second = await runCoverage({
     from: "2026-09-03",
