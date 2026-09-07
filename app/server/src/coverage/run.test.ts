@@ -245,6 +245,79 @@ test("the monthly ceiling refuses a run before it spends", async () => {
   expect(out.recordsSpent).toBe(0);
 });
 
+/* 🔴 FINAL REVIEW, item 6. `alreadySpent >= MONTHLY_RECORD_CEILING` permits
+ * a run one record short of the ceiling to spend a full maxRecordsPerRun
+ * more -- refusing only once the ceiling is ALREADY crossed, never a run
+ * that WOULD cross it. One record short of the ceiling is exactly the case
+ * the old `>=` let through. */
+test("the ceiling refuses a run that WOULD cross it, not only one that already has", async () => {
+  const sourceId = await one<{ id: number }>(`SELECT id FROM source WHERE name = 'HigherGov'`);
+  const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
+  await run(
+    `INSERT INTO api_spend (source_id, endpoint, records) VALUES ($1, 'opportunity', $2)`,
+    [sourceId!.id, MONTHLY_RECORD_CEILING - 1],
+  );
+  const out = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    client: fakeClient({}),
+  });
+  expect(out.aborted).toBe(true);
+  expect(out.abortReason).toContain("would be crossed");
+  expect(out.recordsSpent).toBe(0);
+});
+
+/* The boundary's OTHER side: a run that would land EXACTLY on the ceiling
+ * has not crossed it, and must still be allowed to proceed. */
+test("the ceiling allows a run that would land exactly on it", async () => {
+  const sourceId = await one<{ id: number }>(`SELECT id FROM source WHERE name = 'HigherGov'`);
+  const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
+  await run(
+    `INSERT INTO api_spend (source_id, endpoint, records) VALUES ($1, 'opportunity', $2)`,
+    [sourceId!.id, MONTHLY_RECORD_CEILING - COVERAGE.maxRecordsPerRun],
+  );
+  const out = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    client: fakeClient({
+      "2026-09-03": { notices: [], records: 1, feedCount: 0, pages: 1 },
+    }),
+  });
+  expect(out.aborted).toBe(false);
+});
+
+/* 🔴 FINAL REVIEW, item 7. days() will happily build a wide, mostly-empty
+ * window, and `spent` only advances by records RETURNED -- a zero-result day
+ * bills nothing (CLAUDE.md §5.1), so the record cap alone never trips. This
+ * client returns ZERO records on every single day, across a window far wider
+ * than maxCallsPerRun, and proves the run stops anyway -- on CALL COUNT, not
+ * on spend. */
+test(
+  "a run aborts at maxCallsPerRun even when every call returns zero records",
+  async () => {
+    const zeroEveryDay: HigherGovClient = {
+      async fetchDay() {
+        return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      },
+      async fetchBySourceId() {
+        return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      },
+    };
+    const out = await runCoverage({
+      from: "2026-01-01",
+      to: "2026-06-01",
+      client: zeroEveryDay,
+    });
+    expect(out.aborted).toBe(true);
+    expect(out.abortReason).toContain("maxCallsPerRun");
+    expect(out.recordsSpent).toBe(0);
+  },
+  /* maxCallsPerRun (100) real committed api_spend INSERTs, sequential, over
+   * the network -- comfortably past vitest's 5s default. Not a flaky test;
+   * just a genuinely larger one. */
+  30000,
+);
+
 /* 🔴 CRITICAL REGRESSION (review 2026-09-06, ruled by the controller).
  *
  * run.ts used to fold the settled branch into the found branch:

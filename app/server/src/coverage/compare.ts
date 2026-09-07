@@ -54,12 +54,23 @@ export function dedupBySourceId(notices: FeedNotice[]): {
  * negative and meaningless. Deadline-relative is well-defined regardless of
  * who published first, and it is what a bidder actually experiences.
  *
- * Both inputs are bare YYYY-MM-DD (closes-at.ts and captured_date), so UTC
- * midnight on both sides cancels: no timezone can shift this by a day. */
+ * Both inputs are EXPECTED as bare YYYY-MM-DD (closes-at.ts and
+ * captured_date), so UTC midnight on both sides cancels: no timezone can
+ * shift this by a day. But nothing in this repo PINS the vendor's response
+ * shape -- only a hand-authored fixture -- so both are sliced to their first
+ * 10 characters before parsing. If captured_date ever comes back as a full
+ * timestamp ("2026-09-03T12:00:00Z") instead of a bare date, unsliced
+ * `Date.parse` would choke on the doubled "T...Z" suffix and return NaN for
+ * every row: every leadDays turns null, every carried notice reads as
+ * untimely, and C2 -- THE GATE -- reads 0.0 and fails on a formatting
+ * artifact, not a real finding. It would not self-heal either: a notice
+ * settled `carried` is never re-asked (run.ts's settled-id guard), so a null
+ * lead_days written once is frozen forever. slice(0, 10) is a no-op on an
+ * already-bare date and the fix for a timestamp either way. */
 export function leadDays(deadline: string | null, capturedDate: string | null): number | null {
   if (!deadline || !capturedDate) return null;
-  const end = Date.parse(`${deadline}T00:00:00Z`);
-  const start = Date.parse(`${capturedDate}T00:00:00Z`);
+  const end = Date.parse(`${deadline.slice(0, 10)}T00:00:00Z`);
+  const start = Date.parse(`${capturedDate.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(end) || Number.isNaN(start)) return null;
   return Math.round((end - start) / DAY_MS);
 }

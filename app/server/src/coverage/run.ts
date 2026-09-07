@@ -79,12 +79,19 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
 
   /* THE CEILING IS CHECKED BEFORE ANY CALL, not after. Consumption cannot be
    * read back from the vendor at all (CLAUDE.md §5.1), so the only safe
-   * moment to refuse is before the money is spent. */
+   * moment to refuse is before the money is spent.
+   *
+   * 🔴 FIXED (review): this used to be `alreadySpent >= MONTHLY_RECORD_CEILING`,
+   * which permits a run at, say, 999 of 1000 to spend a full
+   * `maxRecordsPerRun` more -- refusing only once the ceiling is ALREADY
+   * crossed rather than refusing a run that WOULD cross it. The refusal must
+   * account for what this run could still spend. */
   const alreadySpent = await spentThisMonth(HIGHERGOV_SOURCE_NAME);
-  if (alreadySpent >= MONTHLY_RECORD_CEILING) {
+  if (alreadySpent + COVERAGE.maxRecordsPerRun > MONTHLY_RECORD_CEILING) {
     const reason =
-      `Monthly ceiling reached: ${alreadySpent} of ${MONTHLY_RECORD_CEILING} records ` +
-      `already spent this month. Refusing to call.`;
+      `Monthly ceiling would be crossed: ${alreadySpent} of ${MONTHLY_RECORD_CEILING} records ` +
+      `already spent this month, and this run could spend up to ${COVERAGE.maxRecordsPerRun} ` +
+      `more (maxRecordsPerRun). Refusing before it starts.`;
     await exec(`UPDATE coverage_run SET aborted = true, note = $2 WHERE id = $1`, [runId, reason]);
     return { runId, recordsSpent: 0, itemsObserved: 0, aborted: true, abortReason: reason };
   }
@@ -92,6 +99,15 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
   const key = opts.key ?? [];
   const feed: FeedNotice[] = [];
   let spent = 0;
+  /* 🔴 THE CALL BUDGET, SEPARATE FROM THE RECORD BUDGET. days() will happily
+   * build a wide list, and `spent` only advances by records RETURNED -- a
+   * window of mostly-empty days makes many requests without ever tripping
+   * maxRecordsPerRun. "Errors and zero-result calls appear not to count"
+   * rests on one dashboard reading (CLAUDE.md §5.1); this is the guard for
+   * when that reading is wrong. Counted across BOTH loops below -- the day
+   * loop and the per-key id-lookup loop -- because both are live HTTP calls
+   * against the same metered API. */
+  let calls = 0;
 
   /* Notices an earlier run already saw carried. Spec §5.5: a notice enters
    * the cohort once and SETTLES when carried -- re-asking would spend a
@@ -105,7 +121,16 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
   let abortReason: string | undefined;
 
   for (const day of days(opts.from, opts.to)) {
+    if (calls >= COVERAGE.maxCallsPerRun) {
+      aborted = true;
+      abortReason =
+        `Stopped at maxCallsPerRun: ${calls} of ${COVERAGE.maxCallsPerRun} calls. ` +
+        `Remaining days were not queried, and their notices stay 'unchecked' rather than ` +
+        `becoming misses.`;
+      break;
+    }
     const result = await client.fetchDay(day, opts.fetchImpl);
+    calls += 1;
 
     /* THE TALLY COMMITS ON ITS OWN, BEFORE ANYTHING ELSE. The vendor has
      * already billed by the time fetchDay returns -- nothing after this
@@ -201,7 +226,15 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
           `Unresolved notices stay 'unchecked' and are re-asked next run.`;
         break;
       }
+      if (calls >= COVERAGE.maxCallsPerRun) {
+        aborted = true;
+        abortReason =
+          `Stopped at maxCallsPerRun: ${calls} of ${COVERAGE.maxCallsPerRun} calls. ` +
+          `Unresolved notices stay 'unchecked' and are re-asked next run.`;
+        break;
+      }
       const probe = await client.fetchBySourceId(entry.externalId, opts.fetchImpl);
+      calls += 1;
       await recordSpend({ run: exec }, {
         sourceId: source.id,
         endpoint: "opportunity",

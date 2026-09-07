@@ -17,6 +17,7 @@ test("every threshold is a usable number", () => {
   expect(COVERAGE.minLeadDays).toBeGreaterThan(0);
   expect(COVERAGE.minCohortSize).toBeGreaterThan(0);
   expect(COVERAGE.maxRecordsPerRun).toBeGreaterThan(0);
+  expect(COVERAGE.maxCallsPerRun).toBeGreaterThan(0);
 });
 
 /* C2 is a SUBSET of C1 -- a notice carried in time is also a notice carried.

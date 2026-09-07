@@ -32,8 +32,13 @@ const SEGMENTS: Segment[] = ["state_agency", "sub_state"];
 
 /* `unchecked` is excluded from the cohort ENTIRELY -- not counted as a find,
  * not counted as a miss. A run that stopped at its budget cap must not move
- * the score in either direction. */
-const settled = (items: GradedItem[]) => items.filter((i) => i.carried !== "unchecked");
+ * the score in either direction.
+ *
+ * EXPORTED so coverage-cli.ts's headline count can be the SAME filter C4's
+ * `measured` uses, rather than a second copy that can drift from this one --
+ * which is exactly how the CLI used to print "N settled notices" one line
+ * above a C4 that measured a smaller N (review finding #5). */
+export const settled = (items: GradedItem[]) => items.filter((i) => i.carried !== "unchecked");
 
 function median(xs: number[]): number | null {
   if (xs.length === 0) return null;
@@ -76,6 +81,22 @@ function weakest(scores: SegmentScore[], by: (s: SegmentScore) => number): Segme
   return worst;
 }
 
+/* The sub-state answer key is deliberately unbuilt, so `scores` routinely
+ * holds only state_agency -- and `weakest` above returns that lone survivor
+ * without complaint, because there is nothing else to compare it against.
+ * The whole reason the weaker segment wins (ruling ③) is to stop a confident
+ * number about the wrong segment; a detail line that silently drops the
+ * segment it never measured recreates exactly that failure by omission. This
+ * renders EVERY segment, not just the ones with a score, so "sub_state: NOT
+ * MEASURED" sits right next to state_agency's real number and cannot be
+ * missed the way an absence can. */
+function segmentSummary(scores: SegmentScore[], by: (s: SegmentScore) => number): string {
+  return SEGMENTS.map((segment) => {
+    const s = scores.find((x) => x.segment === segment);
+    return s ? `${segment} ${by(s).toFixed(3)}` : `${segment}: NOT MEASURED`;
+  }).join(" · ");
+}
+
 export function measureCoverage(items: GradedItem[]): PredicateResult[] {
   const cohort = settled(items);
   const scores = SEGMENTS.map((s) => scoreSegment(items, s)).filter(
@@ -116,8 +137,8 @@ export function measureCoverage(items: GradedItem[]): PredicateResult[] {
     detail: note(
       worstRecall
         ? `Weakest segment: ${worstRecall.segment} (n=${worstRecall.n}). ` +
-          scores.map((s) => `${s.segment} ${s.recall.toFixed(3)}`).join(" · ")
-        : "No settled items in any segment.",
+          segmentSummary(scores, (s) => s.recall)
+        : `No settled items in any segment. ${segmentSummary(scores, (s) => s.recall)}`,
     ),
   };
 
@@ -135,8 +156,9 @@ export function measureCoverage(items: GradedItem[]): PredicateResult[] {
     detail: note(
       worstTimely
         ? `Weakest segment: ${worstTimely.segment} (n=${worstTimely.n}). ` +
-          `A notice carried too late to bid is a miss with a tick beside it.`
-        : "No settled items in any segment.",
+          `A notice carried too late to bid is a miss with a tick beside it. ` +
+          segmentSummary(scores, (s) => s.timely)
+        : `No settled items in any segment. ${segmentSummary(scores, (s) => s.timely)}`,
     ),
   };
 

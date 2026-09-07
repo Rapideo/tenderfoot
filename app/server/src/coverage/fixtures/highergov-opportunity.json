@@ -1,5 +1,5 @@
 {
-  "meta": { "pagination": { "page": 1, "pages": 1, "count": 3 } },
+  "meta": { "pagination": { "page": 1, "pages": 1, "count": 4 } },
   "results": [
     {
       "source_id": "003000000088067",
@@ -20,6 +20,13 @@
       "captured_date": "2026-09-04",
       "version_key": "v1",
       "title": "300 FW Fingerling Walleye Lake Stock Purchase",
+      "document_path": "https://www.highergov.com/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0001"
+    },
+    {
+      "source_id": "003000000088200",
+      "captured_date": "2026-09-05T14:30:00Z",
+      "version_key": "v1",
+      "title": "Timestamp-shaped captured_date, not a bare YYYY-MM-DD (review finding #2)",
       "document_path": "https://www.highergov.com/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0001"
     }
   ]

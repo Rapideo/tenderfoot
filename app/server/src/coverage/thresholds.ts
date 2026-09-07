@@ -48,4 +48,18 @@ export const COVERAGE = {
    * Proto2PRD-Lessons §2.15 exists for. A run that hits this cap is a
    * finding about volume, not a failure. */
   maxRecordsPerRun: 40,
+
+  /** The hard stop on CALL COUNT, independent of records spent. A zero-result
+   * day bills nothing (CLAUDE.md §5.1's meter counts records RETURNED), so
+   * maxRecordsPerRun alone would let days() walk a wide, mostly-empty window
+   * -- thousands of live requests -- without ever tripping the record cap.
+   * "Errors and zero-result calls appear not to count" rests on ONE
+   * dashboard reading (CLAUDE.md §5.1); an unbounded call count is a real
+   * exposure against a claim that thin, not a hypothetical one.
+   *
+   * ⚖️ UNRATIFIED, same as its neighbours above -- a proposal, not Matt's
+   * ruling. Picked loosely: comfortably above what one run's day loop plus
+   * its per-key id-lookup loop needs at current cohort sizes, without being
+   * so high it stops meaning anything. */
+  maxCallsPerRun: 100,
 } as const;

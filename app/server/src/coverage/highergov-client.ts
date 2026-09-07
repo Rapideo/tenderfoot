@@ -163,8 +163,37 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
     /* The URL is NOT in this message: it carries the api_key. */
     throw new Error(`HigherGov answered ${res.status}`);
   }
-  const body = (await res.json()) as RawBody;
-  const notices = (body.results ?? []).map(toNotice).filter((n): n is FeedNotice => n !== null);
+  /* 🔴 THE PARSE MUST NOT THROW RAW. A truncated or malformed 200 can make
+   * JSON.parse throw a SyntaxError whose message quotes a window of raw
+   * input around the error position -- for a truncated body that window
+   * sits near the END of the payload, exactly where document_path (and the
+   * api_key it embeds on every row) lives. redact() is the boundary rule
+   * made real: the message is scrubbed before it is ever wrapped in a new
+   * Error, so nothing downstream -- including the CLI's own
+   * `console.error(err)` -- can print it raw even by accident. */
+  let body: RawBody;
+  try {
+    body = (await res.json()) as RawBody;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`HigherGov returned a malformed JSON body: ${redact(message)}`);
+  }
+
+  /* 🔴 A NON-ARRAY "results" MUST NOT REACH .map(). `?? []` only catches
+   * null/undefined; a truthy-but-wrong shape (an object, a string) would
+   * still throw a bare TypeError from .map(), and that throw happens BEFORE
+   * recordSpend runs in run.ts -- a call the vendor already billed would
+   * never reach api_spend. Under-reporting is the dangerous direction
+   * against a ceiling that cannot be read back (CLAUDE.md §5.1). */
+  const results = body.results ?? [];
+  if (!Array.isArray(results)) {
+    throw new Error(
+      `HigherGov returned a non-array "results" field (got ${typeof results}). ` +
+        `Refusing to grade a shape this client does not recognise.`,
+    );
+  }
+
+  const notices = results.map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
   const pages = body.meta?.pagination?.pages;
   return {
@@ -172,7 +201,7 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
     /* The row count, not notices.length: a row we could not parse was still
      * billed. Under-reporting is the dangerous direction against a ceiling
      * that cannot be read back (api-spend.ts). */
-    records: (body.results ?? []).length,
+    records: results.length,
     feedCount: typeof count === "number" ? count : null,
     pages: typeof pages === "number" ? pages : null,
   };

@@ -17,10 +17,12 @@
 import { pathToFileURL } from "node:url";
 import { close } from "../db/index.js";
 import { runCoverage, gradedItems } from "./run.js";
-import { measureCoverage } from "./measure.js";
+import { measureCoverage, settled } from "./measure.js";
 import { idoaKeyFrom } from "./answer-key.js";
 import { COVERAGE, COVERAGE_RATIFIED } from "./thresholds.js";
 import { IDOA_URL } from "../scrape/adapters/idoa.js";
+import { HIGHERGOV_SOURCE_NAME } from "./highergov-client.js";
+import { MONTHLY_RECORD_CEILING, spentThisMonth } from "../extract/api-spend.js";
 
 const MARK: Record<string, string> = {
   pass: "PASS",
@@ -75,7 +77,15 @@ export async function main(): Promise<void> {
     );
   }
 
-  /* The operator's last chance to notice a wrong window before money moves. */
+  /* api_spend is PER-DATABASE and spentThisMonth reads whatever DATABASE_URL
+   * names -- running this against the wrong branch spends real vendor money
+   * and files the tally where the monthly ceiling will never see it,
+   * silently. Same format as db/migrate.ts's own print, matched deliberately
+   * so the two operator commands read the same way. */
+  console.log(`database: ${new URL(process.env.DATABASE_URL!).host}`);
+
+  /* The operator's last chance to notice a wrong window (or database) before
+   * money moves. */
   console.log(`Window: ${from} to ${to}.`);
 
   /* The answer key is fetched FREE, from IDOA's own page. */
@@ -90,6 +100,14 @@ export async function main(): Promise<void> {
   const key = idoaKeyFrom(html);
   console.log(`Answer key: ${key.length} notices from IDOA (free).`);
 
+  /* Read the cohort BEFORE this run writes anything, to tell whether this is
+   * the FIRST run ever against this database. After run one, the database IS
+   * the baseline: settled notices are skipped on later runs (run.ts's
+   * settled-id guard), so runs two onward measure only new notices by
+   * construction and this can only ever be true once. */
+  const priorItems = await gradedItems();
+  const isFirstRun = priorItems.length === 0;
+
   const outcome = await runCoverage({ from, to, key });
 
   console.log(
@@ -98,8 +116,40 @@ export async function main(): Promise<void> {
   );
   if (outcome.aborted) console.log(`⚠️  ABORTED: ${outcome.abortReason}`);
 
+  /* CLAUDE.md §5.1: every call is "counted, reported and justified in the
+   * same breath". This slice makes the monthly ceiling load-bearing for the
+   * first time, so the report must show where this run leaves it. */
+  const monthToDate = await spentThisMonth(HIGHERGOV_SOURCE_NAME);
+  console.log(`Month-to-date spend: ${monthToDate} of ${MONTHLY_RECORD_CEILING} records.`);
+
   const items = await gradedItems();
-  console.log(`\nCohort accumulated across all runs: ${items.length} settled notices.\n`);
+  /* Review finding #5: this line used to count gradedItems() directly, which
+   * has no filter on `carried` and so includes `unchecked` rows --
+   * measureCoverage's own cohort (C4's `measured`) filters them out. On a
+   * first run that printed "N settled notices" directly above a C4 that
+   * measured a smaller N, disagreeing with its own table. settled() is the
+   * SAME filter measureCoverage uses internally, imported rather than
+   * reimplemented, so the two numbers cannot drift apart again. */
+  console.log(`\nCohort accumulated across all runs: ${settled(items).length} settled notices.\n`);
+
+  /* Review finding #3: the spec's diff-against-a-frozen-census was never
+   * built -- this CLI passes the entire current IDOA page every time. Ruled
+   * acceptable BECAUSE after run one the database IS the baseline (see
+   * isFirstRun's comment above), but run one's own C2 is INFLATED --
+   * long-open notices were captured long ago, so their lead times are large
+   * for a reason that has nothing to do with HigherGov being fast. This must
+   * be disclosed where an operator reading C2 cannot miss it. */
+  if (isFirstRun) {
+    console.log(
+      "📋 FIRST RUN: this is a FULL CENSUS of everything currently open, not a decay\n" +
+        "   measurement. Long-open notices were captured long ago, so C2 (timely recall)\n" +
+        "   below reads OPTIMISTIC here -- their lead times are large simply because\n" +
+        "   they have sat in HigherGov's feed a while, not because HigherGov is fast.\n" +
+        "   From the next run onward, already-settled notices are skipped automatically\n" +
+        "   and the cohort becomes the NEW-notice cohort C2 is meant to measure. Do not\n" +
+        "   read this run's C2 as a decay measurement.\n",
+    );
+  }
 
   for (const p of measureCoverage(items)) {
     console.log(`  ${p.id}  ${MARK[p.verdict]!.padEnd(9)} ${p.statement}`);

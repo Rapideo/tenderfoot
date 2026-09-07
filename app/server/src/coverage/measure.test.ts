@@ -129,6 +129,18 @@ test("C2 measures ratio, not raw count, catching ratio-vs-count regressions", ()
   expect(find(rs, "C2").detail).toContain("sub_state");
 });
 
+/* 🔴 FINAL REVIEW, item 4. The sub-state answer key is deliberately unbuilt,
+ * so only state_agency is ever scored -- `weakest` returns the lone survivor
+ * and the detail line used to name only it, leaving a reader to notice an
+ * ABSENCE to realise sub_state was never measured at all. The whole reason
+ * the weaker segment wins (ruling ③) is to stop a confident number about the
+ * wrong segment; this is that same failure by omission. */
+test("an unmeasured segment is named explicitly in C1 and C2, not silently dropped", () => {
+  const rs = measureCoverage(items({ segment: "state_agency", carried: 0, timely: 40, missing: 0 }));
+  expect(find(rs, "C1").detail).toContain("sub_state: NOT MEASURED");
+  expect(find(rs, "C2").detail).toContain("sub_state: NOT MEASURED");
+});
+
 /* FIX #3: median's even-length branch with distinct values, not identical.
  * If the index math were off by one, [1, 2, 3, 4] would pick (1 + 2) / 2 = 1.5 (wrong low)
  * or (3 + 4) / 2 = 3.5 (wrong high) instead of (2 + 3) / 2 = 2.5, rounded to 3.

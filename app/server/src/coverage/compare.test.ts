@@ -53,6 +53,24 @@ test("a notice carried after its deadline gives a negative lead time", () => {
   expect(leadDays("2026-09-01", "2026-09-03")).toBe(-2);
 });
 
+/* 🔴 THE ONE THAT CANNOT BE UNDONE (final review, item 2). Nothing in this
+ * repo pins the vendor's response shape -- only a hand-authored fixture. If
+ * captured_date ever comes back as a full timestamp instead of a bare date,
+ * unsliced Date.parse chokes on the doubled "T...Z" and returns NaN for
+ * EVERY row: every leadDays turns null, every carried notice reads untimely,
+ * and C2 -- the gate -- reads 0.0 and fails on a formatting artifact. It does
+ * not self-heal, because a notice settled `carried` is never re-asked. */
+test("a timestamp-shaped capturedDate gives the same lead time as the bare-date form", () => {
+  expect(leadDays("2026-09-30", "2026-09-03T12:00:00Z")).toBe(leadDays("2026-09-30", "2026-09-03"));
+  expect(leadDays("2026-09-30", "2026-09-03T12:00:00Z")).toBe(27);
+});
+
+/* The deadline side gets the same treatment -- closes-at.ts is trusted to
+ * emit a bare date today, but the guard is symmetric on purpose. */
+test("a timestamp-shaped deadline gives the same lead time as the bare-date form", () => {
+  expect(leadDays("2026-09-30T23:59:00Z", "2026-09-03")).toBe(leadDays("2026-09-30", "2026-09-03"));
+});
+
 test("a notice in the key and in the feed is carried", () => {
   const out = observe([key("A")], [notice("A")], new Set(["A"]));
   expect(out[0]!.carried).toBe("carried");

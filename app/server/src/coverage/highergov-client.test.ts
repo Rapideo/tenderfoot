@@ -41,7 +41,7 @@ function fakeFetch(body: string, status = 200): typeof fetch & { calls: string[]
 
 test("a day pull returns one notice per result row", async () => {
   const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
-  expect(out.notices).toHaveLength(3);
+  expect(out.notices).toHaveLength(4);
   expect(out.notices[0]!.externalId).toBe("003000000088067");
   expect(out.notices[0]!.capturedDate).toBe("2026-09-03");
 });
@@ -52,12 +52,23 @@ test("a day pull returns one notice per result row", async () => {
  * dedup will later collapse them to one notice. */
 test("records billed is the row count, before any dedup", async () => {
   const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
-  expect(out.records).toBe(3);
+  expect(out.records).toBe(4);
 });
 
 test("the feed count is read from meta.pagination, for the saved-search detector", async () => {
   const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
-  expect(out.feedCount).toBe(3);
+  expect(out.feedCount).toBe(4);
+});
+
+/* Review finding #2 (compare.ts's leadDays cannot survive this on its own --
+ * this test only proves the CLIENT is a faithful pass-through). Nothing in
+ * this repo pins the vendor's response shape to a bare YYYY-MM-DD; the
+ * client's job is to hand the raw string on, unmodified, and let compare.ts
+ * decide how to parse it. */
+test("a timestamp-shaped captured_date is passed through as-is, not truncated or reparsed", async () => {
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
+  const row = out.notices.find((n) => n.externalId === "003000000088200");
+  expect(row?.capturedDate).toBe("2026-09-05T14:30:00Z");
 });
 
 /* Review finding #3: a truncated day must be DETECTABLE by a caller, not
@@ -117,7 +128,7 @@ test("fetchDay puts search_id on the request", async () => {
 test("fetchBySourceId returns notices and sends no search_id", async () => {
   const fetchImpl = fakeFetch(FIXTURE);
   const out = await higherGovClient.fetchBySourceId("003000000088191", fetchImpl);
-  expect(out.notices).toHaveLength(3);
+  expect(out.notices).toHaveLength(4);
   expect(fetchImpl.calls).toHaveLength(1);
   expect(fetchImpl.calls[0]).toContain("source_id=003000000088191");
   expect(fetchImpl.calls[0]).not.toContain("search_id");
@@ -148,4 +159,47 @@ test("fetchDay throws when HIGHERGOV_SEARCH_ID is unset, rather than fetching un
  * billed HTTP request was about to be attempted. */
 test("fetchDay refuses a live fetch when fetchImpl is left at its default under vitest", async () => {
   await expect(higherGovClient.fetchDay("2026-09-03")).rejects.toThrow(/refusing a live fetch/);
+});
+
+/* 🔴 CREDENTIAL-ADJACENT (final review, item 1). A truncated or malformed 200
+ * can make JSON.parse's own SyntaxError quote a window of raw input around
+ * the error position -- version-dependent, but when it happens, for a
+ * truncated body that window sits near the END of the payload, exactly where
+ * document_path (and its embedded api_key) lives. This body is cut off
+ * mid-string, right after "api_key=". Rather than pin a specific V8 error
+ * message's exact wording (which varies by Node version), this asserts the
+ * two things that must hold regardless: the raw SyntaxError never escapes
+ * unwrapped (a raw one never says "malformed JSON body"), and whatever the
+ * final message says, it does not carry the fake key through. */
+test("a malformed JSON 200 throws a clean, redacted error instead of a raw SyntaxError", async () => {
+  const truncated =
+    '{"results":[{"document_path":"https://x/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0002';
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fakeFetch(truncated));
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(Error);
+  /* A raw, unfixed SyntaxError's own message never says this -- it proves the
+   * try/catch actually wrapped it rather than letting it bubble through
+   * verbatim, regardless of how much (if any) raw context a given V8/Node
+   * version chooses to quote in its own message. */
+  expect((caught as Error).message).toContain("malformed JSON body");
+  expect((caught as Error).message).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0002");
+});
+
+/* 🔴 SPEND UNDER-REPORT (final review, item 1). `body.results ?? []` only
+ * catches null/undefined -- a truthy-but-wrong shape reaches `.map()`
+ * unguarded and throws a bare TypeError, and that throw happens in run.ts
+ * BEFORE recordSpend, so a call the vendor already billed never reaches
+ * api_spend. This must fail with a clean, named error instead. */
+test("a non-array \"results\" field throws a clean error rather than a bare TypeError", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 0, pages: 1 } },
+    results: { not: "an array" },
+  });
+  await expect(higherGovClient.fetchDay("2026-09-03", fakeFetch(body))).rejects.toThrow(
+    /non-array "results"/,
+  );
 });
