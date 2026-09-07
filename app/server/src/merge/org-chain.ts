@@ -67,14 +67,31 @@ export function orgChain(sourceName: string, raw: unknown): string[] {
       names = [r.agency];
       break;
 
-    /* One level, not a chain. HigherGov publishes a flat `agency_name`; the
-     * sub-state buyers this source is bought for ("Allen County", "Natural
-     * Resources") have no parent chain underneath it to walk -- the same
-     * granularity IDOA's own case above already documents, not a limitation
-     * of the parse. */
-    case "HigherGov":
-      names = [r.agency_name];
+    /* One level, not a chain -- the sub-state buyers this source is bought
+     * for ("Allen County", "Natural Resources") have no parent chain
+     * underneath them to walk, the same granularity IDOA's own case above
+     * already documents, not a limitation of the parse.
+     *
+     * The SHAPE of that one level is where this case used to assert more
+     * than it knew: it read a flat `r.agency_name`, a shape with no evidence
+     * behind it -- no fixture captured from a live response backs it, only
+     * one hand-built to match this code. `docs/2026-09-03-highergov-field-mapping.md:55`,
+     * built from HigherGov's published OpenAPI schema and from records
+     * already pulled, records the field as NESTED: `agency.agency_name`.
+     * Rather than guess which spelling a real response uses, both are
+     * accepted -- flat first, so today's assumed behaviour is unchanged
+     * where it already works, nested as the fallback the field-mapping
+     * document says to expect. `agency` itself is read defensively because
+     * its shape is exactly what is in question here: absent, null, a bare
+     * string, or an object are all handled without throwing. */
+    case "HigherGov": {
+      const flat = typeof r.agency_name === "string" ? r.agency_name.trim() : "";
+      const agency = r.agency;
+      const nested =
+        agency && typeof agency === "object" ? (agency as Record<string, any>).agency_name : undefined;
+      names = [flat || nested];
       break;
+    }
 
     default:
       return [];

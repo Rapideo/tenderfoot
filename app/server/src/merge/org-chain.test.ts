@@ -107,3 +107,47 @@ test("a missing or blank HigherGov agency_name yields an empty chain", () => {
   expect(orgChain("HigherGov", { agency_name: "" })).toEqual([]);
   expect(orgChain("HigherGov", { agency_name: null })).toEqual([]);
 });
+
+/* docs/2026-09-03-highergov-field-mapping.md:55 records this field as nested
+ * (`agency.agency_name`), not flat -- unlike the flat shape above, no live
+ * response backs it either, so this fallback exists precisely because which
+ * shape a real HigherGov response actually uses is unverified. */
+test("HigherGov's nested agency.agency_name lands when the flat field is absent", () => {
+  expect(orgChain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
+});
+
+test("HigherGov's nested agency.agency_name is used when the flat field is blank", () => {
+  expect(orgChain("HigherGov", { agency_name: "", agency: { agency_name: "Allen County" } })).toEqual([
+    "Allen County",
+  ]);
+  expect(orgChain("HigherGov", { agency_name: "   ", agency: { agency_name: "Allen County" } })).toEqual([
+    "Allen County",
+  ]);
+});
+
+/* Both shapes present: the flat field wins, so behaviour under today's
+ * assumed shape stays exactly what it was before the nested fallback
+ * existed. */
+test("HigherGov prefers the flat agency_name over the nested one when both are present", () => {
+  expect(
+    orgChain("HigherGov", { agency_name: "Natural Resources", agency: { agency_name: "Allen County" } }),
+  ).toEqual(["Natural Resources"]);
+});
+
+test("HigherGov yields an empty chain when neither the flat nor the nested field is usable", () => {
+  expect(orgChain("HigherGov", { agency: {} })).toEqual([]);
+  expect(orgChain("HigherGov", { agency: { agency_name: "" } })).toEqual([]);
+  expect(orgChain("HigherGov", { agency: null })).toEqual([]);
+  expect(orgChain("HigherGov", { agency: undefined })).toEqual([]);
+});
+
+/* `agency` is exactly the field whose shape is in question -- a non-object
+ * value (the flat shape's own sibling, a stray string, a number) must not be
+ * treated as a container to read `.agency_name` off, and must not throw. */
+test("a non-object HigherGov agency does not throw and is treated as absent", () => {
+  expect(orgChain("HigherGov", { agency: "Allen County" })).toEqual([]);
+  expect(orgChain("HigherGov", { agency: 12345 })).toEqual([]);
+  expect(orgChain("HigherGov", { agency: "Allen County", agency_name: "Natural Resources" })).toEqual([
+    "Natural Resources",
+  ]);
+});
