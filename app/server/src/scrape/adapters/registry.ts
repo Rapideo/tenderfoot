@@ -29,6 +29,7 @@ import { fakeAdapter } from "./fake.js";
 import { samAdapter } from "./sam.js";
 import { usaSpendingAdapter } from "./usaspending.js";
 import { idoaAdapter } from "./idoa.js";
+import { higherGovAdapter } from "./highergov.js";
 import type { Adapter } from "../adapter.js";
 
 export interface AdapterRegistryEntry {
@@ -64,4 +65,10 @@ export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
    * (D27, Proto2PRD 2.26). Its deletion trigger is named in idoa.ts's header:
    * when the HigherGov adapter lands. */
   idoa: { sourceName: "Indiana IDOA solicitations", make: () => idoaAdapter() },
+  /* ⚠️ THE FIRST METERED ADAPTER IN THIS MAP. Every other entry is free to
+   * run; this one bills per record against an allowance that cannot be read
+   * back from the vendor. `npm run scrape -- --source highergov` therefore
+   * spends money, and `npm run ingest:highergov` is the guarded door that
+   * checks the budget first (ingest/highergov-cli.ts). */
+  highergov: { sourceName: "HigherGov", make: () => higherGovAdapter() },
 };
