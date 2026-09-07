@@ -12,11 +12,33 @@
  * the key was thought of as something in the request, not something that
  * comes back.
  *
- * ⚠️ AND THE SCRUB MUST BE STABLE, not merely present. The artifact's hash
- * is computed over the scrubbed bytes, so a scrub applied inconsistently
- * would make two runs over identical data hash differently and quietly
- * change what the UNIQUE constraint means. scrubPayload is idempotent and
- * a test pins that.
+ * ⚠️ AND THE SCRUB MUST BE STABLE, not merely present. scrubPayload is
+ * idempotent and a test pins that.
+ *
+ * ⚠️ THE REASON GIVEN HERE USED TO BE FALSE, and it is worth correcting
+ * rather than deleting, because the wrong reason invited the wrong
+ * conclusion. It said a non-idempotent scrub "would make two runs over
+ * identical data hash differently and quietly change what the UNIQUE
+ * constraint means." Two runs over identical data ALREADY hash differently,
+ * unconditionally: ingest/import-artifact.ts hashes the whole SQLite file
+ * (`createHash("sha256").update(readFileSync(path))`), and that file carries
+ * `run.started_at`, `capture.fetched_at` and `sighting.seen_at`. No scrub,
+ * idempotent or not, can make two runs collide on artifact_sha256.
+ *
+ * THE REAL REASON is byte-stability of what gets PERSISTED. The payload is
+ * written verbatim into the artifact and, through the sighting rows, into
+ * Postgres. A scrub whose output depended on how many times it had been
+ * applied would mean the stored bytes depend on the path a value took to get
+ * here rather than on the value itself -- so the same vendor row would read
+ * back differently depending on whether it arrived through the live adapter
+ * or through highergov-cli.ts's reuse of the dry run's sample, which
+ * deliberately scrubs a second time (its own comment says so). Idempotence
+ * is what makes that second pass provably free.
+ *
+ * CONSEQUENCE, recorded so the next reader does not re-derive it: because
+ * the hash always differs, ingest/highergov-cli.ts's "artifact already
+ * imported -- skipped" branch is structurally unreachable from that CLI. It
+ * is kept as defence, and says so there.
  *
  * ⚠️ NO DATABASE ACCESS, and no spend accounting here. An adapter fetches
  * and parses; ingest/highergov-cli.ts owns the budget, the ceiling and the
