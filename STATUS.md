@@ -236,6 +236,35 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-07
 
+## ✅ 2026-09-07 — `npm run recall` HAS RUN LIVE, AND IT REPRODUCED THE BUY CASE EXACTLY
+
+**Three runs, 99 records, census complete: 77 of 77 IDOA notices resolved.**
+
+| | |
+|---|---|
+| **C1 coverage recall** | **0.987 — 76 of 77 carried** |
+| **C2 timely recall** | **0.987** — every carried notice had ≥7 days left, so C2 equals C1 |
+| C3 capture latency | median **41 days**, min 29, max 104 ⚠️ census-inflated, and the tool says so itself |
+| C4 cohort | **FAIL — 77 against the floor of 100** |
+| sub_state | **NOT MEASURED** — key deliberately unbuilt |
+
+**🔑 THE ONE MISS IS THE SAME NOTICE AS 2026-09-03.** `003400000088450` — *"2-year Contract for Locksmith/Safe Services"*, Motor Vehicles Comm. R2 recorded it as the only miss in the 69/70 answer-key test; four days later, through **completely different code and a different method**, it is still the only gap.
+
+**That is a persistent, structural absence — not sampling noise** — and it is the strongest validation the harness could have produced: two independent methods, four days apart, reproducing the same single result (0.986 then, 0.987 now).
+
+### What the run cost and where the tally landed
+
+**99 records of the 500-record standing budget; 401 remain.** ⚠️ **The tally is in the TEST database's `api_spend`** — `DATABASE_URL` points at `ep-withered-base`, not production — so **production's ledger under-counts by 99.** Recorded here because that ledger is the only instrument, and a number nobody wrote down is a number lost.
+
+### ⏳ WHAT STANDS BETWEEN HERE AND A BINDING VERDICT
+
+**The state-agency segment cannot reach 100 from the current page — it holds 77.** The answer key grew 71 → 77 in the five days since it was frozen, so IDOA publishes about **1.2 notices/day**. Reaching the floor needs **~23 new notices, roughly three weeks** — which is precisely the cost D9 was ruled to accept, now measured rather than estimated.
+
+Until then C1 and C2 correctly report `unknown`. **The tool is working; the evidence is not yet sufficient, and it says so.**
+
+⚠️ **All three runs aborted on `maxRecordsPerRun` (40) — an UNRATIFIED cap**, and the report named it each time. It cost two extra runs and ~10 records of repeated day-pull overhead; nothing else.
+
+
 ## ⛔ 2026-09-07 — THE ONE THING BLOCKING EVERYTHING HIGHERGOV: `HIGHERGOV_SEARCH_ID`
 
 **It is not in `.env`, and without it nothing HigherGov can run.** `searchId()` throws by design — `/opportunity/` has **no location parameter** (R1), so the saved search is the ONLY Indiana filter, and a missing one would pull nationally and bill for it (5,266 records measured for one unfiltered day). The throw is the Task 3 money-bug fix working.
