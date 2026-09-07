@@ -87,6 +87,41 @@ export function postedAt(sourceName: string, raw: unknown): PostedAt | null {
        * things under one label. */
       return null;
 
+    /* HIGHERGOV, ADDED 2026-09-07 -- and it is this module's own header
+     * happening a second time to the source the gate exists to judge.
+     * Without this case `postedAt("HigherGov", …)` fell to the default
+     * below and every ingested row landed with `posted_at` NULL, which is
+     * the identical defect measured at 1,724 of 1,724 on SAM.gov: volume per
+     * source per week, half of what Plan of Action §6 requires the gate to
+     * produce, uncomputable for Indiana.
+     *
+     * `posted_date` is the field, per
+     * docs/2026-09-03-highergov-field-mapping.md:53, which notes "migration
+     * 016 exists for exactly this". Nothing is chosen here the way SAM's
+     * publishDate/originalPublishDate pair had to be chosen -- HigherGov
+     * publishes one posting date and this reads it.
+     *
+     * ⚠️ THE MAPPING DOCUMENT NAMES AN ORIGIN THIS COLUMN CANNOT HOLD.
+     * It writes `posted_at_origin='listing'`; migration 016's CHECK is
+     * `posted_at_origin IN ('published','observed')`, so a row carrying
+     * 'listing' is REJECTED BY THE DATABASE, not merely off-vocabulary. The
+     * two words make the same claim -- the source STATED this date rather
+     * than us deriving it from when we first saw the row (D25's whole
+     * distinction) -- so the column's word is used and the document's is
+     * recorded here as the synonym it is.
+     *
+     * NO FALLBACK TO `captured_date`, though it is present on every row and
+     * would look like a free improvement. It is HigherGov's watermark --
+     * when THEY saw it -- which the field-mapping document calls out as a
+     * different concept from `sighting.seen_at` and is certainly a different
+     * concept from when the buyer published. Reading it here would put an
+     * observed date under `origin: 'published'` in the one column migration
+     * 016 created to keep those two apart. */
+    case "HigherGov": {
+      const date = isoDate(r.posted_date);
+      return date === null ? null : { date, origin: "published" };
+    }
+
     default:
       /* An unknown source yields nothing rather than guessing at a field name
        * that happens to exist. Corpus imports set posted_at at ingest and
