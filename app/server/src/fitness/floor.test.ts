@@ -30,6 +30,17 @@ async function reset(): Promise<void> {
   await run(`DELETE FROM ingest_run`);
   await run(`DELETE FROM sighting`);
   await run(`DELETE FROM solicitation`);
+  /* api_spend BEFORE source: `api_spend.source_id` is NOT NULL REFERENCES
+   * source(id), so any api_spend row -- written by a test, or by anything
+   * that runs before one -- makes this unscoped delete violate the FK.
+   *
+   * ⚠️ This list is hand-enumerated, which means EVERY future table with a
+   * foreign key to `source` breaks this helper, and it breaks as a red test
+   * in a file that never mentions the new table. Migration 032 demonstrated
+   * exactly that: it seeded one api_spend row and turned two fitness tests
+   * red. 032 is now guarded to skip test schemas, so it is no longer the
+   * cause -- this delete stays because the NEXT such table will not be. */
+  await run(`DELETE FROM api_spend`);
   await run(`DELETE FROM source`);
 }
 

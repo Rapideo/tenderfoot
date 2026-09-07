@@ -44,10 +44,33 @@
 -- Applying it there is a deliberate operator act (CLAUDE.md §2) and is not
 -- done by writing this file.
 
+-- 🔴 AND IT MUST NOT REACH A TEST SCHEMA, which the first version of this
+-- file got wrong and the suite caught within minutes.
+--
+-- `useTestSchema()` gives every test file its own schema and sets the pool's
+-- search_path to it (`db/index.ts` -- `options: -c search_path=...`), then
+-- `resetSchema()` runs EVERY migration into it. So an unguarded INSERT here
+-- seeds 490 records of spend into every test fixture in the project. Two ways
+-- that bites, and both were observed:
+--
+--   1. `api_spend.source_id` is NOT NULL REFERENCES source(id), so an
+--      unscoped `DELETE FROM source` in a test's own reset() helper starts
+--      violating a foreign key -- surfacing as red tests in files that have
+--      never heard of api_spend.
+--   2. Worse, because it is silent: every test that exercises the monthly
+--      CEILING would compute against a 490-record head start it did not set
+--      up and cannot see, so its arithmetic would drift without its
+--      assertions ever mentioning spend.
+--
+-- `current_schema()` is 'public' in a real database and the per-run schema
+-- name under test, so this guard is exact. A reconciliation of one real
+-- account's history is not a fixture, and must not become one.
+
 INSERT INTO api_spend (source_id, endpoint, records, called_at)
 SELECT s.id, 'opportunity', 490, timestamptz '2026-09-03 12:00:00+00'
 FROM source s
 WHERE s.name = 'HigherGov'
+  AND current_schema() = 'public'
   /* Idempotent: re-running must not double-count the one thing this file
    * exists to count. Keyed on the exact reconciliation row, so a genuine
    * future 490-record call on a different day still inserts normally. */
