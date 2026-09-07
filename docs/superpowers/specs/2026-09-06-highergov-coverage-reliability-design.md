@@ -95,6 +95,37 @@ passed anyway.**
 This yields a reading in the first run rather than after a two-week wait, and it
 costs one filtered pull per elapsed day.
 
+> ### 🔴 AMENDED 2026-09-06 — THIS IS NOT WHAT WAS BUILT, AND THE SECTION IS LEFT AS WRITTEN SO A READER MEETS THE CORRECTION
+>
+> **The diff against the frozen 71-item key was never implemented.** The
+> whole-branch review found it: the plan never asked for it, and `coverage-cli.ts`
+> passes the **entire current IDOA page** as the cohort. Nothing stores a previous
+> census, so there is nothing to diff against on the first run.
+>
+> **Ruled 2026-09-06: correct this document rather than build the machinery.**
+> Two reasons.
+>
+> **First, the full-page cohort is a legitimate measurement.** With the
+> false-miss guard (§3.4) every key entry not in the window feed is looked up by
+> id, so C1 answers "of the notices open on IDOA today, how many does HigherGov
+> carry" — a real question, and the one the purchase was argued on.
+>
+> **Second, and this is what makes the amendment cheap: after run one, the
+> DATABASE is the baseline.** A notice settled `carried` is never re-asked, so
+> every run after the first naturally measures only what is new or still
+> unresolved. The spec wanted a diff; it gets one from run two onward. **Only run
+> one is a full census.**
+>
+> ⚠️ **What that costs, stated rather than buried: run one's C2 is INFLATED.**
+> Notices that have been open for weeks were captured weeks ago, so their lead
+> times are large. **Run one is a census and must not be read as a decay
+> measurement.** The CLI says so at runtime when the accumulated cohort is empty.
+>
+> ⚠️ **And §6's cost table no longer describes run one.** "Elapsed-window harvest
+> (~4 days) ≈ 25 records" assumed a small new-notice cohort. A full census is
+> ~71 id lookups, capped at 40 records per run — which is why a complete first
+> census takes two or three runs.
+
 > ⚠️ **The diff has one blind spot, disclosed rather than discovered later.**
 > The key is a census of *open* notices. A notice posted **and closed** between
 > two observations appears in neither census and is invisible to the test.
@@ -320,7 +351,11 @@ observation log, not a verdict list.** The rule, stated because it is otherwise
 genuinely ambiguous:
 
 - A notice **enters the cohort** on the run that first sees it in a free answer
-  key. Its `key_seen_at` never changes afterwards.
+  key. ~~Its `key_seen_at` never changes afterwards.~~ **⚠️ CORRECTED
+  2026-09-06: `key_seen_at` is written as `now()` on every row of every run, so
+  it records when THIS run observed the notice, not when it entered the cohort.
+  The earliest observation is recoverable by joining to `coverage_run.run_at`,
+  so nothing is lost — but the sentence as written was wrong about the column.**
 - While it reads `missing` or `unchecked`, **it is re-queried on subsequent
   runs** — a notice carried late is precisely what C2 exists to catch, and a
   single observation would score it as a permanent miss.
