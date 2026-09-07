@@ -10,6 +10,7 @@ import type { Adapter } from "./adapter.js";
 import { ADAPTERS } from "./adapters/registry.js";
 import { resolveSource } from "./resolve-source.js";
 import { MAX_BATCH } from "../lib/batchLimit.js";
+import { HIGHERGOV_ADAPTER_KEY } from "./adapters/highergov.js";
 
 /* Flags that stand alone -- no following value is consumed. Everything else
  * keeps the existing "--name value" shape below. */
@@ -224,6 +225,33 @@ export async function main(
    * distinct mistakes, and collapsing them cost the clearer message when
    * the adapter lookup moved ahead of validateRun (fix round 1, 2026-09-02). */
   if (sourceKey === undefined) throw new Error("source is required");
+
+  /* 🔴 THE DOOR, CLOSED HERE RATHER THAN METERED. HigherGov is registered
+   * (registry.ts) so its adapter exists and is reachable by name -- but
+   * nothing under scrape/ ever calls recordSpend, so a run through this
+   * generic path bills the vendor for real and writes NOTHING to
+   * api_spend. That silently under-reports spentThisMonth("HigherGov"),
+   * which is the one number ingest/highergov-cli.ts's whole ceiling check
+   * depends on -- wrong in the reassuring direction, discovered only when
+   * the vendor's own dashboard disagrees with ours (CLAUDE.md §5.1).
+   *
+   * Metering this path instead of closing it would mean either teaching
+   * scrape/run.ts's windowed loop to read a vendor-billed count off a page
+   * it does not currently carry (WindowedPage has no such field), or
+   * duplicating the tally logic ingest/highergov-cli.ts already owns.
+   * Refusing here makes ingest:highergov the ONE way in, so its header's
+   * claim ("this is the gate spec §7 requires") is actually true rather
+   * than aspirational. */
+  if (sourceKey === HIGHERGOV_ADAPTER_KEY) {
+    throw new Error(
+      "--source highergov is not run through `npm run scrape` -- it is a METERED " +
+        "source (CLAUDE.md §5.1) and this generic path records no spend at all, which " +
+        "would silently under-report spentThisMonth('HigherGov') against the ratified " +
+        "ceiling. Use `npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD` " +
+        "instead -- it measures the window's cost before spending and records every call.",
+    );
+  }
+
   const entry = ADAPTERS[sourceKey];
   if (!entry) {
     throw new Error(`No adapter named ${sourceKey}. Known: ${Object.keys(ADAPTERS).join(", ")}`);
