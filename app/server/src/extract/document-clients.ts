@@ -62,6 +62,17 @@ export interface FetchedDocument {
    * document.source_url column is already nullable (migration 008); the
    * record screen already renders on a null source_url (Record.tsx). */
   sourceUrl: string | null;
+  /* Task 7 review round 2. HigherGov's documents arrive pre-extracted
+   * (docs/2026-09-03-highergov-field-mapping.md §2's `text_extract`) -- not
+   * present at all is a DIFFERENT fact from "we looked and it was empty",
+   * which is why this is optional rather than `string | null`: SAM's client
+   * never sets it, and `undefined` here must read as "this source has no
+   * such concept," not as an absence extract-status would otherwise have to
+   * explain. When present and non-empty, fetch-documents-for.ts writes it
+   * straight to document.extracted_text and marks extract_status
+   * 'extracted' -- the whole mechanical-extraction stack becomes a field
+   * read for this source, per that doc's own conclusion. */
+  extractedText?: string | null;
 }
 
 export interface DocumentFetchResult {
@@ -127,6 +138,9 @@ export const higherGovDocumentClient: DocumentClient = {
     const documents: FetchedDocument[] = docs.map((d) => ({
       filename: d.fileName,
       sourceUrl: null,
+      /* Passed through untouched -- fetch-documents-for.ts decides what
+       * extract_status this earns, this mapper only carries the fact. */
+      extractedText: d.textExtract,
     }));
     return { documents, records };
   },

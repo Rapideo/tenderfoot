@@ -66,13 +66,20 @@ export interface FeedResult {
  * instead show `document_path` carrying a URL that points AT /document/ (see
  * highergov-opportunity.json), so the live per-document field name is not
  * fully pinned down between the two -- but the outcome is identical either
- * way: nothing URL-shaped from this endpoint is fit to persist, so
- * FetchedDoc carries only the one fact that IS safe and IS documented: the
- * filename. There is deliberately no `documentId` field here (the plan's own
- * sketch proposed one) -- inventing a field the vendor's schema does not
- * name would be exactly the guessed-shape failure CLAUDE.md warns against. */
+ * way: nothing URL-shaped from this endpoint is fit to persist. There is
+ * deliberately no `documentId` field here (the plan's own sketch proposed
+ * one) -- inventing a field the vendor's schema does not name would be
+ * exactly the guessed-shape failure CLAUDE.md warns against. */
 export interface FetchedDoc {
   fileName: string;
+  /* Task 7 review round 2. `text_extract` is NOT credential-shaped (unlike
+   * document_path/download_url) -- it is the vendor's own already-extracted
+   * text, 8,884-22,190 chars observed on `.docx` per the field-mapping doc,
+   * NULL for `.xlsx`. Field-mapping doc §2's own conclusion: for HigherGov
+   * documents the whole mechanical-extraction stack "becomes a field read".
+   * Safe to carry all the way out of this module, unlike the two URL fields
+   * above it. */
+  textExtract: string | null;
 }
 
 export interface DocumentsResult {
@@ -236,13 +243,23 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
    *
    * It does NOT make the call free. The vendor bills on the response it
    * sent, not on whether this client can make sense of it, and this still
-   * throws either way. Accounting for that money is run.ts's job, not this
-   * module's -- same separation this file's header states (client fetches
-   * and parses, the caller decides what it cost). run.ts wraps both call
-   * sites in a try/catch and tallies a conservative estimate
-   * (thresholds.ts's `unparseableResponseRecords`) before letting whatever
-   * this function throws propagate, so a call this guard rejects still lands
-   * a row in api_spend instead of disappearing from it. */
+   * throws either way. Accounting for that money is the CALLER's job, not
+   * this module's -- same separation this file's header states (client
+   * fetches and parses, the caller decides what it cost).
+   *
+   * ⚠️ THREE CALL SITES DEPEND ON THIS, NOT TWO. run.ts wraps its two
+   * (fetchDay, fetchBySourceId) in a try/catch and tallies a conservative
+   * estimate (thresholds.ts's `unparseableResponseRecords`) before letting
+   * whatever this function throws propagate. Task 7 opened a THIRD:
+   * fetch-documents-for.ts, reached through document-clients.ts's
+   * higherGovDocumentClient, calls fetchDocuments -- which is this same
+   * fetchValidated() underneath. Before HigherGov's document client existed
+   * that third site only ever saw SAM.gov, which is free and could not lose
+   * anything by going untallied. Registering the first METERED document
+   * client made the gap live, and fetch-documents-for.ts now tallies the
+   * same conservative estimate before rethrowing, for the same reason. Any
+   * FOURTH call site added later must do the same, or a call this guard
+   * rejects vanishes from api_spend instead of landing a row in it. */
   const results = body.results ?? [];
   if (!Array.isArray(results)) {
     throw new Error(
@@ -276,7 +293,7 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
 function toFetchedDoc(r: RawResult): FetchedDoc | null {
   const fileName = str(r.file_name);
   if (!fileName) return null;
-  return { fileName };
+  return { fileName, textExtract: str(r.text_extract) };
 }
 
 async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<DocumentsResult> {
