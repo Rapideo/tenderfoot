@@ -1,0 +1,44 @@
+{
+  "meta": { "pagination": { "page": 1, "pages": 1, "count": 3 } },
+  "results": [
+    {
+      "source_id": "003000000088067",
+      "captured_date": "2026-09-03",
+      "version_key": "v1",
+      "title": "300 SP Salamonie Sludge and WW RemovalBid Documents",
+      "description_text": "Removal of accumulated sludge and wastewater at the Salamonie site.",
+      "due_date": "2026-09-03",
+      "agency_name": "Natural Resources",
+      "source_type": "sled",
+      "pop_state": "IN",
+      "val_est_low": 250000,
+      "document_path": "https://www.highergov.com/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0001"
+    },
+    {
+      "source_id": "004950000088400",
+      "captured_date": "2026-09-04",
+      "version_key": "v1",
+      "title": "AMB 28942 TOC Gas Gen",
+      "description_text": null,
+      "due_date": "2026-09-24",
+      "agency_name": "Environmental Management",
+      "source_type": "sled",
+      "pop_state": "IN",
+      "val_est_low": null,
+      "document_path": "https://www.highergov.com/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0001"
+    },
+    {
+      "source_id": "FORECAST-2027-ROADS",
+      "captured_date": "2026-09-05",
+      "version_key": "v1",
+      "title": "2027 Road Resurfacing Program",
+      "description_text": "Anticipated resurfacing program for the 2027 season.",
+      "due_date": null,
+      "agency_name": "Allen County",
+      "source_type": "sled_forecast",
+      "pop_state": "IN",
+      "val_est_low": null,
+      "document_path": "https://www.highergov.com/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0001"
+    }
+  ]
+}
