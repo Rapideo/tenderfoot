@@ -28,7 +28,8 @@
     "fitness": "tsx --env-file-if-exists=.env app/server/src/fitness/fitness-cli.ts",
     "recall": "tsx --env-file-if-exists=.env app/server/src/coverage/coverage-cli.ts",
     "contracts:ingest": "tsx --env-file-if-exists=.env app/server/src/contracts/contracts-cli.ts",
-    "contracts:ingest:production": "node --env-file-if-exists=.env scripts/contracts-ingest-production.mjs"
+    "contracts:ingest:production": "node --env-file-if-exists=.env scripts/contracts-ingest-production.mjs",
+    "ingest:highergov": "tsx --env-file-if-exists=.env app/server/src/ingest/highergov-cli.ts"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
