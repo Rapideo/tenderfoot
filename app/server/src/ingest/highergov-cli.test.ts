@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -616,6 +616,99 @@ test("an artifact with no billed count falls back UP to the conservative bound, 
 
     expect(await totalSpend()).toBe(1 + COVERAGE.unparseableResponseRecords);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 THIS REVIEW, FIX 2 -- THE TALLY ITSELF MUST NOT REPLACE THE ERROR IT
+ * EXISTS TO RECORD. Both catches above tally a conservative spend before
+ * rethrowing the vendor's own error -- but `one()` and `recordSpend` are
+ * themselves a database round trip, and can throw too (a degraded compute,
+ * per CLAUDE.md §4's own "Connection terminated unexpectedly"). Unguarded,
+ * that second throw would silently replace the vendor's "non-array results"
+ * with a database error before `throw err` ever ran -- the ledger is
+ * unaffected either way (no row is written in either case), but the
+ * operator loses the one diagnostic that explains why records were billed
+ * for nothing.
+ *
+ * A trigger that fails ONLY on the conservative-bound value (not on an
+ * ordinary spend) simulates the tally itself failing without disturbing the
+ * legitimate recordSpend calls this file also makes on the success path --
+ * a blunt "rename the table away" would have broken those too and proven
+ * nothing about this specific guard. */
+async function withFailingSpendTally<T>(fn: () => Promise<T>): Promise<T> {
+  await run(`
+    CREATE OR REPLACE FUNCTION test_fail_conservative_spend() RETURNS trigger AS $BODY$
+    BEGIN
+      IF NEW.records = ${COVERAGE.unparseableResponseRecords} THEN
+        RAISE EXCEPTION 'simulated spend-tally failure for test';
+      END IF;
+      RETURN NEW;
+    END;
+    $BODY$ LANGUAGE plpgsql;
+  `);
+  await run(`
+    CREATE TRIGGER test_fail_conservative_spend_trigger
+    BEFORE INSERT ON api_spend
+    FOR EACH ROW EXECUTE FUNCTION test_fail_conservative_spend();
+  `);
+  try {
+    return await fn();
+  } finally {
+    await run(`DROP TRIGGER IF EXISTS test_fail_conservative_spend_trigger ON api_spend`);
+    await run(`DROP FUNCTION IF EXISTS test_fail_conservative_spend()`);
+  }
+}
+
+test("the sample's own vendor error survives even when the spend tally itself throws", async () => {
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await withFailingSpendTally(async () => {
+      await expect(
+        dryRun("2026-09-01", "2026-09-30", clientThatThrowsAfterBilling(), 0),
+      ).rejects.toThrow(/non-array "results"/);
+    });
+
+    /* No row: the simulated tally failure rolled its own INSERT back, exactly
+     * as a real one would. */
+    const rows = await all<{ records: number }>(
+      `SELECT sp.records FROM api_spend sp JOIN source s ON s.id = sp.source_id WHERE s.name = $1`,
+      [HIGHERGOV_SOURCE_NAME],
+    );
+    expect(rows).toHaveLength(0);
+
+    /* The tally's own failure must still be surfaced somewhere -- silently
+     * dropping it entirely would just be a quieter version of the same
+     * defect. */
+    expect(errorSpy).toHaveBeenCalled();
+  } finally {
+    errorSpy.mockRestore();
+  }
+});
+
+test("a day-walk's vendor error survives even when its own spend tally throws", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });
+
+    await withFailingSpendTally(async () => {
+      await expect(
+        main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir),
+      ).rejects.toThrow(/non-array "results"/);
+    });
+
+    /* The sample's own (non-conservative) spend still committed normally --
+     * only the day-walk's conservative tally for day two hit the trigger. */
+    expect(await totalSpend()).toBe(1);
+    expect(errorSpy).toHaveBeenCalled();
+  } finally {
+    errorSpy.mockRestore();
     rmSync(dir, { recursive: true, force: true });
   }
 });

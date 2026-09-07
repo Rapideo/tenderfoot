@@ -330,15 +330,35 @@ export async function dryRun(
   try {
     sample = await client.fetchDay(from);
   } catch (err) {
-    const src = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [
-      HIGHERGOV_SOURCE_NAME,
-    ]);
-    if (src) {
-      await recordSpend({ run: exec }, {
-        sourceId: src.id,
-        endpoint: "opportunity",
-        records: COVERAGE.unparseableResponseRecords,
-      });
+    /* 🔴 THE TALLY ITSELF MUST NOT SWALLOW `err` (final review, fix 2). This
+     * whole catch exists so the vendor's error is never lost -- but `one()`
+     * and `recordSpend` are themselves a DB round trip, and on a degraded
+     * compute (CLAUDE.md §4's own "Connection terminated unexpectedly") they
+     * can throw too. Unguarded, that second throw would replace `err` before
+     * `throw err` below ever ran: the ledger is unaffected either way (no row
+     * gets written in either case), but the operator would see a database
+     * error instead of the vendor's own -- exactly the diagnostic this catch
+     * was written to preserve. So the tally is wrapped and its own failure
+     * only logged, never allowed to compete with the error it was recording. */
+    try {
+      const src = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [
+        HIGHERGOV_SOURCE_NAME,
+      ]);
+      if (src) {
+        await recordSpend({ run: exec }, {
+          sourceId: src.id,
+          endpoint: "opportunity",
+          records: COVERAGE.unparseableResponseRecords,
+        });
+      }
+    } catch (tallyErr) {
+      console.error(
+        redact(
+          `Failed to record conservative spend after a vendor error (original error follows): ${
+            tallyErr instanceof Error ? (tallyErr.stack ?? tallyErr.message) : String(tallyErr)
+          }`,
+        ),
+      );
     }
     throw err;
   }
@@ -592,12 +612,27 @@ export async function main(
     try {
       runResult = await runScrape(req, dayAdapter, outPath);
     } catch (err) {
+      /* 🔴 SAME GUARD AS THE DRY RUN'S OWN CATCH ABOVE (final review, fix 2):
+       * `recordSpend` is a DB write and can itself throw, and unguarded that
+       * would replace `err` before it ever reached the `throw err` below --
+       * trading the vendor's own diagnostic for a database error, on the one
+       * call site where the vendor's message is the thing worth keeping. */
       if (!isSampledDay) {
-        await recordSpend({ run: exec }, {
-          sourceId: source.id,
-          endpoint: "opportunity",
-          records: COVERAGE.unparseableResponseRecords,
-        });
+        try {
+          await recordSpend({ run: exec }, {
+            sourceId: source.id,
+            endpoint: "opportunity",
+            records: COVERAGE.unparseableResponseRecords,
+          });
+        } catch (tallyErr) {
+          console.error(
+            redact(
+              `Failed to record conservative spend after a vendor error (original error follows): ${
+                tallyErr instanceof Error ? (tallyErr.stack ?? tallyErr.message) : String(tallyErr)
+              }`,
+            ),
+          );
+        }
       }
       throw err;
     }
