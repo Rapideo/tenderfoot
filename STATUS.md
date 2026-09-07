@@ -236,6 +236,18 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-07
 
+## ✅ HIGHERGOV INGESTS — THE PURCHASE FINALLY DELIVERS ROWS
+
+**`npm run ingest:highergov -- --from=… --to=…`.** HigherGov had a registry row and nothing else since 2026-09-03; it now has an adapter, a document client, and four merge cases.
+
+**🔴 THE CONSTRAINT THAT SHAPED THE SLICE.** `scrape/run.ts` hands the payload straight to `writeCapture`, and `import-artifact.ts` hashes the file into `ingest_run.artifact_sha256`. Every HigherGov row carries `document_path`, which embeds the api_key — so an unscrubbed payload would write a **live credential into storage permanently, hashed and immutable**. The payload is scrubbed at the adapter boundary and the scrub is **idempotent**, because the hash is computed over the scrubbed bytes and an inconsistent scrub would make two runs over identical data hash differently.
+
+⚖️ **F6 CHANGED, and it changes a predicate ratified in D4.** It now excludes rows with an empty description whose documents were never fetched — unexamined is not unreadable. Without it, ingesting HigherGov would have dragged the p10 from 57 to 0 on arrival (34% of its rows carry no description, R11), reporting a collapse in quality that is really an increase in coverage. **The population changed, not the threshold**, and a row we *did* fetch documents for and still cannot read stays counted.
+
+⚖️ **Forecasts are held, never queued.** `sled_forecast` → `kind: 'forecast'` → `NOT_BIDDABLE`. Narrower than it sounds: presolicitations stay in the queue, because early signal is worth more to a small firm. A forecast is excluded for being unbiddable *today*.
+
+⚠️ **`val_est` is still not written to `value_cents`** — R6's inferred bands, migration 019's standing prohibition.
+
 ## ✅ 2026-09-07 — `npm run recall` HAS RUN LIVE, AND IT REPRODUCED THE BUY CASE EXACTLY
 
 **Three runs, 99 records, census complete: 77 of 77 IDOA notices resolved.**
