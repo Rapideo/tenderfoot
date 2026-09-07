@@ -87,6 +87,52 @@ path, exactly as `scrape/adapter.ts`'s header intends.
 Everything downstream is unchanged: `scrape → import → merge`, the same three
 commands every other source uses.
 
+> ### ⚖️ AMENDED 2026-09-07 by Matt's ruling — the BACKFILL moves to `posted_date`; live operation stays on `captured_date`
+>
+> **What this section assumed:** that one axis serves both jobs, which is what
+> made "backfill and live operation the same code path" attractive. **That is
+> now known to be false, and the reason is money rather than elegance.**
+>
+> **Two measurements, same saved search, same parameter, disagreeing by 7×:**
+>
+> | Day sampled | Indiana records | Measured |
+> |---|---:|---|
+> | 2026-09-02 | **5** | R5, 2026-09-03 — the number §7's entire cost table is built from |
+> | 2026-06-09 | **~35** (10 on page one, 4 pages) | the first real `ingest:highergov` dry run, 2026-09-07 |
+>
+> **`captured_date` is a CRAWL watermark, not a publication date.** It answers
+> *"what did HigherGov notice on this day"*. For **live** operation that is
+> exactly the right question, and this section's reasoning holds unchanged.
+>
+> **For a BACKFILL it is the wrong question, and expensively so.** A historical
+> `captured_date` window returns whatever their crawler touched that day —
+> **including re-captures of notices we already hold.** The vendor bills per
+> record **returned**, so a re-capture costs full price and delivers nothing:
+> the merge layer dedups it correctly, so the data is clean and the money is
+> gone. That is also the likeliest explanation for arithmetic that never added
+> up — 90 days measuring ~3,200 records against a *whole-archive* estimate of
+> ~9,286 only makes sense if the window is dense with re-captures rather than
+> being a third of thirteen years of publications.
+>
+> **`posted_date` is an accepted parameter (R1) and asks the question a backfill
+> actually means:** what was *published* in this window. No re-capture
+> duplication, and the resulting archive is defined by the market's calendar
+> rather than by the vendor's crawler schedule.
+>
+> **What this costs, stated rather than discovered:** backfill and live are no
+> longer literally the same call, so the adapter grows an axis. The downstream
+> path — `scrape → import → merge`, the artifact, the scrub, the ledger — is
+> untouched, because the axis changes only which day a request asks for.
+>
+> ⚠️ **And a warning about the tool this ruling was made with.** `projectWindow`
+> samples **one** day and extrapolates across the whole window. Against a
+> measured 7× spread in daily volume, that projection is far less reliable than
+> its confident output suggests: a light sample day understates the bill, and a
+> heavy one refuses a window that would have fit. This is `Proto2PRD-Lessons`
+> §2.15 — *an agent's result is one observation* — applying to a guard built in
+> this very slice. **Before a large window is bought, the sample should be more
+> than one day.**
+
 ---
 
 ## 4. 🔴 The constraint that dominates this slice
