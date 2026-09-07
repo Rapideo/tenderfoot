@@ -56,15 +56,21 @@ async function sol(
   closes: string | null,
   kind: string | null,
   description?: string | null,
+  /* Ruling (1) needs this: F6 now distinguishes "we looked and there is
+   * nothing to read" from "we have not looked yet", and attachments_checked_at
+   * (migration 011, reused by D2) is the stamp that tells them apart. */
+  attachmentsCheckedAt?: string | null,
 ): Promise<number> {
   /* posted_at_origin is derived from posted_at rather than passed: migration
    * 016's CHECK forbids a date with no provenance, and a fixture that had to
    * remember to set it would drift out of step with the constraint. */
   return insert(
     `INSERT INTO solicitation
-       (title, source_id, posted_at, posted_at_origin, closes_at, kind, description)
-     VALUES ('floor fixture', $1, $2, $3, $4, $5, $6) RETURNING id`,
-    [sourceId, posted, posted === null ? null : "published", closes, kind, description ?? null],
+       (title, source_id, posted_at, posted_at_origin, closes_at, kind, description,
+        attachments_checked_at)
+     VALUES ('floor fixture', $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [sourceId, posted, posted === null ? null : "published", closes, kind,
+     description ?? null, attachmentsCheckedAt ?? null],
   );
 }
 
@@ -231,7 +237,7 @@ test("F6 reports p10 over biddable rows only", async () => {
   expect(r.id).toBe("F6");
   expect(Number(r.measured)).toBeLessThan(200);
   expect(r.verdict).toBe("fail");
-  expect(r.detail).toContain("over 10 biddable rows");
+  expect(r.detail).toContain("over 10 examined biddable rows");
 });
 
 test("F6 passes when even the tail is readable", async () => {
@@ -242,6 +248,34 @@ test("F6 passes when even the tail is readable", async () => {
   const r = await measureF6();
   expect(Number(r.measured)).toBeGreaterThanOrEqual(200);
   expect(r.verdict).toBe("pass");
+});
+
+/* Ruling (1) (Matt, 2026-09-07). A row with an empty description whose
+ * documents have NEVER been fetched is not KNOWN to be unreadable -- it is
+ * unexamined. The same three-state discipline as document.extract_status,
+ * source.health and coverage_item.carried.
+ *
+ * Without this, ingesting HigherGov drags F6's p10 from 57 to 0 purely by
+ * arriving, because a third of its rows carry no description (R11). */
+test("F6 ignores an empty description nobody has looked for documents on", async () => {
+  await reset();
+  const s = await source("F6 unexamined", "IN");
+  await sol(s, null, null, null, "x".repeat(400), null);
+  await sol(s, null, null, null, "", null);
+  const f6 = await measureF6();
+  expect(f6.measured).toBe(400);
+});
+
+/* AND THE OTHER HALF, which is what stops this becoming a way to hide a
+ * real failure. A row we DID fetch documents for and still cannot read is
+ * a genuine gap and stays in the population. */
+test("F6 counts an empty description we did look for documents on", async () => {
+  await reset();
+  const s = await source("F6 examined", "IN");
+  await sol(s, null, null, null, "x".repeat(400), "2026-09-07T00:00:00Z");
+  await sol(s, null, null, null, "", "2026-09-07T00:00:00Z");
+  const f6 = await measureF6();
+  expect(Number(f6.measured)).toBeLessThan(400);
 });
 
 test("F7 measures reachability only over rows that defer to a document", async () => {

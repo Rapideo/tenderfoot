@@ -218,6 +218,24 @@ export async function measureF5(): Promise<PredicateResult> {
  * still under 200. A median hides the tail, and the tail is where a triage
  * decision becomes impossible. Restricted to biddable kinds because an award
  * notice's empty description is not a defect -- there is nothing to decide. */
+/* ⚖️ RULING ① (Matt, 2026-09-07): F6 measures what we have LOOKED AT.
+ *
+ * An empty description on a row whose documents were never fetched is not
+ * evidence that the row is unreadable -- it is evidence that nobody asked.
+ * Counting it would let F6 fall purely because we ingested a broader
+ * source: HigherGov carries no description on 34% of rows (R11), which
+ * would drag this p10 from 57 to 0 on arrival, reporting a collapse in
+ * data quality that is really an increase in coverage.
+ *
+ * ⚠️ THIS IS NOT A WAY TO HIDE A FAILURE, and the second condition is why.
+ * Once attachments_checked_at is stamped, the row counts whatever it holds.
+ * A notice we fetched documents for and still cannot read is a real gap and
+ * F6 must feel it. Only "we have not asked yet" is excluded, and D2's
+ * on-demand fetch is what turns that state into an answer.
+ *
+ * ⚠️ CHANGES A PREDICATE MATT RATIFIED IN D4. It changes the POPULATION,
+ * not the threshold, and it makes F6 harder to satisfy by accident rather
+ * than easier -- but it is a change to a ratified predicate. */
 export async function measureF6(): Promise<PredicateResult> {
   const statement = "The 10th-percentile description on a biddable row is readable";
   const row = await one<{ p10: number | null; n: string }>(
@@ -226,7 +244,11 @@ export async function measureF6(): Promise<PredicateResult> {
             ) AS p10,
             count(*) AS n
        FROM solicitation s
-      WHERE ${NOT_BIDDABLE_SQL}`,
+      WHERE ${NOT_BIDDABLE_SQL}
+        AND (
+          length(coalesce(s.description, '')) > 0
+          OR s.attachments_checked_at IS NOT NULL
+        )`,
   );
   const n = Number(row?.n ?? 0);
   if (n === 0 || row?.p10 === null || row?.p10 === undefined) {
@@ -248,7 +270,7 @@ export async function measureF6(): Promise<PredicateResult> {
     threshold: THRESHOLDS.minDescriptionP10Chars,
     measured: p10,
     verdict: p10 >= THRESHOLDS.minDescriptionP10Chars ? "pass" : "fail",
-    detail: `p10 = ${p10} characters over ${n} biddable rows.`,
+    detail: `p10 = ${p10} characters over ${n} examined biddable rows.`,
   };
 }
 
