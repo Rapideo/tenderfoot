@@ -178,6 +178,13 @@ function fakeAdapter(
       billedRecords?: number;
       throws?: boolean;
       omitBilledRecords?: boolean;
+      /* meta.pagination.pages for this day's envelope -- adapters/
+       * highergov.ts:139 carries this on every real day, so a fake day that
+       * wants to exercise the truncation-visibility path (Change 2) sets it
+       * here rather than leaving it absent (absent reads back as null/
+       * "unknown", not as untruncated -- see pagesFromArtifact's own
+       * comment). */
+      pages?: number;
     }
   >,
 ): WindowedAdapter {
@@ -193,15 +200,19 @@ function fakeAdapter(
         throw new Error('HigherGov returned a non-array "results" field (got object)');
       }
       const billed = entry.billedRecords ?? entry.items.length;
+      const envelope: Record<string, unknown> = entry.omitBilledRecords
+        ? { capturedDate: since }
+        : { capturedDate: since, records: billed };
+      if (entry.pages !== undefined) {
+        envelope.pages = entry.pages;
+      }
       return {
         items: entry.items,
         undatedSkipped: 0,
         nextCursor: null,
         requestUrl: `fake:/opportunity/?captured_date=${since}`,
         httpStatus: 200,
-        payload: entry.omitBilledRecords
-          ? JSON.stringify({ capturedDate: since })
-          : JSON.stringify({ capturedDate: since, records: billed }),
+        payload: JSON.stringify(envelope),
       };
     },
   };
@@ -519,6 +530,149 @@ test("committing an affordable window walks every day and imports what it finds"
     expect(ingestRuns.length).toBe(2); // one artifact per day, including the reused day
     expect(process.exitCode).toBeUndefined(); // complete, not partial
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* Change 2: TRUNCATION MUST BE VISIBLE FOR EVERY DAY, not just the sampled
+ * one. Before this, highergov-cli.ts:478-484 (now higher up, after Change 1's
+ * edits) warned only about the DRY RUN's own sampled day -- the day-walk
+ * itself never read `pages` back from any OTHER day's artifact, even though
+ * adapters/highergov.ts writes it faithfully on every real day. Day two here
+ * is truncated (pages: 3) and day one (the reused sample) is not (pages
+ * defaults to 1 in clientWithNotices) -- proving this is read per day, not
+ * inherited from the sample. */
+test("a truncated day is reported during the walk, and the end-of-run summary counts it", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-02": {
+        items: [{ externalId: "HG-2", modifiedAt: "2026-09-02", raw: {} }],
+        pages: 3,
+      },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir);
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    /* 🔴 MUST BE THE PER-DAY LINE ITSELF, not merely satisfied by the
+     * end-of-run summary below (which also names the day and the word
+     * TRUNCATED, and would make this assertion pass even with the per-day
+     * print deleted -- caught by mutation testing). "<day> was TRUNCATED:"
+     * is the per-day format exactly; the summary's own wording is "TRUNCATED
+     * ARCHIVE: ... with more pages existing for that day: <day>", which
+     * never produces this substring. */
+    expect(lines.some((l) => l.includes("2026-09-02 was TRUNCATED:"))).toBe(true);
+    /* And the sampled day (untruncated) must NOT be reported as truncated --
+     * this is a per-day fact, not a window-wide guess. */
+    expect(lines.some((l) => l.includes("2026-09-01 was TRUNCATED:"))).toBe(false);
+    /* The end-of-run summary: 1 of the 2 loaded days was truncated. */
+    expect(
+      lines.some(
+        (l) => l.includes("TRUNCATED ARCHIVE") && l.includes("1 of 2") && l.includes("2026-09-02"),
+      ),
+    ).toBe(true);
+    expect(process.exitCode).toBeUndefined(); // the run still completed in full
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* THE OTHER HALF: a run where nothing truncated must say so plainly, not
+ * merely stay silent -- silence here is exactly what let a 90-day run report
+ * truncation "once, about one day" before this change (an operator who never
+ * sees the word TRUNCATED cannot distinguish "this window was clean" from
+ * "nobody checked"). */
+test("no truncated days -- the summary says so explicitly, not by omission", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-02": { items: [{ externalId: "HG-2", modifiedAt: "2026-09-02", raw: {} }] },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir);
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("TRUNCATED"))).toBe(false);
+    expect(lines.some((l) => l.includes("No loaded day was truncated"))).toBe(true);
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* ⚖️ THE TWO FACTS MUST STAY DISTINCT: a mid-walk STOP (the run did not
+ * finish the requested window) and a TRUNCATED capture (a day that WAS
+ * loaded is missing rows) are different failures, and an operator must be
+ * able to tell which happened from the output alone. Same window/rate shape
+ * as "the day-walk stops before the call that would cross the ceiling"
+ * above, with day two ALSO marked truncated -- both PARTIAL and TRUNCATED
+ * ARCHIVE must appear, each naming its own count, and day three (never
+ * reached) must not be counted as truncated merely because it was never
+ * loaded. */
+test("a mid-walk stop and a truncated day are reported as two distinct facts", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const sampleRate = 5;
+    const windowDays = 3;
+    const client = clientWithNotices(
+      Array.from({ length: sampleRate }, (_, i) => ({
+        externalId: `HG-S-${i}`,
+        capturedDate: "2026-09-01",
+        versionKey: null,
+        title: null,
+        raw: {},
+      })),
+      sampleRate,
+    );
+    const day2Items = Array.from({ length: 15 }, (_, i) => ({
+      externalId: `HG-D2-${i}`,
+      modifiedAt: "2026-09-02",
+      raw: {},
+    }));
+    const adapter = fakeAdapter({
+      "2026-09-02": { items: day2Items, pages: 2 },
+      "2026-09-03": { items: [{ externalId: "HG-D3", modifiedAt: "2026-09-03", raw: {} }] },
+    });
+    const alreadySpent = MONTHLY_RECORD_CEILING - sampleRate * (windowDays + 1);
+
+    const src = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [
+      HIGHERGOV_SOURCE_NAME,
+    ]);
+    await run(
+      `INSERT INTO api_spend (source_id, endpoint, records) VALUES ($1, 'opportunity', $2)`,
+      [src!.id, alreadySpent],
+    );
+
+    await main(["--from=2026-09-01", "--to=2026-09-03"], client, adapter, dir);
+
+    /* Stopped early: day three never ran. */
+    expect(process.exitCode).toBe(1);
+    const ingestRuns = await all(`SELECT id FROM ingest_run`);
+    expect(ingestRuns.length).toBe(2); // day one and day two only
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("PARTIAL"))).toBe(true);
+    /* 1 of the 2 loaded days -- day three is never counted, loaded or
+     * truncated, because the walk never reached it. */
+    expect(lines.some((l) => l.includes("TRUNCATED ARCHIVE") && l.includes("1 of 2"))).toBe(true);
+  } finally {
+    logSpy.mockRestore();
     rmSync(dir, { recursive: true, force: true });
   }
 });

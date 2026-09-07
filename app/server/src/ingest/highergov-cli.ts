@@ -286,17 +286,45 @@ function reuseSampleAdapter(page: WindowedPage): WindowedAdapter {
  * COVERAGE.unparseableResponseRecords. `Math.max` rather than the constant
  * alone, because a genuinely large day can exceed 40 rows, and taking the
  * constant would then under-count a figure we can partially see. */
-function billedRecordsFromArtifact(artifactPath: string, atLeast: number): number {
-  const conservative = Math.max(atLeast, COVERAGE.unparseableResponseRecords);
+/* THE ONE WAY TO INTERROGATE A DAY'S ARTIFACT, not two. Both
+ * billedRecordsFromArtifact (the vendor's own billed count) and
+ * pagesFromArtifact (whether this day's capture was truncated) below read
+ * the same envelope -- adapters/highergov.ts's own comment names `records`,
+ * `feedCount` and `pages` as the three scalars it carries specifically so a
+ * caller can answer both questions from one parse. Returns null on anything
+ * that stops this from answering (missing capture, non-string payload, bad
+ * JSON) -- both callers already have their own conservative fallback for
+ * that case, which is why this itself never needs one. */
+function readArtifactEnvelope(artifactPath: string): { records?: unknown; pages?: unknown } | null {
   try {
     const art = readArtifact(artifactPath);
     const capture = art.captures[0] as { payload?: unknown } | undefined;
-    if (!capture || typeof capture.payload !== "string") return conservative;
-    const parsed = JSON.parse(capture.payload) as { records?: unknown };
-    return typeof parsed.records === "number" ? parsed.records : conservative;
+    if (!capture || typeof capture.payload !== "string") return null;
+    return JSON.parse(capture.payload) as { records?: unknown; pages?: unknown };
   } catch {
-    return conservative;
+    return null;
   }
+}
+
+function billedRecordsFromArtifact(artifactPath: string, atLeast: number): number {
+  const conservative = Math.max(atLeast, COVERAGE.unparseableResponseRecords);
+  const envelope = readArtifactEnvelope(artifactPath);
+  return envelope && typeof envelope.records === "number" ? envelope.records : conservative;
+}
+
+/* >1 means THIS DAY's capture was truncated -- coverage/highergov-client.ts's
+ * fetchDay reads page one only, so a day whose meta.pagination.pages exceeded
+ * 1 handed back less than HigherGov actually held for it. Before this, that
+ * fact was only ever surfaced for the ONE sampled day (main()'s own
+ * `result.samplePages` check below) -- every other day's artifact carried
+ * `pages` faithfully (adapters/highergov.ts:139) and nothing ever read it
+ * back. Null when the envelope carries no usable `pages` field at all (an
+ * artifact from a source that never wrote one, or one that failed to parse)
+ * -- that is "unknown", not "not truncated", and callers must not conflate
+ * the two by defaulting this to 1. */
+function pagesFromArtifact(artifactPath: string): number | null {
+  const envelope = readArtifactEnvelope(artifactPath);
+  return envelope && typeof envelope.pages === "number" ? envelope.pages : null;
 }
 
 /* Pure-ish and testable without a network: `client` is injectable (the real
@@ -599,6 +627,12 @@ export async function main(
    * exists on this scope, and shadowing it with an array of the same near-
    * name is exactly the kind of thing that invites a future bug. */
   const days = daysInRange(from, to);
+  /* Every day whose OWN artifact reported more than one page -- built as the
+   * loop goes, then read once for the end-of-run summary below. A day here
+   * does not mean this run failed to finish; it means what it captured for
+   * that day is incomplete, which is a DIFFERENT fact from a mid-walk stop
+   * (see the `committedDays < days.length` check at the very end). */
+  const truncatedDays: string[] = [];
   /* Resolved HERE, not via the parameter's own default expression -- see
    * this function's `adapter` parameter comment for why the default cannot
    * know `pageSize` in time. A test always injects its own `adapter`, so
@@ -711,6 +745,15 @@ export async function main(
       runResult.rows + runResult.undatedSkipped,
     );
 
+    /* TRUNCATION, FOR THIS DAY -- not only the sampled one. `pages` rides on
+     * every day's artifact (adapters/highergov.ts:139, and sampleAsPage()
+     * above for the reused sampled day), so this is the first place anything
+     * has ever read it back for a day other than the sample. */
+    const dayPages = pagesFromArtifact(runResult.artifactPath);
+    if (dayPages !== null && dayPages > 1) {
+      truncatedDays.push(day);
+    }
+
     /* Recorded ONLY for a day that made a real, new call -- the sampled
      * day's cost was already recorded once, above, as the dry run's own
      * spend. Recording it again here would double-count a call that never
@@ -748,6 +791,18 @@ export async function main(
             "be reachable from this command)."
           : "."),
     );
+    /* SAID FOR EVERY DAY, NOT JUST THE SAMPLED ONE (contrast the dry run's
+     * own `result.samplePages` check higher up, which only ever covered the
+     * one day it measured). Printed immediately, per day, rather than saved
+     * only for the end-of-run summary below -- an operator watching a long
+     * run scroll by should not have to wait for the last line to learn that
+     * today's day was incomplete. */
+    if (dayPages !== null && dayPages > 1) {
+      console.log(
+        `    ⚠️  ${day} was TRUNCATED: ${dayPages} page(s) exist but this client reads page ` +
+          "one only -- this day's capture is INCOMPLETE.",
+      );
+    }
   }
 
   console.log(
@@ -755,6 +810,35 @@ export async function main(
       `record(s) newly billed this run (plus ${result.recordsThatDay} sampled by the dry ` +
       `run above, reused for the sampled day rather than billed twice).`,
   );
+
+  /* ⚖️ TRUNCATION IS A SEPARATE FACT FROM A PARTIAL WINDOW, and this summary
+   * is what makes it visible for the WHOLE run rather than only the one day
+   * the dry run happened to sample. Before this, a 90-day window could
+   * truncate up to 91 times and this command would only ever have mentioned
+   * ONE of them (the `result.samplePages` check above, about the sampled day
+   * alone) -- the artifacts recorded every other truncation faithfully
+   * (adapters/highergov.ts:139) and nothing ever read it back or printed it.
+   * A partially-captured archive that LOOKS complete is exactly the failure
+   * this exists to prevent, so the count is made loud (⚠️, its own paragraph)
+   * precisely when it is nonzero, not folded quietly into the "Done" line
+   * above. This says nothing about whether the run itself finished or
+   * stopped early -- that is the `committedDays < days.length` check right
+   * below, and the two must stay readable as different questions: this run
+   * can finish EVERY requested day and still have captured some of them
+   * incompletely, which is exactly the case a mid-walk stop message alone
+   * would never surface. */
+  if (truncatedDays.length > 0) {
+    console.log(
+      `\n⚠️  TRUNCATED ARCHIVE: ${truncatedDays.length} of ${committedDays} loaded day(s) ` +
+        `captured page one only, with more pages existing for that day: ` +
+        `${truncatedDays.join(", ")}. The archive for those days is INCOMPLETE -- ` +
+        "coverage/highergov-client.ts's fetchDay reads page one only by design; only a " +
+        "wider --page-size (still billed per record returned, CLAUDE.md §5.1) or future " +
+        "multi-page walking would capture the rest.",
+    );
+  } else {
+    console.log(`\nNo loaded day was truncated: every day's capture fit on page one.`);
+  }
 
   /* A mid-walk stop is a SUCCESSFUL refusal, not a crash -- it does not
    * throw. But exiting 0 regardless would make a partially loaded window
