@@ -14,6 +14,21 @@ const { api } = await import("./index.js");
 let base = "";
 let server: any;
 
+/* 120000, and it is not decoration. This hook runs a full migrate(), and with
+ * no explicit timeout vitest applies its 10s default -- which this file
+ * exceeded TWICE CONSECUTIVELY on 2026-09-07 as the suite grew past 900
+ * tests, failing the gate with "Hook timed out in 10000ms" while every test
+ * in the file was fine.
+ *
+ * Proved by isolation, the same diagnostic STATUS records for the 2026-08-13
+ * flake: run alone this file passes 34/34, but its own tests take 13.3s, so
+ * under concurrent load a 10s hook never stood a chance.
+ *
+ * 23 of the 31 test files that call migrate() already pass this timeout.
+ * This one did not. Seven others still do not and carry the same latent
+ * exposure -- left alone deliberately, because they are not failing and
+ * fixing them is its own act rather than a side effect of an unrelated
+ * slice. */
 beforeAll(async () => {
   await migrate(false);
   const app = express();
@@ -25,7 +40,7 @@ beforeAll(async () => {
       r();
     });
   });
-});
+}, 120000);
 
 afterAll(async () => {
   await new Promise<void>((r) => server.close(() => r()));

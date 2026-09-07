@@ -40,6 +40,21 @@
  * source is refused here, fail-closed, naming the source and telling the
  * operator what to do about it. This is what makes the registry's on/off
  * switch mean something rather than being purely decorative.
+ *
+ * FIX 3 (Task 8 review round 3, CRITICAL): a metered source is refused here
+ * too, by default -- see registry.ts's `metered` field. Round 2 of that
+ * review put this refusal in scrape/cli.ts alone, keyed on the raw
+ * `--source` string. That is the wrong shape: admin.ts's /run route accepts
+ * BOTH the registry key ('highergov') and the canonical source.name
+ * ('HigherGov') via its own resolveAdapterKey() BEFORE ever calling this
+ * function, so a refusal keyed on one spelling lets the other straight
+ * through -- and admin.ts's /scrape route is a THIRD path with the same gap,
+ * missed by that same round. This function is the one place every existing
+ * call site (and every future one) already converges, and it runs on the
+ * RESOLVED registry key -- after any spelling has already been normalised
+ * -- so there is no second spelling left to dodge it with. scrape/cli.ts
+ * keeps its own refusal too: a better message at the point of use, and
+ * defence in depth on a money path is cheap.
  */
 import { ADAPTERS } from "./adapters/registry.js";
 
@@ -50,10 +65,35 @@ export interface ResolvedSource {
   sourceName: string;
 }
 
-export async function resolveSource(key: string): Promise<ResolvedSource> {
+export interface ResolveSourceOptions {
+  /** Metered sources (registry.ts's `metered: true`) are refused unless a
+   * caller explicitly opts in -- defaults to false so a new call site is
+   * refused by construction rather than by remembering to ask. Only
+   * ingest/highergov-cli.ts passes true, after it has already measured and
+   * capped what committing the window will cost. */
+  meteredAllowed?: boolean;
+}
+
+export async function resolveSource(
+  key: string,
+  opts: ResolveSourceOptions = {},
+): Promise<ResolvedSource> {
   const entry = ADAPTERS[key];
   if (!entry) {
     throw new Error(`No adapter named ${key}. Known: ${Object.keys(ADAPTERS).join(", ")}`);
+  }
+
+  /* Checked before anything else, including the `fake`/null-sourceName
+   * short-circuit below: it needs no database access at all, so a metered
+   * source is refused for free, before a single query -- let alone a
+   * single vendor call -- happens. */
+  if (entry.metered && !opts.meteredAllowed) {
+    throw new Error(
+      `'${entry.sourceName ?? key}' is a METERED source (CLAUDE.md §5.1). This path ` +
+        `never records what it spends, which would silently under-report the monthly ` +
+        `ceiling. Use \`npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD\` ` +
+        `instead -- it measures the window's cost before spending and records every call.`,
+    );
   }
 
   /* `fake` carries sourceName: null -- a dev fixture with no registry row.

@@ -39,6 +39,7 @@ export interface FeedNotice {
   capturedDate: string | null;
   versionKey: string | null;
   title: string | null;
+  raw: Record<string, unknown>;
 }
 
 export interface FeedResult {
@@ -55,9 +56,46 @@ export interface FeedResult {
   pages: number | null;
 }
 
+/* Task 7. The vendor's OWN schema doc for /document/ (docs/2026-09-03-
+ * highergov-field-mapping.md §2, written from their published OpenAPI schema,
+ * zero live calls) lists only seven fields: file_name, file_type, file_size,
+ * text_extract, posted_date, summary, download_url. No stable per-document id
+ * is documented -- download_url IS the address, and that doc's own
+ * conclusion is explicit: "download_url (expires in 60 minutes)" must never
+ * be stored, same as document_path. This repo's own /opportunity/ fixtures
+ * instead show `document_path` carrying a URL that points AT /document/ (see
+ * highergov-opportunity.json), so the live per-document field name is not
+ * fully pinned down between the two -- but the outcome is identical either
+ * way: nothing URL-shaped from this endpoint is fit to persist. There is
+ * deliberately no `documentId` field here (the plan's own sketch proposed
+ * one) -- inventing a field the vendor's schema does not name would be
+ * exactly the guessed-shape failure CLAUDE.md warns against. */
+export interface FetchedDoc {
+  fileName: string;
+  /* Task 7 review round 2. `text_extract` is NOT credential-shaped (unlike
+   * document_path/download_url) -- it is the vendor's own already-extracted
+   * text, 8,884-22,190 chars observed on `.docx` per the field-mapping doc,
+   * NULL for `.xlsx`. Field-mapping doc §2's own conclusion: for HigherGov
+   * documents the whole mechanical-extraction stack "becomes a field read".
+   * Safe to carry all the way out of this module, unlike the two URL fields
+   * above it. */
+  textExtract: string | null;
+}
+
+export interface DocumentsResult {
+  docs: FetchedDoc[];
+  /** What the VENDOR billed: the raw result count, before we discard any
+   * (mirrors FeedResult.records above). */
+  records: number;
+}
+
 export interface HigherGovClient {
   fetchDay(capturedDate: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
+  /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
+   * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
+   * the single most expensive thing in the codebase per invocation. */
+  fetchDocuments(sourceId: string, fetchImpl?: typeof fetch): Promise<DocumentsResult>;
 }
 
 /* Matches an api_key wherever it appears in a string, in any nesting. Broad
@@ -66,6 +104,29 @@ export interface HigherGovClient {
  * incident. */
 const KEY_IN_STRING = /api_key=[^&\s"']+/gi;
 
+/* 🔴 KEYS AS WELL AS VALUES, AND THE FIX IS THE `redact(k)` BELOW.
+ *
+ * This used to be `out[k] = redact(v)` -- it recursed into VALUES only and
+ * copied property NAMES verbatim. `toNotice` sets `raw: redact(rest)`, so a
+ * key-shaped string sitting in a property NAME survived this boundary
+ * untouched and rode `raw` into scrape/run.ts's `writeSighting`, into the
+ * hashed artifact, and finally into Postgres `sighting.raw` jsonb --
+ * permanently, in the one place hardest to retract. The adapter's
+ * string-level `scrubPayload` caught it for `page.payload` and ONLY for
+ * `page.payload`; `items[].raw` had no such second pass. That asymmetry is
+ * closed here rather than at either call site, because the boundary is where
+ * CLAUDE.md §5.3 rule 2 says the scrub belongs.
+ *
+ * ⚠️ STILL IDEMPOTENT, and that is load-bearing (adapters/highergov.ts).
+ * `KEY_IN_STRING` rewrites `api_key=<anything>` to `api_key=REDACTED`, and
+ * `api_key=REDACTED` is itself a match that rewrites to the identical
+ * string -- so a second pass over an already-redacted name or value returns
+ * the same bytes, at any depth.
+ *
+ * ⚠️ TWO NAMES CAN NOW COLLIDE -- `?api_key=A` and `?api_key=B` both become
+ * `?api_key=REDACTED`, and the later wins. That is a deliberate trade: losing
+ * one member of a pair of credential-shaped property names is cheaper than
+ * persisting either of them, and no real vendor field name is key-shaped. */
 export function redact<T>(value: T): T {
   if (typeof value === "string") {
     return value.replace(KEY_IN_STRING, "api_key=REDACTED") as unknown as T;
@@ -74,7 +135,7 @@ export function redact<T>(value: T): T {
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = redact(v);
+      out[redact(k)] = redact(v);
     }
     return out as unknown as T;
   }
@@ -86,6 +147,7 @@ interface RawResult {
   captured_date?: unknown;
   version_key?: unknown;
   title?: unknown;
+  [key: string]: unknown;
 }
 
 interface RawBody {
@@ -97,17 +159,23 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-/* document_path is READ BY NOBODY. Dropping it here, at parse, is rule 1
- * made structural: there is no later point at which a caller could leak
- * what it never received. */
 function toNotice(r: RawResult): FeedNotice | null {
   const externalId = str(r.source_id);
   if (!externalId) return null;
+  /* document_path is REMOVED here, not merely unread. Deleting it from a
+   * copy is what makes "no caller can leak what it never received" true of
+   * `raw` as well as of the named fields -- the ingest needs everything
+   * else, so "we only copy four fields" is no longer the guarantee. Then
+   * redact() walks every remaining value recursively to scrub any key-shaped
+   * strings nested at any depth -- CLAUDE.md §5.3 rule 2: scrubbing happens
+   * at the BOUNDARY, making this the one place the guarantee is enforced. */
+  const { document_path: _dropped, ...rest } = r;
   return {
     externalId,
     capturedDate: str(r.captured_date),
     versionKey: str(r.version_key),
     title: str(r.title),
+    raw: redact(rest),
   };
 }
 
@@ -143,7 +211,16 @@ function searchId(): string {
   return id;
 }
 
-async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+/* Extracted from the original `get()` for Task 7: fetchDocuments needs the
+ * exact same fetch-and-validate plumbing (the VITEST guard, the OK check, the
+ * redact()-wrapped parse, the non-array "results" guard) against a different
+ * endpoint whose rows map to a different shape. Duplicating this instead of
+ * sharing it would be the drift document-clients.ts's own header warns
+ * against -- two implementations of "how do we safely talk to this API"
+ * silently diverging. `get()` and `getDocuments()` below are now both a thin
+ * map over this. Every error message here is UNCHANGED from the pre-Task-7
+ * `get()` -- this is a pure extraction, not a rewrite. */
+async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBody & { results: RawResult[] }> {
   /* Structural, not merely discipline. Every test in this file injects
    * fetchImpl; a future test that forgets the argument would fall through to
    * the real global fetch and make a live, billed call against the API that
@@ -156,9 +233,30 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
         "fetchImpl -- CLAUDE.md §5.1 forbids a live call from a test.",
     );
   }
-  const res = await fetchImpl(url.toString(), {
-    headers: { accept: "application/json" },
-  });
+  /* 🔴 THE FETCH LAYER THROWS TOO, AND IT WAS THE HOLE IN THE CLAIM BELOW.
+   * The parse guard's own comment used to promise that "nothing downstream
+   * -- including the CLI's own console.error(err) -- can print it raw", and
+   * that was true of the PARSE path only. `fetchImpl` rejects with whatever
+   * the runtime attached: undici's `TypeError: fetch failed` carries a
+   * `cause`, and `console.error` prints a cause chain. Nothing here can know
+   * in advance whether some runtime, proxy or polyfill put the requested URL
+   * -- which carries the api_key as a query parameter -- into that chain.
+   *
+   * So the rejection is re-thrown as a NEW Error with a redacted message and
+   * NO `cause`: the chain is dropped rather than trusted. That is what makes
+   * the claim below true of every throw this function can produce, not just
+   * of the one it was written about. The message is deliberately distinct
+   * from "HigherGov answered N" (a real HTTP response) so an operator can
+   * still tell a transport failure from a rejected request. */
+  let res: Response;
+  try {
+    res = await fetchImpl(url.toString(), {
+      headers: { accept: "application/json" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`HigherGov request failed before any response: ${redact(message)}`);
+  }
   if (!res.ok) {
     /* The URL is NOT in this message: it carries the api_key. */
     throw new Error(`HigherGov answered ${res.status}`);
@@ -170,7 +268,11 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
    * api_key it embeds on every row) lives. redact() is the boundary rule
    * made real: the message is scrubbed before it is ever wrapped in a new
    * Error, so nothing downstream -- including the CLI's own
-   * `console.error(err)` -- can print it raw even by accident. */
+   * `console.error(err)` -- can print it raw even by accident. Every OTHER
+   * throw this function produces is now held to the same standard: the
+   * transport guard above re-wraps a runtime rejection, the two guards
+   * below are hand-written strings, and the CLI redacts what it prints as
+   * defence in depth (ingest/highergov-cli.ts's own bottom block). */
   let body: RawBody;
   try {
     body = (await res.json()) as RawBody;
@@ -189,13 +291,23 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
    *
    * It does NOT make the call free. The vendor bills on the response it
    * sent, not on whether this client can make sense of it, and this still
-   * throws either way. Accounting for that money is run.ts's job, not this
-   * module's -- same separation this file's header states (client fetches
-   * and parses, the caller decides what it cost). run.ts wraps both call
-   * sites in a try/catch and tallies a conservative estimate
-   * (thresholds.ts's `unparseableResponseRecords`) before letting whatever
-   * this function throws propagate, so a call this guard rejects still lands
-   * a row in api_spend instead of disappearing from it. */
+   * throws either way. Accounting for that money is the CALLER's job, not
+   * this module's -- same separation this file's header states (client
+   * fetches and parses, the caller decides what it cost).
+   *
+   * ⚠️ THREE CALL SITES DEPEND ON THIS, NOT TWO. run.ts wraps its two
+   * (fetchDay, fetchBySourceId) in a try/catch and tallies a conservative
+   * estimate (thresholds.ts's `unparseableResponseRecords`) before letting
+   * whatever this function throws propagate. Task 7 opened a THIRD:
+   * fetch-documents-for.ts, reached through document-clients.ts's
+   * higherGovDocumentClient, calls fetchDocuments -- which is this same
+   * fetchValidated() underneath. Before HigherGov's document client existed
+   * that third site only ever saw SAM.gov, which is free and could not lose
+   * anything by going untallied. Registering the first METERED document
+   * client made the gap live, and fetch-documents-for.ts now tallies the
+   * same conservative estimate before rethrowing, for the same reason. Any
+   * FOURTH call site added later must do the same, or a call this guard
+   * rejects vanishes from api_spend instead of landing a row in it. */
   const results = body.results ?? [];
   if (!Array.isArray(results)) {
     throw new Error(
@@ -203,8 +315,12 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
         `Refusing to grade a shape this client does not recognise.`,
     );
   }
+  return { ...body, results };
+}
 
-  const notices = results.map(toNotice).filter((n): n is FeedNotice => n !== null);
+async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+  const body = await fetchValidated(url, fetchImpl);
+  const notices = body.results.map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
   const pages = body.meta?.pagination?.pages;
   return {
@@ -212,9 +328,43 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
     /* The row count, not notices.length: a row we could not parse was still
      * billed. Under-reporting is the dangerous direction against a ceiling
      * that cannot be read back (api-spend.ts). */
-    records: results.length,
+    records: body.results.length,
     feedCount: typeof count === "number" ? count : null,
     pages: typeof pages === "number" ? pages : null,
+  };
+}
+
+/* 🔴 See the FetchedDoc comment above: whatever URL-shaped field this row
+ * carries (document_path or download_url) is never read here, on purpose --
+ * not read-and-discarded, simply never touched. The only field this client
+ * trusts from a /document/ row is file_name.
+ *
+ * 🔴 AND BOTH FIELDS ARE REDACTED, for the same reason toNotice() redacts
+ * `raw` (CLAUDE.md §5.3 rule 2: scrub at the BOUNDARY, never at the call
+ * site). Not reading `document_path` protects against the field we KNOW
+ * carries the key; it says nothing about a key-shaped string arriving
+ * somewhere else. `file_name` is vendor-controlled text, and `text_extract`
+ * is the vendor's own extraction of a document that may itself quote a
+ * signed URL -- and extract/fetch-documents-for.ts writes that text straight
+ * into `document.extracted_text`, permanently. The opportunity path has had
+ * this boundary since it was written; the document path shipped without one,
+ * which is the asymmetry the 2026-09-03 leak was made of. */
+function toFetchedDoc(r: RawResult): FetchedDoc | null {
+  const fileName = str(r.file_name);
+  if (!fileName) return null;
+  return { fileName: redact(fileName), textExtract: redact(str(r.text_extract)) };
+}
+
+async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<DocumentsResult> {
+  const body = await fetchValidated(url, fetchImpl);
+  const docs = body.results.map(toFetchedDoc).filter((d): d is FetchedDoc => d !== null);
+  return {
+    docs,
+    /* Same reasoning as get()'s `records` above: the row count billed, not
+     * docs.length -- a row we dropped (no usable file_name) was still
+     * billed, and under-reporting against a ceiling that cannot be read back
+     * from the vendor is the dangerous direction. */
+    records: body.results.length,
   };
 }
 
@@ -244,5 +394,16 @@ export const higherGovClient: HigherGovClient = {
      * was merely out of scope -- a false miss is the one error that would
      * un-shelve the adapter backlog for no reason. */
     return get(url, fetchImpl);
+  },
+
+  async fetchDocuments(sourceId, fetchImpl = fetch) {
+    const url = new URL(`${HOST}/document/`);
+    url.searchParams.set("api_key", apiKey());
+    url.searchParams.set("source_id", sourceId);
+    /* 🔴 No search_id, for the exact reason fetchBySourceId gives above: this
+     * is a lookup by a specific notice's id, and narrowing it by a saved
+     * search would report real documents as absent merely because the
+     * opportunity fell outside that search's scope. */
+    return getDocuments(url, fetchImpl);
   },
 };

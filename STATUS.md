@@ -236,6 +236,26 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-07
 
+## ✅ HIGHERGOV INGESTS — THE PURCHASE FINALLY DELIVERS ROWS
+
+**`npm run ingest:highergov -- --from=… --to=…`.** HigherGov had a registry row and nothing else since 2026-09-03; it now has an adapter, a document client, and **nine merge rules** — `closes_at`, `description`, `place_of_performance`, `org_id`, `kind`, and, added in the final review pass, `posted_at`, `codes`, `set_aside` and the title repair.
+
+⛔ **IT REFUSES ON A FRESH DATABASE, AND ON THIS ONE, FOR TWO SEPARATE REASONS — both are operator acts nobody has taken.** Migration 019 seeds the source `enabled = false` ("Nothing is ever seeded on") and **no migration on this branch flips it**, so the command dies at `resolve-source.ts:120` — *"Source 'HigherGov' is disabled … a disabled source is refused, not silently skipped."* And `HIGHERGOV_SEARCH_ID` is unset, which `searchId()` throws on by design (see the ⛔ section below — it is the ONLY Indiana filter this API has). **Both must be done deliberately before a single record is billed.**
+
+**🔴 THE CONSTRAINT THAT SHAPED THE SLICE.** `scrape/run.ts` hands the payload straight to `writeCapture`, and `import-artifact.ts` hashes the file into `ingest_run.artifact_sha256`. Every HigherGov row carries `document_path`, which embeds the api_key — so an unscrubbed payload would write a **live credential into storage permanently, hashed and immutable**. The payload is scrubbed at the adapter boundary and the scrub is **idempotent**.
+
+> ⚠️ **THE REASON GIVEN HERE WAS FALSE, corrected in the final review pass 2026-09-07** — kept rather than deleted, because the wrong reason invited the wrong conclusion. It said the scrub must be idempotent *"because the hash is computed over the scrubbed bytes and an inconsistent scrub would make two runs over identical data hash differently."* **Two runs over identical data ALREADY hash differently, unconditionally**: `import-artifact.ts:47` hashes the whole SQLite file, and that file carries `run.started_at`, `capture.fetched_at` and `sighting.seen_at`. No scrub, idempotent or not, can make two runs collide on `artifact_sha256`.
+>
+> **The real reason is byte-stability of what gets PERSISTED.** The payload is written verbatim into the artifact and, through the sighting rows, into Postgres. A scrub whose output depended on how many times it had been applied would mean the stored bytes depend on the *path* a value took to get here rather than on the value itself — so the same vendor row would read back differently depending on whether it arrived through the live adapter or through `highergov-cli.ts`'s reuse of the dry run's sample, **which deliberately scrubs a second time**. Idempotence is what makes that second pass provably free. `scrape/adapters/highergov.ts`'s header carries the same correction.
+>
+> **Consequence, recorded so nobody re-derives it:** because the hash always differs, `highergov-cli.ts`'s *"artifact already imported — skipped"* branch is structurally unreachable from that CLI. It is kept as defence and says so there.
+
+⚖️ **F6 CHANGED, and it changes a predicate ratified in D4.** It now excludes rows with an empty description whose documents were never fetched — unexamined is not unreadable. Without it, ingesting HigherGov would have dragged the p10 from 57 to 0 on arrival (34% of its rows carry no description, R11), reporting a collapse in quality that is really an increase in coverage. **The population changed, not the threshold**, and a row we *did* fetch documents for and still cannot read stays counted.
+
+⚖️ **Forecasts are held, never queued.** `sled_forecast` → `kind: 'forecast'` → `NOT_BIDDABLE`. Narrower than it sounds: presolicitations stay in the queue, because early signal is worth more to a small firm. A forecast is excluded for being unbiddable *today*.
+
+⚠️ **`val_est` is still not written to `value_cents`** — R6's inferred bands, migration 019's standing prohibition.
+
 ## ✅ 2026-09-07 — `npm run recall` HAS RUN LIVE, AND IT REPRODUCED THE BUY CASE EXACTLY
 
 **Three runs, 99 records, census complete: 77 of 77 IDOA notices resolved.**

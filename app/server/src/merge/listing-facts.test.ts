@@ -1,5 +1,18 @@
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
+
+/* The bare-code fallback warns (see listing-facts.ts's own header, final
+ * review fix 3). Muted for the whole suite, matching org-chain.test.ts's own
+ * pattern exactly, so the tests that merely EXERCISE a bare-string code (the
+ * "wrong shape" tests below) do not print a real warning into the gate's
+ * output; the tests dedicated to the warning itself install their own spies
+ * on a fresh module instance and assert on it deliberately. */
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /* Pure -- no useTestSchema(), no database. Same posture as closes-at.test.ts:
  * a rule that reads a payload should be testable without a Postgres
@@ -44,6 +57,22 @@ test("a source with no notice type yields null rather than a guess", () => {
   expect(noticeKind("USASpending", SAM)).toBeNull();
   expect(noticeKind("SAM.gov", {})).toBeNull();
   expect(noticeKind("SAM.gov", null)).toBeNull();
+});
+
+/* ⚖️ Ruling ③ (Matt, 2026-09-07). sled_forecast is the pre-RFP layer §4.6
+ * asks for (R4 found 8 in 100). It carries no deadline and no value, so it
+ * is HELD and never QUEUED -- and `kind` is the discriminator NOT_BIDDABLE
+ * already reads. */
+test("a sled_forecast row is kind 'forecast'", () => {
+  expect(noticeKind("HigherGov", { source_type: "sled_forecast" })).toBe("forecast");
+});
+
+/* 🔴 A real notice must NOT be given a kind we invented. `kind` feeds
+ * NOT_BIDDABLE, so a wrong value here silently removes biddable work from
+ * the queue -- the failure this project has already had to fix once. */
+test("an ordinary sled row gets no invented kind", () => {
+  expect(noticeKind("HigherGov", { source_type: "sled" })).toBeNull();
+  expect(noticeKind("HigherGov", {})).toBeNull();
 });
 
 /* ── codes: the corpus path's shape, WIDENED 2026-09-02 ───────────────── */
@@ -150,4 +179,201 @@ test("originalSetAside is read only when the current one is absent entirely", ()
       solicitation: { setAside: { code: "8A" }, originalSetAside: { code: "WOSB" } },
     }),
   ).toBe("8A");
+});
+
+/* ── HigherGov's codes and set-aside, added 2026-09-07 ────────────────── */
+
+/* 🔴 THESE ARE MONEY TESTS, NOT DISPLAY TESTS. CLAUDE.md §5.2 prices human
+ * triage at zero because the listing card carries NAICS, PSC and set_aside.
+ * With those three unmapped, a sub-state notice with no description (58% of
+ * that segment) offers a triager nothing to reject on, so they open
+ * documents -- ~11 billed records each against a 1,000/month ceiling, and
+ * roughly 90 opens exhausts the month.
+ *
+ * The real shape, per docs/2026-09-03-highergov-field-mapping.md:56-58: the
+ * codes are NESTED OBJECTS whose inner key repeats the outer name, and
+ * set_aside is flat. */
+const HIGHERGOV = {
+  source_id: "003000000088067",
+  source_type: "sled",
+  set_aside: "SBA",
+  naics_code: { naics_code: "541611", naics_description: "Administrative Management" },
+  psc_code: { psc_code: "R410", psc_description: "SUPPORT- PROFESSIONAL" },
+};
+
+test("HigherGov's nested naics_code and psc_code land as codes", () => {
+  expect(listingCodes("HigherGov", HIGHERGOV)).toEqual({
+    naics: ["541611"],
+    psc: ["R410"],
+    /* No labels: nothing in the field-mapping document records a description
+     * field on these objects, and the card reads labels with optional
+     * chaining. An invented field name would be a guess wearing a code's
+     * clothes. The fixture above deliberately CARRIES plausible description
+     * keys so that this assertion is about the choice, not about the data
+     * being absent. */
+    naics_labels: [],
+    psc_labels: [],
+  });
+});
+
+/* THE TRAP THIS CASE EXISTS FOR, and it has now sprung three times on this
+ * one source (agency, opp_type, these). Reading the container flat yields
+ * `undefined`; stringifying it yields "[object Object]", which is worse than
+ * nothing because it looks like a code. Neither may happen. */
+test("the code objects are never read flat or stringified", () => {
+  const codes = listingCodes("HigherGov", HIGHERGOV);
+  expect(codes?.naics).not.toContain("[object Object]");
+  expect(codes?.psc).not.toContain("[object Object]");
+  expect(codes?.naics).toEqual(["541611"]);
+});
+
+test("a HigherGov row with no codes yields null, so nothing is overwritten", () => {
+  expect(listingCodes("HigherGov", { source_id: "x" })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: null, psc_code: null })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: {}, psc_code: {} })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: { naics_code: "" } })).toBeNull();
+});
+
+/* One present and the other absent is the ordinary case, not an edge one:
+ * a row must not lose the code it HAS because its sibling is missing. */
+test("one code present and the other absent still yields the one", () => {
+  expect(listingCodes("HigherGov", { naics_code: { naics_code: "541611" } })).toEqual({
+    naics: ["541611"],
+    psc: [],
+    naics_labels: [],
+    psc_labels: [],
+  });
+  expect(listingCodes("HigherGov", { psc_code: { psc_code: "R410" } })).toEqual({
+    naics: [],
+    psc: ["R410"],
+    naics_labels: [],
+    psc_labels: [],
+  });
+});
+
+/* The container's shape is exactly what the money rides on, so a wrong guess
+ * about it must yield NO code rather than a throw or a fabricated one. */
+test("a code container of the wrong shape yields nothing and never throws", () => {
+  expect(listingCodes("HigherGov", { naics_code: "541611" })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: ["541611"] })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: 541611 })).toBeNull();
+  expect(listingCodes("HigherGov", null)).toBeNull();
+});
+
+/* Cross-source discipline, the same closes-at.ts and title.ts hold to: one
+ * source's field names mean nothing to another. */
+test("HigherGov's code shape means nothing to SAM, and SAM's means nothing to HigherGov", () => {
+  expect(listingCodes("SAM.gov", HIGHERGOV)).toBeNull();
+  expect(listingCodes("HigherGov", SAM)).toBeNull();
+});
+
+test("HigherGov's set_aside lands verbatim", () => {
+  expect(setAside("HigherGov", HIGHERGOV)).toBe("SBA");
+  expect(setAside("HigherGov", { set_aside: "SDVOSBC" })).toBe("SDVOSBC");
+});
+
+/* ⚠️ THE SAME DISTINCTION THE SAM CASE TURNS ON, asserted separately here
+ * because it is 100% present on Indiana and therefore the cheapest rejection
+ * signal this source carries. "NONE" is the buyer STATING there is no
+ * set-aside; null is the notice not saying. A later "tidy-up" that collapses
+ * NONE into null must fail here. */
+test("HigherGov's NONE is a stated fact, not an absence", () => {
+  expect(setAside("HigherGov", { set_aside: "NONE" })).toBe("NONE");
+  expect(setAside("HigherGov", { set_aside: "NONE" })).not.toBeNull();
+  expect(setAside("HigherGov", {})).toBeNull();
+  expect(setAside("HigherGov", { set_aside: null })).toBeNull();
+  expect(setAside("HigherGov", { set_aside: "   " })).toBeNull();
+  expect(setAside("HigherGov", { set_aside: { code: "SBA" } })).toBeNull();
+});
+
+test("set_aside is read flat for HigherGov and nested for SAM, never the other way round", () => {
+  expect(setAside("HigherGov", SAM)).toBeNull();
+  expect(setAside("SAM.gov", HIGHERGOV)).toBeNull();
+});
+
+/* ── the bare-code warning, added 2026-09-07 (final review, fix 3) ─────── *
+ *
+ * The symmetric case org-chain.ts's own nested-agency warning already solved
+ * for the agency field: if docs/2026-09-03-highergov-field-mapping.md:56-57
+ * is wrong that NAICS/PSC arrive nested, a row loses its codes silently and
+ * nothing says why. This is the same mechanism, matched to org-chain.ts's own
+ * shape -- a once-per-process module-level flag and a single console.warn --
+ * applied to two fields instead of one. */
+
+/* Mirrors org-chain.test.ts's own freshOrgChain(): the warned flags are
+ * module state and once-per-process by design, so any test that wants to see
+ * the warning actually FIRE needs a fresh module instance rather than one
+ * shared with every other test in this file. */
+async function freshListingCodes() {
+  vi.resetModules();
+  const mod = await import("./listing-facts.js");
+  return mod.listingCodes;
+}
+
+test("a bare-string naics_code warns, names the field, and cites the mapping doc", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  expect(codes("HigherGov", { naics_code: "541611" })).toBeNull();
+
+  expect(warn).toHaveBeenCalledTimes(1);
+  const message = String(warn.mock.calls[0]?.[0]);
+  expect(message).toContain("naics_code");
+  expect(message).toContain("541611");
+  expect(message).toContain("FLAT");
+  expect(message).toContain("field-mapping");
+});
+
+test("a bare-string psc_code warns independently of naics_code", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  /* Both fields bare on the SAME row: two separate claims, so two warnings,
+   * not one silenced by the other. */
+  expect(codes("HigherGov", { naics_code: "541611", psc_code: "R410" })).toBeNull();
+
+  expect(warn).toHaveBeenCalledTimes(2);
+  const messages = warn.mock.calls.map((c) => String(c[0]));
+  expect(messages.some((m) => m.includes("naics_code"))).toBe(true);
+  expect(messages.some((m) => m.includes("psc_code"))).toBe(true);
+});
+
+test("the bare-code warning fires once per field per process, not once per row", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  codes("HigherGov", { naics_code: "541611" });
+  codes("HigherGov", { naics_code: "339116" });
+  codes("HigherGov", { naics_code: "000000" });
+
+  expect(warn).toHaveBeenCalledTimes(1);
+});
+
+/* Only the shape that CONTRADICTS the document is worth a word -- the nested
+ * shape it predicts, and an absent code, both tell us nothing new. Same
+ * asymmetry org-chain.ts's own comment argues for the agency case. */
+test("the nested shape and an absent code never warn", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  codes("HigherGov", HIGHERGOV);
+  codes("HigherGov", { naics_code: null, psc_code: null });
+  codes("HigherGov", { naics_code: {}, psc_code: {} });
+  codes("HigherGov", {});
+  codes("SAM.gov", SAM);
+
+  expect(warn).not.toHaveBeenCalled();
+});
+
+/* 🛑 NO FALLBACK, ON PURPOSE. Unlike the agency field there is no competing
+ * claim to reconcile here (the code asserted nothing before the document
+ * did), so the warning must stay pure diagnosis -- it must never change what
+ * the row resolves to, or it quietly becomes a second, unreviewed code path
+ * for reading a bare string as a code. */
+test("the warning never causes the bare string to be read as a code", async () => {
+  const codes = await freshListingCodes();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  expect(codes("HigherGov", { naics_code: "541611" })).toBeNull();
+  expect(codes("HigherGov", { naics_code: "541611", psc_code: "R410" })).toBeNull();
 });

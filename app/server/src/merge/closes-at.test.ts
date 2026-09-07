@@ -126,3 +126,21 @@ test("an unparseable IDOA date yields null rather than a guess", () => {
 test("IDOA's own field means nothing to a different source", () => {
   expect(closesAt("SAM.gov", { responseDueBy: "10/05/2026 3:00:00PM EST" })).toBeNull();
 });
+
+/* HigherGov publishes an ISO date in `due_date`. Unlike IDOA's
+ * "09/03/2026 10:00:00AM EST" this needs no shape-parsing -- but it still
+ * must return a BARE date, because closes_at is a bare calendar date and
+ * every other case in this file returns one. */
+test("HigherGov's due_date lands as a bare ISO date", () => {
+  expect(closesAt("HigherGov", { due_date: "2026-09-24" })).toBe("2026-09-24");
+});
+
+test("a HigherGov timestamp is truncated, not rejected", () => {
+  expect(closesAt("HigherGov", { due_date: "2026-09-24T15:00:00Z" })).toBe("2026-09-24");
+});
+
+/* A forecast has no due date, and a null must stay null rather than
+ * becoming today or an empty string. */
+test("a HigherGov row with no due_date has no deadline", () => {
+  expect(closesAt("HigherGov", { due_date: null })).toBeNull();
+});

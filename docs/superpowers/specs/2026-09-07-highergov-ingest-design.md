@@ -211,8 +211,33 @@ record cost is identical either way; only the run count changes.
   implementation. At ~11 records per open and a 1,000 ceiling shared with this
   ingest, roughly 90 opens a month — worth knowing before anyone browses hard.
 - **Titles carry a scraping artifact.** R6: `"…RemovalBid Documents"` — the
-  anchor text glued on. `parseIdoaPage` already handles this correctly and the
-  mapper repairs it the same way.
+  anchor text glued on. ~~`parseIdoaPage` already handles this correctly and the
+  mapper repairs it the same way.~~
+
+  > ⚖️ **CORRECTED 2026-09-07, final review. Both halves of the struck sentence
+  > were false, and together they meant nothing repaired anything.**
+  >
+  > `parseIdoaPage` does **not** repair this. `scrape/adapters/idoa.ts:207-211`
+  > takes the **first** anchor's text as the event name, so a later
+  > `Bid Documents` anchor never enters the title at all — it **avoids** the
+  > problem structurally, and there is **no repair function to reuse.** And the
+  > HigherGov adapter had **no title handling whatever**: the vendor's string
+  > flowed straight through into `sighting.raw` and out to the queue card.
+  >
+  > **What shipped:** the repair lives in **`merge/title.ts`**, source-scoped
+  > to HigherGov, and strips a trailing `Bid Documents` **only where it is
+  > glued to a non-space character** — the shape observed in R6 and in the
+  > adapter's own fixture. `"Removal Bid Documents"`, spaced, is left alone:
+  > that is a phrase a buyer could legitimately have typed, and
+  > over-repairing deletes their words invisibly.
+  >
+  > **Why the merge and not the adapter.** `sighting.raw` is specified as "the
+  > payload as received, unmodified" (`002_entity_graph.sql:191`), and the
+  > adapter's items go verbatim into the hashed artifact and then into
+  > Postgres. `org-chain.ts`'s header records the same choice for the same
+  > reason. Deriving at merge time also lets the rule be corrected **without a
+  > re-scrape** — which matters more here than anywhere else, because
+  > re-scraping this source costs metered records (CLAUDE.md §5.1).
 - **Duplicates exist.** R6 found several `source_id` lookups returning two rows,
   via `version_key`. The importer needs a dedup rule; `dedupBySourceId` in
   `coverage/compare.ts` already encodes the earliest-capture-wins choice.

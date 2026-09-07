@@ -114,6 +114,20 @@ test("a content filter is refused with 400", async () => {
   expect(((await res.json()) as any).error).toMatch(/minValue/);
 });
 
+/* Task 8 review round 3, FIX 3 (CRITICAL): /scrape reaches resolveSource()
+ * with the exact registry key when body.source is the key itself -- proving
+ * this route is refused too, not just scrape/cli.ts's own CLI-only check
+ * from round 2. Before any fetch, before any spend: source.enabled is
+ * false for HigherGov by seed, but that is NOT what this refuses on --
+ * this must fire even though nothing here enables the row first. */
+test("POST /api/admin/scrape refuses the metered HigherGov source, before any spend", async () => {
+  const res = await post({ source: "highergov", since: "2026-08-01", depth: "listing" });
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as { error: string };
+  expect(body.error).toMatch(/METERED/);
+  expect(body.error).toMatch(/ingest:highergov/);
+});
+
 test("a valid run streams a SQLite artifact back", async () => {
   const res = await post({ source: "fake", since: "2026-08-01", depth: "listing" });
   expect(res.status).toBe(200);
@@ -334,6 +348,23 @@ test("an unknown adapter key is refused with 400, naming the known keys", async 
   const body = (await res.json()) as { error: string };
   expect(body.error).toMatch(/nope/);
   expect(body.error).toMatch(/fake/);
+});
+
+/* Task 8 review round 3, FIX 3 (CRITICAL): this is the exact failure the
+ * per-entry-point shape (round 2) already had, reproduced. resolveAdapterKey
+ * accepts EITHER the registry key ('highergov') or the canonical
+ * source.name ('HigherGov') -- and the real /admin Run button posts the
+ * LATTER (Admin.tsx: `?source=${s.name}`). A refusal keyed on the raw
+ * --source string, copied from scrape/cli.ts, would let 'HigherGov' straight
+ * through; this one fires on the RESOLVED key inside resolveSource() and so
+ * catches both spellings identically. */
+test("POST /api/admin/run refuses the metered HigherGov source by either spelling", async () => {
+  for (const spelling of ["highergov", "HigherGov"]) {
+    const res = await post({}, undefined, `/api/admin/run?source=${spelling}&since=2026-08-01`);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/METERED/);
+  }
 });
 
 /* CONTROLLER RULING (overrides the task brief): the brief's own version of

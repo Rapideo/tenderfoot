@@ -377,7 +377,13 @@ Workflow spec §8 recorded a six-step dashboard procedure for per-preview databa
 
 **The check that catches it.** Before asserting any rendered text, read what the component actually produces. And treat any `not.toContain` / `queryBy…toBeNull` over a literal as owing a second test proving the literal *can* appear — otherwise the absence proves nothing.
 
-**Why not promoted.** One instance. The mechanism is general and the failure mode is well known in principle, but this project has seen it once.
+**A second instance, 2026-09-07, and it is the more dangerous form: the false premise was in a CORRECTION, not a brief.** Reviewing a metered-API task, the controller instructed the implementer to wrap the vendor call in a `try/catch` that tallies spend on the throw path — unconditionally. That instruction was wrong. The same code path also serves a *free* source, which returns `records: 0`, so an unconditional tally would have **fabricated spend against a source that costs nothing**, corrupting the one ledger that answers "how much allowance is left".
+
+**Why a correction is worse than a brief.** A brief is read as a starting point and argued with. A correction arrives carrying the authority of a review finding — the implementer has just been told they were wrong once, and the social gradient runs entirely toward compliance. It is the point in the loop where a false premise is *least* likely to be challenged and most likely to be implemented exactly as stated.
+
+**What caught it was blast radius, not scrutiny.** A pre-existing test asserted a negative property of the *other* source — that no tally row is written when nothing is billed. The wrong instruction broke a test about a subject the instruction never mentioned. The implementer scoped the tally to the metered source and **reported why the instruction was wrong**, which is the behaviour worth naming: it did not silently comply, and it did not silently deviate.
+
+**Why not promoted.** Two instances now, one project. The brief form and the correction form share a mechanism but need different checks: the brief form is caught by verifying premises against reality before asserting on them; the correction form is caught by the corrector stating the premise separately from the instruction, so it is visible enough to be disagreed with. The second half is untested — it has been observed working once, by an implementer who volunteered the disagreement rather than by a process that invited it.
 
 ---
 
@@ -395,7 +401,14 @@ Workflow spec §8 recorded a six-step dashboard procedure for per-preview databa
 
 **The check that catches it.** Every mutation runs the whole file. Record which tests failed *and* which passed. Red-phase evidence must be an assertion failure with expected-vs-received, never a compile error.
 
-**Why not promoted.** One slice, though it appeared across several tasks within it. Both forms were caught by review rather than by the author, which suggests it is a reviewer-side check rather than a lesson authors will self-apply.
+**Second observation, 2026-09-07 — and it retires the objection this entry was parked on.** The original note argued this was *"a reviewer-side check rather than a lesson authors will self-apply."* Two authors then self-applied it, unprompted, in the same slice:
+
+- An implementer building a guard around a metered API ran its own mutation check, **found one of its own tests was a mock asserting itself**, and rewrote it before reporting. The re-reviewer confirmed the rewrite was genuinely sensitive by a test the original entry does not name: the throwing adapter's message shares **no token** with the asserted pattern, so a removed guard fails the test rather than accidentally satisfying it.
+- A one-file fix reverted itself to the defective shape and reported the split: **exactly 2 of 16 tests failed**, and the other 14 — which do not touch the fixed path — correctly kept passing.
+
+**That second result is the shape to look for, and it is the entry's real content.** "The suite went red" is weak evidence, because a mutation that breaks everything has proved only that the code is load-bearing. The finding is the *asymmetry*: the targeted tests failed, the neighbours did not, and therefore the tests discriminate. A mutation that reddens tests it should not have touched is itself a finding — overlapping coverage, exactly as the first observation discovered.
+
+**✅ This now meets the promotion bar** — observed twice, with a stated mechanism, and the sole recorded objection has been falsified. It should move to `Proto2PRD.md` with the `(T)` marker, phrased as *record which tests failed and which passed, and treat a uniformly red result as a failed experiment rather than a confirmed one*.
 
 ---
 
@@ -588,6 +601,44 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 *look* like a baseline; it lived only in prose, which is why it never became one.
 
 **Why not promoted.** One instance, one project.
+
+---
+
+### 2.29 A guard repeated at every entrance is a list you have to keep correct, and the list is already wrong
+
+**Observed 2026-09-07, on the path that spends real money.** A command was built to be the sanctioned door to a metered API: it checked the remaining allowance, refused unaffordable work, and recorded what it spent. The guard's internals were carefully built and correctly ordered. **It guarded nothing**, because three other routes reached the same billing adapter without passing it — a generic CLI, and two HTTP endpoints.
+
+**The first repair was to copy the refusal to each entrance. That repair was itself the defect, and it had already failed once in the same codebase before anyone proposed it.** One of those endpoints normalises a source identifier that accepts two spellings, and the admin UI's own button posts the spelling the copied guard did not check. A refusal transcribed from the CLI would have sailed straight past **the exact string the real interface sends**. It was not a hypothetical gap; it was a working instance of the failure mode, present in the code at the moment the fix was being written.
+
+**The repair that holds moved the check to where the paths converge.** Every one of those four routes already called a single resolver that owned fail-closed policy for exactly this kind of question. Marking the source `metered: true` in the registry and having the resolver refuse unless a caller explicitly opts in closed all four at once — including a third route nobody had enumerated, which the reviewer found only *after* the central version was written.
+
+**Proposed generalisation.** **A check duplicated per entry point silently converts a safety property into a maintenance obligation**, and the obligation is discharged by a list of entry points that no one holds and nothing verifies. The property "you cannot spend without permission" becomes "someone remembered all the doors" — which fails on the next door, and fails silently, because a missing refusal looks exactly like a permitted action.
+
+> **The tell is a fix whose size scales with the number of call sites.** If closing the hole means editing N places, the hole will reopen at N+1. Ask instead what all N already have in common — in a codebase of any age, they usually share a chokepoint that already exists for a neighbouring policy.
+
+**The check that catches it.** Before writing the second copy of a guard, trace every caller and find what they all pass through. Prefer a data-driven property on the resource (`metered: true`) over a condition on a name at each site: it fires after normalisation, so it cannot be defeated by spelling, and a new entry point inherits it by default instead of by memory. Default the permission to **denied**, so the failure mode of forgetting is refusal rather than spending.
+
+**Why not promoted.** One instance, but the mechanism is stated and the instance is unusually strong: the per-site shape had *already* failed on the spelling axis before it was proposed, and the central version closed a route that had not been enumerated. Worth promoting on a second sighting, in any project where a policy is enforced at more than one entrance.
+
+---
+
+### 2.30 A fixture built from the same assumption as the code cannot test that assumption
+
+**Observed 2026-09-07.** A mapper read a vendor's buying-agency field as a flat top-level property. A code comment stated this as fact: *"the vendor publishes a flat `agency_name`"*. The test fixture used the flat shape. Every test passed.
+
+**The field-mapping document — the only artefact in the repo built from real captured responses — records it as nested.** Nothing in the codebase supported the comment's claim. The fixture did not support it either, because **the fixture had been written from the same assumption as the code**, so the two agreed by construction rather than by evidence. Their agreement was the reason no test could ever detect the disagreement.
+
+**The cost if the document is right:** the mapper reads `undefined`, the attribution chain resolves to nothing, and every ingested opportunity lands with **no buyer attributed** — silently, with a fully green suite, on the market segment the paid source was bought to reach.
+
+**Proposed generalisation.** **A fixture is evidence about the world only if it came from the world.** A hand-built fixture is a *restatement of the author's belief*, and a test comparing code against a restatement of the belief the code encodes is a tautology wearing a test's clothing. This is invisible in review because such a test looks exactly like a good one — realistic data, meaningful assertions, genuine failures when the code breaks. It fails only against reality, which is the one input it never had.
+
+**And a comment asserting a fact is a claim with no test at all.** The comment here was load-bearing on a data-quality property and had no evidence anywhere. Prose asserting how an external system behaves should either cite where that was observed, or say plainly that it is unverified.
+
+> **The tell is a fixture and a mapper that were authored in the same sitting**, especially for an external system whose real response nobody has captured into the repo. Ask of every fixture: *what would this look like if my belief about the source were wrong?* If the answer is "identical", it is testing the code against itself.
+
+**The check that catches it.** Fixtures for external sources are **captured, not composed** — scrubbed of credentials, then committed with a note saying when and from what. Where capture is impossible or costs money, say so in the fixture and make the consuming code tolerant of the shapes you could not rule out, rather than picking one and asserting it in a comment. Accepting both shapes is not a guess in either direction; it is the refusal to guess, and it is usually cheap.
+
+**Why not promoted.** One instance. The mechanism generalises to any fixture standing in for a system the project cannot cheaply observe, which is most of them, but this project has seen it once.
 
 ---
 

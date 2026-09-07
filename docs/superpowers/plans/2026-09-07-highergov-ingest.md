@@ -49,7 +49,8 @@ export interface DryRunResult {
   remainingThisMonth: number;
   affordable: boolean;
 }
-export async function dryRun(from: string, to: string, client?: HigherGovClient): Promise<DryRunResult>;
+export function projectWindow(recordsPerDay: number, windowDays: number): number;
+export async function dryRun(from: string, to: string, client?: HigherGovClient, alreadySpent?: number): Promise<DryRunResult>;
 ```
 
 ---
@@ -563,6 +564,7 @@ git commit -m "HigherGov: registered, and it is the first adapter that costs mon
 - Modify: `app/server/src/merge/description.ts`
 - Modify: `app/server/src/merge/place.ts`
 - Modify: `app/server/src/merge/org-chain.ts`
+- Modify: `app/server/src/merge/listing-facts.ts` — **`noticeKind()`, and it is the one that makes ruling ③ real**
 - Modify: the matching `.test.ts` for each
 
 **Interfaces:**
@@ -623,12 +625,35 @@ test("HigherGov's agency_name lands as the organisation", () => {
 });
 ```
 
+In `listing-facts.test.ts` — **🔴 this is the pair that makes ruling ③ real.**
+Task 2 put `'forecast'` into `NOT_BIDDABLE`; without a producer, no row ever
+carries that kind and forecasts land in the biddable queue exactly as if the
+ruling had never been made, with every test still green:
+
+```ts
+/* ⚖️ Ruling ③ (Matt, 2026-09-07). sled_forecast is the pre-RFP layer §4.6
+ * asks for (R4 found 8 in 100). It carries no deadline and no value, so it
+ * is HELD and never QUEUED -- and `kind` is the discriminator NOT_BIDDABLE
+ * already reads. */
+test("a sled_forecast row is kind 'forecast'", () => {
+  expect(noticeKind("HigherGov", { source_type: "sled_forecast" })).toBe("forecast");
+});
+
+/* 🔴 A real notice must NOT be given a kind we invented. `kind` feeds
+ * NOT_BIDDABLE, so a wrong value here silently removes biddable work from
+ * the queue -- the failure this project has already had to fix once. */
+test("an ordinary sled row gets no invented kind", () => {
+  expect(noticeKind("HigherGov", { source_type: "sled" })).toBeNull();
+  expect(noticeKind("HigherGov", {})).toBeNull();
+});
+```
+
 ⚠️ **Before writing these, open each test file and match its existing calling convention exactly** — the exported function names above are the ones this plan assumes; if a file exports a differently-named entry point, use the real one and say so in your report.
 
 - [ ] **Step 2: Run each and confirm they fail**
 
 Run: `node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run app/server/src/merge/`
-Expected: FAIL on the four new tests, with HigherGov falling through to each module's `default` and returning null/empty.
+Expected: FAIL on the six new tests, with HigherGov falling through to each module's `default` and returning null/empty.
 
 - [ ] **Step 3: Implement the four cases**
 
@@ -683,6 +708,26 @@ Expected: FAIL on the four new tests, with HigherGov falling through to each mod
         : [];
 ```
 
+`listing-facts.ts`, in `noticeKind()` — **the producer ruling ③ needs**:
+
+```ts
+    /* ⚖️ Ruling ③, 2026-09-07. `sled_forecast` is a real source_type and is
+     * NOT in the vendor's documented enum (R4) -- the pre-RFP layer design
+     * spec §4.6 asks for, arriving unrequested.
+     *
+     * 🔴 THIS IS THE ONLY PRODUCER OF 'forecast', and NOT_BIDDABLE is its
+     * only consumer. Without this case the ruling is inert: nothing would
+     * ever carry the kind, forecasts would sit in the biddable queue, and
+     * every test would still pass.
+     *
+     * Everything else returns null rather than inventing a kind. SAM's own
+     * case above reads a published `type.value`; HigherGov publishes no
+     * equivalent, and a fabricated kind feeds NOT_BIDDABLE -- which would
+     * silently remove real biddable work from the queue. */
+    case "HigherGov":
+      return r.source_type === "sled_forecast" ? "forecast" : null;
+```
+
 **Match each file's real return type** — read the neighbouring `case "SAM.gov"` and mirror its shape rather than the sketch above if they differ.
 
 - [ ] **Step 4: Run the tests**
@@ -715,8 +760,41 @@ git commit -m "HigherGov: four merge cases, and val_est is not one of them"
 
 Append to `floor.test.ts` (follow the file's existing fixture conventions for inserting solicitations):
 
+**First extend the file's existing `sol()` fixture** — it currently ends at
+`description?` and cannot express the state this change turns on. Add a sixth
+optional parameter and write it into the insert:
+
 ```ts
-/* ⚖️ Ruling ① (Matt, 2026-09-07). A row with an empty description whose
+async function sol(
+  sourceId: number,
+  posted: string | null,
+  closes: string | null,
+  kind: string | null,
+  description?: string | null,
+  /* Ruling (1) needs this: F6 now distinguishes "we looked and there is
+   * nothing to read" from "we have not looked yet", and attachments_checked_at
+   * (migration 011, reused by D2) is the stamp that tells them apart. */
+  attachmentsCheckedAt?: string | null,
+): Promise<number> {
+  return insert(
+    `INSERT INTO solicitation
+       (title, source_id, posted_at, posted_at_origin, closes_at, kind, description,
+        attachments_checked_at)
+     VALUES ('floor fixture', $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [sourceId, posted, posted === null ? null : "published", closes, kind,
+     description ?? null, attachmentsCheckedAt ?? null],
+  );
+}
+```
+
+**Do not invent a new fixture builder.** One `sol()` shared by every F-test is
+why they stay in step with migration 016's CHECK, as its own comment says.
+
+Then the tests, using the file's established `reset()` / `source()` / `sol()`
+convention:
+
+```ts
+/* Ruling (1) (Matt, 2026-09-07). A row with an empty description whose
  * documents have NEVER been fetched is not KNOWN to be unreadable -- it is
  * unexamined. The same three-state discipline as document.extract_status,
  * source.health and coverage_item.carried.
@@ -724,22 +802,30 @@ Append to `floor.test.ts` (follow the file's existing fixture conventions for in
  * Without this, ingesting HigherGov drags F6's p10 from 57 to 0 purely by
  * arriving, because a third of its rows carry no description (R11). */
 test("F6 ignores an empty description nobody has looked for documents on", async () => {
-  await insertBiddable({ description: "x".repeat(400), attachmentsCheckedAt: null });
-  await insertBiddable({ description: "", attachmentsCheckedAt: null });
+  await reset();
+  const s = await source("F6 unexamined", "IN");
+  await sol(s, null, null, null, "x".repeat(400), null);
+  await sol(s, null, null, null, "", null);
   const f6 = await measureF6();
   expect(f6.measured).toBe(400);
 });
 
-/* 🔴 AND THE OTHER HALF, which is what stops this becoming a way to hide a
+/* AND THE OTHER HALF, which is what stops this becoming a way to hide a
  * real failure. A row we DID fetch documents for and still cannot read is
  * a genuine gap and stays in the population. */
 test("F6 counts an empty description we did look for documents on", async () => {
-  await insertBiddable({ description: "x".repeat(400), attachmentsCheckedAt: new Date() });
-  await insertBiddable({ description: "", attachmentsCheckedAt: new Date() });
+  await reset();
+  const s = await source("F6 examined", "IN");
+  await sol(s, null, null, null, "x".repeat(400), "2026-09-07T00:00:00Z");
+  await sol(s, null, null, null, "", "2026-09-07T00:00:00Z");
   const f6 = await measureF6();
   expect(Number(f6.measured)).toBeLessThan(400);
 });
 ```
+
+WARNING: **check `reset()` and `source()` against the real file before using
+them** — those are the names it has today; if they differ, use the real ones
+and say so in your report.
 
 - [ ] **Step 2: Run and confirm the first fails**
 
@@ -808,12 +894,21 @@ git commit -m "F6 measures what we looked at, not what we merely hold"
 ### Task 7: The document client D2 left out
 
 **Files:**
+- Modify: `app/server/src/coverage/highergov-client.ts` — gains `fetchDocuments`
+- Modify: `app/server/src/coverage/highergov-client.test.ts`
 - Modify: `app/server/src/extract/document-clients.ts`
 - Modify: `app/server/src/extract/document-clients.test.ts`
 
 **Interfaces:**
-- Consumes: `higherGovClient` (existing).
-- Produces: `DOCUMENT_CLIENTS["HigherGov"]`.
+- Consumes: `higherGovClient` (Task 1).
+- Produces: `higherGovClient.fetchDocuments(sourceId, fetchImpl?)`, `DOCUMENT_CLIENTS["HigherGov"]`.
+
+> 🔴 **THE URL IS BUILT IN `highergov-client.ts`, NOWHERE ELSE.** The plan
+> originally told you to build a `/document/?api_key=...` URL inside
+> `document-clients.ts`. **That was wrong and is corrected here** — it would
+> put a second file in the business of handling the credential, which is the
+> exact shape of the 2026-09-03 leak and precisely what the one-client rule
+> exists to prevent. `document-clients.ts` maps a result; it never sees a key.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -862,9 +957,47 @@ Add a `fakeFetch` helper at the top of the file if one does not already exist, a
 
 Expected: FAIL — `DOCUMENT_CLIENTS["HigherGov"]` is undefined.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement, in two pieces**
 
-Add to `document-clients.ts` a `higherGovDocumentClient` that calls `/document/?api_key=…&source_id=…`, returns `{documents, records}` where `records` is the **raw result count**, and **never lets `document_path` into a returned `sourceUrl`** — the download URL must be reconstructed without the key, or the document recorded with no URL at all if that is not possible. State in a comment which you did and why.
+**First, in `coverage/highergov-client.ts`** — the only file that builds a URL
+or touches the key. Add alongside `fetchDay`/`fetchBySourceId`, reusing the same
+`apiKey()` helper, the same `VITEST` guard and the same `redact()`-wrapped parse:
+
+```ts
+export interface FetchedDoc {
+  fileName: string;
+  /** The vendor's own document id, NOT a URL. `document_path` embeds the
+   * api_key and never leaves this module. */
+  documentId: string | null;
+}
+
+export interface DocumentsResult {
+  docs: FetchedDoc[];
+  /** What the VENDOR billed: the raw result count, before we discard any. */
+  records: number;
+}
+
+/* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
+ * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
+ * the single most expensive thing in the codebase per invocation. */
+async fetchDocuments(sourceId: string, fetchImpl = fetch): Promise<DocumentsResult>
+```
+
+It must **not** send `search_id` — an exact-id lookup narrowed by a saved
+search would report a notice's documents as absent when they were merely out
+of scope, the same reasoning `fetchBySourceId` already carries.
+
+**Then, in `document-clients.ts`**, a thin `higherGovDocumentClient` that calls
+it and maps `FetchedDoc[]` to `FetchedDocument[]`, passing `records` through
+untouched. It builds no URL, reads no environment variable, and never sees
+`document_path`.
+
+WARNING: **a document with no reachable URL is still a document.** If a
+`FetchedDoc` has no id we can turn into a fetchable address, record it with
+its filename and no `sourceUrl` rather than dropping it — a document we know
+exists and cannot fetch is a different fact from one that does not exist, and
+D2's whole three-state discipline turns on that difference. Say in a comment
+which case you hit.
 
 Register it:
 

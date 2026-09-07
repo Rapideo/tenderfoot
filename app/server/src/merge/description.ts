@@ -87,6 +87,17 @@ export function description(sourceName: string, raw: unknown): string | null {
     case "Indiana IDOA solicitations":
       text = typeof r.description === "string" ? r.description : null;
       break;
+    /* ⚠️ 34% of rows carry NO description (R11), and 58% among sub-state
+     * buyers -- the segment this source was bought for. `description_text`
+     * is already plain text (not HTML like SAM's), but it still passes
+     * through stripHtml/the empty check below so a whitespace-only value is
+     * treated the same as an absent one. A missing one is null, never "":
+     * F6 measures length, and an empty string is a real measurable zero
+     * where null is an absence. D2's on-demand documents are the answer to
+     * the absence, not this function. */
+    case "HigherGov":
+      text = typeof r.description_text === "string" ? r.description_text : null;
+      break;
     default:
       return null;
   }

@@ -1244,3 +1244,79 @@ CHECKING is inert copy in the same mono microlabel slot the bundle already draws
 > **The POST effect also gained the live-record guard the sibling GET effect already had** (the exact
 > pattern, reused rather than reinvented): a slow POST for a record the user has since navigated away
 > from can no longer stamp or merge onto whatever record is now displayed.
+
+---
+
+## D29 — HigherGov's ids ARE IDOA's ids, and nothing merges the two sources
+
+**Recorded 2026-09-07, final review of the `highergov-ingest` branch. This is a decision left
+open, not a defect fixed** — the same posture D26 takes toward table ordering: name the property,
+say what depends on it, and do not resolve it inside a merge function where nobody can see it.
+
+### What is silent
+
+**Migration 019's own headline finding**, written into the source registry note when HigherGov was
+first characterised:
+
+> *"Their `source_id` for Indiana IS IDOA's own 15-digit Event ID, which makes exact matching
+> possible."*
+
+That is the entire basis of the recall harness: `npm run recall` matches HigherGov rows against
+IDOA's answer key **by exact id**, and reported 76 of 77 carried on that strength. The two sources
+therefore share an identifier space *by observation, not by design* — the same notice, seen twice,
+carries the same string.
+
+**And the merge's demo criterion is exactly that**: two sources seeing one notice merge into one
+record. `merge.ts` groups by `sighting.identity_key`, and migration 022 makes that key
+`external_id` for a source declared `global` and `<source_id>:<external_id>` for one declared
+`local`.
+
+**HigherGov is `local`, and nobody chose it.** Migration 022:30 defaults the column to `'local'`
+and its one `UPDATE` promotes `SAM.gov` and `USASpending` by name. HigherGov's row was seeded three
+migrations earlier and simply inherited the default. So the identity that would fuse the two
+Indiana sources — the one migration 019 measured and the recall harness relies on — is namespaced
+apart by a default nobody applied to it deliberately.
+
+### What was built
+
+**Nothing, and that is the entry.** The branch ships HigherGov with `external_id_scope = 'local'`.
+
+The spec's §8 said otherwise — *"The importer needs a dedup rule; `dedupBySourceId` in
+`coverage/compare.ts` already encodes the earliest-capture-wins choice"* — and **no such rule
+shipped on the ingest path.** `dedupBySourceId` exists and is real, but its only callers are in
+`coverage/run.ts`; nothing between the adapter and `import-artifact.ts` calls it.
+
+### What it costs, today and later
+
+**Today: nothing, and three independent reasons stack up.** IDOA is disabled (`source.enabled =
+false`, migration 019 and registry.ts) and has never ingested through this path; within HigherGov
+the same `external_id` yields the same `identity_key`, so a re-versioned notice still groups onto
+one solicitation; and the failure direction of `local` is **under-merging**, which migration 022's
+own note calls *"visible and repairable"*, against `global`'s *"fuses unrelated records, silently
+and permanently."* Wrong in the safe direction, by a default.
+
+**The residual cost is a count, not a corruption.** With no dedup on the ingest path and no
+uniqueness on the artifact's `sighting` table, two versions of one notice in a single day's
+response land as **two sightings on one solicitation** — which reads on the record screen as
+corroboration by two observations rather than as one notice seen twice. R6 measured this as real:
+several `source_id` lookups returned `count = 2`.
+
+**Later, it becomes a decision with money attached.** If IDOA is ever re-enabled, or a second
+source that scrapes the same Indiana portals is added, the two will hold **duplicate
+solicitations** for the same Event ID — two rows, two triage decisions, and a per-source
+Interested-per-hundred whose denominators double-count the overlap. That is the number the fitness
+gate exists to produce.
+
+### What would reopen it
+
+Any one of these, and none of them is a code change on its own:
+
+1. **IDOA is re-enabled**, or any second source covering Indiana state solicitations is added.
+2. **Matt rules on the identifier's status.** Promoting HigherGov to `global` is a one-line
+   `UPDATE` plus a re-derivation of `identity_key`; the question is whether an id observed to
+   match on Indiana notices may be trusted across a national feed that also carries `sam`,
+   `dibbs`, `sbir` and `grant` rows. **It should not be answered by a migration written on a
+   Tuesday** — 022's own header records that the `global` direction is the one that fails
+   silently and permanently.
+3. **The duplicate-sighting count starts misleading a reader** — at which point the fix is
+   `dedupBySourceId` on the ingest path, which is where §8 thought it already was.

@@ -50,6 +50,19 @@ test("a run with no --source at all is refused as a missing source, not an unkno
   );
 });
 
+/* THE DOOR, CLOSED. HigherGov is registered (registry.ts) and reachable by
+ * name, but nothing under scrape/ ever calls recordSpend -- a run through
+ * this generic path would bill the vendor for real and write nothing to
+ * api_spend, silently under-reporting spentThisMonth("HigherGov") against
+ * the ceiling ingest/highergov-cli.ts's dry run depends on. Refused before
+ * ADAPTERS is even consulted, so this needs no DATABASE_URL_TEST and makes
+ * no network call. */
+test("--source highergov is refused, pointed at the metered door instead", async () => {
+  await expect(
+    main(["--source", "highergov", "--since", "2026-08-01", "--depth", "listing"]),
+  ).rejects.toThrow(/ingest:highergov/);
+});
+
 /* Task 9: the document pass, chained by default. `main` takes an optional
  * second argument -- a partial `CliPasses` -- that replaces the listings
  * and/or documents pass with a fake. That seam did not exist before this

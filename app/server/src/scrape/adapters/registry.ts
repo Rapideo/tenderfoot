@@ -29,6 +29,7 @@ import { fakeAdapter } from "./fake.js";
 import { samAdapter } from "./sam.js";
 import { usaSpendingAdapter } from "./usaspending.js";
 import { idoaAdapter } from "./idoa.js";
+import { higherGovAdapter } from "./highergov.js";
 import type { Adapter } from "../adapter.js";
 
 export interface AdapterRegistryEntry {
@@ -36,6 +37,19 @@ export interface AdapterRegistryEntry {
    * means there is deliberately no row -- see `fake` below. */
   sourceName: string | null;
   make: () => Adapter;
+  /** ⚖️ Task 8 review round 3 (CRITICAL): true for a source that bills per
+   * record. `resolve-source.ts` refuses ANY caller that reaches a metered
+   * entry unless it explicitly opts in (`{ meteredAllowed: true }`) -- the
+   * refusal lives on the RESOLVED registry key, which is the one thing every
+   * call site (scrape/cli.ts, admin.ts's two routes, and every future one)
+   * already agrees on, regardless of which spelling of the source a caller
+   * used to get there. A per-entry-point refusal copied into each call site
+   * is exactly the shape that already failed once: admin.ts's /run accepts
+   * BOTH the registry key ('highergov') and the canonical source.name
+   * ('HigherGov') via resolveAdapterKey(), and a check keyed on one spelling
+   * would let the other straight through. Undefined/false means "free to
+   * run anywhere", unchanged for every other entry. */
+  metered?: boolean;
 }
 
 export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
@@ -61,7 +75,36 @@ export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
   /* ⚠️ 2026-09-03: registered but NOT intended to run. `source.enabled` is
    * false and stays false -- IDOA is retained as the codebase's only second
    * source shape, which is what proves these layers are not SAM-shaped
-   * (D27, Proto2PRD 2.26). Its deletion trigger is named in idoa.ts's header:
-   * when the HigherGov adapter lands. */
+   * (D27, Proto2PRD 2.26). ~~Its deletion trigger is named in idoa.ts's
+   * header: when the HigherGov adapter lands.~~
+   *
+   * 🗓️ THE TRIGGER HAS FIRED -- 2026-09-07, three lines below this one.
+   * `highergov` is in this map. The condition idoa.ts's header names
+   * ("WHEN THE HIGHERGOV ADAPTER LANDS and becomes the second live source
+   * shape") is half met and half not: the adapter exists, and it has never
+   * ingested a row, because `HIGHERGOV_SEARCH_ID` is unset and migration
+   * 019 seeds the source disabled. So the second live source SHAPE this
+   * parser is retained to provide is still the only one there is.
+   *
+   * IDOA IS THEREFORE NOT DELETED HERE, and that is a decision rather than
+   * an omission: deleting the codebase's only non-SAM fixture on the day a
+   * replacement was written but before it had returned a single record is
+   * running D27's experiment again and ignoring the result. What is NOT
+   * left standing is the note itself. A named trigger that has visibly
+   * fired and is still written in the future tense teaches the next reader
+   * that these notes are decorative, which costs more than the parser does.
+   *
+   * ▶️ RE-ASK WHEN, and it is now a question with an answer rather than an
+   * event: once a HigherGov ingest has actually landed rows and the
+   * source-agnostic layers have been exercised against them. Matt's call,
+   * not a consequence. */
   idoa: { sourceName: "Indiana IDOA solicitations", make: () => idoaAdapter() },
+  /* ⚠️ THE FIRST METERED ADAPTER IN THIS MAP. Every other entry is free to
+   * run; this one bills per record against an allowance that cannot be read
+   * back from the vendor. `metered: true` is what resolve-source.ts refuses
+   * by default -- `npm run ingest:highergov` (ingest/highergov-cli.ts) is
+   * the one caller that opts in, after it has measured and capped the
+   * spend. Every other path (scrape/cli.ts, admin.ts's /scrape and /run) is
+   * refused there, not re-taught the rule locally. */
+  highergov: { sourceName: "HigherGov", make: () => higherGovAdapter(), metered: true },
 };

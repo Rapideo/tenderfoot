@@ -53,6 +53,16 @@ export function placeOfPerformance(sourceName: string, raw: unknown): string | n
        * does buy services delivered elsewhere. Null is correct. */
       return null;
 
+    /* R1: `pop_state` is a RESPONSE field, already the two-letter code this
+     * column holds -- 100% coverage on Indiana against our own 36% from SAM
+     * (field-mapping doc §1). Still run through stateCode() rather than
+     * trusted verbatim: this file's whole discipline is checking the SHAPE,
+     * not merely that a value is present, and there is no reason to trust
+     * one source's string more than another's just because it usually
+     * arrives clean. */
+    case "HigherGov":
+      return stateCode(r.pop_state);
+
     default:
       return null;
   }

@@ -48,3 +48,18 @@ test("IDOA gets null rather than an invented 'IN'", () => {
 test("an unknown source gets null, not a guess", () => {
   expect(placeOfPerformance("Some Future Portal", { placeOfPerformance: [{ state: "IN" }] })).toBeNull();
 });
+
+/* Adapted from the brief's sketch: this module's exported entry point is
+ * `placeOfPerformance`, not `placeFrom`, and it returns the bare state code
+ * -- not `{ state }` -- matching every case above it. */
+test("HigherGov's pop_state lands as the place", () => {
+  expect(placeOfPerformance("HigherGov", { pop_state: "IN" })).toBe("IN");
+});
+
+/* Same regression SAM's own case guards: a state-shaped field is still
+ * checked for shape, not merely truthiness. */
+test("HigherGov's pop_state is validated like every other source's state field", () => {
+  expect(placeOfPerformance("HigherGov", { pop_state: "Indiana" })).toBeNull();
+  expect(placeOfPerformance("HigherGov", { pop_state: null })).toBeNull();
+  expect(placeOfPerformance("HigherGov", {})).toBeNull();
+});
