@@ -66,6 +66,51 @@ function codeList(v: unknown): string[] {
     .filter((c): c is string => typeof c === "string" && c.length > 0);
 }
 
+/* ⚠️ THE SYMMETRIC CASE org-chain.ts's warnNestedAgency ALREADY SOLVED
+ * (final review, fix 3) -- this file had no version of it until now. NAICS
+ * and PSC are read as NESTED objects on the sole authority of
+ * docs/2026-09-03-highergov-field-mapping.md:56-57. If that document is
+ * wrong about the shape, `nestedCode` below silently returns `[]`,
+ * `listingCodes` silently returns `null`, and the row loses its codes with
+ * nothing anywhere to say why -- pushing a triager who could have rejected
+ * for free onto a document fetch instead (~11 billed records, CLAUDE.md
+ * §5.2's own arithmetic).
+ *
+ * UNLIKE THE AGENCY FIELD, THERE IS NO FALLBACK HERE, AND NONE SHOULD BE
+ * ADDED. org-chain.ts accepts flat-or-nested because the CODE already
+ * asserted a flat shape and the document contradicted it -- two competing
+ * claims, and reading both was how it reconciled them without spending a
+ * record to find out which was right. Here the code asserted nothing before
+ * the document did, so there is no second claim to honour -- only a
+ * disagreement to notice. A tolerance nobody could have predicted teaches
+ * nothing; it just quietly does the wrong thing forever. Warn only, and let
+ * the first live run that disagrees answer the question for free, exactly as
+ * org-chain.ts's own warning does for the agency.
+ *
+ * Two independent flags, not one shared boolean: NAICS and PSC are two
+ * separate claims about two separate fields (§56 and §57 of the mapping doc
+ * respectively), and one arriving bare must not silence a warning about the
+ * other arriving bare on a later row. */
+const bareCodeWarned = new Set<string>();
+
+function warnBareCode(field: string, value: string): void {
+  if (bareCodeWarned.has(field)) return;
+  bareCodeWarned.add(field);
+  console.warn(
+    `WARNING: HigherGov's ${field} arrived FLAT -- ${field} = ${JSON.stringify(value)}, ` +
+      `not the nested { ${field}: { ${field}: ... } } shape ` +
+      `docs/2026-09-03-highergov-field-mapping.md:56-57 says to expect. That ` +
+      `settles a question this code could not settle for free: the document is ` +
+      `wrong about this field's shape, and nestedCode() has been silently ` +
+      `returning [] for every row that arrives this way -- each one losing its ` +
+      `${field} and, with it, a free rejection this source is priced on ` +
+      `(CLAUDE.md §5.2). No fallback was added on purpose -- see this file's own ` +
+      `header just above -- so fix the read once this is seen, and delete this ` +
+      `warning with it. (Printed once per process, however many rows arrive ` +
+      `this way.)`,
+  );
+}
+
 /** One code out of one of HigherGov's nested code objects -- `{naics_code:
  *  {naics_code: "541611", …}}` -- returned as the same one-or-zero-length
  *  list SAM's arrays produce, so both cases feed `codes` the same shape.
@@ -74,8 +119,14 @@ function codeList(v: unknown): string[] {
  *  precisely what this costs money for: an array, a bare string or a null
  *  where an object was expected must yield NO code rather than a thrown
  *  merge or a stringified `[object Object]` sitting in the column looking
- *  like a real one. */
+ *  like a real one. A non-empty bare STRING is the one case worth a word,
+ *  not just silent absence -- see warnBareCode above: it is the one shape
+ *  that would mean the field-mapping document is wrong. */
 function nestedCode(container: unknown, key: string): string[] {
+  if (typeof container === "string") {
+    if (container.trim()) warnBareCode(key, container.trim());
+    return [];
+  }
   if (!container || typeof container !== "object" || Array.isArray(container)) return [];
   const code = (container as Record<string, unknown>)[key];
   return typeof code === "string" && code.trim() ? [code.trim()] : [];

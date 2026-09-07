@@ -1,5 +1,18 @@
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
+
+/* The bare-code fallback warns (see listing-facts.ts's own header, final
+ * review fix 3). Muted for the whole suite, matching org-chain.test.ts's own
+ * pattern exactly, so the tests that merely EXERCISE a bare-string code (the
+ * "wrong shape" tests below) do not print a real warning into the gate's
+ * output; the tests dedicated to the warning itself install their own spies
+ * on a fresh module instance and assert on it deliberately. */
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /* Pure -- no useTestSchema(), no database. Same posture as closes-at.test.ts:
  * a rule that reads a payload should be testable without a Postgres
@@ -276,4 +289,91 @@ test("HigherGov's NONE is a stated fact, not an absence", () => {
 test("set_aside is read flat for HigherGov and nested for SAM, never the other way round", () => {
   expect(setAside("HigherGov", SAM)).toBeNull();
   expect(setAside("SAM.gov", HIGHERGOV)).toBeNull();
+});
+
+/* ── the bare-code warning, added 2026-09-07 (final review, fix 3) ─────── *
+ *
+ * The symmetric case org-chain.ts's own nested-agency warning already solved
+ * for the agency field: if docs/2026-09-03-highergov-field-mapping.md:56-57
+ * is wrong that NAICS/PSC arrive nested, a row loses its codes silently and
+ * nothing says why. This is the same mechanism, matched to org-chain.ts's own
+ * shape -- a once-per-process module-level flag and a single console.warn --
+ * applied to two fields instead of one. */
+
+/* Mirrors org-chain.test.ts's own freshOrgChain(): the warned flags are
+ * module state and once-per-process by design, so any test that wants to see
+ * the warning actually FIRE needs a fresh module instance rather than one
+ * shared with every other test in this file. */
+async function freshListingCodes() {
+  vi.resetModules();
+  const mod = await import("./listing-facts.js");
+  return mod.listingCodes;
+}
+
+test("a bare-string naics_code warns, names the field, and cites the mapping doc", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  expect(codes("HigherGov", { naics_code: "541611" })).toBeNull();
+
+  expect(warn).toHaveBeenCalledTimes(1);
+  const message = String(warn.mock.calls[0]?.[0]);
+  expect(message).toContain("naics_code");
+  expect(message).toContain("541611");
+  expect(message).toContain("FLAT");
+  expect(message).toContain("field-mapping");
+});
+
+test("a bare-string psc_code warns independently of naics_code", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  /* Both fields bare on the SAME row: two separate claims, so two warnings,
+   * not one silenced by the other. */
+  expect(codes("HigherGov", { naics_code: "541611", psc_code: "R410" })).toBeNull();
+
+  expect(warn).toHaveBeenCalledTimes(2);
+  const messages = warn.mock.calls.map((c) => String(c[0]));
+  expect(messages.some((m) => m.includes("naics_code"))).toBe(true);
+  expect(messages.some((m) => m.includes("psc_code"))).toBe(true);
+});
+
+test("the bare-code warning fires once per field per process, not once per row", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  codes("HigherGov", { naics_code: "541611" });
+  codes("HigherGov", { naics_code: "339116" });
+  codes("HigherGov", { naics_code: "000000" });
+
+  expect(warn).toHaveBeenCalledTimes(1);
+});
+
+/* Only the shape that CONTRADICTS the document is worth a word -- the nested
+ * shape it predicts, and an absent code, both tell us nothing new. Same
+ * asymmetry org-chain.ts's own comment argues for the agency case. */
+test("the nested shape and an absent code never warn", async () => {
+  const codes = await freshListingCodes();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  codes("HigherGov", HIGHERGOV);
+  codes("HigherGov", { naics_code: null, psc_code: null });
+  codes("HigherGov", { naics_code: {}, psc_code: {} });
+  codes("HigherGov", {});
+  codes("SAM.gov", SAM);
+
+  expect(warn).not.toHaveBeenCalled();
+});
+
+/* 🛑 NO FALLBACK, ON PURPOSE. Unlike the agency field there is no competing
+ * claim to reconcile here (the code asserted nothing before the document
+ * did), so the warning must stay pure diagnosis -- it must never change what
+ * the row resolves to, or it quietly becomes a second, unreviewed code path
+ * for reading a bare string as a code. */
+test("the warning never causes the bare string to be read as a code", async () => {
+  const codes = await freshListingCodes();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  expect(codes("HigherGov", { naics_code: "541611" })).toBeNull();
+  expect(codes("HigherGov", { naics_code: "541611", psc_code: "R410" })).toBeNull();
 });
