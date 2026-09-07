@@ -1,9 +1,20 @@
 /* THE GUARDED DOOR -- npm run ingest:highergov.
  *
- * ⚖️ CLOSED, NOT MERELY GUARDED: scrape/cli.ts refuses `--source highergov`
- * outright (it never called recordSpend, so it silently under-reported
- * spentThisMonth against the ceiling this file depends on) -- so this really
- * is the one path in, not a second gate beside an open one.
+ * ⚖️ CLOSED AT THE CONVERGENCE POINT, NOT AT EACH DOORWAY (review round 3).
+ * Round 2 put the refusal in scrape/cli.ts, keyed on the raw --source
+ * string -- and that shape already failed once: admin.ts's /run route
+ * accepts BOTH the registry key ('highergov') and the canonical
+ * source.name ('HigherGov') before ever reaching resolveSource(), and
+ * admin.ts's /scrape route is a THIRD path with the identical gap. The
+ * refusal now lives in resolve-source.ts, on registry.ts's `metered: true`
+ * flag, checked on the RESOLVED registry key -- the one thing every call
+ * site (this file, scrape/cli.ts, and both admin.ts routes) already agrees
+ * on regardless of spelling. Only this file opts in
+ * (`{ meteredAllowed: true }`), after it has measured and capped what
+ * committing the window will cost. scrape/cli.ts keeps its OWN refusal too
+ * -- a better message at the point of use, and defence in depth on a money
+ * path is cheap. That is what makes this file genuinely the one path in,
+ * not merely the one with the nicest message.
  *
  * A costed dry run runs FIRST, always, and a window that would cross the
  * remaining monthly allowance is refused BEFORE any further spending is even
@@ -17,7 +28,13 @@
  * (Proto2PRD-Lessons §2.15). At 15/day a 90-day backfill is 1,350 records
  * against a 1,000 ceiling, and the ceiling would refuse the run partway
  * through. The dry run costs ~5 records and turns that guess into a real
- * measurement before anything wider is attempted.
+ * measurement before anything wider is attempted. A ZERO-record sample gets
+ * the opposite defect -- it would make every window look free -- so it is
+ * refused rather than projected from (review round 3, item 2).
+ *
+ * The sampled day is never billed twice: the day-walk below reuses the
+ * sample's own already-paid-for data for that one day instead of
+ * re-fetching it (review round 3, item 4).
  *
  * Mirrors coverage/coverage-cli.ts's shape deliberately: the same
  * shape-then-round-trip date validation (a bare regex lets 2026-13-01
@@ -34,13 +51,19 @@ import { MONTHLY_RECORD_CEILING, recordSpend, spentThisMonth } from "../extract/
 import {
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
+  type FeedResult,
   type HigherGovClient,
 } from "../coverage/highergov-client.js";
-import { higherGovAdapter, HIGHERGOV_ADAPTER_KEY } from "../scrape/adapters/highergov.js";
+import {
+  higherGovAdapter,
+  HIGHERGOV_ADAPTER_KEY,
+  scrubPayload,
+} from "../scrape/adapters/highergov.js";
 import { resolveSource } from "../scrape/resolve-source.js";
 import { runScrape } from "../scrape/run.js";
+import { readArtifact } from "../scrape/artifact.js";
 import { DEFAULT_BUDGET_MS, type RunRequest } from "../scrape/contract.js";
-import type { WindowedAdapter } from "../scrape/adapter.js";
+import type { WindowedAdapter, WindowedItem, WindowedPage } from "../scrape/adapter.js";
 import { importArtifact } from "../ingest/import-artifact.js";
 
 const USAGE = "Usage: npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD [--dry-run]";
@@ -115,6 +138,86 @@ export interface DryRunResult {
   projectedRecords: number;
   remainingThisMonth: number;
   affordable: boolean;
+  /** The sample's own raw result, kept (not discarded) so a caller
+   * committing the window can reuse the sampled day's already-paid-for data
+   * instead of re-fetching it (review round 3, item 4: "the sampled day is
+   * bought twice"). Null exactly when `sampled` is false. */
+  sampleResult: FeedResult | null;
+}
+
+/* Converts the dry run's own sample into the exact WindowedPage shape
+ * adapters/highergov.ts's real fetchListing would have produced for the
+ * same day -- so the day-walk can commit day one through runScrape's
+ * ordinary artifact-writing path without a second live call for data
+ * already billed (review round 3, item 4). Mirrors fetchListing's own
+ * undated-skip logic exactly: a notice with no capturedDate is counted, not
+ * silently dropped (adapter.ts §5.4). */
+function sampleAsPage(sample: FeedResult, day: string): WindowedPage {
+  let undatedSkipped = 0;
+  const items: WindowedItem[] = [];
+  for (const n of sample.notices) {
+    if (!n.capturedDate) {
+      undatedSkipped++;
+      continue;
+    }
+    items.push({ externalId: n.externalId, modifiedAt: n.capturedDate, raw: n.raw });
+  }
+  return {
+    items,
+    undatedSkipped,
+    nextCursor: null,
+    requestUrl: `highergov:/opportunity/?captured_date=${day}&reused=dry-run-sample`,
+    httpStatus: 200,
+    /* scrubPayload() is idempotent (its own header) -- `n.raw` is already
+     * redacted by highergov-client.ts's toNotice(), so this is a defensive
+     * second pass, not a required one, and cannot change the bytes. */
+    payload: scrubPayload(
+      JSON.stringify({
+        capturedDate: day,
+        records: sample.records,
+        feedCount: sample.feedCount,
+        pages: sample.pages,
+        results: sample.notices.map((n) => n.raw),
+      }),
+    ),
+  };
+}
+
+/* A one-page WindowedAdapter that always answers with `page`, whatever
+ * since/until it is asked for -- the day-walk only ever uses this for the
+ * one day it already knows the answer to. */
+function reuseSampleAdapter(page: WindowedPage): WindowedAdapter {
+  return {
+    shape: "windowed",
+    name: HIGHERGOV_SOURCE_NAME,
+    async fetchListing() {
+      return page;
+    },
+  };
+}
+
+/* THE VENDOR-BILLED COUNT, read back from the artifact this call just wrote
+ * -- not approximated from rows+undatedSkipped, which adapters/highergov.ts's
+ * own comment says explicitly is NOT the billed count (a row dropped for a
+ * missing source_id is billed but excluded from both). HigherGov's windowed
+ * loop always writes exactly one capture per call (nextCursor is always
+ * null), and that capture's payload is the adapter's own scrubbed JSON,
+ * which carries `records` verbatim -- the exact figure the vendor billed.
+ * Falls back to the rows+undatedSkipped estimate only if the payload cannot
+ * be read at all (a defensive path, not the normal one): under-reporting is
+ * the dangerous direction against a ceiling that cannot be read back from
+ * the vendor (CLAUDE.md §5.1), so a fallback that could ever UNDER-count
+ * would be worse than one that merely risks never firing. */
+function billedRecordsFromArtifact(artifactPath: string, fallback: number): number {
+  try {
+    const art = readArtifact(artifactPath);
+    const capture = art.captures[0] as { payload?: unknown } | undefined;
+    if (!capture || typeof capture.payload !== "string") return fallback;
+    const parsed = JSON.parse(capture.payload) as { records?: unknown };
+    return typeof parsed.records === "number" ? parsed.records : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /* Pure-ish and testable without a network: `client` is injectable (the real
@@ -147,6 +250,7 @@ export async function dryRun(
       projectedRecords: 0,
       remainingThisMonth: remainingBeforeSample,
       affordable: false,
+      sampleResult: null,
     };
   }
 
@@ -162,6 +266,15 @@ export async function dryRun(
    * A "remaining" figure that ignores it overstates headroom by exactly the
    * sample's own cost. */
   const remainingThisMonth = remainingBeforeSample - sample.records;
+  /* 🔴 A ZERO-RECORD SAMPLE MUST NOT LOOK "FREE FOREVER" (review round 3,
+   * item 2). A weekend, a holiday, or a --from ahead of the vendor's own
+   * capture can all return zero. With sample.records === 0, projectedRecords
+   * is ALSO 0 regardless of windowDays -- so ANY window length would pass
+   * `projectedRecords <= remainingThisMonth` by construction, and the
+   * day-walk's own per-day estimate would be 0 too, disabling ITS guard the
+   * same way. Refusing to extrapolate a rate from an unmeasured day is the
+   * safe direction; the operator can re-run with a different --from. */
+  const affordable = sample.records > 0 && projectedRecords <= remainingThisMonth;
   return {
     sampledDay: from,
     sampled: true,
@@ -170,7 +283,8 @@ export async function dryRun(
     windowDays,
     projectedRecords,
     remainingThisMonth,
-    affordable: projectedRecords <= remainingThisMonth,
+    affordable,
+    sampleResult: sample,
   };
 }
 
@@ -221,6 +335,18 @@ export async function main(
     );
   }
 
+  /* 🔴 MOVED AHEAD OF THE SAMPLE (review round 3, item 3) -- this used to
+   * run only in the committing branch, AFTER the sample had already billed.
+   * HigherGov is seeded `enabled = false` (migration 019), so every real
+   * invocation bought a sampled day and then died with "Source is
+   * disabled": records bought, nothing loaded. This check is free (registry
+   * + one row read, no vendor call), so it belongs before the one spend
+   * that is NOT free. `{ meteredAllowed: true }` is what lets THIS caller
+   * through resolve-source.ts's default refusal of a metered source --
+   * see this file's own header. The resolved name is reused below, in the
+   * day-walk, rather than resolved a second time. */
+  const resolved = await resolveSource(HIGHERGOV_ADAPTER_KEY, { meteredAllowed: true });
+
   /* THE DRY RUN ALWAYS RUNS, even without --dry-run -- that flag only stops
    * execution AFTER it. This is the one unavoidable spend: measuring the
    * window costs one sampled day, and there is no way to know whether a
@@ -268,8 +394,18 @@ export async function main(
 
   /* REFUSING IS THE POINT. Both numbers are printed so the operator can see
    * exactly what was measured and exactly what it was measured against,
-   * rather than a bare "no". */
+   * rather than a bare "no". A zero-record sample gets its OWN message
+   * (review round 3, item 2): the numbers involved (0 projected, against
+   * whatever remains) would otherwise read as trivially affordable, which is
+   * exactly the defect being refused, not a coincidence worth explaining. */
   if (!result.affordable) {
+    if (result.recordsThatDay === 0) {
+      throw new Error(
+        `Refusing: the sampled day (${result.sampledDay}) returned 0 records. A ` +
+          `zero-record sample cannot be extrapolated into a safe projection for the rest ` +
+          `of the window -- re-run with a different --from, or a window known to have data.`,
+      );
+    }
     throw new Error(
       `Refusing: the projected ${result.projectedRecords} record(s) for this window ` +
         `exceeds the ${result.remainingThisMonth} remaining this month ` +
@@ -287,29 +423,49 @@ export async function main(
    * if since !== until and says so explicitly: "the caller must walk days
    * itself." This command is the only component holding the validated
    * --from/--to window, so it is that caller -- without this loop, ruling
-   * ②'s 90-day backfill has no executor anywhere in this slice. */
-  const resolved = await resolveSource(HIGHERGOV_ADAPTER_KEY);
+   * ②'s 90-day backfill has no executor anywhere in this slice.
+   * `resolved` was already computed above, before the sample -- not
+   * re-resolved here. */
   const perDayEstimate = result.recordsThatDay;
   let committedDays = 0;
   let committedRecords = 0;
+  /* Named `days`, not `windowDays` -- `result.windowDays` (a count) already
+   * exists on this scope, and shadowing it with an array of the same near-
+   * name is exactly the kind of thing that invites a future bug. */
+  const days = daysInRange(from, to);
 
-  for (const day of daysInRange(from, to)) {
-    /* Stop BEFORE the call that would cross the ceiling. Re-read fresh each
-     * iteration rather than tracked locally: recordSpend below commits
-     * immediately, so a fresh read reflects this loop's own prior days, the
-     * dry run's own sample above, and anything else recorded meanwhile.
-     * perDayEstimate -- the dry run's own measured rate -- is the only
-     * forward-looking signal available for a day not yet fetched. */
-    const spentSoFar = await spentThisMonth(HIGHERGOV_SOURCE_NAME);
-    const remainingNow = MONTHLY_RECORD_CEILING - spentSoFar;
-    if (remainingNow < perDayEstimate) {
-      console.log(
-        `\nStopping before ${day}: ${committedDays} of ${result.windowDays} day(s) loaded ` +
-          `(${committedRecords} record(s) billed this run). ${remainingNow} remain(s) this ` +
-          `month, below the measured rate of ${perDayEstimate}/day -- refusing before the ` +
-          `call that would cross it.`,
-      );
-      break;
+  for (const day of days) {
+    /* THE SAMPLED DAY IS NEVER BILLED TWICE (review round 3, item 4). `day`
+     * equals `result.sampledDay` on exactly the first iteration (dryRun()
+     * always samples `from`, and `from` is always daysInRange's first
+     * entry) -- reuse its already-paid-for data instead of re-fetching the
+     * same day through the network a second time. */
+    const isSampledDay = day === result.sampledDay;
+
+    /* Stop BEFORE the call that would cross the ceiling -- skipped for the
+     * sampled day, which makes no new network call and so cannot cross
+     * anything. Re-read fresh each iteration rather than tracked locally:
+     * recordSpend below commits immediately, so a fresh read reflects this
+     * loop's own prior days, the dry run's own sample, and anything else
+     * recorded meanwhile. perDayEstimate -- the dry run's own measured rate
+     * -- is the only forward-looking signal available for a day not yet
+     * fetched. `<= 0 ||` is defence in depth: dryRun() already refuses a
+     * zero-record sample above, so perDayEstimate should never reach here
+     * as 0, but a per-day guard that only fires on a STRICT less-than would
+     * itself go silent at exactly zero remaining and zero estimated, the
+     * same failure mode one layer up (review round 3, item 2). */
+    if (!isSampledDay) {
+      const spentSoFar = await spentThisMonth(HIGHERGOV_SOURCE_NAME);
+      const remainingNow = MONTHLY_RECORD_CEILING - spentSoFar;
+      if (remainingNow <= 0 || remainingNow < perDayEstimate) {
+        console.log(
+          `\nStopping before ${day}: ${committedDays} of ${days.length} day(s) loaded ` +
+            `(${committedRecords} record(s) billed this run). ${remainingNow} remain(s) this ` +
+            `month, below the measured rate of ${perDayEstimate}/day -- refusing before the ` +
+            `call that would cross it.`,
+        );
+        break;
+      }
     }
 
     const req: RunRequest = {
@@ -324,34 +480,64 @@ export async function main(
     const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
     const outPath = join(runsDir, `run-highergov-${day}-${stamp}.db`);
 
-    const runResult = await runScrape(req, adapter, outPath);
-    /* BILLED, not merely WRITTEN. adapter.ts §5.4: a row with no usable
-     * date is excluded from `items` (so from `rows`) but was still billed
-     * -- runResult.undatedSkipped is the same count the client's own
-     * FeedResult.records would carry, short only of the one edge case
-     * highergov-client.ts's own comment names: a row missing source_id is
-     * dropped by toNotice() before either counter sees it. That gap is
-     * pre-existing and documented there, not introduced here. */
-    const dayRecords = runResult.rows + runResult.undatedSkipped;
-    await recordSpend({ run: exec }, {
-      sourceId: source.id,
-      endpoint: "opportunity",
-      records: dayRecords,
-    });
-    committedRecords += dayRecords;
+    /* The sampled day reuses `result.sampleResult` (guaranteed non-null:
+     * `result.sampled` was already checked true above) through a one-page
+     * adapter instead of the real one -- same runScrape path, same
+     * artifact-writing code, zero new network calls. */
+    const dayAdapter = isSampledDay
+      ? reuseSampleAdapter(sampleAsPage(result.sampleResult!, day))
+      : adapter;
+    const runResult = await runScrape(req, dayAdapter, outPath);
+
+    /* BILLED, read back from the artifact -- see billedRecordsFromArtifact's
+     * own header for why this is not rows+undatedSkipped. */
+    const dayRecords = billedRecordsFromArtifact(
+      runResult.artifactPath,
+      runResult.rows + runResult.undatedSkipped,
+    );
+
+    /* Recorded ONLY for a day that made a real, new call -- the sampled
+     * day's cost was already recorded once, above, as the dry run's own
+     * spend. Recording it again here would double-count a call that never
+     * happened a second time. */
+    if (!isSampledDay) {
+      await recordSpend({ run: exec }, {
+        sourceId: source.id,
+        endpoint: "opportunity",
+        records: dayRecords,
+      });
+      committedRecords += dayRecords;
+    }
     committedDays += 1;
 
     const imported = await importArtifact(runResult.artifactPath);
     console.log(
-      `  ${day}: ${dayRecords} record(s) billed, ${imported.imported} sighting(s) imported` +
+      `  ${day}: ${dayRecords} record(s) ` +
+        (isSampledDay ? "(reused from the dry run's sample -- not re-billed)" : "billed") +
+        `, ${imported.imported} sighting(s) imported` +
         (imported.skipped ? " (artifact already imported -- skipped)." : "."),
     );
   }
 
   console.log(
-    `\nDone: ${committedDays} of ${result.windowDays} day(s) loaded, ${committedRecords} ` +
-      `record(s) billed this run (plus ${result.recordsThatDay} sampled by the dry run above).`,
+    `\nDone: ${committedDays} of ${days.length} day(s) loaded, ${committedRecords} ` +
+      `record(s) newly billed this run (plus ${result.recordsThatDay} sampled by the dry ` +
+      `run above, reused for the sampled day rather than billed twice).`,
   );
+
+  /* A mid-walk stop is a SUCCESSFUL refusal, not a crash -- it does not
+   * throw. But exiting 0 regardless would make a partially loaded window
+   * indistinguishable from a complete one to any wrapper or cron (review
+   * round 3, item 6). Set, not thrown: the summary above is exactly the
+   * information an operator needs, and a thrown Error here would bury it
+   * under a stack trace for what is a legitimate, actionable outcome. */
+  if (committedDays < days.length) {
+    process.exitCode = 1;
+    console.log(
+      `⚠️  PARTIAL: ${committedDays} of ${days.length} requested day(s) loaded. ` +
+        `Exiting non-zero.`,
+    );
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

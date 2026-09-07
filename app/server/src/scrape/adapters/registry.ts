@@ -37,6 +37,19 @@ export interface AdapterRegistryEntry {
    * means there is deliberately no row -- see `fake` below. */
   sourceName: string | null;
   make: () => Adapter;
+  /** ⚖️ Task 8 review round 3 (CRITICAL): true for a source that bills per
+   * record. `resolve-source.ts` refuses ANY caller that reaches a metered
+   * entry unless it explicitly opts in (`{ meteredAllowed: true }`) -- the
+   * refusal lives on the RESOLVED registry key, which is the one thing every
+   * call site (scrape/cli.ts, admin.ts's two routes, and every future one)
+   * already agrees on, regardless of which spelling of the source a caller
+   * used to get there. A per-entry-point refusal copied into each call site
+   * is exactly the shape that already failed once: admin.ts's /run accepts
+   * BOTH the registry key ('highergov') and the canonical source.name
+   * ('HigherGov') via resolveAdapterKey(), and a check keyed on one spelling
+   * would let the other straight through. Undefined/false means "free to
+   * run anywhere", unchanged for every other entry. */
+  metered?: boolean;
 }
 
 export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
@@ -67,8 +80,10 @@ export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
   idoa: { sourceName: "Indiana IDOA solicitations", make: () => idoaAdapter() },
   /* ⚠️ THE FIRST METERED ADAPTER IN THIS MAP. Every other entry is free to
    * run; this one bills per record against an allowance that cannot be read
-   * back from the vendor. `npm run scrape -- --source highergov` therefore
-   * spends money, and `npm run ingest:highergov` is the guarded door that
-   * checks the budget first (ingest/highergov-cli.ts). */
-  highergov: { sourceName: "HigherGov", make: () => higherGovAdapter() },
+   * back from the vendor. `metered: true` is what resolve-source.ts refuses
+   * by default -- `npm run ingest:highergov` (ingest/highergov-cli.ts) is
+   * the one caller that opts in, after it has measured and capped the
+   * spend. Every other path (scrape/cli.ts, admin.ts's /scrape and /run) is
+   * refused there, not re-taught the rule locally. */
+  highergov: { sourceName: "HigherGov", make: () => higherGovAdapter(), metered: true },
 };

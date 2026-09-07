@@ -77,3 +77,29 @@ test("idoa resolves to the registry row it binds to", () => {
   expect(ADAPTERS.idoa!.sourceName).toBe("Indiana IDOA solicitations");
   expect(ADAPTERS.idoa!.make().shape).toBe("snapshot");
 });
+
+/* Task 8 review round 3, FIX 3 (CRITICAL): a metered source is refused by
+ * DEFAULT, on the registry key alone -- no database touched at all, which
+ * this test proves by never seeding or enabling a 'HigherGov' row first.
+ * Round 2's refusal lived in scrape/cli.ts, keyed on the raw --source
+ * string; this one lives here, on the RESOLVED key, so it cannot be dodged
+ * by a caller that resolves a different spelling to the same registry entry
+ * before calling in (see admin.ts's resolveAdapterKey). */
+test("a metered source is refused by default, before any database lookup", async () => {
+  expect(ADAPTERS.highergov?.metered).toBe(true);
+  await expect(resolveSource("highergov")).rejects.toThrow(/METERED/);
+  await expect(resolveSource("highergov")).rejects.toThrow(/ingest:highergov/);
+});
+
+test("a metered source resolves normally when the caller explicitly opts in", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = 'HigherGov'`);
+  const resolved = await resolveSource("highergov", { meteredAllowed: true });
+  expect(resolved.sourceName).toBe("HigherGov");
+});
+
+test("opting in does not bypass the disabled check -- metered and enabled are independent gates", async () => {
+  await run(`UPDATE source SET enabled = false WHERE name = 'HigherGov'`);
+  await expect(resolveSource("highergov", { meteredAllowed: true })).rejects.toThrow(
+    /disabled|enable/i,
+  );
+});
