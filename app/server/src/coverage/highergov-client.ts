@@ -104,6 +104,29 @@ export interface HigherGovClient {
  * incident. */
 const KEY_IN_STRING = /api_key=[^&\s"']+/gi;
 
+/* 🔴 KEYS AS WELL AS VALUES, AND THE FIX IS THE `redact(k)` BELOW.
+ *
+ * This used to be `out[k] = redact(v)` -- it recursed into VALUES only and
+ * copied property NAMES verbatim. `toNotice` sets `raw: redact(rest)`, so a
+ * key-shaped string sitting in a property NAME survived this boundary
+ * untouched and rode `raw` into scrape/run.ts's `writeSighting`, into the
+ * hashed artifact, and finally into Postgres `sighting.raw` jsonb --
+ * permanently, in the one place hardest to retract. The adapter's
+ * string-level `scrubPayload` caught it for `page.payload` and ONLY for
+ * `page.payload`; `items[].raw` had no such second pass. That asymmetry is
+ * closed here rather than at either call site, because the boundary is where
+ * CLAUDE.md §5.3 rule 2 says the scrub belongs.
+ *
+ * ⚠️ STILL IDEMPOTENT, and that is load-bearing (adapters/highergov.ts).
+ * `KEY_IN_STRING` rewrites `api_key=<anything>` to `api_key=REDACTED`, and
+ * `api_key=REDACTED` is itself a match that rewrites to the identical
+ * string -- so a second pass over an already-redacted name or value returns
+ * the same bytes, at any depth.
+ *
+ * ⚠️ TWO NAMES CAN NOW COLLIDE -- `?api_key=A` and `?api_key=B` both become
+ * `?api_key=REDACTED`, and the later wins. That is a deliberate trade: losing
+ * one member of a pair of credential-shaped property names is cheaper than
+ * persisting either of them, and no real vendor field name is key-shaped. */
 export function redact<T>(value: T): T {
   if (typeof value === "string") {
     return value.replace(KEY_IN_STRING, "api_key=REDACTED") as unknown as T;
@@ -112,7 +135,7 @@ export function redact<T>(value: T): T {
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = redact(v);
+      out[redact(k)] = redact(v);
     }
     return out as unknown as T;
   }
@@ -210,9 +233,30 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
         "fetchImpl -- CLAUDE.md §5.1 forbids a live call from a test.",
     );
   }
-  const res = await fetchImpl(url.toString(), {
-    headers: { accept: "application/json" },
-  });
+  /* 🔴 THE FETCH LAYER THROWS TOO, AND IT WAS THE HOLE IN THE CLAIM BELOW.
+   * The parse guard's own comment used to promise that "nothing downstream
+   * -- including the CLI's own console.error(err) -- can print it raw", and
+   * that was true of the PARSE path only. `fetchImpl` rejects with whatever
+   * the runtime attached: undici's `TypeError: fetch failed` carries a
+   * `cause`, and `console.error` prints a cause chain. Nothing here can know
+   * in advance whether some runtime, proxy or polyfill put the requested URL
+   * -- which carries the api_key as a query parameter -- into that chain.
+   *
+   * So the rejection is re-thrown as a NEW Error with a redacted message and
+   * NO `cause`: the chain is dropped rather than trusted. That is what makes
+   * the claim below true of every throw this function can produce, not just
+   * of the one it was written about. The message is deliberately distinct
+   * from "HigherGov answered N" (a real HTTP response) so an operator can
+   * still tell a transport failure from a rejected request. */
+  let res: Response;
+  try {
+    res = await fetchImpl(url.toString(), {
+      headers: { accept: "application/json" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`HigherGov request failed before any response: ${redact(message)}`);
+  }
   if (!res.ok) {
     /* The URL is NOT in this message: it carries the api_key. */
     throw new Error(`HigherGov answered ${res.status}`);
@@ -224,7 +268,11 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
    * api_key it embeds on every row) lives. redact() is the boundary rule
    * made real: the message is scrubbed before it is ever wrapped in a new
    * Error, so nothing downstream -- including the CLI's own
-   * `console.error(err)` -- can print it raw even by accident. */
+   * `console.error(err)` -- can print it raw even by accident. Every OTHER
+   * throw this function produces is now held to the same standard: the
+   * transport guard above re-wraps a runtime rejection, the two guards
+   * below are hand-written strings, and the CLI redacts what it prints as
+   * defence in depth (ingest/highergov-cli.ts's own bottom block). */
   let body: RawBody;
   try {
     body = (await res.json()) as RawBody;
@@ -289,11 +337,22 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
 /* 🔴 See the FetchedDoc comment above: whatever URL-shaped field this row
  * carries (document_path or download_url) is never read here, on purpose --
  * not read-and-discarded, simply never touched. The only field this client
- * trusts from a /document/ row is file_name. */
+ * trusts from a /document/ row is file_name.
+ *
+ * 🔴 AND BOTH FIELDS ARE REDACTED, for the same reason toNotice() redacts
+ * `raw` (CLAUDE.md §5.3 rule 2: scrub at the BOUNDARY, never at the call
+ * site). Not reading `document_path` protects against the field we KNOW
+ * carries the key; it says nothing about a key-shaped string arriving
+ * somewhere else. `file_name` is vendor-controlled text, and `text_extract`
+ * is the vendor's own extraction of a document that may itself quote a
+ * signed URL -- and extract/fetch-documents-for.ts writes that text straight
+ * into `document.extracted_text`, permanently. The opportunity path has had
+ * this boundary since it was written; the document path shipped without one,
+ * which is the asymmetry the 2026-09-03 leak was made of. */
 function toFetchedDoc(r: RawResult): FetchedDoc | null {
   const fileName = str(r.file_name);
   if (!fileName) return null;
-  return { fileName, textExtract: str(r.text_extract) };
+  return { fileName: redact(fileName), textExtract: redact(str(r.text_extract)) };
 }
 
 async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<DocumentsResult> {

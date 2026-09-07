@@ -103,6 +103,39 @@ test("the redactor leaves harmless values alone", () => {
   expect(redact({ title: "Walleye", count: 3 })).toEqual({ title: "Walleye", count: 3 });
 });
 
+/* 🔴 A KEY-SHAPED PROPERTY NAME, NOT ONLY A VALUE. redact() used to walk
+ * values only (`out[k] = redact(v)`), so a credential sitting in a property
+ * NAME crossed this boundary untouched. `raw` is what scrape/run.ts writes
+ * into the hashed artifact and ingest/import-artifact.ts writes into
+ * Postgres `sighting.raw` jsonb -- permanent, and the hardest place to
+ * retract from. The adapter's string-level scrubPayload() caught this for
+ * `page.payload` and for nothing else. */
+test("the redactor removes an api_key sitting in a property NAME, not just a value", () => {
+  const raw = {
+    "https://x/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0005": "harmless value",
+    nested: { deeper: { "?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0005": 1 } },
+  };
+  const printed = JSON.stringify(redact(raw));
+  expect(printed).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0005");
+  expect(printed).toContain("api_key=REDACTED");
+});
+
+/* ⚠️ IDEMPOTENCE IS LOAD-BEARING, and redacting KEYS could have broken it:
+ * a redacted name is itself key-shaped, so a second pass must rewrite it to
+ * the identical string rather than to something new. scrubPayload() (the
+ * string form, pinned in adapters/highergov.test.ts) is this same function,
+ * so byte-stability of what gets persisted rests on exactly this. */
+test("redacting an already-redacted structure changes nothing, keys included", () => {
+  const raw = {
+    "https://x/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0006": {
+      url: "https://y/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0006",
+      list: ["?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0006", "plain"],
+    },
+  };
+  const once = redact(raw);
+  expect(JSON.stringify(redact(once))).toBe(JSON.stringify(once));
+});
+
 /* document_path is a CREDENTIAL, not a URL (CLAUDE.md §5.3). It must not
  * survive into anything a caller could persist or print. */
 test("a parsed notice carries no document_path at all", async () => {
@@ -346,4 +379,72 @@ test("fetchDocuments also drops a download_url field, whichever name the vendor 
 
 test("a non-OK response throws for fetchDocuments too", async () => {
   await expect(higherGovClient.fetchDocuments("x", fakeFetch("nope", 500))).rejects.toThrow();
+});
+
+/* 🔴 THE DOCUMENT PATH HAD NO REDACTION BOUNDARY AT ALL. fetchValidated()
+ * redacts its ERROR MESSAGES; it never redacted its RETURN VALUE, and unlike
+ * the opportunity path (toNotice -> `raw: redact(rest)`) toFetchedDoc read
+ * file_name and text_extract straight off the raw body. Both fields are
+ * vendor-controlled, and extract/fetch-documents-for.ts writes text_extract
+ * into `document.extracted_text` permanently. Not-reading document_path
+ * defends against the field we know carries the key; it says nothing about a
+ * key-shaped string arriving anywhere else on the row. */
+test("fetchDocuments redacts a key-shaped file_name and text_extract, not only errors", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1 } },
+    results: [
+      {
+        file_name: "sow?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0007.pdf",
+        text_extract:
+          "See https://x/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0007 for the addendum.",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDocuments("003000000088067", fakeFetch(body));
+  expect(out.docs).toHaveLength(1);
+  expect(JSON.stringify(out)).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0007");
+  expect(out.docs[0]!.fileName).toContain("api_key=REDACTED");
+  expect(out.docs[0]!.textExtract).toContain("api_key=REDACTED");
+});
+
+/* A null text_extract (the `.xlsx` case, per the field-mapping doc) must
+ * still come back null -- redact() passing a non-string through unchanged is
+ * what fetch-documents-for.ts's status decision depends on. */
+test("a null text_extract survives redaction as null, not as a string", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1 } },
+    results: [{ file_name: "cost-proposal.xlsx", text_extract: null }],
+  });
+  const out = await higherGovClient.fetchDocuments("003000000088067", fakeFetch(body));
+  expect(out.docs[0]!.textExtract).toBeNull();
+});
+
+/* 🔴 FIX 6a: the parse guard's comment claimed "nothing downstream --
+ * including the CLI's own console.error(err) -- can print it raw even by
+ * accident", and that was true of the PARSE path alone. A rejection from the
+ * fetch layer carried whatever the runtime attached, `cause` included, and
+ * the CLI prints errors. This pins that a transport rejection is re-wrapped
+ * with a redacted message and NO cause chain to print. */
+test("a rejection from the fetch layer is re-wrapped redacted, with no cause chain", async () => {
+  const throwing = (async () => {
+    const err = new Error("fetch failed");
+    (err as Error & { cause?: unknown }).cause = new Error(
+      "connect ECONNREFUSED for https://www.highergov.com/api-external/opportunity/" +
+        "?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0008",
+    );
+    throw err;
+  }) as unknown as typeof fetch;
+
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", throwing);
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(Error);
+  expect((caught as Error).message).toContain("before any response");
+  /* The cause is DROPPED, not merely redacted: console.error prints a cause
+   * chain, and nothing here can vouch for what a runtime put in one. */
+  expect((caught as Error & { cause?: unknown }).cause).toBeUndefined();
+  expect(JSON.stringify((caught as Error).message)).not.toContain("FAKEKEY");
 });
