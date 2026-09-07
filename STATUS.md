@@ -236,6 +236,23 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-06
 
+## ✅ 2026-09-06 — STEP ③ IS MERGED TO `main`, AND IT HAS STILL NEVER BEEN RUN
+
+**Merged `--no-ff` at `e62f4ae`. Gate re-run ON THE MERGED RESULT: 891 tests / 100 files, exit 0** — the same figure the branch carried, which is the point of re-running it. ⚠️ **NOT PUSHED.** `main` is 24 commits ahead of `origin/main`.
+
+**`npm run recall` exists and has made zero live API calls, deliberately.** Every test reads a fixture or an injected client, and the client throws under `VITEST` if one is ever left at the real global. **The first live call is an operator act and needs a proposed record count first.**
+
+🔴 **NINE DEFECTS WERE FOUND IN THE PLAN'S OWN CODE — six before a line was written, three by review.** Recorded because the pattern is the lesson: **a plan that carries verbatim code IS code, and it is never typechecked.** The three worst each biased the verdict toward coverage decay, which is the direction that *wrongly un-shelves the adapter backlog* — a false-miss generator in the settled branch, an optional Indiana filter that would have pulled nationally and billed for it, and a window-vs-source confusion that would have called every long-open notice a miss.
+
+🔴 **AND ONE OF THEM COULD NOT HAVE BEEN CAUGHT BY ANY TEST IN THE FILE.** `beforeEach` emptied `coverage_item`, so the settled path had zero coverage — CLAUDE.md §4's question failing at the **fixture** level rather than the assertion level, which is much harder to see than a weak assertion. It survived two mutation checks that never reached the line.
+
+⚖️ **FOUR RULINGS WAIT FOR MATT, none of which costs a record.** The four C-thresholds — **`minCohortSize: 30` is the one to look at hardest**, since it sits below R7's population floor of 100 and was traded down to keep the test bounded. **`MONTHLY_RECORD_CEILING`**, which D2 left unratified at 1,000 and which this slice makes load-bearing for a second actor. **The forward cadence.** And **the sub-state buyer list** — spec §8.1 is an empty template.
+
+⚠️ **TWO LIMITS ON WHAT A FIRST RUN WOULD MEAN, both disclosed in the tool's own output rather than only here.** The **sub-state answer key is not built**, so weakest-segment-wins currently grades one segment and it is not the one HigherGov was bought for. And **run one is a CENSUS, not a decay measurement** — the spec's baseline diff was never built, so the cohort is the whole current IDOA page and its C2 is inflated by long-open notices. From run two onward the database is the baseline and the cohort is genuinely new notices.
+
+Spec: `docs/superpowers/specs/2026-09-06-highergov-coverage-reliability-design.md` (amended in place where the code diverged). Plan: `docs/superpowers/plans/2026-09-06-highergov-coverage-reliability.md`.
+
+
 ## ✅ 2026-09-06 — STEP ③ IS BUILT, AND IT HAS NOT BEEN RUN
 
 **`npm run recall` exists. It has never made a live HigherGov call, deliberately** — CLAUDE.md §5.1 covers testing, so every test in the slice runs against fixtures or an injected client. **The first live run is an operator act, and it needs a proposed record count first.**
