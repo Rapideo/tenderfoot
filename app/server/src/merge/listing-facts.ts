@@ -66,6 +66,21 @@ function codeList(v: unknown): string[] {
     .filter((c): c is string => typeof c === "string" && c.length > 0);
 }
 
+/** One code out of one of HigherGov's nested code objects -- `{naics_code:
+ *  {naics_code: "541611", …}}` -- returned as the same one-or-zero-length
+ *  list SAM's arrays produce, so both cases feed `codes` the same shape.
+ *
+ *  The container is read defensively because a wrong guess about it is
+ *  precisely what this costs money for: an array, a bare string or a null
+ *  where an object was expected must yield NO code rather than a thrown
+ *  merge or a stringified `[object Object]` sitting in the column looking
+ *  like a real one. */
+function nestedCode(container: unknown, key: string): string[] {
+  if (!container || typeof container !== "object" || Array.isArray(container)) return [];
+  const code = (container as Record<string, unknown>)[key];
+  return typeof code === "string" && code.trim() ? [code.trim()] : [];
+}
+
 /* THE NOTICE TYPE, IN SAM'S OWN WORD. Ruled by Matt, 2026-09-01.
  *
  * `solicitation.kind`'s column comment says `RFP | RFI | RFQ | IFB |
@@ -152,6 +167,53 @@ export function listingCodes(
         ? { naics, psc, naics_labels: naicsLabels, psc_labels: pscLabels }
         : null;
     }
+
+    /* HIGHERGOV, ADDED 2026-09-07, AND THIS ONE IS MONEY RATHER THAN
+     * DISPLAY. CLAUDE.md §5.2 prices human triage at ZERO on the strength of
+     * what the listing card carries -- "NAICS, PSC, `set_aside` ... and a
+     * description 66% of the time". Strip the codes and a triager looking at
+     * a sub-state notice with no description (58% of that segment, which is
+     * the segment this source was bought for) has nothing left to reject on,
+     * so they open documents: ~11 billed records each against a 1,000/month
+     * ceiling. Roughly 90 opens exhausts the month. The omission converts the
+     * free triage stage into the paid one.
+     *
+     * ⚠️ NESTED OBJECTS, NOT STRINGS, and the field name repeats inside the
+     * object: `naics_code.naics_code`, `psc_code.psc_code`
+     * (docs/2026-09-03-highergov-field-mapping.md:56-57). This is the same
+     * trap the same document records for `opp_type` -- "printed as
+     * [object Object] on first read" -- and the same one the agency field
+     * sprang on this branch. A flat read yields `undefined`, silently, with
+     * every test still green.
+     *
+     * ONE CODE EACH, NOT AN ARRAY. SAM publishes `naics[]`/`psc[]` and this
+     * source publishes a single object per code, so the arrays here are
+     * one-or-zero long by the source's own shape rather than by a choice
+     * made here.
+     *
+     * NO LABELS, DELIBERATELY. `*_labels` were added for SAM because SAM
+     * carries `{code, value}` and we were storing half of it. Nothing in the
+     * field-mapping document records a description field on HigherGov's code
+     * objects, so guessing at one (`naics_description`? `value`?) would be
+     * inventing a field name -- and the card reads labels with optional
+     * chaining, so an absent label is a missing chip and not a broken row.
+     * Empty lists are what "we have the code and not its label" looks like.
+     *
+     * A BARE-STRING FALLBACK WAS CONSIDERED AND REJECTED. `org-chain.ts`
+     * accepts flat-or-nested for the agency because the CODE already
+     * asserted a flat shape and the document contradicted it -- two
+     * competing claims and no free way to settle them. Here the code
+     * asserted nothing at all, so the document is the only evidence there
+     * is, and a tolerance nobody can ever learn from is exactly the defect
+     * the warning in org-chain.ts now exists to avoid repeating. */
+    case "HigherGov": {
+      const naics = nestedCode(r.naics_code, "naics_code");
+      const psc = nestedCode(r.psc_code, "psc_code");
+      return naics.length || psc.length
+        ? { naics, psc, naics_labels: [], psc_labels: [] }
+        : null;
+    }
+
     default:
       return null;
   }
@@ -186,6 +248,29 @@ export function setAside(sourceName: string, raw: unknown): string | null {
       const ocode = orig?.code;
       return typeof ocode === "string" && ocode.trim() ? ocode.trim() : null;
     }
+
+    /* HIGHERGOV, ADDED 2026-09-07. Flat, unlike its two neighbours in the
+     * field-mapping document -- `naics_code` and `psc_code` are flagged
+     * nested there and `set_aside` deliberately is not
+     * (docs/2026-09-03-highergov-field-mapping.md:58), so this reads the
+     * top-level string and no object is walked.
+     *
+     * 100% PRESENT ON INDIANA, which is what makes it the cheapest rejection
+     * signal this source carries and the reason its absence costs money
+     * rather than polish -- see listingCodes above for the arithmetic.
+     *
+     * ⚠️ `"NONE"` IS A VALUE, NOT A NULL, exactly as it is for SAM directly
+     * above. Nothing special is done to preserve it -- and that is the
+     * point: the temptation is to add `if (v === "NONE") return null` and
+     * "tidy" the column, which would destroy the same we-looked /
+     * we-did-not-look distinction View 2.3 enforces everywhere else, in the
+     * one place a reader has no citation to check it against. A test pins
+     * it so the tidy-up fails loudly. */
+    case "HigherGov": {
+      const sa = r.set_aside;
+      return typeof sa === "string" && sa.trim() ? sa.trim() : null;
+    }
+
     default:
       return null;
   }

@@ -167,3 +167,113 @@ test("originalSetAside is read only when the current one is absent entirely", ()
     }),
   ).toBe("8A");
 });
+
+/* ── HigherGov's codes and set-aside, added 2026-09-07 ────────────────── */
+
+/* 🔴 THESE ARE MONEY TESTS, NOT DISPLAY TESTS. CLAUDE.md §5.2 prices human
+ * triage at zero because the listing card carries NAICS, PSC and set_aside.
+ * With those three unmapped, a sub-state notice with no description (58% of
+ * that segment) offers a triager nothing to reject on, so they open
+ * documents -- ~11 billed records each against a 1,000/month ceiling, and
+ * roughly 90 opens exhausts the month.
+ *
+ * The real shape, per docs/2026-09-03-highergov-field-mapping.md:56-58: the
+ * codes are NESTED OBJECTS whose inner key repeats the outer name, and
+ * set_aside is flat. */
+const HIGHERGOV = {
+  source_id: "003000000088067",
+  source_type: "sled",
+  set_aside: "SBA",
+  naics_code: { naics_code: "541611", naics_description: "Administrative Management" },
+  psc_code: { psc_code: "R410", psc_description: "SUPPORT- PROFESSIONAL" },
+};
+
+test("HigherGov's nested naics_code and psc_code land as codes", () => {
+  expect(listingCodes("HigherGov", HIGHERGOV)).toEqual({
+    naics: ["541611"],
+    psc: ["R410"],
+    /* No labels: nothing in the field-mapping document records a description
+     * field on these objects, and the card reads labels with optional
+     * chaining. An invented field name would be a guess wearing a code's
+     * clothes. The fixture above deliberately CARRIES plausible description
+     * keys so that this assertion is about the choice, not about the data
+     * being absent. */
+    naics_labels: [],
+    psc_labels: [],
+  });
+});
+
+/* THE TRAP THIS CASE EXISTS FOR, and it has now sprung three times on this
+ * one source (agency, opp_type, these). Reading the container flat yields
+ * `undefined`; stringifying it yields "[object Object]", which is worse than
+ * nothing because it looks like a code. Neither may happen. */
+test("the code objects are never read flat or stringified", () => {
+  const codes = listingCodes("HigherGov", HIGHERGOV);
+  expect(codes?.naics).not.toContain("[object Object]");
+  expect(codes?.psc).not.toContain("[object Object]");
+  expect(codes?.naics).toEqual(["541611"]);
+});
+
+test("a HigherGov row with no codes yields null, so nothing is overwritten", () => {
+  expect(listingCodes("HigherGov", { source_id: "x" })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: null, psc_code: null })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: {}, psc_code: {} })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: { naics_code: "" } })).toBeNull();
+});
+
+/* One present and the other absent is the ordinary case, not an edge one:
+ * a row must not lose the code it HAS because its sibling is missing. */
+test("one code present and the other absent still yields the one", () => {
+  expect(listingCodes("HigherGov", { naics_code: { naics_code: "541611" } })).toEqual({
+    naics: ["541611"],
+    psc: [],
+    naics_labels: [],
+    psc_labels: [],
+  });
+  expect(listingCodes("HigherGov", { psc_code: { psc_code: "R410" } })).toEqual({
+    naics: [],
+    psc: ["R410"],
+    naics_labels: [],
+    psc_labels: [],
+  });
+});
+
+/* The container's shape is exactly what the money rides on, so a wrong guess
+ * about it must yield NO code rather than a throw or a fabricated one. */
+test("a code container of the wrong shape yields nothing and never throws", () => {
+  expect(listingCodes("HigherGov", { naics_code: "541611" })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: ["541611"] })).toBeNull();
+  expect(listingCodes("HigherGov", { naics_code: 541611 })).toBeNull();
+  expect(listingCodes("HigherGov", null)).toBeNull();
+});
+
+/* Cross-source discipline, the same closes-at.ts and title.ts hold to: one
+ * source's field names mean nothing to another. */
+test("HigherGov's code shape means nothing to SAM, and SAM's means nothing to HigherGov", () => {
+  expect(listingCodes("SAM.gov", HIGHERGOV)).toBeNull();
+  expect(listingCodes("HigherGov", SAM)).toBeNull();
+});
+
+test("HigherGov's set_aside lands verbatim", () => {
+  expect(setAside("HigherGov", HIGHERGOV)).toBe("SBA");
+  expect(setAside("HigherGov", { set_aside: "SDVOSBC" })).toBe("SDVOSBC");
+});
+
+/* ⚠️ THE SAME DISTINCTION THE SAM CASE TURNS ON, asserted separately here
+ * because it is 100% present on Indiana and therefore the cheapest rejection
+ * signal this source carries. "NONE" is the buyer STATING there is no
+ * set-aside; null is the notice not saying. A later "tidy-up" that collapses
+ * NONE into null must fail here. */
+test("HigherGov's NONE is a stated fact, not an absence", () => {
+  expect(setAside("HigherGov", { set_aside: "NONE" })).toBe("NONE");
+  expect(setAside("HigherGov", { set_aside: "NONE" })).not.toBeNull();
+  expect(setAside("HigherGov", {})).toBeNull();
+  expect(setAside("HigherGov", { set_aside: null })).toBeNull();
+  expect(setAside("HigherGov", { set_aside: "   " })).toBeNull();
+  expect(setAside("HigherGov", { set_aside: { code: "SBA" } })).toBeNull();
+});
+
+test("set_aside is read flat for HigherGov and nested for SAM, never the other way round", () => {
+  expect(setAside("HigherGov", SAM)).toBeNull();
+  expect(setAside("SAM.gov", HIGHERGOV)).toBeNull();
+});
