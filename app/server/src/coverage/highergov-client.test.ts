@@ -222,3 +222,34 @@ test("no key-shaped value survives into raw, at any depth", async () => {
   expect(serialized).not.toContain("api_key");
   expect(serialized).not.toContain("FAKEKEY");
 });
+
+/* Proves that redact() runs on raw and catches nested keys, not just the
+ * top-level document_path. The fixture itself carries no nested urls, so
+ * this test must inject them inline. */
+test("redact() removes key-shaped values nested deeply in raw", async () => {
+  const bodyWithNestedKey = JSON.stringify({
+    meta: { pagination: { count: 1, pages: 1 } },
+    results: [
+      {
+        source_id: "nested-test-id",
+        captured_date: "2026-09-03",
+        version_key: "v1",
+        title: "Test with nested key",
+        document_path: "https://example.com/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0099",
+        metadata: {
+          nested_field: "value",
+          deeper: {
+            url: "https://example.com/doc?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0099",
+          },
+        },
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(bodyWithNestedKey));
+  const serialized = JSON.stringify(out.notices.map((n) => n.raw));
+  /* The key at the top level is removed by destructuring. Nested ones are
+   * removed by redact(), which walks every value recursively. The actual key
+   * value should never survive; redaction should replace it with REDACTED. */
+  expect(serialized).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0099");
+  expect(serialized).toContain("api_key=REDACTED");
+});

@@ -105,14 +105,17 @@ function toNotice(r: RawResult): FeedNotice | null {
   /* document_path is REMOVED here, not merely unread. Deleting it from a
    * copy is what makes "no caller can leak what it never received" true of
    * `raw` as well as of the named fields -- the ingest needs everything
-   * else, so "we only copy four fields" is no longer the guarantee. */
-  const { document_path: _dropped, ...rest } = r as Record<string, unknown>;
+   * else, so "we only copy four fields" is no longer the guarantee. Then
+   * redact() walks every remaining value recursively to scrub any key-shaped
+   * strings nested at any depth -- CLAUDE.md §5.3 rule 2: scrubbing happens
+   * at the BOUNDARY, making this the one place the guarantee is enforced. */
+  const { document_path: _dropped, ...rest } = r;
   return {
     externalId,
     capturedDate: str(r.captured_date),
     versionKey: str(r.version_key),
     title: str(r.title),
-    raw: rest,
+    raw: redact(rest),
   };
 }
 
