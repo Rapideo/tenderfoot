@@ -25,6 +25,11 @@ const { all, close, one, run } = await import("../db/index.js");
 const { dryRun, projectWindow, assertValidDate, main } = await import("./highergov-cli.js");
 const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
 const { HIGHERGOV_SOURCE_NAME } = await import("../coverage/highergov-client.js");
+/* The conservative "what could this call have cost when we cannot read its
+ * response" bound, imported rather than retyped as 40 -- the same constant
+ * coverage/run.ts and extract/fetch-documents-for.ts tally at their own
+ * metered call sites, and the one this file now tallies at its two. */
+const { COVERAGE } = await import("../coverage/thresholds.js");
 
 beforeAll(async () => {
   await migrate(false);
@@ -111,15 +116,46 @@ function clientThatMustNotBeCalled(): HigherGovClient {
   };
 }
 
+/* A client whose fetchDay throws the way highergov-client.ts's own two
+ * guards do -- AFTER the vendor has already billed the response it could not
+ * parse. Neither guard makes the call free, and that client's own comment
+ * says so explicitly. */
+function clientThatThrowsAfterBilling(): HigherGovClient {
+  return {
+    async fetchDay() {
+      throw new Error('HigherGov returned a non-array "results" field (got object)');
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+    async fetchDocuments() {
+      return { docs: [], records: 0 };
+    },
+  };
+}
+
 /* A minimal WindowedAdapter for the day-walk tests -- deterministic items
  * (and an explicit vendor-billed count, independent of item count) per
  * captured_date, no network. `billedRecords` defaults to items.length but
  * can diverge from it -- adapters/highergov.ts's own comment: a row dropped
  * for a missing source_id is billed but excluded from both rows and
  * undatedSkipped, which is exactly what review round 3 item 5 exists to
- * stop this file from mis-tallying. */
+ * stop this file from mis-tallying.
+ *
+ * `throws` makes a given day fail the way the real adapter can: HigherGov's
+ * client throws on a truncated 200 or a non-array `results` AFTER the vendor
+ * has billed. `omitBilledRecords` writes an envelope with no `records` field
+ * at all -- the shape billedRecordsFromArtifact's fallback path exists for. */
 function fakeAdapter(
-  byDay: Record<string, { items: WindowedItem[]; billedRecords?: number }>,
+  byDay: Record<
+    string,
+    {
+      items: WindowedItem[];
+      billedRecords?: number;
+      throws?: boolean;
+      omitBilledRecords?: boolean;
+    }
+  >,
 ): WindowedAdapter {
   return {
     shape: "windowed",
@@ -129,6 +165,9 @@ function fakeAdapter(
         throw new Error(`test fakeAdapter expects since===until, got ${since}/${until}`);
       }
       const entry = byDay[since] ?? { items: [] };
+      if (entry.throws) {
+        throw new Error('HigherGov returned a non-array "results" field (got object)');
+      }
       const billed = entry.billedRecords ?? entry.items.length;
       return {
         items: entry.items,
@@ -136,7 +175,9 @@ function fakeAdapter(
         nextCursor: null,
         requestUrl: `fake:/opportunity/?captured_date=${since}`,
         httpStatus: 200,
-        payload: JSON.stringify({ capturedDate: since, records: billed }),
+        payload: entry.omitBilledRecords
+          ? JSON.stringify({ capturedDate: since })
+          : JSON.stringify({ capturedDate: since, records: billed }),
       };
     },
   };
@@ -466,6 +507,114 @@ test("the day-walk stops before the call that would cross the ceiling", async ()
 
     /* A partial window must not exit 0 -- review round 3, item 6. */
     expect(process.exitCode).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 FINAL REVIEW, FIX 1 (CRITICAL) -- THE MANDATORY SPEND THAT COULD VANISH.
+ *
+ * The dry run's sample is the one unavoidable call this command makes: it
+ * runs on every invocation, --dry-run included, and its cost is recorded in
+ * main() AFTER dryRun returns. `client.fetchDay` had no try/catch, so a throw
+ * that happened AFTER the vendor billed -- highergov-client.ts guards two
+ * such cases by name, a truncated 200 and a non-array `results`, and its own
+ * comment says neither "makes the call free" -- skipped that recordSpend
+ * entirely. ~5 records billed, no api_spend row, and a remaining-allowance
+ * figure wrong in the reassuring direction, which is the one direction
+ * CLAUDE.md §5.1 calls dangerous.
+ *
+ * The error must still propagate unchanged: a malformed response fails the
+ * run loudly, it just fails having recorded that it spent something. */
+test("a sample that throws after the vendor billed still writes a conservative spend row", async () => {
+  await expect(
+    dryRun("2026-09-01", "2026-09-30", clientThatThrowsAfterBilling(), 0),
+  ).rejects.toThrow(/non-array "results"/);
+
+  const rows = await all<{ records: number; endpoint: string }>(
+    `SELECT sp.records, sp.endpoint FROM api_spend sp
+       JOIN source s ON s.id = sp.source_id WHERE s.name = $1`,
+    [HIGHERGOV_SOURCE_NAME],
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.endpoint).toBe("opportunity");
+  /* We cannot know what an unparseable response cost, so the conservative
+   * upper bound is tallied -- the same figure, from the same constant, that
+   * coverage/run.ts and extract/fetch-documents-for.ts use for exactly this
+   * question at their own metered call sites. */
+  expect(rows[0]!.records).toBe(COVERAGE.unparseableResponseRecords);
+});
+
+/* The same fix reached through main(), which is the path that actually runs
+ * in production: the sample throws before main() ever gets to its own
+ * recordSpend, and the tally must already be there. */
+test("main() leaves a spend row behind when the dry run's own sample throws", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  await expect(
+    main(
+      ["--from=2026-09-01", "--to=2026-09-02"],
+      clientThatThrowsAfterBilling(),
+      fakeAdapter({}),
+    ),
+  ).rejects.toThrow(/non-array "results"/);
+  expect(await totalSpend()).toBe(COVERAGE.unparseableResponseRecords);
+});
+
+/* 🔴 FINAL REVIEW, FIX 1 -- THE SAME CLASS AT THE DAY LOOP. runScrape does
+ * not catch what the adapter throws (its loop is try/finally, no catch), so a
+ * malformed response on day two propagated straight past recordSpend and took
+ * the run down having recorded nothing for a day the vendor already billed.
+ *
+ * The total is the discriminator: 1 (the sample, recorded normally) + the
+ * conservative bound for the failed day. Without the fix it is 1. */
+test("a day-walk call that throws still writes a conservative spend row before failing", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });
+
+    await expect(
+      main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir),
+    ).rejects.toThrow(/non-array "results"/);
+
+    expect(await totalSpend()).toBe(1 + COVERAGE.unparseableResponseRecords);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 FINAL REVIEW, FIX 2 -- THE FALLBACK NOW POINTS THE WAY ITS OWN COMMENT
+ * ARGUES. billedRecordsFromArtifact reads the vendor's billed count out of
+ * the artifact envelope; when the envelope carries no `records` field it used
+ * to fall back to `rows + undatedSkipped`, which is a FLOOR on what was
+ * billed, not an estimate of it -- the under-counting direction the very
+ * comment above it calls "worse". It now falls back UP, to the same
+ * conservative bound the two throw paths use.
+ *
+ * Day two carries one item and an envelope with no `records`. Old behaviour:
+ * 1 (sample) + 1 = 2. Fixed: 1 + max(1, 40) = 41. */
+test("an artifact with no billed count falls back UP to the conservative bound, never down", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-02": {
+        items: [{ externalId: "HG-D2", modifiedAt: "2026-09-02", raw: {} }],
+        omitBilledRecords: true,
+      },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir);
+
+    expect(await totalSpend()).toBe(1 + COVERAGE.unparseableResponseRecords);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

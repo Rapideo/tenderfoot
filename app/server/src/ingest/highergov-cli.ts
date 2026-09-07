@@ -48,9 +48,15 @@ import { mkdirSync } from "node:fs";
 import { join, resolve as resolvePath } from "node:path";
 import { close, one, run as exec } from "../db/index.js";
 import { MONTHLY_RECORD_CEILING, recordSpend, spentThisMonth } from "../extract/api-spend.js";
+/* The conservative "the most a single call could plausibly have cost when we
+ * cannot read its response" figure, reused rather than re-guessed -- the same
+ * import coverage/run.ts and extract/fetch-documents-for.ts already make for
+ * the same question at their own metered call sites. */
+import { COVERAGE } from "../coverage/thresholds.js";
 import {
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
+  redact,
   type FeedResult,
   type HigherGovClient,
 } from "../coverage/highergov-client.js";
@@ -116,6 +122,23 @@ function daysInRange(from: string, to: string): string[] {
   return out;
 }
 
+/* ⚠️ KNOWN AND ACCEPTED: THIS CHARGES FOR THE SAMPLED DAY TWICE.
+ *
+ * `windowDays` counts every day in [from, to], the sampled day included --
+ * but the day-walk below reuses the sample's already-paid-for data for that
+ * one day and makes no second call for it (review round 3, item 4). So a
+ * one-day window projects 2x what it will actually spend, a two-day window
+ * 1.5x, and so on; the error shrinks as the window widens and never
+ * disappears.
+ *
+ * It errs toward REFUSING a window that was in fact affordable, which is the
+ * safe direction against a ceiling that cannot be read back from the vendor
+ * (CLAUDE.md §5.1) -- the opposite error would be accepting a window that
+ * crosses it. `projectWindow(rate, windowDays - 1) + rate` would be exact,
+ * and is deliberately NOT what this does: a projection that shaves its own
+ * margin to be precise about a rate measured on ONE day (R5's single
+ * observation) buys accuracy in the wrong currency. Left as-is on purpose --
+ * this note exists so the next reader does not re-derive it as a bug. */
 export function projectWindow(recordsPerDay: number, windowDays: number): number {
   return recordsPerDay * windowDays;
 }
@@ -203,20 +226,35 @@ function reuseSampleAdapter(page: WindowedPage): WindowedAdapter {
  * loop always writes exactly one capture per call (nextCursor is always
  * null), and that capture's payload is the adapter's own scrubbed JSON,
  * which carries `records` verbatim -- the exact figure the vendor billed.
- * Falls back to the rows+undatedSkipped estimate only if the payload cannot
- * be read at all (a defensive path, not the normal one): under-reporting is
- * the dangerous direction against a ceiling that cannot be read back from
- * the vendor (CLAUDE.md §5.1), so a fallback that could ever UNDER-count
- * would be worse than one that merely risks never firing. */
-function billedRecordsFromArtifact(artifactPath: string, fallback: number): number {
+ * adapters/highergov.test.ts now pins that the envelope actually carries it;
+ * before that, deleting `records:` from the adapter left every test green
+ * while every real day fell silently down the path below.
+ *
+ * 🔴 THE FALLBACK NOW MATCHES ITS OWN ARGUMENT (final review, fix 2). This
+ * comment has always said under-reporting is the dangerous direction against
+ * a ceiling that cannot be read back from the vendor (CLAUDE.md §5.1), "so a
+ * fallback that could ever UNDER-count would be worse than one that merely
+ * risks never firing" -- and then returned exactly `rows + undatedSkipped`,
+ * which is the under-counting formula the paragraph above it rejects. It is
+ * a FLOOR, not an estimate: every row we saw was billed, and the rows we
+ * could not see were billed too.
+ *
+ * So the floor is kept as a floor and raised to the conservative upper bound
+ * the other two metered call sites already use for the identical question
+ * ("what could this call have cost when we cannot read its response"):
+ * COVERAGE.unparseableResponseRecords. `Math.max` rather than the constant
+ * alone, because a genuinely large day can exceed 40 rows, and taking the
+ * constant would then under-count a figure we can partially see. */
+function billedRecordsFromArtifact(artifactPath: string, atLeast: number): number {
+  const conservative = Math.max(atLeast, COVERAGE.unparseableResponseRecords);
   try {
     const art = readArtifact(artifactPath);
     const capture = art.captures[0] as { payload?: unknown } | undefined;
-    if (!capture || typeof capture.payload !== "string") return fallback;
+    if (!capture || typeof capture.payload !== "string") return conservative;
     const parsed = JSON.parse(capture.payload) as { records?: unknown };
-    return typeof parsed.records === "number" ? parsed.records : fallback;
+    return typeof parsed.records === "number" ? parsed.records : conservative;
   } catch {
-    return fallback;
+    return conservative;
   }
 }
 
@@ -256,8 +294,54 @@ export async function dryRun(
 
   /* Sample the window's first day. Which day is sampled is not specified by
    * the brief and not asserted by any test -- `from` is chosen because it is
-   * always inside the window and the caller already validated it. */
-  const sample = await client.fetchDay(from);
+   * always inside the window and the caller already validated it.
+   *
+   * 🔴 THE MANDATORY SPEND, AND IT COULD VANISH FROM api_spend (final
+   * review, fix 1). This call is unavoidable: the dry run ALWAYS runs, even
+   * under --dry-run, and main() records its cost afterwards. Afterwards is
+   * the problem. fetchDay can throw AFTER the vendor has already billed --
+   * highergov-client.ts guards two such cases explicitly, a truncated 200
+   * and a non-array `results`, and its own comment says plainly that neither
+   * guard "makes the call free". An uncaught throw here therefore skipped
+   * main()'s recordSpend entirely: ~5 records billed, no row written, and a
+   * remaining-allowance figure wrong in the reassuring direction.
+   *
+   * The shape is coverage/run.ts's and extract/fetch-documents-for.ts's,
+   * matched deliberately rather than reinvented: tally the conservative
+   * upper bound, then let the error propagate UNCHANGED -- a malformed
+   * response must still fail the run loudly, it just fails having recorded
+   * that it spent something.
+   *
+   * ⚠️ THE SOURCE ROW IS LOOKED UP HERE, NOT PASSED IN. main() already holds
+   * it, but dryRun() is exported and called directly by tests, and an
+   * optional `sourceId` parameter would mean the tally silently does nothing
+   * for exactly the callers most likely to exercise this path. The lookup is
+   * free, on the failure path only, and by the time it runs main()'s own
+   * loud check for a missing source row has already passed.
+   *
+   * ⚠️ IT OVER-REPORTS FOR A THROW THAT COST NOTHING -- an unset
+   * HIGHERGOV_SEARCH_ID, the VITEST guard, a DNS failure. That is the same
+   * trade both sibling call sites make and for the same stated reason:
+   * over-reporting is merely conservative, under-reporting is what lets an
+   * operator believe there is budget left when there is not (api-spend.ts's
+   * header). Scoping by error type would mean this file deciding which
+   * vendor failures bill, which is exactly the thing nobody can read back. */
+  let sample: FeedResult;
+  try {
+    sample = await client.fetchDay(from);
+  } catch (err) {
+    const src = await one<{ id: number }>(`SELECT id FROM source WHERE name = $1`, [
+      HIGHERGOV_SOURCE_NAME,
+    ]);
+    if (src) {
+      await recordSpend({ run: exec }, {
+        sourceId: src.id,
+        endpoint: "opportunity",
+        records: COVERAGE.unparseableResponseRecords,
+      });
+    }
+    throw err;
+  }
   const projectedRecords = projectWindow(sample.records, windowDays);
   /* 🔴 NOT `MONTHLY_RECORD_CEILING - spent`. The sample above just billed
    * `sample.records` -- by the time this line runs, that spend is real,
@@ -487,7 +571,36 @@ export async function main(
     const dayAdapter = isSampledDay
       ? reuseSampleAdapter(sampleAsPage(result.sampleResult!, day))
       : adapter;
-    const runResult = await runScrape(req, dayAdapter, outPath);
+
+    /* 🔴 THE SECOND PLACE A BILLED CALL COULD VANISH (final review, fix 1).
+     * runScrape does not catch what the adapter throws -- its own loop is
+     * `try { ... } finally { art.finish(); art.close(); }` -- so a truncated
+     * 200 or a non-array `results` on day seven propagates straight out of
+     * here, past the recordSpend below, and takes the whole run down having
+     * recorded nothing for a day the vendor already billed. Same shape and
+     * same conservative figure as the dry run's own sample above.
+     *
+     * ⚠️ SCOPED TO !isSampledDay, and that scope is the whole correctness of
+     * it. The sampled day runs through reuseSampleAdapter, which returns an
+     * in-memory page and makes NO network call -- a throw on that iteration
+     * (an artifact write failing, say) cost zero vendor records, and its
+     * real cost was already tallied once as the dry run's own spend. Tallying
+     * there would not be conservative, it would be fabricated, and it would
+     * double-count the sample. Same distinction fetch-documents-for.ts draws
+     * between HigherGov and free SAM.gov at its own catch. */
+    let runResult: Awaited<ReturnType<typeof runScrape>>;
+    try {
+      runResult = await runScrape(req, dayAdapter, outPath);
+    } catch (err) {
+      if (!isSampledDay) {
+        await recordSpend({ run: exec }, {
+          sourceId: source.id,
+          endpoint: "opportunity",
+          records: COVERAGE.unparseableResponseRecords,
+        });
+      }
+      throw err;
+    }
 
     /* BILLED, read back from the artifact -- see billedRecordsFromArtifact's
      * own header for why this is not rows+undatedSkipped. */
@@ -511,11 +624,27 @@ export async function main(
     committedDays += 1;
 
     const imported = await importArtifact(runResult.artifactPath);
+    /* ⚠️ `imported.skipped` IS STRUCTURALLY UNREACHABLE FROM HERE, and the
+     * branch is kept anyway (final review, fix 6). importArtifact dedups on
+     * a sha256 of the WHOLE SQLite file, which carries run.started_at,
+     * capture.fetched_at and sighting.seen_at -- so two runs over byte-
+     * identical vendor data still hash differently, always. Every path
+     * through this loop writes a fresh artifact to a fresh timestamped
+     * filename, so nothing this CLI produces can collide with a row already
+     * in ingest_run. The branch stays because it is free and importArtifact's
+     * contract may outlive this reasoning; what it must NOT do is advertise a
+     * de-duplication this command can never actually perform, which is why
+     * the message now names it as defensive rather than reporting it as a
+     * thing that happened for an ordinary reason. */
     console.log(
       `  ${day}: ${dayRecords} record(s) ` +
         (isSampledDay ? "(reused from the dry run's sample -- not re-billed)" : "billed") +
         `, ${imported.imported} sighting(s) imported` +
-        (imported.skipped ? " (artifact already imported -- skipped)." : "."),
+        (imported.skipped
+          ? " (UNEXPECTED: importArtifact reported this artifact's hash as already " +
+            "imported -- artifact hashes carry per-run timestamps, so this should not " +
+            "be reachable from this command)."
+          : "."),
     );
   }
 
@@ -543,7 +672,16 @@ export async function main(
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main()
     .catch((err) => {
-      console.error(err);
+      /* 🔴 REDACTED, AND DEFENCE IN DEPTH (final review, fix 6).
+       * highergov-client.ts now guarantees that every error IT produces is
+       * already scrubbed and carries no cause chain -- but this catch sees
+       * everything, including errors from pg, node:fs and better-sqlite3,
+       * and `console.error(err)` prints an Error's whole cause chain. The
+       * boundary rule (CLAUDE.md §5.3 rule 2) is about what comes BACK, and
+       * printing is the last thing that happens to it. `err.stack` rather
+       * than `err` keeps the stack trace an operator needs; passing the
+       * Error object itself is what would print the parts nobody vetted. */
+      console.error(redact(err instanceof Error ? (err.stack ?? err.message) : String(err)));
       process.exitCode = 1;
     })
     .finally(() => close());
