@@ -65,3 +65,75 @@ test("a non-string value is stringified rather than rejected", () => {
 test("a whitespace-only title falls back to (untitled)", () => {
   expect(title("SAM.gov", { title: "   " })).toBe("(untitled)");
 });
+
+/* ── HigherGov's glued anchor text, added 2026-09-07 ──────────────────── */
+
+/* The observed artifact, verbatim from
+ * docs/2026-09-03-highergov-field-mapping.md:51 and from the adapter's own
+ * fixture (`highergov-listing.json`): HigherGov's parser takes a table
+ * cell's whole text where ours takes one anchor, so Indiana's "Bid
+ * Documents" link arrives welded to the end of the event name with no
+ * separator. */
+test("HigherGov's glued Bid Documents anchor is stripped from the title", () => {
+  expect(title("HigherGov", { title: "300 SP Salamonie Sludge and WW RemovalBid Documents" })).toBe(
+    "300 SP Salamonie Sludge and WW Removal",
+  );
+});
+
+/* An ordinary HigherGov title is untouched -- the repair is a strip of one
+ * known string, not a cleaner that reshapes every title it sees. */
+test("a HigherGov title without the artifact is passed through unchanged", () => {
+  expect(title("HigherGov", { title: "AMB 28942 TOC Gas Gen" })).toBe("AMB 28942 TOC Gas Gen");
+  expect(title("HigherGov", { title: "2027 Road Resurfacing Program" })).toBe(
+    "2027 Road Resurfacing Program",
+  );
+});
+
+/* 🔴 THE CONSERVATISM THIS TURNS ON. Glued to a word, the string cannot be
+ * something a buyer typed. Separated by a space it is an ordinary English
+ * phrase, and nothing distinguishes it from the artifact -- so it stays.
+ * Under-repairing leaves an ugly title; over-repairing silently deletes
+ * words the buyer wrote, on a screen where nobody can see the original. */
+test("a spaced 'Bid Documents' is left alone: it may be the buyer's own words", () => {
+  expect(title("HigherGov", { title: "Removal Bid Documents" })).toBe("Removal Bid Documents");
+  expect(title("HigherGov", { title: "Bid Documents" })).toBe("Bid Documents");
+});
+
+/* Only at the END, and only that exact string. A title that mentions bid
+ * documents in the middle is describing the work, not carrying a link. */
+test("the strip is anchored to the end of the title and to that exact string", () => {
+  expect(title("HigherGov", { title: "RemovalBid Documents Addendum 2" })).toBe(
+    "RemovalBid Documents Addendum 2",
+  );
+  expect(title("HigherGov", { title: "Removalbid documents" })).toBe("Removalbid documents");
+  expect(title("HigherGov", { title: "RemovalBid Document" })).toBe("RemovalBid Document");
+});
+
+/* Trailing whitespace around the artifact must not defeat the anchor: the
+ * value is trimmed before the match, so the glued suffix is still the last
+ * thing in the string. */
+test("trailing whitespace does not hide the artifact", () => {
+  expect(title("HigherGov", { title: "  WW RemovalBid Documents   " })).toBe("WW Removal");
+});
+
+/* Source-scoped, like every other rule in these modules. The artifact is a
+ * property of HigherGov's parser, not of titles in general -- a source that
+ * has never been seen to carry it is not put through a rule written for
+ * someone else's bug. */
+test("no other source's title is put through HigherGov's repair", () => {
+  expect(title("SAM.gov", { title: "300 SP Salamonie Sludge and WW RemovalBid Documents" })).toBe(
+    "300 SP Salamonie Sludge and WW RemovalBid Documents",
+  );
+  expect(
+    title("Indiana IDOA solicitations", { eventName: "WW RemovalBid Documents" }),
+  ).toBe("WW RemovalBid Documents");
+});
+
+/* The fallback still governs: a HigherGov row with nothing usable is
+ * "(untitled)", and the repair cannot manufacture an empty title out of one
+ * that had content. */
+test("HigherGov's repair never produces an empty title", () => {
+  expect(title("HigherGov", {})).toBe("(untitled)");
+  expect(title("HigherGov", { title: "   " })).toBe("(untitled)");
+  expect(title("HigherGov", { title: "xBid Documents" })).toBe("x");
+});
