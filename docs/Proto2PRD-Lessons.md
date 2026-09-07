@@ -549,6 +549,48 @@ second project shows a spec re-inventing something its own schema already has.
 
 ---
 
+### 2.28 An answer key you already froze is a window you already have
+
+**Observed 2026-09-06.** Step ③ needed coverage recall over time, and the obvious
+reading was that it needed to WAIT — pick a window, run daily, adjudicate at the
+end. Nothing could be measured until the window closed.
+
+**But a 71-item census had been frozen four days earlier**, for an unrelated
+purpose (the buy case). ~~Diffing today's free scrape against it produced a real
+new-notice cohort immediately.~~ **The wall-clock had already elapsed; nobody had
+been watching it.**
+
+> 🔴 **CORRECTED 2026-09-06, the same day this was written, by the whole-branch
+> review. THE DIFF WAS NEVER BUILT.** The spec described it, the plan never asked
+> for it, and the shipped command passes the entire current page as its cohort.
+> The struck sentence describes something that did not happen.
+>
+> **The insight survives; the account of it did not.** And the correction sharpens
+> the lesson rather than weakening it: a frozen artefact is only a baseline if
+> something *reads* it. This one lived in a markdown document, so nothing could —
+> the running code had no way to reach it. **A baseline that is not in a store the
+> code queries is a baseline in name only.**
+>
+> That is also why the amended design works anyway: after the first run, the
+> DATABASE holds the census, and every later run diffs against it for free. The
+> baseline had to become data before it could do the job the prose claimed for it.
+
+**Proposed generalisation.** Before designing a longitudinal measurement, search
+the repository for a FROZEN ARTEFACT — a census, a fixture, a committed answer
+key, a recorded run — and check its date. A test that "needs two weeks" often
+needs two weeks *from the earliest thing already on disk*, not from today. The
+artefact was usually captured for a different purpose, which is why it does not
+present itself as a baseline.
+
+**The corollary that makes it act-able:** when freezing any census, record the
+capture date in the artefact itself — **and put it somewhere the code can read.**
+The 71-item key carried its date (`captured 2026-09-02`), which is what made it
+*look* like a baseline; it lived only in prose, which is why it never became one.
+
+**Why not promoted.** One instance, one project.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.

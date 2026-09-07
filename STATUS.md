@@ -236,6 +236,20 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-06
 
+## ✅ 2026-09-06 — STEP ③ IS BUILT, AND IT HAS NOT BEEN RUN
+
+**`npm run recall` exists. It has never made a live HigherGov call, deliberately** — CLAUDE.md §5.1 covers testing, so every test in the slice runs against fixtures or an injected client. **The first live run is an operator act, and it needs a proposed record count first.**
+
+**What it measures:** coverage decay — does HigherGov keep finding things? Four predicates, C1–C4, all with UNRATIFIED thresholds. **C2 is the gate**: a notice carried too late to bid is a miss with a tick beside it.
+
+⚖️ **FOUR RULINGS WAITING, none of which costs a record.** The four C-thresholds; `minCohortSize: 30` in particular, which is BELOW R7's population floor of 100 and traded down to keep the test bounded; `MONTHLY_RECORD_CEILING`, which D2 left unratified at 1,000 and which this slice makes load-bearing for a second actor; and the forward cadence. **And one thing to fill in: the sub-state buyer list** — spec §8.1 carries an empty template, because the right buyers are the ones in KP's working geography and that is Matt's knowledge, not a lookup.
+
+⚠️ **The first run will not resolve the whole answer key.** Confirming ~71 notices costs about one record each where HigherGov carries them, against a per-run cap of 40. Everything unresolved stays `unchecked` — **not** a miss — and is re-asked next run. **A complete first census therefore takes two or three runs**, which is the accumulating cohort working as designed rather than a fault. The cap was deliberately NOT raised to cover it: it governs money, it is unratified, and raising it is Matt's ruling to make.
+
+⚠️ **The sub-state half of the answer key is NOT BUILT.** `idoaKeyFrom` covers the state-agency segment only. Until the sub-state key exists, `measureCoverage` sees one segment, and **weakest-segment-wins is measuring the segment we did not buy HigherGov for.** The predicate machinery is ready for it; the pages are not chosen. This is the largest open gap in the slice and it is named rather than discovered later.
+
+Spec: `docs/superpowers/specs/2026-09-06-highergov-coverage-reliability-design.md`. Plan: `docs/superpowers/plans/2026-09-06-highergov-coverage-reliability.md`.
+
 ## ✅ 2026-09-05 — D2 IS BUILT, D6 AND D7 ARE DONE IN PRODUCTION, F1 HAS FLIPPED THERE — AND A FINDING THAT NEEDS MATT, NOT A FIX
 
 **Branch `d2-on-demand-documents`, six tasks, all built.** This entry is the accurate replacement for everything the 2026-09-04 block below says about D2/D6/D7 being blocked or half-done — none of that is true any more.
