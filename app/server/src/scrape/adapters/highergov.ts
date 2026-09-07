@@ -22,7 +22,7 @@
  * and parses; ingest/highergov-cli.ts owns the budget, the ceiling and the
  * tally -- the same split coverage/highergov-client.ts already states. */
 import type { WindowedAdapter, ListingItem, ListingPage } from "../adapter.js";
-import { higherGovClient, redact } from "../../coverage/highergov-client.js";
+import { HIGHERGOV_SOURCE_NAME, higherGovClient, redact } from "../../coverage/highergov-client.js";
 
 export const HIGHERGOV_ADAPTER_KEY = "highergov";
 
@@ -37,13 +37,35 @@ export function higherGovAdapter(fetchImpl: typeof fetch = fetch): WindowedAdapt
   return {
     shape: "windowed",
     /* Must match migration 019's seeded source.name exactly --
-     * resolve-source.ts looks it up by this string. */
-    name: "HigherGov",
+     * resolve-source.ts looks it up by this string. Imported rather than
+     * hand-typed a second time: HIGHERGOV_SOURCE_NAME exists precisely so a
+     * rename is a loud failure (one place to fix), not a silent mismatch
+     * against the wrong source_id (highergov-client.ts's own comment). */
+    name: HIGHERGOV_SOURCE_NAME,
 
-    async fetchListing(since, _until, _cursor): Promise<ListingPage> {
-      /* ONE DAY PER CALL. R5 only ever sent a single `captured_date`, and
-       * whether the parameter accepts a range is unverified -- the dry run
-       * in highergov-cli.ts answers it for free. Until it does, the caller
+    async fetchListing(since, until, _cursor): Promise<ListingPage> {
+      /* ONE DAY PER CALL, ENFORCED, NOT MERELY DOCUMENTED. run.ts's windowed
+       * loop trusts `nextCursor` alone to decide `done` (scrape/run.ts:
+       * `cursor = page.nextCursor; if (cursor === null) { done = true; ... }`)
+       * -- and this adapter always returns `nextCursor: null`. Silently
+       * reading only `since` while the caller believes `until` was honoured
+       * would report a multi-day window as complete after fetching one day.
+       * This codebase already fails loud on exactly this shape elsewhere
+       * (searchId() throws rather than silently scoping nothing), so a
+       * caller that has not yet learned to walk days here must be told,
+       * not humoured. */
+      if (until !== since) {
+        throw new Error(
+          `higherGovAdapter.fetchListing: since (${since}) and until (${until}) differ. ` +
+            "This adapter reads a single captured_date per call and always reports " +
+            "nextCursor: null -- a multi-day request would silently read only the " +
+            "first day and be reported complete. The caller must walk days itself.",
+        );
+      }
+
+      /* R5 only ever sent a single `captured_date`, and whether the
+       * parameter accepts a range is unverified -- the dry run in
+       * highergov-cli.ts answers it for free. Until it does, the caller
        * walks days and this reads one. `since` IS the day. */
       const result = await higherGovClient.fetchDay(since, fetchImpl);
 
@@ -67,7 +89,35 @@ export function higherGovAdapter(fetchImpl: typeof fetch = fetch): WindowedAdapt
          * (CLAUDE.md §5.3) and this value is persisted in the artifact. */
         requestUrl: `highergov:/opportunity/?captured_date=${since}`,
         httpStatus: 200,
-        payload: scrubPayload(JSON.stringify({ capturedDate: since, results: result.notices.map((n) => n.raw) })),
+        /* The envelope carries three scalars beyond the rows, and dropping
+         * any of them turns this artifact into evidence it cannot answer:
+         *
+         *  - `pages`: the client's own comment on FeedResult.pages says why
+         *    this exists -- without it, a 19-of-19 day and a page-1-of-2 day
+         *    are INDISTINGUISHABLE after the fact, and a later reader would
+         *    silently treat a truncated day as HigherGov not having the
+         *    rows -- a false miss this adapter is the caller that must not
+         *    manufacture.
+         *  - `feedCount`: the saved-search change detector (meta.pagination
+         *    .count) -- the only signal that the search itself moved.
+         *  - `records`: what the VENDOR BILLED, not `items.length +
+         *    undatedSkipped` -- a row rejected by the client for a missing
+         *    source_id (toNotice returning null) is billed but appears in
+         *    neither count, and under-reporting spend is the dangerous
+         *    direction against a ceiling that cannot be read back
+         *    (CLAUDE.md §5.1).
+         *
+         * All three are scalars, so carrying them costs no extra API
+         * records and does not touch the scrub or the hash's stability. */
+        payload: scrubPayload(
+          JSON.stringify({
+            capturedDate: since,
+            records: result.records,
+            feedCount: result.feedCount,
+            pages: result.pages,
+            results: result.notices.map((n) => n.raw),
+          }),
+        ),
       };
     },
   };
