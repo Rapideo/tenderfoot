@@ -75,8 +75,29 @@ export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
   /* ⚠️ 2026-09-03: registered but NOT intended to run. `source.enabled` is
    * false and stays false -- IDOA is retained as the codebase's only second
    * source shape, which is what proves these layers are not SAM-shaped
-   * (D27, Proto2PRD 2.26). Its deletion trigger is named in idoa.ts's header:
-   * when the HigherGov adapter lands. */
+   * (D27, Proto2PRD 2.26). ~~Its deletion trigger is named in idoa.ts's
+   * header: when the HigherGov adapter lands.~~
+   *
+   * 🗓️ THE TRIGGER HAS FIRED -- 2026-09-07, three lines below this one.
+   * `highergov` is in this map. The condition idoa.ts's header names
+   * ("WHEN THE HIGHERGOV ADAPTER LANDS and becomes the second live source
+   * shape") is half met and half not: the adapter exists, and it has never
+   * ingested a row, because `HIGHERGOV_SEARCH_ID` is unset and migration
+   * 019 seeds the source disabled. So the second live source SHAPE this
+   * parser is retained to provide is still the only one there is.
+   *
+   * IDOA IS THEREFORE NOT DELETED HERE, and that is a decision rather than
+   * an omission: deleting the codebase's only non-SAM fixture on the day a
+   * replacement was written but before it had returned a single record is
+   * running D27's experiment again and ignoring the result. What is NOT
+   * left standing is the note itself. A named trigger that has visibly
+   * fired and is still written in the future tense teaches the next reader
+   * that these notes are decorative, which costs more than the parser does.
+   *
+   * ▶️ RE-ASK WHEN, and it is now a question with an answer rather than an
+   * event: once a HigherGov ingest has actually landed rows and the
+   * source-agnostic layers have been exercised against them. Matt's call,
+   * not a consequence. */
   idoa: { sourceName: "Indiana IDOA solicitations", make: () => idoaAdapter() },
   /* ⚠️ THE FIRST METERED ADAPTER IN THIS MAP. Every other entry is free to
    * run; this one bills per record against an allowance that cannot be read

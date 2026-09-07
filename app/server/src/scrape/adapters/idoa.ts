@@ -21,6 +21,18 @@
  * intention: DELETE THIS PARSER, ITS FIXTURE AND ITS TESTS WHEN THE HIGHERGOV
  * ADAPTER LANDS and becomes the second live source shape. Not before.
  *
+ * ⚖️ THE TRIGGER HAS PARTLY FIRED -- 2026-09-07, and it is recorded here
+ * rather than left to be re-derived. The HigherGov adapter LANDED: it is in
+ * `ADAPTERS` (registry.ts), it has a document client and merge cases. It has
+ * NOT "become the second live source shape": `HIGHERGOV_SEARCH_ID` is unset
+ * and migration 019 seeds the source disabled, so it has never returned a
+ * row and every source-agnostic layer is still proven against this parser
+ * alone. Deleting the only non-SAM fixture the day its replacement was
+ * written, before that replacement had ingested anything, is running D27's
+ * experiment again and ignoring the result -- so the deletion is NOT taken,
+ * deliberately. Re-ask once a HigherGov ingest has actually landed rows.
+ * Matt's call; not a consequence of this note.
+ *
  * IDOA publishes no posting date -- `SnapshotItem` has no `modifiedAt` by
  * design (adapter.ts), and this parser must not manufacture one from
  * anything, including row position (see the ordering note at the bottom).
