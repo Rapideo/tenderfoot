@@ -2113,6 +2113,27 @@ function arg(name: string): string | undefined {
   return hit?.split("=")[1];
 }
 
+/* Shape AND calendar validity, because neither check alone is enough: the
+ * regex lets "2026-13-01" through, and Date.parse lets "2026-02-30" through
+ * by rolling it forward to March 2nd rather than rejecting it. Only the
+ * ROUND TRIP catches both -- format the parsed date back to YYYY-MM-DD and
+ * compare it to the input, so a surviving date is not merely parseable but
+ * is the exact calendar day the operator named.
+ *
+ * Why an operator tool earns this: a window that fails validation silently
+ * yields an EMPTY day list, and the run then prints a confident report about
+ * nothing. It cannot overspend -- the per-run and monthly ceilings hold
+ * regardless -- but a tool a person invokes to spend money must not answer a
+ * mistyped question as though it were the question asked. */
+function assertValidDate(name: string, value: string): void {
+  const shapeOk = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const ms = shapeOk ? Date.parse(`${value}T00:00:00Z`) : NaN;
+  const roundTripsOk = !Number.isNaN(ms) && new Date(ms).toISOString().slice(0, 10) === value;
+  if (!shapeOk || !roundTripsOk) {
+    throw new Error(`--${name}=${value} is not a real YYYY-MM-DD calendar date.`);
+  }
+}
+
 export async function main(): Promise<void> {
   const from = arg("from");
   const to = arg("to");
@@ -2124,8 +2145,21 @@ export async function main(): Promise<void> {
     );
   }
 
+  /* Every check below happens BEFORE the first fetch. A window that is
+   * present but wrong must fail here, not silently downstream. */
+  assertValidDate("from", from);
+  assertValidDate("to", to);
+  if (from > to) {
+    throw new Error(`--from=${from} is after --to=${to}; the window is reversed.`);
+  }
+  console.log(`Window: ${from} to ${to}.`);
+
   /* The answer key is fetched FREE, from IDOA's own page. */
-  const html = await (await fetch(IDOA_URL)).text();
+  const res = await fetch(IDOA_URL);
+  /* An error page parses to a 0-notice census, and the run would then report
+   * a measurement of nothing as though it were real. */
+  if (!res.ok) throw new Error(`IDOA answered ${res.status} for the answer key.`);
+  const html = await res.text();
   const key = idoaKeyFrom(html);
   console.log(`Answer key: ${key.length} notices from IDOA (free).`);
 
