@@ -47,3 +47,18 @@ test("the generated SQL escapes quotes rather than trusting the list", () => {
   const built = NOT_BIDDABLE.map((k) => `'${k.replace(/'/g, "''")}'`).join(", ");
   expect(NOT_BIDDABLE_SQL).toContain(built);
 });
+
+/* ⚖️ Ruling ③ (Matt, 2026-09-07): forecasts are INGESTED and HELD, but never
+ * queued. They carry no deadline and no value estimate (R4 measured
+ * val_est 0 of 8), so a triager would be sorting rows that cannot be sorted. */
+test("a forecast is not biddable", () => {
+  expect(NOT_BIDDABLE).toContain("forecast");
+});
+
+/* 🔴 THE DISTINCTION THAT MUST NOT BLUR. eligibility.ts's own header keeps
+ * PRESOLICITATION notices in the queue -- "the earliest signal a requirement
+ * exists, and lead time is worth more to a small firm than to a large one".
+ * A forecast is excluded for being unbiddable TODAY, not for being early. */
+test("presolicitation is still biddable", () => {
+  expect(NOT_BIDDABLE).not.toContain("presolicitation");
+});

@@ -117,6 +117,11 @@ export const NOT_BIDDABLE = [
   "Special Notice",
   "Sale of Surplus Property",
   "Consolidate/(Substantially) Bundle",
+  /* ⚖️ Ruling ③, 2026-09-07. HigherGov's `sled_forecast` source_type -- the
+   * pre-RFP layer design spec §4.6 asks for, arriving unrequested (R4).
+   * Excluded for being UNBIDDABLE TODAY (no deadline, no value estimate),
+   * never for being early: the early-signal principle above is untouched. */
+  "forecast",
 ] as const;
 
 /* INLINED rather than bound as a parameter, and that is deliberate.
