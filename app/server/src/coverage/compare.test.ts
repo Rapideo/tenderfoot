@@ -15,6 +15,7 @@ const notice = (externalId: string, capturedDate: string | null = "2026-09-03"):
   capturedDate,
   versionKey: "v1",
   title: "t",
+  raw: {},
 });
 
 /* 🔴 R6: "several source_id lookups returned count=2" -- versioning, via

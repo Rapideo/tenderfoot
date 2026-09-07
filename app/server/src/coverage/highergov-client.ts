@@ -39,6 +39,7 @@ export interface FeedNotice {
   capturedDate: string | null;
   versionKey: string | null;
   title: string | null;
+  raw: Record<string, unknown>;
 }
 
 export interface FeedResult {
@@ -86,6 +87,7 @@ interface RawResult {
   captured_date?: unknown;
   version_key?: unknown;
   title?: unknown;
+  [key: string]: unknown;
 }
 
 interface RawBody {
@@ -97,17 +99,20 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-/* document_path is READ BY NOBODY. Dropping it here, at parse, is rule 1
- * made structural: there is no later point at which a caller could leak
- * what it never received. */
 function toNotice(r: RawResult): FeedNotice | null {
   const externalId = str(r.source_id);
   if (!externalId) return null;
+  /* document_path is REMOVED here, not merely unread. Deleting it from a
+   * copy is what makes "no caller can leak what it never received" true of
+   * `raw` as well as of the named fields -- the ingest needs everything
+   * else, so "we only copy four fields" is no longer the guarantee. */
+  const { document_path: _dropped, ...rest } = r as Record<string, unknown>;
   return {
     externalId,
     capturedDate: str(r.captured_date),
     versionKey: str(r.version_key),
     title: str(r.title),
+    raw: rest,
   };
 }
 

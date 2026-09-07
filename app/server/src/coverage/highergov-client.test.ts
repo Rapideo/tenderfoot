@@ -203,3 +203,22 @@ test("a non-array \"results\" field throws a clean error rather than a bare Type
     /non-array "results"/,
   );
 });
+
+/* The ingest needs every field the coverage test threw away -- description,
+ * deadline, agency -- but document_path must STILL never appear. The whole
+ * value of one client is that this stays true in one place. */
+test("a notice carries the full record, with document_path removed", async () => {
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
+  const first = out.notices[0]!;
+  expect(first.raw).toBeDefined();
+  expect(first.raw.source_id).toBe("003000000088067");
+  expect(first.raw.title).toBe("300 SP Salamonie Sludge and WW RemovalBid Documents");
+  expect("document_path" in first.raw).toBe(false);
+});
+
+test("no key-shaped value survives into raw, at any depth", async () => {
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
+  const serialized = JSON.stringify(out.notices.map((n) => n.raw));
+  expect(serialized).not.toContain("api_key");
+  expect(serialized).not.toContain("FAKEKEY");
+});
