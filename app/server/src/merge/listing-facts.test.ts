@@ -46,6 +46,22 @@ test("a source with no notice type yields null rather than a guess", () => {
   expect(noticeKind("SAM.gov", null)).toBeNull();
 });
 
+/* ⚖️ Ruling ③ (Matt, 2026-09-07). sled_forecast is the pre-RFP layer §4.6
+ * asks for (R4 found 8 in 100). It carries no deadline and no value, so it
+ * is HELD and never QUEUED -- and `kind` is the discriminator NOT_BIDDABLE
+ * already reads. */
+test("a sled_forecast row is kind 'forecast'", () => {
+  expect(noticeKind("HigherGov", { source_type: "sled_forecast" })).toBe("forecast");
+});
+
+/* 🔴 A real notice must NOT be given a kind we invented. `kind` feeds
+ * NOT_BIDDABLE, so a wrong value here silently removes biddable work from
+ * the queue -- the failure this project has already had to fix once. */
+test("an ordinary sled row gets no invented kind", () => {
+  expect(noticeKind("HigherGov", { source_type: "sled" })).toBeNull();
+  expect(noticeKind("HigherGov", {})).toBeNull();
+});
+
 /* ── codes: the corpus path's shape, WIDENED 2026-09-02 ───────────────── */
 
 /* The `*_labels` keys were added after Matt found the triage card showed

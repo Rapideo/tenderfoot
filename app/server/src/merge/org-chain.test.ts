@@ -93,3 +93,17 @@ test("null and non-object payloads yield an empty chain, not a throw", () => {
   expect(orgChain("Indiana IDOA solicitations", undefined)).toEqual([]);
   expect(orgChain("SAM.gov", null)).toEqual([]);
 });
+
+/* Adapted from the brief's sketch: this module's exported entry point is
+ * `orgChain`, not `orgChainFrom` -- there is no `orgChainFrom` in this file.
+ * One level, not a chain: HigherGov publishes a flat agency name, and the
+ * sub-state buyers this source is bought for have no parent to walk. */
+test("HigherGov's agency_name lands as the organisation", () => {
+  expect(orgChain("HigherGov", { agency_name: "Natural Resources" })).toEqual(["Natural Resources"]);
+});
+
+test("a missing or blank HigherGov agency_name yields an empty chain", () => {
+  expect(orgChain("HigherGov", {})).toEqual([]);
+  expect(orgChain("HigherGov", { agency_name: "" })).toEqual([]);
+  expect(orgChain("HigherGov", { agency_name: null })).toEqual([]);
+});

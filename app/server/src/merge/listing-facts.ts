@@ -98,6 +98,22 @@ export function noticeKind(sourceName: string, raw: unknown): string | null {
       const v = t?.value;
       return typeof v === "string" && v.trim() ? v.trim() : null;
     }
+    /* ⚖️ Ruling ③, 2026-09-07. `sled_forecast` is a real source_type and is
+     * NOT in the vendor's documented enum (R4) -- the pre-RFP layer design
+     * spec §4.6 asks for, arriving unrequested.
+     *
+     * 🔴 THIS IS THE ONLY PRODUCER OF 'forecast', and NOT_BIDDABLE is its
+     * only consumer. Without this case the ruling is inert: nothing would
+     * ever carry the kind, forecasts would sit in the biddable queue, and
+     * every test would still pass.
+     *
+     * Everything else returns null rather than inventing a kind. SAM's own
+     * case above reads a published `type.value`; HigherGov publishes no
+     * equivalent, and a fabricated kind feeds NOT_BIDDABLE -- which would
+     * silently remove real biddable work from the queue. */
+    case "HigherGov":
+      return r.source_type === "sled_forecast" ? "forecast" : null;
+
     /* USASpending reports awards, which have no notice type. Naming one would
      * invent a fact; the corpus path sets kind at ingest and never gets here. */
     default:

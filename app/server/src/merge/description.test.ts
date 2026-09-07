@@ -84,6 +84,18 @@ test("truncateWords leaves a short description completely alone", () => {
   expect(text).toBe("Three words here.");
 });
 
+/* 34% of HigherGov rows carry no description (R11). A missing one must be
+ * null, never "" -- F6 measures length and an empty string is a real,
+ * measurable zero while null is an absence.
+ *
+ * Adapted from the brief's sketch: this module's exported entry point is
+ * `description`, not `descriptionFrom` -- there is no `descriptionFrom` in
+ * this file. */
+test("HigherGov's description_text lands, and a missing one is null", () => {
+  expect(description("HigherGov", { description_text: "Sludge removal." })).toBe("Sludge removal.");
+  expect(description("HigherGov", { description_text: null })).toBeNull();
+});
+
 test("truncateWords prefers a sentence end when one is near the cut", () => {
   const words = Array.from({ length: 195 }, (_, i) => `w${i}`).join(" ");
   const { text } = truncateWords(`${words}. ${"tail ".repeat(30)}`, 200);

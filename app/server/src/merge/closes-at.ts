@@ -95,6 +95,16 @@ export function closesAt(sourceName: string, raw: unknown): string | null {
     case "Indiana IDOA solicitations":
       return idoaDate(r.responseDueBy);
 
+    /* HigherGov publishes an ISO date (or timestamp) in `due_date`, with no
+     * UTC-vs-local question to settle -- unlike SAM's pair above, there is
+     * only one field. isoDate() already truncates a timestamp to its leading
+     * calendar date, which is exactly the normalisation this column needs:
+     * a bare date and a timestamp both land as the same bare YYYY-MM-DD. A
+     * forecast row (source_type: "sled_forecast") carries no due_date at
+     * all, and null stays null rather than becoming today or a guess. */
+    case "HigherGov":
+      return isoDate(r.due_date);
+
     default:
       /* USASpending included: it reports awards, which have no response
        * deadline to read. Corpus imports set closes_at at ingest and never

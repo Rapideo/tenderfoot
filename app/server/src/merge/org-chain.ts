@@ -67,6 +67,15 @@ export function orgChain(sourceName: string, raw: unknown): string[] {
       names = [r.agency];
       break;
 
+    /* One level, not a chain. HigherGov publishes a flat `agency_name`; the
+     * sub-state buyers this source is bought for ("Allen County", "Natural
+     * Resources") have no parent chain underneath it to walk -- the same
+     * granularity IDOA's own case above already documents, not a limitation
+     * of the parse. */
+    case "HigherGov":
+      names = [r.agency_name];
+      break;
+
     default:
       return [];
   }
