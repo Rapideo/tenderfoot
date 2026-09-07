@@ -234,7 +234,36 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-06
+## 🔖 RESUME HERE — updated 2026-09-07
+
+## ⛔ 2026-09-07 — THE ONE THING BLOCKING EVERYTHING HIGHERGOV: `HIGHERGOV_SEARCH_ID`
+
+**It is not in `.env`, and without it nothing HigherGov can run.** `searchId()` throws by design — `/opportunity/` has **no location parameter** (R1), so the saved search is the ONLY Indiana filter, and a missing one would pull nationally and bill for it (5,266 records measured for one unfiltered day). The throw is the Task 3 money-bug fix working.
+
+**Matt almost certainly already has the search** — the 2026-09-03 testing made Indiana-filtered calls with one; its ID lived in a throwaway script and was never persisted. It is in HigherGov's UI under saved searches. **`.env.example` documents the variable; `.env` needs the value.**
+
+This gates BOTH `npm run recall` and any HigherGov ingest.
+
+## ⚖️ 2026-09-07 — THE SUB-STATE ANSWER KEY IS SPECCED AND DELIBERATELY NOT BUILT
+
+**Spec: `docs/superpowers/specs/2026-09-07-substate-answer-key-design.md`. Ruled 2026-09-07 by Matt: do not build it.** The spec stays on disk because it records *why* the segment is unmeasured, which a future reader will otherwise mistake for an oversight.
+
+**The exploration that produced the spec is what killed it.** Sub-state buyers post **10–25 notices a YEAR each** — six of them is one to two a week, so the segment could not reach D9's ratified floor of 100 for over a year. Three arguments closed it:
+
+1. **The decision it informs is already made.** The adapter backlog is shelved because maintaining scrapers costs more than $500/yr. A sub-state recall of 85% instead of 99% says HigherGov is imperfect; it does not say the alternative is better. **No realistic result flips the call.**
+2. **The stakes are proportional to volume, and the volume is tiny.** A detectable miss rate is a handful of notices a year.
+3. **The analysis eats itself.** A CivicEngage parser covering six Indiana municipalities *is* a sub-state adapter. Building it to measure whether sub-state coverage is needed would have built the sub-state coverage. **You do not measure the need for a thing you just made.**
+
+⚠️ **TWO DEFECTS ARE PARKED, NOT FIXED, AND THE REASON IS LOAD-BEARING.** The whole-branch review found (a) the cohort floor is global while the verdict is per-segment, so a 5-row segment could drive the gate, and (b) `coverage_item`'s key has no buyer namespace, so small sequential sub-state ids would collide and reject an insert **after** the records were spent. **Both are reachable ONLY through the sub-state path.** No sub-state rows, neither can fire. If that path is ever reopened, §3 of the spec is the fix list and both must land before a single sub-state row is written.
+
+## ▶️ 2026-09-07 — WHAT ACTUALLY MATTERS NEXT: HIGHERGOV HAS NEVER DELIVERED A ROW
+
+**Checked, not assumed: HigherGov has a `source` registry row (migration 019) and nothing else.** No adapter in `ADAPTERS`, no entry in `DOCUMENT_CLIENTS`, not one row in the store.
+
+It was bought 2026-09-03 and proved at 99% recall. D2 built on-demand documents **against SAM.gov instead**. The whole coverage slice built a harness to *measure* it. **It has never put a single opportunity in front of anyone.**
+
+That is the gap between a $500 purchase and real Indiana work, and it is the only remaining piece that pays. **Next: an Adapter for the Indiana saved search plus the one `DOCUMENT_CLIENTS` entry D2 deliberately left out** — both shapes the project already has patterns for. Blocked on `HIGHERGOV_SEARCH_ID` above.
+
 
 ## ⚖️ 2026-09-07 — ALL FIVE RECALL RULINGS ARE IN, AND ONE FLAG HAD TO BE SPLIT
 
