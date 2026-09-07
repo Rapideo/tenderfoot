@@ -24,7 +24,7 @@ import { higherGovClient, HIGHERGOV_SOURCE_NAME, type HigherGovClient } from "./
 import { IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
 import { dedupBySourceId, observe, type Observation } from "./compare.js";
 import { COVERAGE } from "./thresholds.js";
-import type { FeedNotice } from "./highergov-client.js";
+import type { FeedNotice, FeedResult } from "./highergov-client.js";
 
 export interface RunOutcome {
   runId: number;
@@ -129,7 +129,30 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
         `becoming misses.`;
       break;
     }
-    const result = await client.fetchDay(day, opts.fetchImpl);
+    let result: FeedResult;
+    try {
+      result = await client.fetchDay(day, opts.fetchImpl);
+    } catch (err) {
+      /* 🔴 THE OPEN FINDING THIS CLOSES: a call that THROWS was still
+       * BILLED. highergov-client.ts's two guards (a malformed 200, a
+       * non-array "results") turn a leaky TypeError/SyntaxError into a
+       * clean, redacted error -- they do not, and structurally cannot,
+       * un-bill the call. Reaching this catch with nothing tallied is
+       * exactly the under-report api-spend.ts's header (lines 9-24) calls
+       * the dangerous direction: it is what lets an operator believe there
+       * is budget left when there is not. We cannot know what this response
+       * actually cost, so we tally the conservative figure
+       * (thresholds.ts's `unparseableResponseRecords`) BEFORE the error
+       * propagates, then let it propagate unchanged -- a malformed response
+       * must still fail the run loudly, it just fails having recorded that
+       * it spent something. */
+      await recordSpend({ run: exec }, {
+        sourceId: source.id,
+        endpoint: "opportunity",
+        records: COVERAGE.unparseableResponseRecords,
+      });
+      throw err;
+    }
     calls += 1;
 
     /* THE TALLY COMMITS ON ITS OWN, BEFORE ANYTHING ELSE. The vendor has
@@ -233,7 +256,20 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
           `Unresolved notices stay 'unchecked' and are re-asked next run.`;
         break;
       }
-      const probe = await client.fetchBySourceId(entry.externalId, opts.fetchImpl);
+      let probe: FeedResult;
+      try {
+        probe = await client.fetchBySourceId(entry.externalId, opts.fetchImpl);
+      } catch (err) {
+        /* Same reasoning as the day-loop's try/catch above: this call was
+         * billed before it could throw, so the conservative tally must land
+         * before the error does, and the error must still propagate. */
+        await recordSpend({ run: exec }, {
+          sourceId: source.id,
+          endpoint: "opportunity",
+          records: COVERAGE.unparseableResponseRecords,
+        });
+        throw err;
+      }
       calls += 1;
       await recordSpend({ run: exec }, {
         sourceId: source.id,

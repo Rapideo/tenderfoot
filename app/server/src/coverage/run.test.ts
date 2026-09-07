@@ -94,6 +94,68 @@ test("the spend is recorded even when the item write fails", async () => {
   expect(Number(spend!.total)).toBe(7);
 });
 
+/* 🔴 THE OPEN FINDING THIS BRANCH CLOSES: a call the vendor already billed
+ * must not reach zero records in api_spend just because this client could
+ * not make sense of what came back. A malformed 200 or a non-array
+ * "results" (highergov-client.ts's guards) throws AFTER the vendor billed
+ * and BEFORE recordSpend would otherwise run -- byte-for-byte the same
+ * under-report as the bare TypeError those guards replaced. run.ts now
+ * tallies a conservative estimate (thresholds.ts's
+ * `unparseableResponseRecords`) before letting the error propagate. The
+ * error must still propagate: a malformed response should fail the run
+ * loudly, having recorded that it spent something. */
+test("a fetchDay throw still tallies a conservative spend before the error propagates", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      throw new Error('HigherGov returned a non-array "results" field (test double)');
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+  };
+  await expect(
+    runCoverage({ from: "2026-09-03", to: "2026-09-03", client }),
+  ).rejects.toThrow(/non-array/);
+  const spend = await one<{ total: string }>(
+    `SELECT coalesce(sum(records),0)::text AS total FROM api_spend`,
+  );
+  expect(Number(spend!.total)).toBe(COVERAGE.unparseableResponseRecords);
+});
+
+/* Same finding, the OTHER call site: the per-key id-lookup loop calls
+ * fetchBySourceId for any notice the day loop did not already find (and
+ * that no earlier run already settled). It needs its own try/catch because
+ * it is a second, independent call to a second client method. */
+test("a fetchBySourceId throw still tallies a conservative spend before the error propagates", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+    async fetchBySourceId() {
+      throw new Error("HigherGov returned a malformed JSON body (test double)");
+    },
+  };
+  await expect(
+    runCoverage({
+      from: "2026-09-03",
+      to: "2026-09-03",
+      key: [
+        {
+          externalId: "003000000088067",
+          segment: "state_agency",
+          keyOrigin: "Indiana IDOA solicitations",
+          deadline: "2026-09-30",
+        },
+      ],
+      client,
+    }),
+  ).rejects.toThrow(/malformed JSON/);
+  const spend = await one<{ total: string }>(
+    `SELECT coalesce(sum(records),0)::text AS total FROM api_spend`,
+  );
+  expect(Number(spend!.total)).toBe(COVERAGE.unparseableResponseRecords);
+});
+
 /* 🔴 THE HARD STOP. The cost model is a projection from ONE observation
  * (R5, 5 records for one day). A run must abort rather than overspend. */
 test("a run aborts at maxRecordsPerRun rather than continuing", async () => {

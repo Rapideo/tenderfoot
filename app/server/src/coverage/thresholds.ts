@@ -12,6 +12,12 @@
  * the word and the test stayed green. */
 export const COVERAGE_RATIFIED = false;
 
+/* Named apart from the object below so `unparseableResponseRecords` can
+ * reuse the exact number rather than a second literal that could drift from
+ * it -- see that field's own comment for why reusing it is deliberate, not
+ * laziness. */
+const MAX_RECORDS_PER_RUN = 40;
+
 export const COVERAGE = {
   /** C1 — share of answer-key notices HigherGov carried AT ALL. The
    * 2026-09-03 measurement was 69/70 = 0.986, from one observation. */
@@ -47,7 +53,32 @@ export const COVERAGE = {
    * ONE OBSERVATION AT ONE MOMENT, which is the exact error
    * Proto2PRD-Lessons §2.15 exists for. A run that hits this cap is a
    * finding about volume, not a failure. */
-  maxRecordsPerRun: 40,
+  maxRecordsPerRun: MAX_RECORDS_PER_RUN,
+
+  /** What to TALLY when a call throws before its response can be read at all
+   * -- a malformed 200 or a non-array "results" field, highergov-client.ts's
+   * two guards. By the time either guard fires, the VENDOR HAS ALREADY
+   * BILLED the call; the guard turns a leaky TypeError/SyntaxError into a
+   * clean, redacted error, it does not and cannot un-bill anything. Recording
+   * 0 for a call we could not parse is exactly the under-report api-spend.ts's
+   * header (lines 9-24) names as the dangerous direction: it is what lets an
+   * operator believe there is budget left when there is not, against a
+   * ceiling that cannot be read back from the vendor at all (CLAUDE.md §5.1).
+   *
+   * We cannot know what an unparseable response actually cost, so this picks
+   * the largest a single call could plausibly have cost rather than guess a
+   * smaller number. It reuses `maxRecordsPerRun`'s own figure rather than a
+   * fresh one: that number is already this file's answer to "the most one
+   * call in a run is assumed to cost" (R5 measured 5 records for one
+   * filtered Indiana day -- this is an 8x margin over it), so charging a
+   * single unreadable call the full per-run cap is deliberately generous, not
+   * arbitrary. Over-charging this way is OVER-reporting, which api-spend.ts's
+   * header calls "merely conservative, not wrong" -- unlike under-reporting,
+   * it cannot hide real consumption from the one instrument that can still
+   * catch it, a person reading the account dashboard.
+   *
+   * ⚖️ UNRATIFIED, same as its neighbours above. */
+  unparseableResponseRecords: MAX_RECORDS_PER_RUN,
 
   /** The hard stop on CALL COUNT, independent of records spent. A zero-result
    * day bills nothing (CLAUDE.md §5.1's meter counts records RETURNED), so

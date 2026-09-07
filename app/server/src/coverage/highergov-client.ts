@@ -181,10 +181,21 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
 
   /* 🔴 A NON-ARRAY "results" MUST NOT REACH .map(). `?? []` only catches
    * null/undefined; a truthy-but-wrong shape (an object, a string) would
-   * still throw a bare TypeError from .map(), and that throw happens BEFORE
-   * recordSpend runs in run.ts -- a call the vendor already billed would
-   * never reach api_spend. Under-reporting is the dangerous direction
-   * against a ceiling that cannot be read back (CLAUDE.md §5.1). */
+   * still throw a bare TypeError from .map(), whose message could quote
+   * whatever unexpected shape the vendor actually sent. This guard's job
+   * stops there: it turns that into a NAMED, redaction-safe error -- the same
+   * posture as the JSON.parse guard immediately above -- so a caller's own
+   * console.error can never print something raw by accident.
+   *
+   * It does NOT make the call free. The vendor bills on the response it
+   * sent, not on whether this client can make sense of it, and this still
+   * throws either way. Accounting for that money is run.ts's job, not this
+   * module's -- same separation this file's header states (client fetches
+   * and parses, the caller decides what it cost). run.ts wraps both call
+   * sites in a try/catch and tallies a conservative estimate
+   * (thresholds.ts's `unparseableResponseRecords`) before letting whatever
+   * this function throws propagate, so a call this guard rejects still lands
+   * a row in api_spend instead of disappearing from it. */
   const results = body.results ?? [];
   if (!Array.isArray(results)) {
     throw new Error(

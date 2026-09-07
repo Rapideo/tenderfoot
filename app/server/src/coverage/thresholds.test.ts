@@ -18,6 +18,15 @@ test("every threshold is a usable number", () => {
   expect(COVERAGE.minCohortSize).toBeGreaterThan(0);
   expect(COVERAGE.maxRecordsPerRun).toBeGreaterThan(0);
   expect(COVERAGE.maxCallsPerRun).toBeGreaterThan(0);
+  expect(COVERAGE.unparseableResponseRecords).toBeGreaterThan(0);
+});
+
+/* The conservative-tally figure must not UNDER-report relative to the
+ * per-run cap it is modelled on -- api-spend.ts's doctrine is that
+ * over-reporting is the safe direction, so this must be AT LEAST as large as
+ * "the most one call in a run is assumed to cost", never smaller. */
+test("the unparseable-response tally is at least as large as a single call's assumed cost", () => {
+  expect(COVERAGE.unparseableResponseRecords).toBeGreaterThanOrEqual(COVERAGE.maxRecordsPerRun);
 });
 
 /* C2 is a SUBSET of C1 -- a notice carried in time is also a notice carried.

@@ -101,12 +101,19 @@ export async function main(): Promise<void> {
   console.log(`Answer key: ${key.length} notices from IDOA (free).`);
 
   /* Read the cohort BEFORE this run writes anything, to tell whether this is
-   * the FIRST run ever against this database. After run one, the database IS
-   * the baseline: settled notices are skipped on later runs (run.ts's
-   * settled-id guard), so runs two onward measure only new notices by
-   * construction and this can only ever be true once. */
+   * still a FULL-CENSUS run: nothing has SETTLED yet. Computed from
+   * settled(), NOT raw gradedItems().length -- gradedItems() includes
+   * 'unchecked' rows, and a first run that aborts on the record or call cap
+   * (thresholds.ts's maxRecordsPerRun / maxCallsPerRun) writes only those.
+   * Counting them as "not first" would suppress this census disclosure on
+   * the very next run, while that run is still C2-inflated for the same
+   * reason the disclosure exists -- erring toward withholding a warning the
+   * operator needs. Once at least one notice has settled, settled() is
+   * non-empty and this correctly goes false for good: settled notices are
+   * skipped on later runs (run.ts's settled-id guard), so runs from then on
+   * measure only new notices by construction. */
   const priorItems = await gradedItems();
-  const isFirstRun = priorItems.length === 0;
+  const isFirstRun = settled(priorItems).length === 0;
 
   const outcome = await runCoverage({ from, to, key });
 
