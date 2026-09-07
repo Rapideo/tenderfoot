@@ -24,11 +24,13 @@
  * spend in its own committed write, before its transaction opens. */
 import { all, type Querier } from "../db/index.js";
 
-/* ⚖️ UNRATIFIED. Matt sets this number; it ships as a proposal in exactly
- * the style of fitness/thresholds.ts's R7 block (D5, 2026-09-04) -- see
- * `CEILING_RATIFIED` immediately below for what "exactly the style" means.
+/* ⚖️ ~~UNRATIFIED.~~ RATIFIED 2026-09-07 (D10, option A) -- see
+ * `CEILING_RATIFIED` below. It shipped as a proposal in exactly the style of
+ * fitness/thresholds.ts's R7 block (D5, 2026-09-04), and the argument it was
+ * approved on is kept verbatim below rather than deleted, because it is what
+ * he actually agreed to.
  *
- * The proposal is 1,000 -- 10% of the 10,000/month allowance, about 90
+ * The proposal was 1,000 -- 10% of the 10,000/month allowance, about 90
  * document fetches. The reasoning, which is what he is actually ruling on:
  * the standing 500-record budget governs what an AGENT may spend unasked,
  * while this governs what the APPLICATION spends while somebody browses.
@@ -47,9 +49,20 @@ export const MONTHLY_RECORD_CEILING = 1000;
  * stayed green, which means nothing was actually pinning the claim. This is
  * the one number in the branch that governs money, so it gets the real
  * mechanism rather than a comment that a paraphrase can quietly drop.
- * `false` until Matt rules on 1,000 (or any other value) the way he ruled D4
- * for the floor's thresholds. */
-export const CEILING_RATIFIED = false;
+ * ~~`false` until Matt rules on 1,000 (or any other value) the way he ruled
+ * D4 for the floor's thresholds.~~ He ruled it 2026-09-07 -- see below. */
+/* ⚖️ RATIFIED 2026-09-07 BY MATT -- ruling sheet D10, option A, "ratify
+ * 1,000 as it stands". The number above is no longer a proposal.
+ *
+ * ⚠️ HE WAS SHOWN, AND DECLINED, THE ALTERNATIVE THAT WOULD HAVE SPLIT IT.
+ * One ceiling now governs TWO spenders: the application fetching documents
+ * while somebody browses (D2's original framing) and `npm run recall`
+ * measuring coverage. They compete -- a heavy browsing month can starve a
+ * measurement run and vice versa, and neither is warned, because
+ * consumption cannot be read back from the vendor at all. Option C offered
+ * one ceiling per actor; he took A. Recorded here because the next person
+ * to hit an unexplained refusal deserves to know it was a choice. */
+export const CEILING_RATIFIED = true;
 
 export interface Spend {
   sourceId: number;

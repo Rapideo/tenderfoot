@@ -26,8 +26,15 @@ function find(rs: ReturnType<typeof measureCoverage>, id: string) {
   return r;
 }
 
+/* Cohort sizes here are DERIVED from COVERAGE.minCohortSize rather than
+ * written as literals. When Matt raised the floor from 30 to 100 on
+ * 2026-09-07 (D9), four tests in this file broke on hard-coded 40s -- they
+ * were asserting `pass` on cohorts the new floor grades `unknown`. Deriving
+ * them means the next ruling that moves the floor moves these with it. */
+const FLOOR = COVERAGE.minCohortSize;
+
 test("a healthy cohort passes C1 and C2", () => {
-  const rs = measureCoverage(items({ segment: "state_agency", carried: 0, timely: 40, missing: 0 }));
+  const rs = measureCoverage(items({ segment: "state_agency", carried: 0, timely: FLOOR, missing: 0 }));
   expect(find(rs, "C1").verdict).toBe("pass");
   expect(find(rs, "C2").verdict).toBe("pass");
 });
@@ -35,7 +42,7 @@ test("a healthy cohort passes C1 and C2", () => {
 /* 🔴 THE WHOLE POINT OF RULING ④. A source that carries everything, always,
  * but too late to bid, passes C1 and must FAIL C2. */
 test("carried but always too late passes C1 and fails C2", () => {
-  const rs = measureCoverage(items({ segment: "state_agency", carried: 40, timely: 0, missing: 0 }));
+  const rs = measureCoverage(items({ segment: "state_agency", carried: FLOOR, timely: 0, missing: 0 }));
   expect(find(rs, "C1").verdict).toBe("pass");
   expect(find(rs, "C2").verdict).toBe("fail");
 });
@@ -45,7 +52,7 @@ test("carried but always too late passes C1 and fails C2", () => {
  * minimum, unlike an average, cannot be talked up by adding strengths. */
 test("a strong segment cannot rescue a weak one", () => {
   const rs = measureCoverage([
-    ...items({ segment: "state_agency", carried: 0, timely: 40, missing: 0 }),
+    ...items({ segment: "state_agency", carried: 0, timely: FLOOR, missing: 0 }),
     ...items({ segment: "sub_state", carried: 0, timely: 10, missing: 30 }),
   ]);
   expect(find(rs, "C1").verdict).toBe("fail");
@@ -81,9 +88,15 @@ test("unchecked notices are excluded from the cohort entirely", () => {
   );
 });
 
-test("every predicate says its thresholds are unratified", () => {
-  const rs = measureCoverage(items({ segment: "state_agency", carried: 0, timely: 40, missing: 0 }));
-  for (const r of rs) expect(r.detail ?? "").toContain("not approved");
+/* ⚖️ INVERTED 2026-09-07. This asserted that every predicate carries the
+ * "not approved" caveat -- correct while the thresholds were proposals, and
+ * WRONG the moment Matt ratified them (D8/D9/D11). The caveat is derived
+ * from the live flag, so ratifying removed it, and a test still demanding it
+ * would have forced the caveat to be re-hardcoded -- which is exactly the
+ * defect the derivation was introduced to fix. */
+test("a ratified verdict carries no provisional caveat", () => {
+  const rs = measureCoverage(items({ segment: "state_agency", carried: 0, timely: FLOOR, missing: 0 }));
+  for (const r of rs) expect(r.detail ?? "").not.toContain("not approved");
 });
 
 test("C3 reports median lead time without gating", () => {

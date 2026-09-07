@@ -74,7 +74,9 @@ test("a source that has never spent reads zero, not null", async () => {
  * from api-spend.ts would have left this green. `CEILING_RATIFIED` is the
  * flag that actually pins it, in the same style rubric.test.ts pins
  * `R7_RATIFIED` and `THRESHOLDS_RATIFIED`. */
-test("the ceiling is a positive number and is marked unratified in source", () => {
+test("the ceiling is a positive number and its ratification is pinned in source", () => {
   expect(MONTHLY_RECORD_CEILING).toBeGreaterThan(0);
-  expect(CEILING_RATIFIED).toBe(false);
+  /* ⚖️ Ratified 2026-09-07 (D10). Asserts the RULING, not a permanent
+   * property: if it is ever withdrawn, this test changes with it. */
+  expect(CEILING_RATIFIED).toBe(true);
 });

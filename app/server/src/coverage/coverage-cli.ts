@@ -19,7 +19,7 @@ import { close } from "../db/index.js";
 import { runCoverage, gradedItems } from "./run.js";
 import { measureCoverage, settled } from "./measure.js";
 import { idoaKeyFrom } from "./answer-key.js";
-import { COVERAGE, COVERAGE_RATIFIED } from "./thresholds.js";
+import { COVERAGE, COVERAGE_RATIFIED, SPEND_LIMITS_RATIFIED } from "./thresholds.js";
 import { IDOA_URL } from "../scrape/adapters/idoa.js";
 import { HIGHERGOV_SOURCE_NAME } from "./highergov-client.js";
 import { MONTHLY_RECORD_CEILING, spentThisMonth } from "../extract/api-spend.js";
@@ -164,10 +164,26 @@ export async function main(): Promise<void> {
     if (p.detail) console.log(`        ${p.detail}`);
   }
 
+  /* Two flags, reported separately, because they went different ways on
+   * 2026-09-07: the GRADING thresholds were ratified and the SPEND caps were
+   * not. Collapsing them would either overclaim (calling an unratified money
+   * cap approved) or underclaim (calling a ruled verdict provisional), and an
+   * operator acts on this line. */
   if (!COVERAGE_RATIFIED) {
     console.log(
-      `\n⚖️  THIS VERDICT IS NOT BINDING. The thresholds are proposals ` +
-        `awaiting Matt's ruling (spec §8).`,
+      `
+⚖️  THIS VERDICT IS NOT BINDING. The grading thresholds are ` +
+        `proposals awaiting Matt's ruling (spec §8).`,
+    );
+  }
+
+  if (!SPEND_LIMITS_RATIFIED) {
+    console.log(
+      `
+⚖️  The spend caps are UNRATIFIED — maxRecordsPerRun ` +
+        `${COVERAGE.maxRecordsPerRun}, maxCallsPerRun ${COVERAGE.maxCallsPerRun}. ` +
+        `They were picked by an agent, not ruled. If this run aborted on one of ` +
+        `them, it stopped on a number nobody has approved.`,
     );
   }
 }

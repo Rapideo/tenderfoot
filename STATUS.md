@@ -236,6 +236,31 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ## 🔖 RESUME HERE — updated 2026-09-06
 
+## ⚖️ 2026-09-07 — ALL FIVE RECALL RULINGS ARE IN, AND ONE FLAG HAD TO BE SPLIT
+
+**Ruling sheet D8–D12: <https://claude.ai/code/artifact/63e9b5f6-8db9-45b4-89a5-7223b2d65222>** — answers in its own store (`read_db`, collection `rulings`, docs `d8`…`d12`). **Do not re-ask any of them.**
+
+| | Decision | Ruled | Consequence |
+|---|---|---|---|
+| **D8** | `minLeadDays` | **A — 7 days** | Generous to the source: a notice arriving six days out still clears C2 |
+| **D9** | `minCohortSize` | **B — 100**, raising the agent's 30 | Now MATCHES R7's population floor instead of departing from it |
+| **D10** | `MONTHLY_RECORD_CEILING` | **A — ratify 1,000** | `CEILING_RATIFIED = true`. ⚠️ He was shown and declined option C, one ceiling per actor — so browsing and measurement now compete for one budget, unwarned |
+| **D11** | The agent's three defaults | **A — all stand** | 0.95 / 0.90, twice-weekly, adjudicate at cohort size not at a date |
+| **D12** | Sub-state answer key | **Allen County · Fort Wayne · Fishers.** Indianapolis Airport Authority **excluded** | The buyer list exists. **The key itself is still not built** |
+
+**🔴 THE RULING FORCED A SPLIT NOBODY ASKED FOR, AND IT IS THE SAME DEFECT THIS PROJECT ALREADY PAID FOR ONCE.** One `COVERAGE_RATIFIED` flag governed **six** numbers; Matt ruled on **four**. The other three — `maxRecordsPerRun`, `maxCallsPerRun`, `unparseableResponseRecords` — cap **spending**, were picked by an agent from a single dashboard reading, and have never been put to him. Ratifying the grading thresholds would have silently carried them along. **`SPEND_LIMITS_RATIFIED` now exists beside `COVERAGE_RATIFIED` and is `false`**, pinned by a test asserting the two are not equal. `fitness/thresholds.ts` had to be split the same way under pressure on 2026-09-05 when D4 and D5 went different ways; doing it here **before** the divergence is the cheap version.
+
+**⚠️ RATIFYING MADE THE VERDICT BINDING, NOT AVAILABLE.** C1 and C2 still report `unknown` until the cohort reaches 100 — which is now **further away by deliberate choice**. D9's second argument is the one worth keeping: a floor of 30 was cleared part-way through the ~71-notice census, so the first binding verdict would have been **a verdict about the census**, whose C2 lead times are inflated. 100 forces the test past it into genuinely new notices. Cost: one to two weeks.
+
+**Four `measure.test.ts` tests broke on the new floor** — they asserted `pass` on hard-coded cohorts of 40 that the raised floor grades `unknown`. Now derived from `COVERAGE.minCohortSize`, so the next ruling that moves the floor moves them with it. A fifth was **inverted**: it demanded the "not approved" caveat on every predicate, which ratification correctly removed.
+
+**Gate: 893 tests / 100 files, exit 0.**
+
+### ▶️ WHAT IS ACTUALLY NEXT
+
+**Building the sub-state answer key** — D12 named the buyers, and nothing reads them yet. `idoaKeyFrom` hardcodes `segment: "state_agency"`, so **weakest-segment-wins still grades one segment, and it is not the one HigherGov was bought for.** Three municipal bid pages need parsing; that is its own slice with its own spec, not a patch. **Until it lands, no `npm run recall` verdict speaks to the purchase's actual claim.**
+
+
 ## ✅ 2026-09-06 — STEP ③ IS MERGED TO `main`, AND IT HAS STILL NEVER BEEN RUN
 
 **Merged `--no-ff` at `e62f4ae`. Gate re-run ON THE MERGED RESULT: 891 tests / 100 files, exit 0** — the same figure the branch carried, which is the point of re-running it. ⚠️ **NOT PUSHED.** `main` is 24 commits ahead of `origin/main`.

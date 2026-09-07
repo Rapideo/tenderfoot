@@ -5,12 +5,39 @@
  * module -- and so nobody can quietly introduce another number by
  * hard-coding it at a call site.
  *
- * ⚖️ ALL UNRATIFIED. These are PROPOSALS awaiting Matt's ruling, in the
- * shape D4/D5 established: an exported boolean that changes runtime output
- * and is pinned by a test, never merely the word UNRATIFIED in a comment.
- * api-spend.ts's final review found that a comment pins nothing -- delete
- * the word and the test stayed green. */
-export const COVERAGE_RATIFIED = false;
+ * ⚖️ TWO FLAGS, NOT ONE, AND THE SPLIT IS THE POINT. Ratification arrived
+ * 2026-09-07 for the GRADING thresholds (D8, D9, D11) and NOT for the SPEND
+ * limits, which Matt has never been asked to rule on. A single flag would
+ * have made that answer inexpressible -- and this project has already paid
+ * for exactly that: fitness/thresholds.ts carried one THRESHOLDS_RATIFIED
+ * over two blocks until D4/D5 went different ways on 2026-09-05 and it had
+ * to be split under pressure. Splitting it here BEFORE the divergence is the
+ * cheap version of the same lesson.
+ *
+ * Both keep the D4/D5 mechanism: an exported boolean that changes runtime
+ * output and is pinned by a test, never merely the word UNRATIFIED in a
+ * comment. api-spend.ts's final review found that a comment pins nothing --
+ * delete the word and the test stayed green. */
+
+/* ⚖️ RATIFIED 2026-09-07 BY MATT. Governs the four GRADING thresholds only:
+ * minCoverageRecall, minTimelyRecall, minLeadDays, minCohortSize. Ruling
+ * sheet D8-D12 (artifact 63e9b5f6), the same shape D1-D7 took.
+ *
+ * ⚠️ WHAT RATIFYING DID AND DID NOT DO. It makes the VERDICT binding -- the
+ * caveat stops printing on every predicate. It does NOT make the verdict
+ * available: C1 and C2 still report `unknown` until the cohort reaches
+ * minCohortSize, which is now further away than it was, by deliberate
+ * choice. Approving the standard is not the same as meeting it. */
+export const COVERAGE_RATIFIED = true;
+
+/* ⚖️ STILL UNRATIFIED, and deliberately so: Matt has never been shown these
+ * three. They cap SPENDING, not grading -- maxRecordsPerRun,
+ * unparseableResponseRecords and maxCallsPerRun -- and every one of them was
+ * picked by an agent from a single dashboard reading. They govern money
+ * against an allowance that cannot be read back from the vendor
+ * (CLAUDE.md §5.1), which is the reason they are not folded into the flag
+ * above and quietly carried along by a ruling that never mentioned them. */
+export const SPEND_LIMITS_RATIFIED = false;
 
 /* Named apart from the object below so `unparseableResponseRecords` can
  * reuse the exact number rather than a second literal that could drift from
@@ -37,12 +64,32 @@ export const COVERAGE = {
 
   /** C4 — below this the verdict is `unknown`, NEVER `pass`.
    *
-   * ⚠️ THIS IS THE ONE TO LOOK AT HARDEST. It is BELOW R7's population floor
-   * of 100, traded down to keep the test bounded as Matt asked. A 100-notice
-   * cohort of genuinely NEW Indiana notices needs roughly three weeks of
-   * forward running at observed volumes. The trade is his to accept or
-   * reject (spec §8). */
-  minCohortSize: 30,
+   * ⚖️ RULED 100 BY MATT, 2026-09-07 (D9, option B), raising the agent's
+   * proposal of 30. It now MATCHES R7's population floor rather than
+   * departing from it, so there is no inconsistency left to explain.
+   *
+   * Two arguments carried it, and the second only surfaced while the first
+   * was being explained:
+   *
+   * 1. GRANULARITY. At n=30 one notice is worth 3.3 points and no value
+   *    lands on 0.95 at all -- 29/30 passes, 28/30 fails -- so the test was
+   *    really "at most one miss", not "95%". At a TRUE recall of 0.98 (near
+   *    the measured 0.986) that fails by luck about one run in eight. At
+   *    n=100 the same source fails about one in sixty. The floor is not
+   *    protecting against missing decay; it protects against INVENTING it,
+   *    which is the error that wrongly un-shelves the adapter backlog.
+   *
+   * 2. IT FORCES THE TEST PAST THE CENSUS. Run one sweeps the whole open
+   *    IDOA page, ~71 notices, whose lead times are inflated because they
+   *    were captured long ago (spec §3.2 as amended). A floor of 30 is
+   *    cleared part-way through that census, so the first binding verdict
+   *    would have been a verdict ABOUT the census. Reaching 100 requires
+   *    ~29 genuinely new notices -- one to two weeks at observed volumes --
+   *    and those are the ones whose C2 means what it says.
+   *
+   * Accepted cost, in his words as much as mine: one to two weeks longer
+   * before anything grades. */
+  minCohortSize: 100,
 
   /** The hard stop. A run that would spend more than this aborts and reports
    * rather than continuing.
@@ -52,7 +99,12 @@ export const COVERAGE = {
    * it derives from (R5: 5 records for one filtered Indiana day) is ITSELF
    * ONE OBSERVATION AT ONE MOMENT, which is the exact error
    * Proto2PRD-Lessons §2.15 exists for. A run that hits this cap is a
-   * finding about volume, not a failure. */
+   * finding about volume, not a failure.
+   *
+   * ⚖️ UNRATIFIED -- see SPEND_LIMITS_RATIFIED. The agent declined to raise
+   * it when the false-miss guard made a full first census cost more than one
+   * run's cap, on the grounds that a cap on money is Matt's to move. That
+   * reasoning still holds, and he has still not been asked. */
   maxRecordsPerRun: MAX_RECORDS_PER_RUN,
 
   /** What to TALLY when a call throws before its response can be read at all
@@ -77,7 +129,8 @@ export const COVERAGE = {
    * it cannot hide real consumption from the one instrument that can still
    * catch it, a person reading the account dashboard.
    *
-   * ⚖️ UNRATIFIED, same as its neighbours above. */
+   * ⚖️ UNRATIFIED -- see SPEND_LIMITS_RATIFIED. The grading thresholds were
+   * ratified 2026-09-07; this was not, and was never put to Matt. */
   unparseableResponseRecords: MAX_RECORDS_PER_RUN,
 
   /** The hard stop on CALL COUNT, independent of records spent. A zero-result
@@ -88,8 +141,7 @@ export const COVERAGE = {
    * dashboard reading (CLAUDE.md §5.1); an unbounded call count is a real
    * exposure against a claim that thin, not a hypothetical one.
    *
-   * ⚖️ UNRATIFIED, same as its neighbours above -- a proposal, not Matt's
-   * ruling. Picked loosely: comfortably above what one run's day loop plus
+   * ⚖️ UNRATIFIED -- see SPEND_LIMITS_RATIFIED. Picked loosely: comfortably above what one run's day loop plus
    * its per-key id-lookup loop needs at current cohort sizes, without being
    * so high it stops meaning anything. */
   maxCallsPerRun: 100,
