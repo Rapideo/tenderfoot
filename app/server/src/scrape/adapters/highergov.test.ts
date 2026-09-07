@@ -137,6 +137,73 @@ test("a key-shaped PROPERTY NAME, not just a value, does not survive into the pa
   expect(page.payload).toContain("REDACTED");
 });
 
+/* 🔴 THE HALF THE TEST ABOVE MISSED, AND THE WORSE HALF. It asserted only on
+ * `page.payload`, which scrubPayload() scrubs as a whole string. The SAME
+ * fixture left the key intact in `page.items[0].raw`, and `raw` is what
+ * scrape/run.ts hands to art.writeSighting and ingest/import-artifact.ts
+ * writes into Postgres `sighting.raw` jsonb -- permanently, in the one place
+ * hardest to retract. The payload is a string in an artifact file; the raw is
+ * a row in the production database. Only fixing redact() to walk property
+ * NAMES as well as values closes this, which is why the assertion lives here
+ * rather than being another scrubPayload() call at this call site. */
+test("a key-shaped PROPERTY NAME does not survive into items[].raw either", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { page: 1, pages: 1, count: 1 } },
+    results: [
+      {
+        source_id: "Y",
+        captured_date: "2026-09-03",
+        title: "t",
+        nested: { "https://h/?api_key=SOMEFAKE": "value" },
+      },
+    ],
+  });
+  const page = await higherGovAdapter(fakeFetch(body)).fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  const raw = JSON.stringify(page.items.map((i) => i.raw));
+  expect(raw).not.toContain("SOMEFAKE");
+  expect(raw).toContain("api_key=REDACTED");
+});
+
+/* 🔴 THE VENDOR'S OWN BILLED COUNT, AND NOTHING WAS PINNING IT. Deleting
+ * `records:` from the payload envelope used to leave every test in this file
+ * green, while ingest/highergov-cli.ts's billedRecordsFromArtifact() -- which
+ * reads exactly this field back out of the artifact to decide what to write
+ * to api_spend -- silently fell through to an estimate on every real day. The
+ * one test that exercised that function used a fake adapter writing its own
+ * payload, so it never touched this file's envelope at all.
+ *
+ * `feedCount` and `pages` are asserted in the same breath for the same
+ * reason: this adapter's own comment argues all three are load-bearing, and
+ * an argument in a comment is not a test. */
+test("the payload envelope carries records, feedCount and pages -- the vendor's own scalars", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { page: 1, pages: 3, count: 41 } },
+    results: [
+      { source_id: "A", captured_date: "2026-09-03", title: "a" },
+      /* Billed, but dropped by the client for a missing source_id -- the exact
+       * row that makes `records` differ from items.length + undatedSkipped,
+       * which is the whole reason the envelope carries it. */
+      { captured_date: "2026-09-03", title: "no source_id" },
+    ],
+  });
+  const page = await higherGovAdapter(fakeFetch(body)).fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  const envelope = JSON.parse(page.payload) as {
+    records?: unknown;
+    feedCount?: unknown;
+    pages?: unknown;
+  };
+  /* 2, not 1: both rows were billed, only one became an item. */
+  expect(envelope.records).toBe(2);
+  expect(page.items).toHaveLength(1);
+  expect(page.undatedSkipped).toBe(0);
+  expect(envelope.feedCount).toBe(41);
+  expect(envelope.pages).toBe(3);
+});
+
 /* A single page and done: paginating costs records, and this adapter reads
  * one page per day-window call by design. */
 test("a single-page response reports no next cursor", async () => {
