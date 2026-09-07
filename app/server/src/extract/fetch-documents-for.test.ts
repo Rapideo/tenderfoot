@@ -296,12 +296,23 @@ test("a HigherGov document with text_extract lands extracted, carrying its text"
   expect(doc!.extracted_text).toBe("already extracted body text");
 });
 
-/* The other half: field-mapping doc §2 says text_extract is NULL for
- * `.xlsx` -- exactly where cost proposals live. That row must stay 'pending'
- * (picked up by the ordinary download-and-parse queue later), not be
- * invented an 'extracted' status it never earned. */
-test("a HigherGov document with no text_extract stays pending", async () => {
-  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-pending");
+/* 🔴 THE OTHER HALF, AND THE FINAL REVIEW'S FIX 5. Field-mapping doc §2 says
+ * text_extract is NULL for `.xlsx` -- exactly where cost proposals live --
+ * and document-clients.ts sets sourceUrl null for every HigherGov row. This
+ * test used to assert 'pending' and called that "picked up by the ordinary
+ * download-and-parse queue later". It never was. run-extract.ts's queue takes
+ * `extract_status = 'pending'`, finds a parser (`.xlsx` IS supported), then
+ * hits its no-source_url branch and writes `failed` with a message about
+ * re-expanding a parent bundle that HigherGov documents never had -- while
+ * `attachments_checked_at` is already stamped, so nothing will ever re-buy
+ * the row. The ~11-record purchase bought a filename and a permanent, wrong
+ * explanation.
+ *
+ * The honest state is recorded where the fact is known. 'failed', not
+ * 'absent': precedence.ts counts 'absent' as a document the extractor GOT TO
+ * READ, and this one was never read. */
+test("a HigherGov document with neither text nor an address is terminal, not queued", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-unreachable");
   const body = {
     meta: { pagination: { count: 1 } },
     results: [{ file_name: "cost-proposal.xlsx" }],
@@ -311,24 +322,64 @@ test("a HigherGov document with no text_extract stays pending", async () => {
   expect(out.reason).toBe("fetched");
   expect(out.documents).toBe(1);
 
-  const doc = await one<{ extract_status: string; extracted_text: string | null }>(
-    `SELECT extract_status, extracted_text FROM document WHERE solicitation_id = $1`,
+  const doc = await one<{
+    extract_status: string;
+    extracted_text: string | null;
+    source_url: string | null;
+    source_note: string | null;
+  }>(
+    `SELECT extract_status, extracted_text, source_url, source_note
+       FROM document WHERE solicitation_id = $1`,
     [hgSolicitationId],
   );
-  expect(doc!.extract_status).toBe("pending");
+  expect(doc!.extract_status).toBe("failed");
   expect(doc!.extracted_text).toBeNull();
+  expect(doc!.source_url).toBeNull();
+  /* The note must describe THIS source's situation, not a parent bundle. */
+  expect(doc!.source_note).toMatch(/no address to fetch it from/);
+  expect(doc!.source_note).not.toMatch(/bundle/);
+});
+
+/* The row must be invisible to run-extract.ts's queue, which is the whole
+ * point of not leaving it 'pending'. Asserted against the queue's own
+ * predicate rather than by running the extractor, which would need bytes. */
+test("the terminal row is not in run-extract's pending queue", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-not-queued");
+  await fetchDocumentsFor(
+    hgSolicitationId,
+    stubFetch({ meta: { pagination: { count: 1 } }, results: [{ file_name: "costs.xlsx" }] }),
+  );
+  const queued = await all(
+    `SELECT d.id FROM document d
+       JOIN solicitation s ON s.id = d.solicitation_id
+      WHERE d.extract_status = 'pending' AND d.parent_document_id IS NULL
+        AND d.solicitation_id = $1`,
+    [hgSolicitationId],
+  );
+  expect(queued).toHaveLength(0);
 });
 
 /* SAM must keep working exactly as it does: it has no text_extract concept
  * at all (FetchedDocument.extractedText stays `undefined`), and its rows
  * must still land 'pending' -- proving the new logic did not change SAM's
- * pre-existing behaviour. */
+ * pre-existing behaviour.
+ *
+ * ⚠️ THIS IS ALSO THE BOUNDARY OF FIX 5, which is why source_url is asserted
+ * here. Fix 5's condition is "no text AND no address", not "no text": a row
+ * that HAS an address can still succeed, so it must keep starting 'pending'
+ * and go through the ordinary download queue. Widening that condition would
+ * redden this test, which is the point. */
 test("SAM documents still land pending, unaffected by the extracted-text change", async () => {
   await fetchDocumentsFor(solicitationId, stubFetch(ONE_ATTACHMENT));
-  const doc = await one<{ extract_status: string; extracted_text: string | null }>(
-    `SELECT extract_status, extracted_text FROM document WHERE solicitation_id = $1`,
+  const doc = await one<{
+    extract_status: string;
+    extracted_text: string | null;
+    source_url: string | null;
+  }>(
+    `SELECT extract_status, extracted_text, source_url FROM document WHERE solicitation_id = $1`,
     [solicitationId],
   );
+  expect(doc!.source_url).not.toBeNull();
   expect(doc!.extract_status).toBe("pending");
   expect(doc!.extracted_text).toBeNull();
 });

@@ -162,16 +162,77 @@ export async function fetchDocumentsFor(
        * "failure" claims we could not get was already sitting in `fetched`.
        * A non-empty string is the ONLY thing that earns 'extracted' --
        * `undefined` (SAM, which has no such concept) and `null`/'' (HigherGov
-       * .xlsx, which the vendor never extracts) both leave the row exactly
-       * as before: 'pending', extracted_text unset, picked up by the normal
-       * download queue or (for a null-source_url row) the existing
-       * stranded-member handling in run-extract.ts -- unchanged by this
-       * task, per the review's own instruction to fix this at the source. */
+       * .xlsx, which the vendor never extracts) do not.
+       *
+       * ⚠️ THE SENTENCE THAT USED TO END THIS PARAGRAPH WAS WRONG, and the
+       * block below is the correction: it claimed a text-less row was left
+       * "'pending' ... picked up by the normal download queue or (for a
+       * null-source_url row) the existing stranded-member handling in
+       * run-extract.ts". The stranded-member handling only ever touches rows
+       * with a `parent_document_id`, which these do not have, and the
+       * download queue has nothing to download. See below. */
       const hasText = typeof d.extractedText === "string" && d.extractedText.length > 0;
+
+      /* 🔴 FINAL REVIEW, FIX 5: 'pending' WAS A LIE FOR EVERY `.xlsx`, AND
+       * `.xlsx` IS WHERE THE COST PROPOSALS LIVE.
+       *
+       * The comment above used to promise that a HigherGov row with no
+       * text_extract would be "picked up by the normal download queue or
+       * (for a null-source_url row) the existing stranded-member handling in
+       * run-extract.ts". Neither happens. run-extract.ts's queue selects
+       * `extract_status = 'pending'`, finds a parser (`.xlsx` IS supported,
+       * parse.ts), then hits its own no-source_url branch and records
+       * `failed` with "no source_url: expand its parent bundle again to
+       * recover this member" -- a message about a parent bundle HigherGov
+       * documents do not have, because document-clients.ts sets sourceUrl
+       * null for all of them (the address field embeds the api_key or expires
+       * in 60 minutes, so it is never stored). The row then sits 'failed'
+       * forever, and `attachments_checked_at` is already stamped, so
+       * fetchDocumentsFor's own guard above will never re-buy it. A ~11-record
+       * purchase bought a filename and a misleading permanent failure.
+       *
+       * So the honest state is recorded HERE, at the point the fact is known,
+       * rather than queueing a row that cannot succeed and letting a later
+       * pass invent a reason for it.
+       *
+       * ⚖️ WHY 'failed' AND NOT 'absent'. The vocabulary is fixed by
+       * migration 002 -- pending | extracted | absent | failed -- and this
+       * invents nothing new. 'absent' means WE READ IT AND THE VALUE IS NOT
+       * THERE: precedence.ts counts 'extracted' and 'absent' together as "the
+       * two states that mean the extractor got to read it", and uses them as
+       * the denominator for the miss rate. Marking this 'absent' would enter
+       * a document nobody ever read into that denominator and manufacture
+       * misses out of a fetch we could not make -- precedence.ts's own words:
+       * "a document we never managed to read is not a missed extraction, it
+       * is a missed FETCH, and conflating them would blame the extractor for
+       * the network." 'failed' is exactly that state, and it is excluded from
+       * the denominator for exactly that reason.
+       *
+       * ⚠️ NOTHING THAT COULD SUCCEED IS MARKED FAILED. The condition is
+       * source-agnostic and narrow: no text AND no address. A row with an
+       * address stays 'pending' and goes through the ordinary download queue
+       * (every SAM row, which is why that path is untouched); a row with text
+       * is 'extracted'. Only a row with neither -- no bytes to fetch and no
+       * text to keep -- is terminal, and it is terminal as a matter of
+       * arithmetic, not policy. */
+      const unreachable = !hasText && !d.sourceUrl;
       await q.run(
-        `INSERT INTO document (solicitation_id, filename, source_url, extracted_text, extract_status)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [row.id, d.filename, d.sourceUrl, hasText ? d.extractedText : null, hasText ? "extracted" : "pending"],
+        `INSERT INTO document
+           (solicitation_id, filename, source_url, extracted_text, extract_status, source_note)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          row.id,
+          d.filename,
+          d.sourceUrl,
+          hasText ? d.extractedText : null,
+          hasText ? "extracted" : unreachable ? "failed" : "pending",
+          unreachable
+            ? "not read: the source returned no extracted text for this file and no address " +
+              "to fetch it from, so there are no bytes to parse. This is terminal -- the " +
+              "solicitation is stamped as checked and re-asking would cost metered records " +
+              "for the same answer."
+            : null,
+        ],
       );
     }
     await q.run(`UPDATE solicitation SET attachments_checked_at = now() WHERE id = $1`, [row.id]);
