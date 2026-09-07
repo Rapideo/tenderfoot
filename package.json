@@ -26,6 +26,7 @@
     "import": "tsx --env-file-if-exists=.env app/server/src/ingest/import-cli.ts",
     "merge": "tsx --env-file-if-exists=.env app/server/src/merge/merge-cli.ts",
     "fitness": "tsx --env-file-if-exists=.env app/server/src/fitness/fitness-cli.ts",
+    "recall": "tsx --env-file-if-exists=.env app/server/src/coverage/coverage-cli.ts",
     "contracts:ingest": "tsx --env-file-if-exists=.env app/server/src/contracts/contracts-cli.ts",
     "contracts:ingest:production": "node --env-file-if-exists=.env scripts/contracts-ingest-production.mjs"
   },
