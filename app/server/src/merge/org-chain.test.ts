@@ -1,5 +1,16 @@
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { orgChain } from "./org-chain.js";
+
+/* The nested-agency fallback warns (see org-chain.ts). Muted for the whole
+ * suite so the tests that merely EXERCISE that branch do not print a real
+ * warning into the gate's output; the two tests at the bottom of this file
+ * install their own spies and assert on it deliberately. */
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /* Pure -- no useTestSchema(), no database. Same posture as closes-at.test.ts
  * and title.test.ts: a rule that reads a payload should be testable without a
@@ -150,4 +161,80 @@ test("a non-object HigherGov agency does not throw and is treated as absent", ()
   expect(orgChain("HigherGov", { agency: "Allen County", agency_name: "Natural Resources" })).toEqual([
     "Natural Resources",
   ]);
+});
+
+/* ── the nested fallback reports itself, added 2026-09-07 ─────────────── */
+
+/* Accepting both shapes settled a disagreement between this module and
+ * docs/2026-09-03-highergov-field-mapping.md:55 without spending metered
+ * records. What it did NOT do is answer it: whichever shape is real, the
+ * merge succeeds silently and the guess survives the very run that could
+ * have resolved it. The warning is that answer, collected for free on the
+ * first live run.
+ *
+ * Each test takes a FRESH module instance, because the warning is
+ * once-per-process by design and a shared instance would make these
+ * order-dependent on the nested-fallback tests above. */
+async function freshOrgChain() {
+  vi.resetModules();
+  const mod = await import("./org-chain.js");
+  return mod.orgChain;
+}
+
+test("the nested agency fallback warns, and says which shape it saw", async () => {
+  const chain = await freshOrgChain();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  expect(chain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
+
+  expect(warn).toHaveBeenCalledTimes(1);
+  const message = String(warn.mock.calls[0]?.[0]);
+  expect(message).toContain("NESTED");
+  /* The observed name is in the message: a reader confirming the shape wants
+   * to see a real buyer, not just an assertion that one existed. */
+  expect(message).toContain("Allen County");
+  /* And the message must say what to DO with the answer, or it is a fact
+   * nobody acts on -- the flat branch is what gets deleted. */
+  expect(message).toContain("agency_name");
+
+  /* ONCE PER PROCESS. A merge walks every group; if the nested shape is the
+   * real one, per-row warnings would print thousands of identical lines and
+   * bury the rest of the run's output. */
+  chain("HigherGov", { agency: { agency_name: "Natural Resources" } });
+  chain("HigherGov", { agency: { agency_name: "Wayne Township" } });
+  expect(warn).toHaveBeenCalledTimes(1);
+});
+
+/* 🔴 THE HALF THAT CARRIES THE INFORMATION. Only the nested branch DECIDING
+ * the name means anything -- it means the document is right and this module's
+ * original flat read was an assumption. A warning that also fired on the flat
+ * path, or on a row with no agency at all, would report nothing and would be
+ * indistinguishable from noise on the first live run. */
+test("neither the flat shape nor an absent agency warns", async () => {
+  const chain = await freshOrgChain();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  chain("HigherGov", { agency_name: "Natural Resources" });
+  /* Both present: the flat one wins, so nothing was learned and nothing is
+   * said. */
+  chain("HigherGov", { agency_name: "Natural Resources", agency: { agency_name: "Allen County" } });
+  chain("HigherGov", { agency: {} });
+  chain("HigherGov", { agency: null });
+  chain("HigherGov", { agency: "Allen County" });
+  chain("HigherGov", {});
+  chain("SAM.gov", SAM);
+  chain("Indiana IDOA solicitations", { agency: "Education" });
+
+  expect(warn).not.toHaveBeenCalled();
+});
+
+/* Non-fatal, and not a control-flow decision: the name has already been read
+ * by the time the warning is emitted, so a console that throws (or a caller
+ * that has silenced it) cannot cost a row its organisation. */
+test("the warning never changes what the chain resolves to", async () => {
+  const chain = await freshOrgChain();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  expect(chain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
+  /* Second call, warning already spent -- the answer is identical. */
+  expect(chain("HigherGov", { agency: { agency_name: "Allen County" } })).toEqual(["Allen County"]);
 });

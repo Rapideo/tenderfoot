@@ -23,6 +23,40 @@
  * Silence is recoverable; a wrong organisation is not.
  */
 
+/* ⚠️ A TOLERANCE THAT TEACHES NOTHING IS HALF A FIX, and this is the other
+ * half. The HigherGov case below accepts a flat `agency_name` OR a nested
+ * `agency.agency_name` because the code and the field-mapping document
+ * disagree and settling it live costs metered records (CLAUDE.md §5.1). As
+ * first written, whichever shape was real, the merge would quietly succeed
+ * and nobody would ever find out which -- so the guess would still be
+ * unresolved after the run that could have answered it for free.
+ *
+ * This warns exactly ONCE PER PROCESS when the nested branch is the one that
+ * produced the name, which is the only case that carries information: it
+ * means the document is right and the code's original flat assumption was
+ * wrong. The flat branch firing tells us nothing new, so it says nothing.
+ *
+ * Once, not per row: a merge walks every group, and if the nested shape is
+ * the real one this would otherwise print thousands of identical lines and
+ * bury the rest of the run's output. Non-fatal by construction -- the name
+ * has already been read successfully by the time this is called; the warning
+ * is a note to a reader, never a control-flow decision. */
+let nestedAgencyWarned = false;
+
+function warnNestedAgency(name: string): void {
+  if (nestedAgencyWarned) return;
+  nestedAgencyWarned = true;
+  console.warn(
+    `WARNING: HigherGov's buying agency arrived NESTED -- agency.agency_name ` +
+      `= ${JSON.stringify(name)}, with no flat agency_name beside it. That ` +
+      `settles a question this code could not settle for free: ` +
+      `docs/2026-09-03-highergov-field-mapping.md:55 is right and the flat ` +
+      `read org-chain.ts shipped with was an assumption no captured response ` +
+      `ever backed. Drop the flat branch and this warning together. ` +
+      `(Printed once per process, however many rows arrive this way.)`,
+  );
+}
+
 /** Top-level first, buying office last. Empty when the source is unknown or
  * the payload carries nothing usable. */
 export function orgChain(sourceName: string, raw: unknown): string[] {
@@ -89,6 +123,11 @@ export function orgChain(sourceName: string, raw: unknown): string[] {
       const agency = r.agency;
       const nested =
         agency && typeof agency === "object" ? (agency as Record<string, any>).agency_name : undefined;
+      /* Only the NESTED branch actually deciding the name is worth a word --
+       * see warnNestedAgency above for why that asymmetry is the whole
+       * point. `flat` is already trimmed to "" when unusable, so this fires
+       * on exactly the rows the fallback rescued and on no others. */
+      if (!flat && typeof nested === "string" && nested.trim()) warnNestedAgency(nested.trim());
       names = [flat || nested];
       break;
     }
