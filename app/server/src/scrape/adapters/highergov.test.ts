@@ -18,6 +18,19 @@ function fakeFetch(body: string): typeof fetch {
     new Response(body, { status: 200, headers: { "content-type": "application/json" } })) as any;
 }
 
+/* Captures the URL each call was made with -- same shape as coverage/
+ * highergov-client.test.ts's own fakeFetch, needed here too to assert on the
+ * QUERY STRING itself rather than only on the parsed result. */
+function fakeFetchCapturing(body: string): typeof fetch & { calls: string[] } {
+  const calls: string[] = [];
+  const impl = (async (url: string | URL) => {
+    calls.push(String(url));
+    return new Response(body, { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch & { calls: string[] };
+  impl.calls = calls;
+  return impl;
+}
+
 /* 🔴 THE ONE THAT MATTERS. scrape/run.ts hands `page.payload` straight to
  * art.writeCapture, and import-artifact.ts hashes the file into
  * ingest_run.artifact_sha256. An unscrubbed payload writes a live
@@ -211,4 +224,20 @@ test("a single-page response reports no next cursor", async () => {
     "2026-09-03", "2026-09-03", null,
   );
   expect(page.nextCursor).toBeNull();
+});
+
+/* page_size THREADING: this adapter's own knob is a pass-through to
+ * highergov-client.ts's fetchDay, which owns the actual economics comment.
+ * Left unset (the default, no second argument), the request must be
+ * unchanged from before this parameter existed. */
+test("higherGovAdapter sends no page_size when none is given", async () => {
+  const fetchImpl = fakeFetchCapturing(FIXTURE);
+  await higherGovAdapter(fetchImpl).fetchListing("2026-09-03", "2026-09-03", null);
+  expect(fetchImpl.calls[0]).not.toContain("page_size");
+});
+
+test("higherGovAdapter threads an explicit page_size through to the request", async () => {
+  const fetchImpl = fakeFetchCapturing(FIXTURE);
+  await higherGovAdapter(fetchImpl, 25).fetchListing("2026-09-03", "2026-09-03", null);
+  expect(fetchImpl.calls[0]).toContain("page_size=25");
 });

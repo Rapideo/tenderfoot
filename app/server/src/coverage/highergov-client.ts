@@ -90,7 +90,11 @@ export interface DocumentsResult {
 }
 
 export interface HigherGovClient {
-  fetchDay(capturedDate: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
+  /* `pageSize`: OPTIONAL and OFF BY DEFAULT, on purpose -- see fetchDay's own
+   * implementation below for the full economics. Omitting it (or passing
+   * `undefined`) must produce a request byte-identical to one that never
+   * knew this parameter existed. */
+  fetchDay(capturedDate: string, fetchImpl?: typeof fetch, pageSize?: number): Promise<FeedResult>;
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
    * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
@@ -369,7 +373,7 @@ async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<Document
 }
 
 export const higherGovClient: HigherGovClient = {
-  async fetchDay(capturedDate, fetchImpl = fetch) {
+  async fetchDay(capturedDate, fetchImpl = fetch, pageSize) {
     const url = new URL(`${HOST}/opportunity/`);
     url.searchParams.set("api_key", apiKey());
     url.searchParams.set("captured_date", capturedDate);
@@ -382,6 +386,36 @@ export const higherGovClient: HigherGovClient = {
      * LOUD (searchId() throws) rather than silently billing every row
      * nationwide -- see searchId()'s own comment. */
     url.searchParams.set("search_id", searchId());
+    /* 🔴 page_size IS AN EXPLICIT, OPT-IN KNOB -- and an easy one to
+     * misunderstand, so the economics are spelled out here rather than only
+     * at its one caller (ingest/highergov-cli.ts's `--page-size` flag).
+     *
+     * `pageSize === undefined` (the default: nothing threaded a flag through)
+     * sends NO `page_size` parameter at all, not the vendor's own default
+     * written out explicitly -- that is what makes today's request provably
+     * BYTE-IDENTICAL to a request built before this parameter existed. Never
+     * change this to `url.searchParams.set("page_size", String(pageSize ??
+     * 10))` or similar: that would still be inert today, but it stops being
+     * provable from the URL alone, which is the whole point of the test that
+     * pins this branch.
+     *
+     * RAISING page_size DOES NOT REDUCE SPEND. CLAUDE.md §5.1's meter counts
+     * records RETURNED -- a bigger page returns more rows and therefore
+     * bills MORE per call, not less. It only pays for itself when the
+     * alternative was fetching those same rows anyway, across several
+     * page-one-only calls this client does not currently make: then a larger
+     * page buys the identical records in fewer HTTP round trips. That
+     * matters because coverage/thresholds.ts's `maxCallsPerRun` is 100 --
+     * a real dry run on 2026-09-07 measured one day at 10 records on page
+     * one with 4 pages existing, so a 91-day backfill walked one page at a
+     * time (this client's current behaviour) would be 91 days, but WALKING
+     * ALL FOUR PAGES per day would be 364 calls, comfortably over the cap.
+     * This client still only ever reads page one -- raising pageSize today
+     * simply asks page one for more rows, which is real, billed spend with
+     * no free lunch attached. */
+    if (pageSize !== undefined) {
+      url.searchParams.set("page_size", String(pageSize));
+    }
     return get(url, fetchImpl);
   },
 

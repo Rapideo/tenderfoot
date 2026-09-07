@@ -72,7 +72,9 @@ import { DEFAULT_BUDGET_MS, type RunRequest } from "../scrape/contract.js";
 import type { WindowedAdapter, WindowedItem, WindowedPage } from "../scrape/adapter.js";
 import { importArtifact } from "../ingest/import-artifact.js";
 
-const USAGE = "Usage: npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD [--dry-run]";
+const USAGE =
+  "Usage: npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD [--dry-run] " +
+  "[--page-size=N]";
 
 function arg(argv: string[], name: string): string | undefined {
   const hit = argv.find((a) => a.startsWith(`--${name}=`));
@@ -100,6 +102,45 @@ export function assertValidDate(name: string, value: string): void {
   if (!shapeOk || !roundTripsOk) {
     throw new Error(`${USAGE}\n--${name}=${value} is not a real YYYY-MM-DD calendar date.`);
   }
+}
+
+/* ⚖️ NOT A DOCUMENTED VENDOR LIMIT -- a sanity rail this project owns, not a
+ * ceiling HigherGov has published (docs/2026-09-03-highergov-field-mapping.md
+ * names no such limit either). R5/2026-09-07's own measurement -- 10 records
+ * on page one with 3 more pages behind it, so a few dozen at most for one
+ * Indiana day -- puts the real single-day volume nowhere near this. 1000 is
+ * a wide margin above that (room to fetch a whole day, or several, in one
+ * call) while still refusing an obvious typo (a stray zero or three) before
+ * it can turn into a bill nobody asked for. Raise it only on purpose, not by
+ * discovering it is "too small" for a value that was itself a mistake. */
+export const MAX_PAGE_SIZE = 1000;
+
+/* Validates and parses `--page-size`'s raw string value. CALLED ONLY WHEN THE
+ * FLAG IS PRESENT (main() leaves pageSize `undefined` otherwise) -- there is
+ * nothing to validate about a knob nobody touched, and highergov-client.ts's
+ * fetchDay depends on that exact distinction to leave today's request
+ * unchanged. Every rejection fires BEFORE main()'s own dry run makes its one
+ * unavoidable network call (CLAUDE.md §5.1: refuse before spending, not
+ * after), and every message names the cost consequence rather than just
+ * "invalid" -- billing is per record returned, so this is a money guard, not
+ * a type check. */
+export function assertValidPageSize(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `${USAGE}\n--page-size=${raw} is not a positive integer. Billing is per record ` +
+        "returned (CLAUDE.md §5.1), so an invalid page size is refused before any call is " +
+        "made rather than sent to the vendor to see what happens.",
+    );
+  }
+  if (value > MAX_PAGE_SIZE) {
+    throw new Error(
+      `${USAGE}\n--page-size=${raw} exceeds the sanity cap of ${MAX_PAGE_SIZE}. Raising ` +
+        "page_size does NOT reduce spend -- billing is per record returned, so a page this " +
+        "large risks billing far more per call than intended. Refusing before any call is made.",
+    );
+  }
+  return value;
 }
 
 /* Inclusive day count -- "2026-09-01" to "2026-09-30" is 30 days, not 29. */
@@ -269,6 +310,11 @@ export async function dryRun(
   to: string,
   client: HigherGovClient = higherGovClient,
   alreadySpent?: number,
+  /* Threaded straight from main()'s `--page-size` flag, already validated by
+   * assertValidPageSize before this ever runs. Left `undefined` (the
+   * default) it changes nothing about the sample's own request -- see
+   * highergov-client.ts's fetchDay for why that has to be provably true. */
+  pageSize?: number,
 ): Promise<DryRunResult> {
   const spent = alreadySpent ?? (await spentThisMonth(HIGHERGOV_SOURCE_NAME));
   const windowDays = windowDayCount(from, to);
@@ -328,7 +374,7 @@ export async function dryRun(
    * vendor failures bill, which is exactly the thing nobody can read back. */
   let sample: FeedResult;
   try {
-    sample = await client.fetchDay(from);
+    sample = await client.fetchDay(from, undefined, pageSize);
   } catch (err) {
     /* 🔴 THE TALLY ITSELF MUST NOT SWALLOW `err` (final review, fix 2). This
      * whole catch exists so the vendor's error is never lost -- but `one()`
@@ -395,7 +441,13 @@ export async function dryRun(
 export async function main(
   argv: string[] = process.argv.slice(2),
   client: HigherGovClient = higherGovClient,
-  adapter: WindowedAdapter = higherGovAdapter(),
+  /* ⚠️ NO EAGER DEFAULT, DELIBERATELY. The real adapter needs `pageSize`,
+   * which is only known once argv has been parsed and validated below -- and
+   * a parameter's default expression runs at call time, before this
+   * function's own body does. `undefined` (a test always supplies its own
+   * fake adapter, so this only matters for the real CLI entrypoint at the
+   * bottom of this file) is resolved further down, AFTER pageSize exists. */
+  adapter?: WindowedAdapter,
   /* Injectable so a test can point the day-walk's artifact files at a
    * temp directory instead of the repo's own gitignored `runs/` -- the
    * real CLI's default matches scrape/cli.ts's own convention exactly. */
@@ -418,6 +470,16 @@ export async function main(
   if (from > to) {
     throw new Error(`${USAGE}\n--from=${from} is after --to=${to}. The window must run forward.`);
   }
+
+  /* Same "before any fetch" posture as the date checks just above --
+   * `undefined` when the flag is absent (unset is the required default: a
+   * page-size opt-in changes nothing about today's request), validated and
+   * parsed together the moment it IS present, and checked here rather than
+   * inside dryRun()/the adapter so a bad value never reaches even the one
+   * unavoidable network call below. */
+  const pageSizeArg = arg(argv, "page-size");
+  const pageSize: number | undefined =
+    pageSizeArg === undefined ? undefined : assertValidPageSize(pageSizeArg);
 
   /* api_spend is PER-DATABASE. Same format as db/migrate.ts's own print and
    * coverage-cli.ts's, matched deliberately so all three operator commands
@@ -455,7 +517,7 @@ export async function main(
    * execution AFTER it. This is the one unavoidable spend: measuring the
    * window costs one sampled day, and there is no way to know whether a
    * window is affordable without spending that much to find out. */
-  const result = await dryRun(from, to, client);
+  const result = await dryRun(from, to, client, undefined, pageSize);
 
   if (!result.sampled) {
     /* No allowance remained even before the sample -- nothing was spent,
@@ -537,6 +599,11 @@ export async function main(
    * exists on this scope, and shadowing it with an array of the same near-
    * name is exactly the kind of thing that invites a future bug. */
   const days = daysInRange(from, to);
+  /* Resolved HERE, not via the parameter's own default expression -- see
+   * this function's `adapter` parameter comment for why the default cannot
+   * know `pageSize` in time. A test always injects its own `adapter`, so
+   * this branch is only ever live for the real CLI entrypoint. */
+  const dayWalkAdapter = adapter ?? higherGovAdapter(fetch, pageSize);
 
   for (const day of days) {
     /* THE SAMPLED DAY IS NEVER BILLED TWICE (review round 3, item 4). `day`
@@ -590,7 +657,7 @@ export async function main(
      * artifact-writing code, zero new network calls. */
     const dayAdapter = isSampledDay
       ? reuseSampleAdapter(sampleAsPage(result.sampleResult!, day))
-      : adapter;
+      : dayWalkAdapter;
 
     /* 🔴 THE SECOND PLACE A BILLED CALL COULD VANISH (final review, fix 1).
      * runScrape does not catch what the adapter throws -- its own loop is

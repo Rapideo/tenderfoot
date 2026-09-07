@@ -22,7 +22,8 @@ await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
 const { all, close, one, run } = await import("../db/index.js");
-const { dryRun, projectWindow, assertValidDate, main } = await import("./highergov-cli.js");
+const { dryRun, projectWindow, assertValidDate, assertValidPageSize, MAX_PAGE_SIZE, main } =
+  await import("./highergov-cli.js");
 const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
 const { HIGHERGOV_SOURCE_NAME } = await import("../coverage/highergov-client.js");
 /* The conservative "what could this call have cost when we cannot read its
@@ -97,6 +98,29 @@ function clientWithNotices(notices: FeedNotice[], recordsOverride?: number, page
       return { docs: [], records: 0 };
     },
   };
+}
+
+/* Records the exact arguments client.fetchDay was called with, so a test can
+ * assert pageSize actually reached the call -- rather than merely trusting
+ * the parsed FeedResult, which would stay identical either way. */
+function clientCapturingFetchDayArgs(records: number): {
+  client: HigherGovClient;
+  calls: Array<[string, typeof fetch | undefined, number | undefined]>;
+} {
+  const calls: Array<[string, typeof fetch | undefined, number | undefined]> = [];
+  const client: HigherGovClient = {
+    async fetchDay(capturedDate, fetchImpl, pageSize) {
+      calls.push([capturedDate, fetchImpl, pageSize]);
+      return { notices: [], records, feedCount: records, pages: 1 };
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+    },
+    async fetchDocuments() {
+      return { docs: [], records: 0 };
+    },
+  };
+  return { client, calls };
 }
 
 /* Proves the sample is never spent when there is nothing left to spend it
@@ -291,6 +315,86 @@ test("a shape-valid but nonexistent date is rejected -- the Date.parse rollover 
   /* Date.parse alone rolls "2026-02-30" forward to March 2nd rather than
    * rejecting it -- exactly the case the round-trip check exists for. */
   expect(() => assertValidDate("from", "2026-02-30")).toThrow(/not a real .* calendar date/);
+});
+
+/* Change 1: page_size is an explicit, opt-in knob. Every one of these must
+ * be refused BEFORE any call is made -- assertValidPageSize is a pure
+ * function, so "before any call" is true by construction here, and main()'s
+ * own tests below prove it holds at the command level too. */
+test("a non-integer page size is rejected", () => {
+  expect(() => assertValidPageSize("abc")).toThrow(/positive integer/);
+});
+
+test("a decimal page size is rejected -- it must be a whole number", () => {
+  expect(() => assertValidPageSize("3.5")).toThrow(/positive integer/);
+});
+
+test("a zero page size is rejected", () => {
+  expect(() => assertValidPageSize("0")).toThrow(/positive integer/);
+});
+
+test("a negative page size is rejected", () => {
+  expect(() => assertValidPageSize("-5")).toThrow(/positive integer/);
+});
+
+/* The message must name the COST consequence, not just say "invalid" --
+ * billing is per record returned, and this is the guard that keeps an
+ * absurd value from turning into an absurd bill. */
+test("an absurdly large page size is rejected, naming the cost consequence", () => {
+  expect(() => assertValidPageSize(String(MAX_PAGE_SIZE + 1))).toThrow(/does NOT reduce spend/);
+});
+
+test("a page size at or under the cap is accepted and parsed", () => {
+  expect(assertValidPageSize("10")).toBe(10);
+  expect(assertValidPageSize(String(MAX_PAGE_SIZE))).toBe(MAX_PAGE_SIZE);
+});
+
+/* 🔴 THE TEST THAT STOPS page_size FROM SILENTLY TRIPLING SPEND, at the
+ * dryRun() level: an explicit pageSize must actually reach client.fetchDay,
+ * and OMITTING it must leave the call exactly as it was before this
+ * parameter existed (`undefined`, not some default the client would then
+ * have to special-case). coverage/highergov-client.test.ts proves the same
+ * thing one layer down, on the wire itself. */
+test("dryRun threads an explicit pageSize through to client.fetchDay", async () => {
+  const { client, calls } = clientCapturingFetchDayArgs(5);
+  await dryRun("2026-09-01", "2026-09-01", client, 0, 42);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]![2]).toBe(42);
+});
+
+test("dryRun sends no pageSize when none is given -- Change 1's default is inert", async () => {
+  const { client, calls } = clientCapturingFetchDayArgs(5);
+  await dryRun("2026-09-01", "2026-09-01", client, 0);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]![2]).toBeUndefined();
+});
+
+/* main()-LEVEL PROOF that an invalid --page-size never reaches even the
+ * source lookup, let alone the sample -- HigherGov is disabled by default
+ * here too (beforeEach), same as the test right below, and
+ * clientThatMustNotBeCalled() proves fetchDay is never invoked. If page-size
+ * validation ran any later than it does, this would fail with a "disabled"
+ * message instead of the page-size one. */
+test("main() refuses a non-integer --page-size before any call is made", async () => {
+  await expect(
+    main(
+      ["--from=2026-09-01", "--to=2026-09-02", "--page-size=abc"],
+      clientThatMustNotBeCalled(),
+      fakeAdapter({}),
+    ),
+  ).rejects.toThrow(/positive integer/);
+  expect(await totalSpend()).toBe(0);
+});
+
+test("main() refuses an absurdly large --page-size before any call is made", async () => {
+  await expect(
+    main(
+      ["--from=2026-09-01", "--to=2026-09-02", `--page-size=${MAX_PAGE_SIZE + 1}`],
+      clientThatMustNotBeCalled(),
+      fakeAdapter({}),
+    ),
+  ).rejects.toThrow(/does NOT reduce spend/);
+  expect(await totalSpend()).toBe(0);
 });
 
 /* Review round 3, item 3 (CRITICAL regression from round 1): resolveSource()

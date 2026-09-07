@@ -154,6 +154,24 @@ test("fetchDay puts search_id on the request", async () => {
   expect(fetchImpl.calls[0]).toContain("search_id=TESTSEARCHIDTESTSEARCHID0000");
 });
 
+/* 🔴 THE TEST THAT STOPS page_size FROM SILENTLY TRIPLING SPEND. Omitting the
+ * new (optional) third argument must produce a request BYTE-IDENTICAL to one
+ * that never knew page_size existed -- not the vendor's own default (10)
+ * written out explicitly, which would still behave the same today but would
+ * no longer be provable from the wire alone. */
+test("fetchDay sends no page_size when none is given -- today's request, unchanged", async () => {
+  const fetchImpl = fakeFetch(FIXTURE);
+  await higherGovClient.fetchDay("2026-09-03", fetchImpl);
+  expect(fetchImpl.calls).toHaveLength(1);
+  expect(fetchImpl.calls[0]).not.toContain("page_size");
+});
+
+test("fetchDay puts page_size on the request when one is explicitly given", async () => {
+  const fetchImpl = fakeFetch(FIXTURE);
+  await higherGovClient.fetchDay("2026-09-03", fetchImpl, 50);
+  expect(fetchImpl.calls[0]).toContain("page_size=50");
+});
+
 /* fetchBySourceId had NO test at all -- the one asymmetry Task 7 depends on
  * (an exact-id lookup must never be narrowed by a saved search) was
  * unverified. This exercises it end to end against the fixture AND asserts

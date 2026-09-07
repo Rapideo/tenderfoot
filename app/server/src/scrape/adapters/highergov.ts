@@ -55,7 +55,11 @@ export function scrubPayload(body: string): string {
   return redact(body);
 }
 
-export function higherGovAdapter(fetchImpl: typeof fetch = fetch): WindowedAdapter {
+/* `pageSize` is OPTIONAL, threaded here only from ingest/highergov-cli.ts's
+ * `--page-size` flag -- see highergov-client.ts's fetchDay for the full
+ * economics comment. Left unset (the default), this adapter's request is
+ * unchanged from before this parameter existed. */
+export function higherGovAdapter(fetchImpl: typeof fetch = fetch, pageSize?: number): WindowedAdapter {
   return {
     shape: "windowed",
     /* Must match migration 019's seeded source.name exactly --
@@ -89,7 +93,7 @@ export function higherGovAdapter(fetchImpl: typeof fetch = fetch): WindowedAdapt
        * parameter accepts a range is unverified -- the dry run in
        * highergov-cli.ts answers it for free. Until it does, the caller
        * walks days and this reads one. `since` IS the day. */
-      const result = await higherGovClient.fetchDay(since, fetchImpl);
+      const result = await higherGovClient.fetchDay(since, fetchImpl, pageSize);
 
       let undatedSkipped = 0;
       const items: ListingItem[] = [];
