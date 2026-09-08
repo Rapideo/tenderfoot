@@ -28,6 +28,7 @@ const {
   assertValidDate,
   assertValidPageSize,
   assertValidAxis,
+  assertValidMaxRecords,
   MAX_PAGE_SIZE,
   main,
 } = await import("./highergov-cli.js");
@@ -265,16 +266,31 @@ test("a window that fits is affordable", async () => {
 });
 
 /* 🔴 REFUSING IS THE POINT. Discovering mid-run that the ceiling is
- * exhausted leaves a half-loaded window and a spend nobody planned. */
+ * exhausted leaves a half-loaded window and a spend nobody planned.
+ *
+ * ⚖️ RATE RAISED 2026-09-07 alongside MONTHLY_RECORD_CEILING's own raise
+ * (1,000 -> 9,000, extract/api-spend.ts): 15/day * 365 days (5,475) fit
+ * comfortably under the new, larger ceiling and would have made this test
+ * assert the opposite of what it is named for. 50/day * 365 (18,250) is
+ * still nowhere near affordable against 9,000. */
 test("a window that would cross the ceiling is refused before spending", async () => {
-  const r = await dryRun("2026-01-01", "2026-12-31", clientReturning(15), 0);
+  const r = await dryRun("2026-01-01", "2026-12-31", clientReturning(50), 0);
   expect(r.affordable).toBe(false);
   expect(r.projectedRecords).toBeGreaterThan(r.remainingThisMonth);
 });
 
+/* ⚖️ `alreadySpent` MOVED 2026-09-07 to be relative to MONTHLY_RECORD_CEILING
+ * rather than the literal 900 -- that number was 90% of the OLD 1,000
+ * ceiling, and left as a bare literal it would have been 10% of the new
+ * 9,000 one, no longer tight enough to make the window unaffordable at all. */
 test("spend already made this month reduces what is affordable", async () => {
   const generous = await dryRun("2026-09-01", "2026-09-30", clientReturning(5), 0);
-  const tight = await dryRun("2026-09-01", "2026-09-30", clientReturning(5), 900);
+  const tight = await dryRun(
+    "2026-09-01",
+    "2026-09-30",
+    clientReturning(5),
+    MONTHLY_RECORD_CEILING - 100,
+  );
   expect(generous.affordable).toBe(true);
   expect(tight.affordable).toBe(false);
 });
@@ -499,6 +515,207 @@ test("main() refuses an unrecognised --axis before any call is made", async () =
   expect(await totalSpend()).toBe(0);
 });
 
+/* ═══ THE RUN CAP (--max-records) ═══ Matt's ruling, 2026-09-07: the trial
+ * ends in ~2 days with ~9,000 records unspent, spent on a complete Indiana
+ * archive -- and this is the review gate that keeps a multi-day walk from
+ * running unattended all the way there. Validated the same way --page-size
+ * is: BEFORE any call is made, so a typo costs nothing. */
+test("a non-integer --max-records is rejected", () => {
+  expect(() => assertValidMaxRecords("abc")).toThrow(/positive integer/);
+});
+
+test("a decimal --max-records is rejected -- it must be a whole number", () => {
+  expect(() => assertValidMaxRecords("3.5")).toThrow(/positive integer/);
+});
+
+test("a zero --max-records is rejected", () => {
+  expect(() => assertValidMaxRecords("0")).toThrow(/positive integer/);
+});
+
+test("a negative --max-records is rejected", () => {
+  expect(() => assertValidMaxRecords("-5")).toThrow(/positive integer/);
+});
+
+test("a positive integer --max-records is accepted and parsed", () => {
+  expect(assertValidMaxRecords("10")).toBe(10);
+  expect(assertValidMaxRecords("9000")).toBe(9000);
+});
+
+/* main()-LEVEL: an invalid --max-records must never reach the source lookup,
+ * let alone the sample. HigherGov is disabled by default here (beforeEach),
+ * so if this validated any later it would fail with "disabled" instead. */
+test("main() refuses a non-integer --max-records before any call is made", async () => {
+  await expect(
+    main(
+      ["--from=2026-09-01", "--to=2026-09-02", "--max-records=abc"],
+      clientThatMustNotBeCalled(),
+      fakeAdapter({}),
+    ),
+  ).rejects.toThrow(/positive integer/);
+  expect(await totalSpend()).toBe(0);
+});
+
+test("main() refuses a zero --max-records before any call is made", async () => {
+  await expect(
+    main(
+      ["--from=2026-09-01", "--to=2026-09-02", "--max-records=0"],
+      clientThatMustNotBeCalled(),
+      fakeAdapter({}),
+    ),
+  ).rejects.toThrow(/positive integer/);
+  expect(await totalSpend()).toBe(0);
+});
+
+/* 🔴 MANDATORY TEST 1: no --max-records leaves the walk byte-identical to
+ * before this flag existed -- the run must complete in full, and nothing in
+ * its output may even mention the cap machinery, proving it never ran at all
+ * rather than merely running with a very large effective limit.
+ *
+ * ⚠️ DELIBERATELY SIZED, NOT A SMALL FIXTURE. A run that spends only a
+ * handful of records could pass this test even with a small, wrongly-active
+ * DEFAULT cap in place (a mutation test caught exactly that: a fixture
+ * spending 3 records total still completed under a bogus default of 2 --
+ * not because the cap was inert, but because this fixture happened not to
+ * cross it). Two real days at 100 records each, plus the sample, spend 205
+ * this run -- comfortably past every other number this file's own guards
+ * would plausibly default to by accident (COVERAGE.unparseableResponseRecords
+ * = 40, the old maxCallsPerRun = 100), so completing in full is real evidence
+ * that no cap of any ordinary size fired, not a coincidence of small
+ * numbers. */
+test("main() with no --max-records: the walk is unchanged and no cap logic fires", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const sampleRate = 5;
+    const client = clientWithNotices(
+      Array.from({ length: sampleRate }, (_, i) => ({
+        externalId: `HG-S-${i}`,
+        capturedDate: "2026-09-01",
+        postedDate: null,
+        versionKey: null,
+        title: null,
+        raw: {},
+      })),
+      sampleRate,
+    );
+    const day2Items = Array.from({ length: 100 }, (_, i) => ({
+      externalId: `HG-D2-${i}`,
+      modifiedAt: "2026-09-02",
+      raw: {},
+    }));
+    const day3Items = Array.from({ length: 100 }, (_, i) => ({
+      externalId: `HG-D3-${i}`,
+      modifiedAt: "2026-09-03",
+      raw: {},
+    }));
+    const adapter = fakeAdapter({
+      "2026-09-02": { items: day2Items },
+      "2026-09-03": { items: day3Items },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-03"], client, adapter, dir);
+
+    expect(await totalSpend()).toBe(sampleRate + 100 + 100); // 205 -- nothing stopped early
+    const ingestRuns = await all(`SELECT id FROM ingest_run`);
+    expect(ingestRuns.length).toBe(3); // all three requested days loaded
+    expect(process.exitCode).toBeUndefined(); // complete, not partial or capped
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.toLowerCase().includes("max-records"))).toBe(false);
+    expect(lines.some((l) => l.includes("RUN CAP"))).toBe(false);
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 MANDATORY TEST 2: a run that WOULD cross the cap stops before the
+ * crossing call, reports the cap stop distinctly from a ceiling stop, and
+ * names the day it stopped at so the next chunk can resume without
+ * re-billing anything. Same shape as "the day-walk stops before the call
+ * that would cross the ceiling" below, but driven by --max-records instead
+ * of a seeded near-ceiling spend -- alreadySpent is 0 here, nowhere near
+ * MONTHLY_RECORD_CEILING, so there is no ambiguity about which guard fired.
+ *
+ * sampleRate=5 (day one, reused, never re-billed) + day two's real 5 records
+ * = 10, which --max-records=10 allows (AT the cap, not past it); day three
+ * would need 5 more, crossing it -- so the walk must stop before day three,
+ * a distinct adapter entry that throws if it is ever reached at all. */
+test("a run with --max-records stops before the crossing call, distinctly from a ceiling stop", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const sampleRate = 5;
+    const client = clientWithNotices(
+      Array.from({ length: sampleRate }, (_, i) => ({
+        externalId: `HG-S-${i}`,
+        capturedDate: "2026-09-01",
+        postedDate: null,
+        versionKey: null,
+        title: null,
+        raw: {},
+      })),
+      sampleRate,
+    );
+    const day2Items = Array.from({ length: 5 }, (_, i) => ({
+      externalId: `HG-D2-${i}`,
+      modifiedAt: "2026-09-02",
+      raw: {},
+    }));
+    const adapter: WindowedAdapter = {
+      shape: "windowed",
+      name: HIGHERGOV_SOURCE_NAME,
+      async fetchListing(since, until) {
+        if (since !== until) {
+          throw new Error(`test adapter expects since===until, got ${since}/${until}`);
+        }
+        if (since === "2026-09-02") {
+          return {
+            items: day2Items,
+            undatedSkipped: 0,
+            nextCursor: null,
+            requestUrl: `fake:/opportunity/?captured_date=${since}`,
+            httpStatus: 200,
+            payload: JSON.stringify({
+              axis: "captured_date",
+              day: since,
+              records: day2Items.length,
+            }),
+          };
+        }
+        throw new Error(
+          "TEST FAILURE: --max-records must stop the walk before day three is ever reached",
+        );
+      },
+    };
+
+    await main(["--from=2026-09-01", "--to=2026-09-03", "--max-records=10"], client, adapter, dir);
+
+    const ingestRuns = await all(`SELECT id FROM ingest_run`);
+    expect(ingestRuns.length).toBe(2); // day one (sample) and day two only
+
+    const sightings = await all<{ external_id: string }>(`SELECT external_id FROM sighting`);
+    expect(sightings.some((s) => s.external_id === "HG-D3")).toBe(false);
+
+    /* Deliberately incomplete, but NOT a ceiling refusal. */
+    expect(process.exitCode).toBe(1);
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("--max-records=10"))).toBe(true);
+    expect(lines.some((l) => l.includes("2026-09-03"))).toBe(true);
+    expect(lines.some((l) => l.includes("STOPPED AT RUN CAP"))).toBe(true);
+    /* Distinct from the ceiling's own wording -- this run never got near the
+     * monthly ceiling (alreadySpent was 0), and the summary must not read as
+     * though it did. */
+    expect(lines.some((l) => l.includes("PARTIAL"))).toBe(false);
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 /* 🔴 A PROJECTION IS A SPENDING DECISION, so it must not be axis-ambiguous.
  * The same saved search on the same parameter has been measured 7x apart on
  * two days (spec §3.2's amendment) -- a rate printed without its axis is a
@@ -671,17 +888,25 @@ test("a disabled source is refused before the sample spends anything", async () 
  * resolve-source.ts, not here -- but this file is the one caller that opts
  * in, and this test proves an ENABLED, otherwise-affordable run still
  * reaches the sample and the walk (i.e. meteredAllowed: true actually took
- * effect, this is not accidentally refused for the wrong reason). */
+ * effect, this is not accidentally refused for the wrong reason).
+ *
+ * ⚖️ RATE RAISED 2026-09-07, same reason as "a window that would cross the
+ * ceiling is refused before spending" above: 15/day * 365 days (5,475) is
+ * now AFFORDABLE against the raised 9,000 ceiling, which used to make main()
+ * refuse at the dry-run stage but would now fall through into the real
+ * 365-day committing loop -- turning this into an accidental, very slow
+ * integration test (it timed out at 120s once observed) instead of the fast
+ * refusal it is named for. 50/day (18,250) stays nowhere near affordable. */
 test("recordSpend fires before the refusal, not only on the affordable path", async () => {
   await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
   await expect(
     main(
       ["--from=2026-01-01", "--to=2026-12-31"],
-      clientReturning(15), // 15/day * 365 days is nowhere near affordable
+      clientReturning(50), // 50/day * 365 days is nowhere near affordable
       fakeAdapter({}),
     ),
   ).rejects.toThrow(/Refusing/);
-  expect(await totalSpend()).toBe(15);
+  expect(await totalSpend()).toBe(50);
 });
 
 /* Review round 3, item 2, at the main() level: a zero-record sample must

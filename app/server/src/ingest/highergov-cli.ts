@@ -53,6 +53,23 @@
  * same "database: <host>" announcement before any spend -- api_spend is
  * per-database, and a run against the wrong branch spends real vendor money
  * into a ledger the ceiling will never read.
+ *
+ * ⚖️ `--max-records`, ADDED 2026-09-07 ON MATT'S RULING. The trial ends in
+ * ~2 days with ~9,000 records unspent, and he ruled we spend them on a
+ * complete Indiana listing archive rather than lose them -- which is why
+ * MONTHLY_RECORD_CEILING (extract/api-spend.ts) and COVERAGE.maxCallsPerRun
+ * (coverage/thresholds.ts) were both raised the same day. This flag is the
+ * other half: a review gate roughly every 1,000 records so a multi-day
+ * archive walk does not run unattended all the way to 9,000 before a person
+ * looks at it. A DATE WINDOW CANNOT BE THAT GATE -- measured daily volume
+ * swings from 4 to 67 records, so a 38-day window might cost 150 records or
+ * 2,500 -- so this is a hard cap on records spent WITHIN ONE RUN, checked
+ * before each day's call the same way the monthly ceiling already is, and
+ * reported as its own, third stop reason: not a ceiling refusal, not a
+ * completed window, but a deliberate stop for review. Optional and defaulted
+ * to `undefined` (unset), like `--page-size` and `--axis` before it: an
+ * invocation that never asks for a cap must behave exactly as it did before
+ * this flag existed.
  */
 import { pathToFileURL } from "node:url";
 import { mkdirSync } from "node:fs";
@@ -89,7 +106,7 @@ import { importArtifact } from "../ingest/import-artifact.js";
 
 const USAGE =
   "Usage: npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD [--dry-run] " +
-  `[--page-size=N] [--axis=${FEED_AXES.join("|")}]`;
+  `[--page-size=N] [--axis=${FEED_AXES.join("|")}] [--max-records=N]`;
 
 function arg(argv: string[], name: string): string | undefined {
   const hit = argv.find((a) => a.startsWith(`--${name}=`));
@@ -188,6 +205,39 @@ export function assertValidAxis(raw: string): FeedAxis {
     );
   }
   return hit;
+}
+
+/* Validates and parses `--max-records`'s raw string value. CALLED ONLY WHEN
+ * THE FLAG IS PRESENT (main() leaves maxRecords `undefined` otherwise) --
+ * the same "an unasked-for knob changes nothing" discipline
+ * assertValidPageSize and assertValidAxis are held to above: an invocation
+ * that omits this flag must be byte-identical to one made before it existed.
+ * Every rejection fires BEFORE main()'s own dry run makes its one
+ * unavoidable network call (CLAUDE.md §5.1: refuse before spending, not
+ * after).
+ *
+ * ⚖️ ADDED 2026-09-07 ON MATT'S RULING -- see this file's own header. A date
+ * window cannot substitute for this: measured daily volume swings from 4 to
+ * 67 records (recorded observation), so a 38-day window might cost 150
+ * records or 2,500. This is instead a hard cap on records spent WITHIN ONE
+ * RUN, independent of how many days that turns out to be.
+ *
+ * Unlike `--page-size`, there is no upper sanity cap (MAX_PAGE_SIZE) here: a
+ * page size that is too large risks an unintentionally expensive CALL, but a
+ * max-records value that is "too large" is merely a looser review gate --
+ * the operator is choosing it specifically to sit below the monthly ceiling,
+ * so there is no typo-shaped failure mode to guard against the way an
+ * oversized page-size has one. */
+export function assertValidMaxRecords(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `${USAGE}\n--max-records=${raw} is not a positive integer. This is a per-run spend cap ` +
+        "-- a review gate, not the monthly ceiling -- so an invalid value is refused before " +
+        "any call is made rather than silently ignored.",
+    );
+  }
+  return value;
 }
 
 /* Inclusive day count -- "2026-09-01" to "2026-09-30" is 30 days, not 29. */
@@ -593,6 +643,18 @@ export async function main(
   const axisArg = arg(argv, "axis");
   const axis: FeedAxis = axisArg === undefined ? DEFAULT_FEED_AXIS : assertValidAxis(axisArg);
 
+  /* Same posture again: unset (the default, `undefined`) leaves the
+   * day-walk's existing ceiling-only stop condition byte-identical to before
+   * this flag existed -- see assertValidMaxRecords's own comment for why a
+   * date window cannot substitute for a hard per-run record cap. Present, it
+   * adds a SECOND, independent stop condition that the day-walk checks
+   * BEFORE the ceiling check (below), from this run's own local totals --
+   * no extra query needed to decide it, unlike the ceiling check right next
+   * to it. */
+  const maxRecordsArg = arg(argv, "max-records");
+  const maxRecords: number | undefined =
+    maxRecordsArg === undefined ? undefined : assertValidMaxRecords(maxRecordsArg);
+
   /* api_spend is PER-DATABASE. Same format as db/migrate.ts's own print and
    * coverage-cli.ts's, matched deliberately so all three operator commands
    * read the same way. */
@@ -732,6 +794,16 @@ export async function main(
    * that day is incomplete, which is a DIFFERENT fact from a mid-walk stop
    * (see the `committedDays < days.length` check at the very end). */
   const truncatedDays: string[] = [];
+  /* Which of the two independent stop conditions, if either, ended the walk
+   * before the requested window finished -- read only by the end-of-run
+   * summary below, so a --max-records stop and a ceiling stop are reported
+   * as the two distinct facts they are, never folded into one generic
+   * "stopped early" message. `null` means the walk reached the end of the
+   * requested window on its own. `stoppedAtDay` is the day the walk stopped
+   * BEFORE (never billed this run), which is exactly the day the next chunk
+   * should resume from. */
+  let stopReason: "cap" | "ceiling" | null = null;
+  let stoppedAtDay: string | null = null;
   /* Resolved HERE, not via the parameter's own default expression -- see
    * this function's `adapter` parameter comment for why the default cannot
    * know `pageSize` in time. A test always injects its own `adapter`, so
@@ -759,9 +831,39 @@ export async function main(
      * itself go silent at exactly zero remaining and zero estimated, the
      * same failure mode one layer up (review round 3, item 2). */
     if (!isSampledDay) {
+      /* THE CAP CHECK RUNS FIRST, and needs no database read to decide --
+       * unlike the ceiling check right below it, "how much has THIS RUN
+       * spent" is fully known from local totals: the dry run's own
+       * mandatory sample (result.recordsThatDay, always billed exactly once
+       * per run) plus every day this loop has itself billed so far
+       * (committedRecords, which by construction excludes the reused
+       * sampled day -- see where it is incremented further down).
+       * perDayEstimate is the same forward-looking figure the ceiling check
+       * uses for the same reason: a day's REAL cost is not known until
+       * after the call that would cross the cap, and the whole point is
+       * refusing BEFORE that call, never after. */
+      if (maxRecords !== undefined) {
+        const spentThisRun = result.recordsThatDay + committedRecords;
+        if (spentThisRun + perDayEstimate > maxRecords) {
+          stopReason = "cap";
+          stoppedAtDay = day;
+          console.log(
+            `\nStopping before ${day}: continuing would push this run's own spend past the ` +
+              `--max-records=${maxRecords} cap (${spentThisRun} record(s) spent this run so ` +
+              `far, plus the measured rate of ${perDayEstimate}/day). ${committedDays} of ` +
+              `${days.length} day(s) loaded so far. This is a DELIBERATE STOP FOR REVIEW -- ` +
+              `not the monthly ceiling, and not a completed window. Resume the next chunk ` +
+              `with --from=${day} once reviewed.`,
+          );
+          break;
+        }
+      }
+
       const spentSoFar = await spentThisMonth(HIGHERGOV_SOURCE_NAME);
       const remainingNow = MONTHLY_RECORD_CEILING - spentSoFar;
       if (remainingNow <= 0 || remainingNow < perDayEstimate) {
+        stopReason = "ceiling";
+        stoppedAtDay = day;
         console.log(
           `\nStopping before ${day}: ${committedDays} of ${days.length} day(s) loaded ` +
             `(${committedRecords} record(s) billed this run). ${remainingNow} remain(s) this ` +
@@ -947,10 +1049,27 @@ export async function main(
    * under a stack trace for what is a legitimate, actionable outcome. */
   if (committedDays < days.length) {
     process.exitCode = 1;
-    console.log(
-      `⚠️  PARTIAL: ${committedDays} of ${days.length} requested day(s) loaded. ` +
-        `Exiting non-zero.`,
-    );
+    /* 🔴 A CAP STOP IS A THIRD STATE, worded apart from both "completed" and
+     * the ceiling's own "PARTIAL" -- the run neither failed nor finished the
+     * requested window, and it stopped at a boundary the OPERATOR chose for
+     * review, not one the vendor or the ceiling imposed. Reading it as an
+     * error (an unexplained non-zero exit) or as a completed window (silence
+     * about the difference) would both be wrong. This reuses the exact same
+     * gate and the same non-zero exit code as every other early stop (review
+     * round 3, item 6) -- only the reported reason differs, never the
+     * mechanism. */
+    if (stopReason === "cap") {
+      console.log(
+        `⚠️  STOPPED AT RUN CAP: ${committedDays} of ${days.length} requested day(s) loaded, ` +
+          `deliberately incomplete for review (--max-records=${maxRecords}, not the monthly ` +
+          `ceiling). Resume the next chunk with --from=${stoppedAtDay}. Exiting non-zero.`,
+      );
+    } else {
+      console.log(
+        `⚠️  PARTIAL: ${committedDays} of ${days.length} requested day(s) loaded. ` +
+          `Exiting non-zero.`,
+      );
+    }
   }
 }
 
