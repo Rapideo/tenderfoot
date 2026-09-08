@@ -23,16 +23,41 @@ const STATES: readonly PursuitState[] = ["New", "Triaged", "Interested", "Not In
 export { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
 import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
 
+/* THE BRANCH A MISSING REASON WAS MISSING FROM. Both branches omit the same
+ * FIELD -- `reason` -- so the route answers the same 400 naming the same
+ * control, and one error class is correct. What differs is the argument for
+ * asking, and a caller told "a reason is required on Pass" after refusing an
+ * Interested would be told the wrong thing about its own screen. */
+type ReasonBranch = "Not Interested" | "Interested";
+
+const REASON_REQUIRED_MESSAGE: Record<ReasonBranch, string> = {
+  "Not Interested":
+    "A reason is required on Pass. This is a default, not a law -- " +
+    "requireReasonOnPass may be switched off, and what that gives up is " +
+    "the corpus a reason vocabulary would later be derived from.",
+  /* Ruled by Matt 2026-09-08, deviation D30. The pair to the line above, and
+   * deliberately the same shape: same default, same switch, same corpus --
+   * the half of it that says what to LOOK FOR rather than what to exclude. */
+  Interested:
+    "A reason is required on Interested. This is a default, not a law -- " +
+    "requireReasonOnInterested may be switched off, and what that gives up is " +
+    "the other half of that corpus: a filter trained only on rejections learns " +
+    "only what to exclude.",
+};
+
 /* Distinct from a generic Error so the route can answer 400 rather than 500:
  * a missing reason is the caller's to fix, not a fault. */
 export class ReasonRequiredError extends Error {
-  constructor() {
-    super(
-      "A reason is required on Pass. This is a default, not a law -- " +
-        "requireReasonOnPass may be switched off, and what that gives up is " +
-        "the corpus a reason vocabulary would later be derived from.",
-    );
+  /* Which decision was refused. The route does not branch on it -- the field
+   * is `reason` either way -- but a test that asserted only `instanceof`
+   * could not tell the two guards apart, and one guard deleted would then
+   * still look green through the other's test. */
+  readonly branch: ReasonBranch;
+
+  constructor(branch: ReasonBranch) {
+    super(REASON_REQUIRED_MESSAGE[branch]);
     this.name = "ReasonRequiredError";
+    this.branch = branch;
   }
 }
 
@@ -43,6 +68,11 @@ export interface DecisionInput {
   decidedBy?: string | null;
   /** SVRC Region 1.1.4, ratified 2026-08-12: default on, switchable. */
   requireReasonOnPass?: boolean;
+  /** D30, ruled by Matt 2026-09-08: the same default and the same switch, on
+   * the other branch. Kept switchable to match requireReasonOnPass -- the two
+   * are one policy about free text, and a firm that turns one off for speed
+   * would be surprised to find the other still blocking its queue. */
+  requireReasonOnInterested?: boolean;
   /** REQUIRED on Interested, ignored otherwise. See recordDecision. */
   discoveryChannel?: DiscoveryChannel | null;
 }
@@ -70,7 +100,13 @@ export class DiscoveryChannelRequiredError extends Error {
  * predecessor would be the one place this project discards evidence, and it
  * would do it to the data the GO/NO-GO number is computed from. */
 export async function recordDecision(input: DecisionInput): Promise<LatestPursuit> {
-  const { solicitationId, state, decidedBy = null, requireReasonOnPass = true } = input;
+  const {
+    solicitationId,
+    state,
+    decidedBy = null,
+    requireReasonOnPass = true,
+    requireReasonOnInterested = true,
+  } = input;
 
   if (!STATES.includes(state)) {
     throw new Error(`Unknown pursuit state "${state}". One of: ${STATES.join(", ")}.`);
@@ -78,7 +114,7 @@ export async function recordDecision(input: DecisionInput): Promise<LatestPursui
 
   const reason = input.reason?.trim() ? input.reason.trim() : null;
   if (state === "Not Interested" && requireReasonOnPass && !reason) {
-    throw new ReasonRequiredError();
+    throw new ReasonRequiredError("Not Interested");
   }
 
   /* REQUIRED ON INTERESTED, AND NOT SWITCHABLE, which is a deliberate contrast
@@ -104,6 +140,32 @@ export async function recordDecision(input: DecisionInput): Promise<LatestPursui
   const discoveryChannel = input.discoveryChannel ?? null;
   if (state === "Interested" && !discoveryChannel) {
     throw new DiscoveryChannelRequiredError();
+  }
+
+  /* AND A REASON ON INTERESTED, ruled by Matt 2026-09-08 -- deviation D30.
+   *
+   * Until today a rejection always carried a written reason and an acceptance
+   * never had to: `reason` existed on this branch but was optional and
+   * unprompted. Triage 150 items under that arrangement and the corpus holds
+   * 150 articulated reasons for "no" and nothing for "yes" -- a filter trained
+   * on it learns only what to exclude.
+   *
+   * Free text on BOTH sides, and still no preset chips here: SVRC 1.1.4's
+   * argument against a reason vocabulary is unchanged by which way the
+   * decision went, and a vocabulary has to be DERIVED from what Matt writes
+   * rather than guessed before he writes it. The channel chips above are not
+   * a precedent for it -- a channel is a closed factual set, a reason is an
+   * open judgement.
+   *
+   * ⚠️ ORDER IS DELIBERATE: the channel is checked first, so an Interested
+   * carrying neither is refused for the omission that has no off switch. This
+   * guard has one (requireReasonOnInterested), and naming a switchable rule
+   * ahead of an absolute one would send a caller to fix the wrong thing.
+   *
+   * "New" is NOT covered, here or above: undo is not a decision, and asking a
+   * mis-tap to be justified would make the correction harder than the error. */
+  if (state === "Interested" && requireReasonOnInterested && !reason) {
+    throw new ReasonRequiredError("Interested");
   }
 
   await run(

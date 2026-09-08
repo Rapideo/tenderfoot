@@ -114,8 +114,14 @@ triage.post(
     const exists = await one(`SELECT id FROM solicitation WHERE id = $1`, [id]);
     if (!exists) return res.status(404).json({ error: `No solicitation ${id}.` });
 
-    const { state, reason, decided_by, require_reason_on_pass, discovery_channel } =
-      req.body ?? {};
+    const {
+      state,
+      reason,
+      decided_by,
+      require_reason_on_pass,
+      require_reason_on_interested,
+      discovery_channel,
+    } = req.body ?? {};
     try {
       const latest = await recordDecision({
         solicitationId: id,
@@ -123,6 +129,10 @@ triage.post(
         reason,
         decidedBy: typeof decided_by === "string" ? decided_by : null,
         requireReasonOnPass: require_reason_on_pass !== false,
+        /* Same shape, same default-on: only an explicit `false` switches it
+         * off, so a body that omits the flag -- every body the screen sends
+         * -- gets the rule (D30). */
+        requireReasonOnInterested: require_reason_on_interested !== false,
         /* Passed through unvalidated ON PURPOSE. Presence is checked in
          * recordDecision and VALIDITY by migration 013's CHECK, so a value
          * outside the vocabulary fails at the database rather than being
@@ -131,6 +141,10 @@ triage.post(
       } as Parameters<typeof recordDecision>[0]);
       return res.status(201).json(latest);
     } catch (err) {
+      /* BOTH branches land here since D30 -- Pass and Interested each require
+       * a reason, and both omit the same field, so the screen is pointed at
+       * the same control. The error's own message says which question went
+       * unanswered; `field` says which input to focus. */
       if (err instanceof ReasonRequiredError) {
         return res.status(400).json({ error: err.message, field: "reason" });
       }

@@ -241,6 +241,19 @@ export function Queue() {
         setError("Where else would this have reached you? Pick one — “Not sure” counts.");
         return;
       }
+      /* AND A REASON ON INTERESTED TOO -- D30, ruled by Matt 2026-09-08.
+       *
+       * Same guard, same courtesy-not-rule standing as the two above: the
+       * server answers 400 with field:"reason" if it ever gets past. Checked
+       * AFTER the channel, matching recordDecision's order, so an Interested
+       * confirmed with nothing filled in names the unswitchable omission
+       * first rather than sending the operator to the wrong control.
+       *
+       * `state === "New"` is UNDO and falls through this one as well. */
+      if (state === "Interested" && !reason.trim()) {
+        setError("A reason is required on Interested.");
+        return;
+      }
       const secret = getAdminSecret();
       if (!secret) return;
       /* Spec §5.3: "decided_by is set once per session and stored on every
@@ -661,11 +674,21 @@ export function Queue() {
           * label and the accent confirm are all the bundle's own interested
           * branch, which we simply had never built.
           *
-          * PASS CHIPS are still correctly absent -- SVRC 1.1.4 ratified free
-          * text only for V1, since a preset reason vocabulary would flatten
-          * the signal it exists to capture. The discovery chips do not
-          * reopen that: a REASON is an open judgement, a CHANNEL is a closed
-          * factual set, and free text cannot be counted. See migration 013. */}
+          * ⚖️ AND IT NOW ASKS TWO QUESTIONS, on Matt's ruling of 2026-09-08
+          * -- deviation D30. The branches were asymmetric: a Pass could not
+          * be recorded without a written reason, an Interested never had to
+          * carry one, so a corpus built from a 150-item sitting would hold
+          * every argument for "no" and none for "yes". The discovery channel
+          * is unchanged -- required, single-select, preset -- and a REQUIRED
+          * free-text reason now sits beside it.
+          *
+          * REASON CHIPS are still correctly absent on BOTH branches -- SVRC
+          * 1.1.4 ratified free text only for V1, since a preset reason
+          * vocabulary would flatten the signal it exists to capture, and
+          * which way the decision went does not change that argument. The
+          * discovery chips do not reopen it: a REASON is an open judgement, a
+          * CHANNEL is a closed factual set, and free text cannot be counted.
+          * See migration 013. */}
         {askReason ? (
           <div className="queue__reason">
             <div className="queue__reason-head">
@@ -706,14 +729,67 @@ export function Queue() {
               </div>
             )}
 
+            {/* THE SECOND QUESTION ON THIS BRANCH — D30, ruled by Matt
+              * 2026-09-08. Until today an acceptance never had to say why:
+              * this input was here, labelled "Note", optional and unprompted,
+              * while a rejection could not be recorded without a written
+              * reason. Triage 150 items that way and the corpus holds 150
+              * articulated reasons for "no" and nothing for "yes".
+              *
+              * It sits HERE, between the chips and the input, because a
+              * prompt belongs next to the control it prompts: the head above
+              * asks the chips' question, this one asks the input's. Reading
+              * order is question, chips, question, field.
+              *
+              * 🔴 NO CHIPS FOR IT, and the argument is the one that already
+              * keeps them off the Pass branch: SVRC 1.1.4 ratified free text
+              * only for V1, since a preset reason vocabulary would flatten
+              * the signal it exists to capture. A vocabulary gets DERIVED
+              * from what Matt writes here; guessing it in advance is the
+              * failure D30 exists to avoid, not a shortcut to it.
+              *
+              * The copy is written as the pair of the Pass prompt's, not a
+              * copy of it -- WHY NOT? / WHY THIS ONE?, and Matt's own
+              * argument for the ruling as the help line. Both are OURS: the
+              * bundle asks "ANYTHING TO NOTE? — OPTIONAL" here. */}
+            {askReason === "interested" && (
+              <div className="queue__reason-head">
+                <span className="queue__reason-prompt queue__reason-prompt--acc">
+                  WHY THIS ONE? — REQUIRED
+                </span>
+                <span className="queue__reason-help">
+                  A filter trained only on rejections learns only what to exclude.
+                </span>
+              </div>
+            )}
+
             <div className="queue__reason-row">
               <input
-                aria-label={askReason === "pass" ? "Reason" : "Note"}
+                /* "Reason" on BOTH branches now. It was "Note" here, which is
+                 * what an optional field is called; the thing it labels is
+                 * required and is the same kind of answer the Pass branch
+                 * collects. Only one of the two ever renders, so the name
+                 * stays unambiguous. */
+                aria-label="Reason"
                 value={reason}
                 autoFocus
                 onChange={(e) => setReason(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && void confirmReason()}
-                placeholder="…or say it in your own words (this is the training signal)"
+                /* ⚖️ THE PLACEHOLDER BRANCHES, and only here. The bundle uses
+                 * one string for both branches -- "…or say it in your own
+                 * words (this is the training signal)" -- and it is right on
+                 * Pass, which has no chips, and was right on Interested when
+                 * the bundle's chips answered THIS question and the field was
+                 * an alternative to them. Ours do not: the chips answer where
+                 * the item reached you, the field asks why it fits, and both
+                 * are required. Left verbatim, "…or" would invite skipping a
+                 * required field. Same sentence, minus the "or" -- part of
+                 * D30. */
+                placeholder={
+                  askReason === "pass"
+                    ? "…or say it in your own words (this is the training signal)"
+                    : "In your own words (this is the training signal)"
+                }
               />
               <Button variant="secondary" size="sm" ariaLabel="Back" onClick={cancelReason}>
                 Back

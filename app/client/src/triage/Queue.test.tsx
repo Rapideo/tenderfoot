@@ -58,16 +58,32 @@ const renderQueue = () =>
     </MemoryRouter>,
   );
 
-/* MARKING SOMETHING INTERESTED IS THREE STEPS NOW, not one. Migration 013
- * made the discovery channel required on Interested (design spec §8.5 --
- * "the whole measure"), so `I` opens a step instead of deciding.
+/* REACT DOES NOT SEE `input.value = x`. Setting the property directly leaves
+ * React's own value tracker believing nothing changed, so the change event is
+ * swallowed and onChange never fires. Going through the prototype's setter is
+ * the standard workaround, and it is what every hand-typed reason in this file
+ * already does -- extracted here now that both branches need it. */
+function typeReason(text: string) {
+  const input = screen.getByLabelText("Reason") as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )!.set!;
+  setter.call(input, text);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/* MARKING SOMETHING INTERESTED IS FOUR STEPS NOW, not one. Migration 013 made
+ * the discovery channel required on Interested (design spec §8.5 -- "the whole
+ * measure"), so `I` opens a step instead of deciding; D30 (2026-09-08) added
+ * the good-fit reason to that step, required, alongside the channel.
  *
  * Deliberately NOT a helper that swallows the intermediate states: each test
  * below still asserts the thing it is about. This only spares four unrelated
- * tests from re-spelling the same three clicks. `channel` defaults to
- * "Nowhere" because that is the answer the gate actually counts, so a
- * fixture that drifts to some other value fails visibly. */
-async function markInterested(channel = "Nowhere") {
+ * tests from re-spelling the same clicks. `channel` defaults to "Nowhere"
+ * because that is the answer the gate actually counts, so a fixture that
+ * drifts to some other value fails visibly. */
+async function markInterested(channel = "Nowhere", reason = "In our lane") {
   screen.getByRole("button", { name: /^interested$/i }).click();
   await waitFor(() => expect(screen.getByRole("button", { name: channel })).toBeTruthy());
   screen.getByRole("button", { name: channel }).click();
@@ -81,6 +97,13 @@ async function markInterested(channel = "Nowhere") {
     expect(screen.getByRole("button", { name: channel }).getAttribute("aria-pressed")).toBe(
       "true",
     ),
+  );
+  /* D30: required, so the same "wait for the commit" rule applies -- confirm
+   * with the state not yet flushed and decide() reads an empty reason out of
+   * its closure and refuses. */
+  typeReason(reason);
+  await waitFor(() =>
+    expect((screen.getByLabelText("Reason") as HTMLInputElement).value).toBe(reason),
   );
   screen.getByRole("button", { name: /confirm interested/i }).click();
 }
@@ -559,6 +582,13 @@ test("the channel is single-select: picking a second replaces the first", async 
   expect(screen.getByRole("button", { name: "Nowhere" }).getAttribute("aria-pressed")).toBe("true");
   expect(screen.getByRole("button", { name: "Portal" }).getAttribute("aria-pressed")).toBe("false");
 
+  /* This test is about the chips, but since D30 the branch will not confirm
+   * without a reason either -- supplied so the refusal under test can only be
+   * the channel's. */
+  typeReason("In our lane");
+  await waitFor(() =>
+    expect((screen.getByLabelText("Reason") as HTMLInputElement).value).toBe("In our lane"),
+  );
   screen.getByRole("button", { name: /confirm interested/i }).click();
   await waitFor(() =>
     expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
@@ -582,14 +612,7 @@ test("a Pass carries no channel", async () => {
    * hand-run, and the discovery chips must not leak across the mode. */
   expect(document.querySelectorAll(".choice-chip")).toHaveLength(0);
 
-  (screen.getByLabelText("Reason") as HTMLInputElement).focus();
-  const input = screen.getByLabelText("Reason") as HTMLInputElement;
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )!.set!;
-  setter.call(input, "Out of geography");
-  input.dispatchEvent(new Event("input", { bubbles: true }));
+  typeReason("Out of geography");
 
   screen.getByRole("button", { name: /confirm pass/i }).click();
   await waitFor(() =>
@@ -684,6 +707,140 @@ test("the prompt and help are the bundle's own copy, per branch", async () => {
 
 
 /* ===========================================================================
+ * THE GOOD-FIT REASON — D30, ruled by Matt 2026-09-08
+ * ===========================================================================
+ * The two branches were asymmetric: Pass demanded a written reason, Interested
+ * never did -- its note field existed, unprompted and optional. A 150-item
+ * sitting under that arrangement produces 150 articulated reasons for "no" and
+ * nothing for "yes", and a filter trained on that corpus learns only what to
+ * exclude. Both branches now collect free text, and the discovery channel is
+ * untouched beside it.
+ */
+
+test("Interested is blocked until a reason is given, and nothing reaches the server", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  /* A CHANNEL IS PICKED, so the channel guard is satisfied and this test can
+   * only fail on the reason. Asserted where it can be violated: confirming. */
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Nowhere" })).toBeTruthy());
+  screen.getByRole("button", { name: "Nowhere" }).click();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Nowhere" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    ),
+  );
+
+  screen.getByRole("button", { name: /confirm interested/i }).click();
+  await waitFor(() =>
+    expect(screen.getByText("A reason is required on Interested.")).toBeTruthy(),
+  );
+
+  const posts = fetchMock.mock.calls.filter((c) => (c[1] as any)?.method === "POST");
+  expect(posts).toHaveLength(0);
+});
+
+test("the Interested POST carries the reason as well as the channel", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  await markInterested("Portal", "Care-management work we have delivered twice");
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.state).toBe("Interested");
+  /* THE WHOLE POINT OF THE RULING. A test asserting only the channel would
+   * pass with the reason silently dropped on the way to the server, which is
+   * the corpus not being collected at all. */
+  expect(body.reason).toBe("Care-management work we have delivered twice");
+  expect(body.discovery_channel).toBe("portal");
+});
+
+test("the good-fit prompt reads as the pair of the rejection prompt, not as an optional note", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByText("WHY THIS ONE? — REQUIRED")).toBeTruthy());
+  expect(
+    screen.getByText("A filter trained only on rejections learns only what to exclude."),
+  ).toBeTruthy();
+  /* Accent, not the rejection colour -- this is the acceptance branch, and
+   * the same ternary that governs the channel prompt governs this one. */
+  expect(screen.getByText("WHY THIS ONE? — REQUIRED").className).toMatch(/--acc/);
+
+  /* The bundle's copy for this field is "ANYTHING TO NOTE? — OPTIONAL", and
+   * D30 is precisely the departure from it. If that string ever returns, the
+   * deviation has been reverted by someone reading the bundle without
+   * reading admin-deviations.md. */
+  expect(screen.queryByText(/ANYTHING TO NOTE/i)).toBeNull();
+  /* Both questions are on screen at once: the channel's and the reason's. */
+  expect(screen.getByText("WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED")).toBeTruthy();
+});
+
+test("the good-fit reason is free text -- no chips are offered for it", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByText("WHY THIS ONE? — REQUIRED")).toBeTruthy());
+
+  /* SEVEN CHIPS, and all seven are the migration's channels. SVRC 1.1.4
+   * ratified free text only for V1: a preset reason vocabulary would flatten
+   * the signal it exists to capture, and a vocabulary has to be DERIVED from
+   * what gets written here rather than guessed before it is. The bundle's own
+   * fit chips are the shape that must not appear. */
+  expect(document.querySelectorAll(".choice-chip")).toHaveLength(7);
+  expect(screen.queryByText("Strong fit")).toBeNull();
+  expect(screen.queryByText("Sub-teaming play")).toBeNull();
+  expect(screen.queryByText("Watch only")).toBeNull();
+});
+
+/* Undo passes state "New", which is not a decision and must not be held to
+ * either requirement -- neither the channel's nor, since D30, the reason's.
+ * A correction that demanded a justification would be harder than the mistake
+ * it corrects. */
+test("undo needs no reason of its own", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  await markInterested();
+  const undo = await waitFor(() => screen.getByRole("button", { name: "UNDO · U" }));
+  undo.click();
+
+  await waitFor(() => {
+    const bodies = fetchMock.mock.calls
+      .filter((c) => (c[1] as any)?.method === "POST")
+      .map((c) => JSON.parse((c[1] as any).body));
+    const back = bodies.find((b) => b.state === "New");
+    expect(back).toBeDefined();
+    /* Sent with no reason and no channel, and NOT refused by the client
+     * guards on its way out. */
+    expect(back.reason).toBeNull();
+    expect(back.discovery_channel).toBeNull();
+  });
+});
+
+
+/* ===========================================================================
  * THE LAST-DECISION TOAST — 2026-09-02
  * ===========================================================================
  * FOUND BY MATT, BY CLICKING IT. The decision bar carried a `<span>` keycap
@@ -706,13 +863,16 @@ test("a decision raises a toast naming what just happened", async () => {
 
   expect(document.querySelector(".queue__toast")).toBeNull();
 
-  await markInterested("Indiana email");
+  await markInterested("Indiana email", "Care-management work we have done");
 
   /* The bundle's own label shape: kind, then what was chosen. Asserting the
    * CHANNEL is in it matters -- a toast that just says "Interested" would
-   * not tell you which of seven answers you are about to undo. */
+   * not tell you which of seven answers you are about to undo. Since D30 the
+   * reason is always there too, because it is now always given. */
   await waitFor(() =>
-    expect(screen.getByText("Interested · Indiana email")).toBeTruthy(),
+    expect(
+      screen.getByText("Interested · Indiana email · “Care-management work we have done”"),
+    ).toBeTruthy(),
   );
 });
 
@@ -766,13 +926,7 @@ test("a Pass toast names the reason, and carries the same control", async () => 
   screen.getByRole("button", { name: /^pass$/i }).click();
   await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
 
-  const input = screen.getByLabelText("Reason") as HTMLInputElement;
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )!.set!;
-  setter.call(input, "Out of geography");
-  input.dispatchEvent(new Event("input", { bubbles: true }));
+  typeReason("Out of geography");
 
   screen.getByRole("button", { name: /confirm pass/i }).click();
 

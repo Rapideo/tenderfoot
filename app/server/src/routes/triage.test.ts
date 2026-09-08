@@ -123,6 +123,9 @@ test("a decision appends and returns the new latest state", async () => {
     decided_by: "matt",
     /* Required on Interested since migration 013 -- §8.5's discovery measure. */
     discovery_channel: "nowhere",
+    /* And a reason since D30 (2026-09-08): an acceptance is articulated the
+     * same way a rejection always has been. */
+    reason: "squarely in our lane",
   });
   expect(res.status).toBe(201);
   const body = (await res.json()) as any;
@@ -177,6 +180,58 @@ test("a channel outside the vocabulary does not become a stored decision", async
   const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
     state: "Interested",
     discovery_channel: "carrier_pigeon",
+    /* Supplied on purpose since D30 -- without it the request is refused by
+     * the reason guard and never reaches the CHECK this test is about, which
+     * would leave the assertion passing for the wrong reason. */
+    reason: "testing the vocabulary, not the prompt",
   });
   expect(res.status).not.toBe(201);
+});
+
+/* ⚖️ THE GOOD-FIT REASON AT THE ROUTE BOUNDARY — D30, ruled by Matt
+ * 2026-09-08. Same contract as the two omissions above: the caller can fix it,
+ * so 400 and not 500, and the field named is the input to focus. Both reason
+ * guards name `reason`, because both are the same control. */
+test("Interested with a channel but no reason answers 400 and names the field", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Interested",
+    discovery_channel: "nowhere",
+  });
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as any;
+  expect(body.field).toBe("reason");
+  /* The Interested wording, not the Pass wording. A screen that showed "a
+   * reason is required on Pass" after refusing an acceptance would be
+   * describing a different decision than the one on the card. */
+  expect(body.error).toMatch(/required on Interested/i);
+});
+
+test("Interested with both is created", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Interested",
+    discovery_channel: "portal",
+    reason: "care-management work we have delivered twice",
+  });
+  expect(res.status).toBe(201);
+});
+
+/* The route passes the switch through the same way it passes
+ * require_reason_on_pass: only an explicit false turns it off, so the screen
+ * -- which sends neither flag -- always gets the rule. */
+test("require_reason_on_interested: false is honoured", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Interested",
+    discovery_channel: "nowhere",
+    require_reason_on_interested: false,
+  });
+  expect(res.status).toBe(201);
+});
+
+/* Undo is not a decision. It carries neither a reason nor a channel, and it
+ * must not be refused for lacking either. */
+test("a return to New needs neither a reason nor a channel", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "New",
+  });
+  expect(res.status).toBe(201);
 });
