@@ -234,7 +234,56 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-08 (evening)
+## 🔖 RESUME HERE — updated 2026-09-08 (late)
+
+## 🎯 THE QUEUE IS READY TO TRIAGE, AND THE SAMPLE IS SCOPED TO THE NEW DATA
+
+**Matt, 2026-09-08:** the 6 existing decisions are against **SAM.gov and the old Indiana corpus** — federal rows already judged not good. *"What I really should be triaging against is our new data."* Correct, and the fix needed no code: `drawSample` has always taken a `sourceId`, so scoping a sample to one source is an operator act.
+
+**Sample #2 drawn: 150 items from 1,755 eligible HigherGov rows**, seed `1788890660565-4atkg6bi`. The queue header shows the denominator and the seed on screen, so the measurement is reproducible and the population cannot drift silently.
+
+**Triage URL: `http://localhost:5175/?sample=2`.** Verified in a browser, not merely by test — the `?sample=` filter reaches `queuePage()` and the header reads `SAMPLE · 150 of 1,755 · HigherGov`.
+
+⚖️ **And it showed exactly why the scoping mattered.** The UNSCOPED queue (1,996 items, deadline-soonest-first) opens on a `Corpus import — Indiana open` row whose title renders **`(untitled)`**. The sample view opens on *Battery Disposal IFB*, Illinois EPA, with a real three-sentence scope. Same product, same code, different denominator.
+
+### 🔴 DO NOT CLICK THE DOCUMENTS ACTION ON A HIGHERGOV ROW
+
+**`POST /api/solicitations/:id/documents` answers `HigherGov answered 400`.** The key is live (§5.3: a burned key answers **403**, a live one **400**) — the REQUEST SHAPE is wrong. `/document/` is called with `source_id`, but R1 only ever recorded the accepted parameter set for `/opportunity/`; the document endpoint's own set was never established, so `source_id` there is an assumption.
+
+**Two consequences, and the second is the dangerous one:**
+
+1. A 400 returns no rows, so the vendor almost certainly billed nothing.
+2. **But the conservative tally cannot tell a rejected request from a billed-then-unparseable 200**, so it recorded **100 records** anyway (`api_spend` id 211). And `attachments_checked_at` is stamped only AFTER a successful fetch — so a failing row is **re-clickable, at a phantom 100 each time**. Roughly 22 clicks would exhaust the remaining headroom and the loader would begin refusing legitimate work against a ledger inflated by calls that cost nothing.
+
+**The fix is accounting, not the request.** CLAUDE.md §5.1 already says *"errors and zero-result calls appear not to count"* — so a non-OK HTTP status should tally **zero** while a malformed 200 keeps the conservative estimate. That makes the ledger more accurate in BOTH directions rather than merely safer, and it makes a failed click free. The request shape is a separate question and settling it costs one metered call.
+
+⚠️ **The 100 already recorded is left in place pending a dashboard reading.** If the dashboard still reads what it did before that click, 400s provably do not bill and the row is corrected with evidence rather than inference — the same technique that separated a fixed offset from a rate error on 2026-09-08 (lesson 2.31).
+
+### ⚖️ AN ACCEPTANCE NOW CARRIES ITS REASONING TOO — D30
+
+**Matt's ruling, 2026-09-08.** The two branches were asymmetric: Pass demanded a written reason, Interested demanded only a discovery channel and left its note optional and unprompted. Triaging 150 items that way would have produced **150 articulated reasons for "no" and almost nothing for "yes"** — a corpus that can only teach a filter what to exclude.
+
+**Interested now requires a free-text reason as well**, prompted `WHY THIS ONE? — REQUIRED` with the help line *"A filter trained only on rejections learns only what to exclude."* `requireReasonOnInterested` mirrors `requireReasonOnPass` — on by default, switchable, same 400 from the route.
+
+🔴 **NO PRESET CHIPS ON EITHER BRANCH, and a test pins their absence.** The argument is unchanged from SVRC 1.1.4: a preset vocabulary would flatten the very signal the field exists to capture. The vocabulary is to be **derived** from what Matt actually writes. The discovery-channel chips do not reopen this — *a reason is an open judgement, a channel is a closed factual set, and free text cannot be counted.*
+
+**Recorded as D30** rather than resolved silently, because the bundle's interested branch does not ask this (CLAUDE.md §1). Three smaller departures are named there too: guard order (channel checked before reason, so the omission with no off switch is the one reported), a branched placeholder on Interested only — **Pass keeps the bundle string verbatim** — and the input's aria-label.
+
+⚠️ **NOT CLICK-TESTED, and that is a real gap in the §4 sense.** The Chrome extension reported "not connected" for both the implementer and the controller, and CLAUDE.md's remedy is restarting Chrome — which would have closed the page Matt was about to triage in. What WAS verified: both prompt strings are served by Vite from the running dev server (`curl http://localhost:5175/src/triage/Queue.tsx` returns `WHY THIS ONE? — REQUIRED` alongside the existing `WHY NOT? — REQUIRED`), `/api/queue` answers 200, and no new CSS classes were introduced. **The screen has not been looked at.** SP3.6 is the reason that distinction is written down rather than assumed.
+
+### ⚙️ THE DEV PROXY TARGET IS NOW OVERRIDABLE, AND THE REASON IS WORTH KNOWING
+
+This machine also runs **IDE8**, whose Express server takes **3003** when it starts first. Tenderfoot's Vite proxy was hardcoded there, so every `/api` call went to the wrong application — **which answers 404 rather than refusing the connection**, so it presents as a broken route in Tenderfoot rather than as a port collision. That cost real time.
+
+```
+PORT=3010 npm run dev --workspace app/server
+VITE_API_TARGET=http://localhost:3010 npm run dev --workspace app/client
+```
+
+Default unchanged; `6731a03`.
+
+---
+
 
 ## 📦 THE COMPLETE-DAY PULL IS DONE — 3,238 SOLICITATIONS, 851 BUYERS, FIVE STATES
 
