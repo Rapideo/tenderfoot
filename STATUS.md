@@ -274,13 +274,21 @@ Depth-of-day against number-of-days. **Spending was stopped rather than foreclos
 - **The agency field arrives NESTED.** The warning fired on the first real row and again across an entirely different four-state buyer set. `org-chain.ts`'s flat read was an assumption no captured response ever backed; the tolerance added 2026-09-07 is the only reason 552 buyers resolved instead of none. **The flat branch and its warning can now both be deleted.**
 - **The ledger was 150 light** — the interval between the last dashboard reading (09-03) and the ledger's first write (09-04), when nothing was measuring. Migration 033 reconciles it; ledger and dashboard now agree exactly.
 
-### 🔴 A MERGE DEFECT FOUND IN LIVE DATA — WORKAROUND IN USE, FIX OUTSTANDING
+### ✅ A MERGE DEFECT FOUND IN LIVE DATA — FIXED 2026-09-08 (`902153c`), WORKAROUND RETIRED
 
-**Seven fields are applied only to solicitations that ALREADY EXIST** — `merge.ts:301,314,330,338,351,355,359`: `closes_at`, `posted_at`, `description`, `place_of_performance`, `kind`, `codes`, `set_aside`. On the pass that CREATES a row, `g.solicitation_id` is still null, so **all seven are skipped**. A freshly merged solicitation has no deadline, no description, no codes and no set-aside until merge runs again.
+> ⚠️ **CORRECTED 2026-09-08, and the correction matters — the first version of this entry overstated it.** It claimed all seven per-source facts were skipped on the creating pass, the deadline among them, which would have made a fresh row nearly empty. **That was wrong, and reading the INSERT rather than the guards is what showed it.**
 
-**The deadline is in that list, and the queue sorts by deadline.**
+**TWO fields, not seven.** Six of the seven reach a newly created row perfectly well, because the INSERT carries them: `inserts.push` (`merge.ts:368-379`) supplies `kind`, `codes`, `set_aside`, `closes_at`, `posted_at` and `posted_at_origin`, and the column list at `:424` matches. **`closes_at` is among them, so the deadline is set at creation and the queue's sort is fine.**
 
-**Workaround, in use and free: ALWAYS RUN `npm run merge` TWICE after an ingest.** Verified directly — descriptions went 0 → 16 of 16 on the second pass. Not fixed at the time of discovery: it is the most delicate layer in the system and thousands of rows were about to pass through it.
+**`description` and `place_of_performance` are in neither the push nor the INSERT.** Their only route is an update map guarded on `g.solicitation_id !== null` (`:330`, `:338`), which is null for a row being created in the same run — so a freshly ingested solicitation carries neither until merge runs again.
+
+**It still costs money, which is why it is worth fixing rather than living with.** A description is what lets a person triage a notice for free; without one they open documents at ~11 billed records each.
+
+✅ **FIXED.** Both fields now ride the creation path exactly as the other six do — into `inserts.push` and the INSERT's column list. Both are plain `text` (migrations 015 and 017) so they travel in the `unnest` as `text[]`; `codes` keeps its `::jsonb` cast as the only exception. **The insert/link/update phase ordering was NOT touched** — `merge.ts:408` explains why insert must come first, and that is load-bearing. The update maps stay for the already-exists path.
+
+~~**Workaround: run `npm run merge` twice.**~~ **RETIRED — one pass is now correct.** The workaround was real while it lasted (descriptions measured 0, then 16 of 16 on a second pass) and is recorded because it is how the defect was proven rather than argued.
+
+⚖️ **And `org-chain.ts`'s flat branch is DELETED in the same wave (`8b4adcc`).** 1,856 captured rows across five states: flat present in **0**, nested in **1,856**. The tolerance added 2026-09-07 did its job — it kept 552 buyers attributed while the question was open, and it made the first live run answer the question for free. The test that replaced it **pins the deletion**: a suite that merely stopped mentioning the flat field would keep passing if the branch were quietly restored.
 
 ---
 
