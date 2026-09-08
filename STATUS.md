@@ -252,7 +252,33 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ⚖️ **Two saved searches now exist.** `HIGHERGOV_SEARCH_ID` in `.env` is INDIANA-ONLY. The four-neighbour search (IL/MI/OH/KY, and it also carries IN) is `-Dul7dQMJTvTIqV3mHngP`, supplied by Matt 2026-09-08 and passed per-run as an env override — **not** written to `.env`, so the default stays Indiana. Geography lives ONLY in the saved search: R1 proved `pop_state`, `state` and `place_of_performance_state` are all accepted and **silently ignored**.
 
-### ⛔ THE OPEN DECISION, AND IT IS WHY ~6,400 RECORDS WERE NOT SPENT
+### ✅ RESOLVED 2026-09-08 — MATT RULED "BUILD PAGING, THEN BUY COMPLETE DAYS", AND IT IS BUILT
+
+**`fetchDay` walks pages.** A day comes back whole or comes back marked PARTIAL; no caller can
+receive a half-bought day without being told. `FeedResult.records` is the **sum billed across every
+page**, and `pagesFetched` beside `pages` is what separates "bought whole" from "stopped short" —
+in the type, in the artifact envelope, and in the CLI's truncation warning.
+
+**Four guards, none optional.** Page one prices the rest (`pages` × the measured 100-row cap, known
+before anything more is bought) · a hard `MAX_PAGES_PER_DAY = 10` backstop that binds even with no
+budget passed · a caller budget checked *before* each page and priced at what that page could cost ·
+and a mid-day throw that carries what the earlier pages already billed, so three paid pages cannot
+vanish from `api_spend` behind a flat 40.
+
+**The dry run's projection was measured wrong and is now honest.** It sampled page one and treated
+it as the day — a 30-day window projected 780 and cost 151; another projected 240 and cost 1,556.
+The sample is still deliberately one page (pricing a window must not cost a thousand records), but
+the projection now carries that page's rate across the vendor's own `pages` count.
+
+⚠️ **`maxCallsPerRun` (500) now counts HTTP requests, not days** — one day is up to ten of them, so
+counting a paged day as one call would have left the ratified figure bounding something ten times
+smaller than it names. The constant is untouched; **whether 500 still fits a year-long paged walk is
+a live question for Matt.**
+
+The paragraphs below are the decision as it stood before that ruling, kept because they are the
+measurement the ruling was made on.
+
+### ~~⛔ THE OPEN DECISION, AND IT IS WHY ~6,400 RECORDS WERE NOT SPENT~~ — RULED, SEE ABOVE
 
 **`page_size` IS CAPPED AT 100 BY THE VENDOR.** Measured, not assumed: a run requesting `--page-size=300` produced **14 calls returning exactly 100 records each**. So any day with more than 100 records is bought *partially*, and **14 of 20 weekdays on the four-state search exceeded 100.**
 
