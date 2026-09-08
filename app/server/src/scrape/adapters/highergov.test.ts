@@ -64,12 +64,15 @@ test("every result becomes an item keyed by source_id", async () => {
 });
 
 /* captured_date is HigherGov's own watermark (R9), and modifiedAt is the
- * field scrape/run.ts compares against the window. */
-test("modifiedAt is captured_date", async () => {
+ * field scrape/run.ts compares against the window. The fixture's first row now
+ * carries posted_date 2026-06-09 as well, so this is no longer satisfiable by
+ * "whichever date happened to be first". */
+test("modifiedAt is captured_date on the default axis", async () => {
   const page = await higherGovAdapter(fakeFetch(FIXTURE)).fetchListing(
     "2026-09-03", "2026-09-03", null,
   );
   expect(page.items[0]!.modifiedAt).toBe("2026-09-03");
+  expect(page.items[0]!.modifiedAt).not.toBe("2026-06-09");
 });
 
 /* An item with no captured_date cannot be placed in the window. adapter.ts:
@@ -240,4 +243,170 @@ test("higherGovAdapter threads an explicit page_size through to the request", as
   const fetchImpl = fakeFetchCapturing(FIXTURE);
   await higherGovAdapter(fetchImpl, 25).fetchListing("2026-09-03", "2026-09-03", null);
   expect(fetchImpl.calls[0]).toContain("page_size=25");
+});
+
+/* ═══ THE AXIS ═══ Matt's ruling, 2026-09-07 (design spec §3.2's amendment):
+ * the BACKFILL runs on posted_date, LIVE operation stays on captured_date.
+ * `captured_date` is a CRAWL watermark, so a historical window on it returns
+ * re-captures of notices we already hold -- billed in full, delivering
+ * nothing, because the meter counts records RETURNED (CLAUDE.md §5.1).
+ *
+ * The fixture carries posted dates in JUNE against captured dates in SEPTEMBER
+ * precisely so that reading the wrong one cannot pass by coincidence. */
+
+/* 🔴 THE MANDATORY INERT DEFAULT. An adapter constructed the way registry.ts
+ * constructs it -- no arguments -- must ask exactly what it asked before axes
+ * existed. Asserted on the wire, not on the parsed page. */
+test("higherGovAdapter asks captured_date and never posted_date when no axis is given", async () => {
+  const fetchImpl = fakeFetchCapturing(FIXTURE);
+  await higherGovAdapter(fetchImpl).fetchListing("2026-09-03", "2026-09-03", null);
+  expect(fetchImpl.calls[0]).toContain("captured_date=2026-09-03");
+  expect(fetchImpl.calls[0]).not.toContain("posted_date");
+});
+
+test("an explicit posted_date axis reaches the request, replacing captured_date", async () => {
+  const fetchImpl = fakeFetchCapturing(FIXTURE);
+  await higherGovAdapter(fetchImpl, undefined, "posted_date").fetchListing(
+    "2026-06-09", "2026-06-09", null,
+  );
+  expect(fetchImpl.calls[0]).toContain("posted_date=2026-06-09");
+  expect(fetchImpl.calls[0]).not.toContain("captured_date");
+});
+
+/* 🔴🔴 THE DEFECT THIS WHOLE DESIGN EXISTS TO AVOID, PINNED DIRECTLY.
+ *
+ * adapter.ts: "`modifiedAt` is the field the caller compares against the
+ * window", and scrape/run.ts folds every item's modifiedAt into the run's
+ * low-water resume marker. Query posted_date but report captured_date and a
+ * notice PUBLISHED in June, CRAWLED in September, comes back from a June
+ * request wearing a SEPTEMBER modifiedAt -- outside the window just asked for.
+ * Days would appear to contain records they do not.
+ *
+ * If someone later "simplifies" `axisValue(n, axis)` back to `n.capturedDate`,
+ * this test must be the thing that stops them. */
+test("modifiedAt follows the WALKED axis: a posted_date walk reports the posted date", async () => {
+  const page = await higherGovAdapter(fakeFetch(FIXTURE), undefined, "posted_date").fetchListing(
+    "2026-06-09", "2026-06-09", null,
+  );
+  const byId = new Map(page.items.map((i) => [i.externalId, i.modifiedAt]));
+  /* The vendor row says captured 2026-09-03, posted 2026-06-09. */
+  expect(byId.get("003000000088067")).toBe("2026-06-09");
+  expect(byId.get("003000000088067")).not.toBe("2026-09-03");
+  expect(byId.get("004950000088400")).toBe("2026-06-10");
+  expect(byId.get("004950000088400")).not.toBe("2026-09-04");
+});
+
+/* The same trap, read from the other end: a captured_date walk must NOT start
+ * reporting posted dates. Both directions are asserted because a mutation that
+ * swapped the two would otherwise be caught by only one of them. */
+test("modifiedAt follows the WALKED axis: a captured_date walk reports no posted date", async () => {
+  const page = await higherGovAdapter(fakeFetch(FIXTURE), undefined, "captured_date").fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  expect(page.items.map((i) => i.modifiedAt)).toEqual([
+    "2026-09-03", "2026-09-04", "2026-09-05",
+  ]);
+});
+
+/* adapter.ts §5.4, applied to the axis actually in use: a row with no value on
+ * the WALKED axis cannot be placed in the window, whatever other date it
+ * carries. Borrowing the other axis's value would be fabricating a position.
+ * The fixture's forecast row has a captured_date and NO posted_date, so it is
+ * an item on one walk and an undatedSkipped count on the other. */
+test("a row with no value on the walked axis is skipped and counted, not borrowed", async () => {
+  const posted = await higherGovAdapter(fakeFetch(FIXTURE), undefined, "posted_date").fetchListing(
+    "2026-06-09", "2026-06-09", null,
+  );
+  expect(posted.items.map((i) => i.externalId)).toEqual([
+    "003000000088067", "004950000088400",
+  ]);
+  expect(posted.undatedSkipped).toBe(1);
+
+  /* The very same row, on the axis it DOES have a value for, is an item -- so
+   * this is a fact about the walk, not about the row. */
+  const captured = await higherGovAdapter(fakeFetch(FIXTURE)).fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  expect(captured.items.map((i) => i.externalId)).toContain("FORECAST-2027-ROADS");
+  expect(captured.undatedSkipped).toBe(0);
+});
+
+/* The refusal message names the axis IN USE. Hard-coded "captured_date" was
+ * simply false on a posted_date walk, and a refusal that misdescribes what the
+ * adapter does sends the reader to fix the wrong thing. */
+test("the multi-day refusal names the axis actually being walked", async () => {
+  await expect(
+    higherGovAdapter(fakeFetch(FIXTURE), undefined, "posted_date").fetchListing(
+      "2026-06-01", "2026-06-05", null,
+    ),
+  ).rejects.toThrow(/reads a single posted_date per call/);
+  await expect(
+    higherGovAdapter(fakeFetch(FIXTURE)).fetchListing("2026-09-01", "2026-09-05", null),
+  ).rejects.toThrow(/reads a single captured_date per call/);
+});
+
+/* requestUrl is PERSISTED in the artifact, and it is the only record there of
+ * what was actually asked for -- so it must follow the axis. It must also stay
+ * the synthetic `highergov:` form: the real URL carries the api_key as a query
+ * parameter (CLAUDE.md §5.3). */
+test("requestUrl names the axis and still carries no api_key", async () => {
+  const posted = await higherGovAdapter(fakeFetch(FIXTURE), undefined, "posted_date").fetchListing(
+    "2026-06-09", "2026-06-09", null,
+  );
+  expect(posted.requestUrl).toBe("highergov:/opportunity/?posted_date=2026-06-09");
+  expect(posted.requestUrl).not.toContain("api_key");
+
+  const captured = await higherGovAdapter(fakeFetch(FIXTURE)).fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  expect(captured.requestUrl).toBe("highergov:/opportunity/?captured_date=2026-09-03");
+});
+
+/* 🔴 EVIDENCE THAT LIES. The envelope used to write `capturedDate: since`
+ * unconditionally -- so a posted_date sample landed in the artifact labelled a
+ * captured one, permanently, hashed, in the place hardest to retract. Two
+ * fields rather than one renamed field: "2026-06-09" alone cannot say whether
+ * it was published or crawled then. */
+test("the payload envelope records WHICH AXIS it asked for, and the day", async () => {
+  const posted = await higherGovAdapter(fakeFetch(FIXTURE), undefined, "posted_date").fetchListing(
+    "2026-06-09", "2026-06-09", null,
+  );
+  const postedEnvelope = JSON.parse(posted.payload) as { axis?: unknown; day?: unknown };
+  expect(postedEnvelope.axis).toBe("posted_date");
+  expect(postedEnvelope.day).toBe("2026-06-09");
+  /* And the old, now-lying key must be gone rather than kept alongside. */
+  expect(postedEnvelope).not.toHaveProperty("capturedDate");
+
+  const captured = await higherGovAdapter(fakeFetch(FIXTURE)).fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  const capturedEnvelope = JSON.parse(captured.payload) as { axis?: unknown; day?: unknown };
+  expect(capturedEnvelope.axis).toBe("captured_date");
+  expect(capturedEnvelope.day).toBe("2026-09-03");
+});
+
+/* The scrub is not weakened by the axis: a posted_date page's payload is
+ * scrubbed by the same boundary, and scrubbing it a second time changes not
+ * one byte (idempotence is what keeps the persisted bytes independent of how
+ * many times they were scrubbed -- this file's own header). */
+test("a posted_date page's payload is scrubbed, and scrubbing it again is a no-op", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { page: 1, pages: 1, count: 1 } },
+    results: [
+      {
+        source_id: "P",
+        captured_date: "2026-09-03",
+        posted_date: "2026-06-09",
+        document_path: "https://x/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0011",
+        nested: { "https://h/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0011": "value" },
+      },
+    ],
+  });
+  const page = await higherGovAdapter(fakeFetch(body), undefined, "posted_date").fetchListing(
+    "2026-06-09", "2026-06-09", null,
+  );
+  expect(page.payload).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0011");
+  expect(page.payload).toContain("REDACTED");
+  expect(scrubPayload(page.payload)).toBe(page.payload);
+  expect(JSON.stringify(page.items.map((i) => i.raw))).not.toContain("FAKEKEY");
 });

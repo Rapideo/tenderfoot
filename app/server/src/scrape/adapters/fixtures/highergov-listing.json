@@ -4,6 +4,7 @@
     {
       "source_id": "003000000088067",
       "captured_date": "2026-09-03",
+      "posted_date": "2026-06-09",
       "version_key": "v1",
       "title": "300 SP Salamonie Sludge and WW RemovalBid Documents",
       "description_text": "Removal of accumulated sludge and wastewater at the Salamonie site.",
@@ -17,6 +18,7 @@
     {
       "source_id": "004950000088400",
       "captured_date": "2026-09-04",
+      "posted_date": "2026-06-10",
       "version_key": "v1",
       "title": "AMB 28942 TOC Gas Gen",
       "description_text": null,
@@ -30,6 +32,7 @@
     {
       "source_id": "FORECAST-2027-ROADS",
       "captured_date": "2026-09-05",
+      "posted_date": null,
       "version_key": "v1",
       "title": "2027 Road Resurfacing Program",
       "description_text": "Anticipated resurfacing program for the 2027 season.",

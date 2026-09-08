@@ -200,9 +200,15 @@ function fakeAdapter(
         throw new Error('HigherGov returned a non-array "results" field (got object)');
       }
       const billed = entry.billedRecords ?? entry.items.length;
+      /* The envelope's day label is `axis` + `day`, matching adapters/
+       * highergov.ts since the axis ruling -- it used to be an unconditional
+       * `capturedDate`, which would have labelled a posted_date sample as a
+       * captured one. Nothing here READS it (billedRecordsFromArtifact and
+       * pagesFromArtifact read `records` and `pages` only); it is kept in step
+       * so this fake stays a faithful stand-in for the real adapter. */
       const envelope: Record<string, unknown> = entry.omitBilledRecords
-        ? { capturedDate: since }
-        : { capturedDate: since, records: billed };
+        ? { axis: "captured_date", day: since }
+        : { axis: "captured_date", day: since, records: billed };
       if (entry.pages !== undefined) {
         envelope.pages = entry.pages;
       }

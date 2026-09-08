@@ -44,7 +44,14 @@
  * and parses; ingest/highergov-cli.ts owns the budget, the ceiling and the
  * tally -- the same split coverage/highergov-client.ts already states. */
 import type { WindowedAdapter, ListingItem, ListingPage } from "../adapter.js";
-import { HIGHERGOV_SOURCE_NAME, higherGovClient, redact } from "../../coverage/highergov-client.js";
+import {
+  DEFAULT_FEED_AXIS,
+  HIGHERGOV_SOURCE_NAME,
+  higherGovClient,
+  redact,
+  type FeedAxis,
+  type FeedNotice,
+} from "../../coverage/highergov-client.js";
 
 export const HIGHERGOV_ADAPTER_KEY = "highergov";
 
@@ -55,11 +62,42 @@ export function scrubPayload(body: string): string {
   return redact(body);
 }
 
+/* 🔴 THE VALUE ON THE WALKED AXIS, AND NOTHING ELSE. This is the whole point
+ * of threading an axis rather than only swapping a query parameter.
+ *
+ * adapter.ts: "`modifiedAt` is the field the caller compares against the
+ * window" -- and it is deliberately not called `postedAt`, because sources
+ * differ in which axis they can filter on. scrape/run.ts folds every item's
+ * `modifiedAt` into the run's low-water resume marker.
+ *
+ * So a notice PUBLISHED in June but CRAWLED in September, returned by a
+ * `posted_date=2026-06-09` request, must report June. Reporting its
+ * `captured_date` instead would hand the runner a September date for a day it
+ * asked about in June -- a day would appear to contain records it does not,
+ * and the resume marker would be built from the wrong calendar entirely.
+ *
+ * Exported so the CLI's dry-run-sample reuse (ingest/highergov-cli.ts's
+ * sampleAsPage) reads the axis the SAME way rather than re-deriving it: two
+ * places choosing the field independently is exactly how the two would drift. */
+export function axisValue(n: FeedNotice, axis: FeedAxis): string | null {
+  return axis === "posted_date" ? n.postedDate : n.capturedDate;
+}
+
 /* `pageSize` is OPTIONAL, threaded here only from ingest/highergov-cli.ts's
  * `--page-size` flag -- see highergov-client.ts's fetchDay for the full
  * economics comment. Left unset (the default), this adapter's request is
- * unchanged from before this parameter existed. */
-export function higherGovAdapter(fetchImpl: typeof fetch = fetch, pageSize?: number): WindowedAdapter {
+ * unchanged from before this parameter existed.
+ *
+ * `axis` is OPTIONAL in the same provable sense and defaults to
+ * `captured_date` -- see FeedAxis in highergov-client.ts for Matt's
+ * 2026-09-07 ruling and why backfill and live now want different questions.
+ * registry.ts constructs this adapter with no arguments at all, so the
+ * ordinary scrape path is untouched by the existence of the parameter. */
+export function higherGovAdapter(
+  fetchImpl: typeof fetch = fetch,
+  pageSize?: number,
+  axis: FeedAxis = DEFAULT_FEED_AXIS,
+): WindowedAdapter {
   return {
     shape: "windowed",
     /* Must match migration 019's seeded source.name exactly --
@@ -83,28 +121,41 @@ export function higherGovAdapter(fetchImpl: typeof fetch = fetch, pageSize?: num
       if (until !== since) {
         throw new Error(
           `higherGovAdapter.fetchListing: since (${since}) and until (${until}) differ. ` +
-            "This adapter reads a single captured_date per call and always reports " +
+            /* NAMES THE AXIS IN USE, not a hard-coded "captured_date". On a
+             * posted_date walk that hard-coded word was simply false, and a
+             * refusal message that misdescribes what the adapter does is
+             * worse than no message: it sends the reader to fix the wrong
+             * thing. */
+            `This adapter reads a single ${axis} per call and always reports ` +
             "nextCursor: null -- a multi-day request would silently read only the " +
             "first day and be reported complete. The caller must walk days itself.",
         );
       }
 
-      /* R5 only ever sent a single `captured_date`, and whether the
-       * parameter accepts a range is unverified -- the dry run in
-       * highergov-cli.ts answers it for free. Until it does, the caller
-       * walks days and this reads one. `since` IS the day. */
-      const result = await higherGovClient.fetchDay(since, fetchImpl, pageSize);
+      /* R5 only ever sent a single date, and whether either axis parameter
+       * accepts a RANGE is unverified -- the dry run in highergov-cli.ts
+       * answers it for free. Until it does, the caller walks days and this
+       * reads one. `since` IS the day, on whichever axis was asked for. */
+      const result = await higherGovClient.fetchDay(since, fetchImpl, pageSize, axis);
 
       let undatedSkipped = 0;
       const items: ListingItem[] = [];
       for (const n of result.notices) {
         /* adapter.ts §5.4: a record with no usable date cannot be placed in
-         * the window. Counted, never allowed to decide it. */
-        if (!n.capturedDate) {
+         * the window. Counted, never allowed to decide it.
+         *
+         * 🔴 "USABLE" MEANS ON THE WALKED AXIS. A row with a captured_date but
+         * no posted_date cannot be placed in a posted_date window, however
+         * much other date it carries -- substituting the other axis's value
+         * would be fabricating a position in the window, which is precisely
+         * what §5.4 forbids. So it is skipped and counted, exactly as a row
+         * with no date at all always has been. */
+        const modifiedAt = axisValue(n, axis);
+        if (!modifiedAt) {
           undatedSkipped++;
           continue;
         }
-        items.push({ externalId: n.externalId, modifiedAt: n.capturedDate, raw: n.raw });
+        items.push({ externalId: n.externalId, modifiedAt, raw: n.raw });
       }
 
       return {
@@ -112,10 +163,14 @@ export function higherGovAdapter(fetchImpl: typeof fetch = fetch, pageSize?: num
         undatedSkipped,
         nextCursor: null,
         /* NOT the real URL: it carries the api_key as a query parameter
-         * (CLAUDE.md §5.3) and this value is persisted in the artifact. */
-        requestUrl: `highergov:/opportunity/?captured_date=${since}`,
+         * (CLAUDE.md §5.3) and this value is persisted in the artifact. The
+         * synthetic `highergov:` form is kept exactly as it was -- only the
+         * parameter NAME follows the axis, so this can still never carry a
+         * credential. It has to follow it, though: this string is the only
+         * record in the artifact of what was actually asked for. */
+        requestUrl: `highergov:/opportunity/?${axis}=${since}`,
         httpStatus: 200,
-        /* The envelope carries three scalars beyond the rows, and dropping
+        /* The envelope carries FOUR scalars beyond the rows, and dropping
          * any of them turns this artifact into evidence it cannot answer:
          *
          *  - `pages`: the client's own comment on FeedResult.pages says why
@@ -132,12 +187,29 @@ export function higherGovAdapter(fetchImpl: typeof fetch = fetch, pageSize?: num
          *    neither count, and under-reporting spend is the dangerous
          *    direction against a ceiling that cannot be read back
          *    (CLAUDE.md §5.1).
+         *  - `axis` + `day`: WHICH QUESTION THIS SAMPLE ANSWERS. This used to
+         *    be a single field, `capturedDate: since`, written unconditionally
+         *    -- so the moment a posted_date walk existed, a posted_date sample
+         *    would be labelled `capturedDate` and the artifact would be
+         *    evidence that LIES. Two fields rather than one renamed field
+         *    because the axis and the day are two facts: "2026-06-09" alone
+         *    cannot say whether it was published or crawled then, and this
+         *    file is the only place that still knows.
          *
-         * All three are scalars, so carrying them costs no extra API
-         * records and does not touch the scrub or the hash's stability. */
+         * All four are scalars, so carrying them costs no extra API
+         * records and does not touch the scrub or the hash's stability.
+         *
+         * ⚠️ NOTHING READ THE OLD `capturedDate` KEY -- checked, not assumed.
+         * ingest/highergov-cli.ts's readArtifactEnvelope (the single reader of
+         * this envelope, feeding billedRecordsFromArtifact and
+         * pagesFromArtifact) reads `records` and `pages` only, and no other
+         * module in the repo parses a capture payload at all. Renaming it is
+         * therefore safe today; it is named here so a future reader knows the
+         * question was asked. */
         payload: scrubPayload(
           JSON.stringify({
-            capturedDate: since,
+            axis,
+            day: since,
             records: result.records,
             feedCount: result.feedCount,
             pages: result.pages,
