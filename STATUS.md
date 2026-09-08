@@ -234,7 +234,56 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-07
+## 🔖 RESUME HERE — updated 2026-09-08
+
+## 🛒 THE TRIAL WAS SPENT DOWN ON PURPOSE — 1,540 SOLICITATIONS, FIVE STATES, 552 BUYERS
+
+**Matt, 2026-09-07/08: the trial ends within days with ~9,000 records unspent, and unspent records are LOST.** So the standing frugality was suspended by ruling and the ceiling raised from 1,000 to 9,000 (`api-spend.ts`), `maxCallsPerRun` 100 → 500. Both are ratified values and both commits record who ruled and why.
+
+| | |
+|---|---|
+| Records spent | **2,605 of 9,000** — ~6,400 deliberately UNSPENT, see the decision below |
+| Solicitations | **1,540** |
+| Buyers | **552** |
+| States | MI 446 · OH 430 · IL 326 · **IN 213** · KY 126 |
+| Biddable vs forecast | 1,233 biddable · 307 forecasts (held out of the queue by ruling ③) |
+| Descriptions | **~80%** — against 66% predicted, 42% for sub-state |
+| Window | 2026-06-09 → 2026-09-07, on `posted_date` |
+
+⚖️ **Two saved searches now exist.** `HIGHERGOV_SEARCH_ID` in `.env` is INDIANA-ONLY. The four-neighbour search (IL/MI/OH/KY, and it also carries IN) is `-Dul7dQMJTvTIqV3mHngP`, supplied by Matt 2026-09-08 and passed per-run as an env override — **not** written to `.env`, so the default stays Indiana. Geography lives ONLY in the saved search: R1 proved `pop_state`, `state` and `place_of_performance_state` are all accepted and **silently ignored**.
+
+### ⛔ THE OPEN DECISION, AND IT IS WHY ~6,400 RECORDS WERE NOT SPENT
+
+**`page_size` IS CAPPED AT 100 BY THE VENDOR.** Measured, not assumed: a run requesting `--page-size=300` produced **14 calls returning exactly 100 records each**. So any day with more than 100 records is bought *partially*, and **14 of 20 weekdays on the four-state search exceeded 100.**
+
+**We do not control `ordering`, so we cannot say WHICH 100 we get.** That makes a partial day evidence of unknown shape rather than a sample.
+
+**The choice, and it is Matt's:**
+
+| | Cost | What it buys |
+|---|---|---|
+| **Build multi-page walking** (`page_number` is an accepted parameter) | ~6,400 records ≈ **25–30 COMPLETE days** | Complete days, honest archive |
+| **Keep buying page one only** | ~6,400 records ≈ **60+ partial days** | ~2 more months at ~60% of each busy day |
+
+Depth-of-day against number-of-days. **Spending was stopped rather than foreclosing the better option**, and because building a metered paging loop unattended overnight is how an allowance gets exhausted by a bug.
+
+### ✅ WHAT WAS PROVEN WITH REAL MONEY, NOT ASSUMED
+
+- **The meter bills exactly `results.length`.** One isolated call returned 2 records; the dashboard moved 847 → 849. **No per-call floor.** That calibration is what made a large pull safe — a proportional error would have overrun the real allowance by ~20% with every guard reporting healthy.
+- **`posted_date` is honoured** (not one of the silently-ignored parameters). Backfill runs on it; live stays on `captured_date` (spec §3.2 amendment).
+- **The agency field arrives NESTED.** The warning fired on the first real row and again across an entirely different four-state buyer set. `org-chain.ts`'s flat read was an assumption no captured response ever backed; the tolerance added 2026-09-07 is the only reason 552 buyers resolved instead of none. **The flat branch and its warning can now both be deleted.**
+- **The ledger was 150 light** — the interval between the last dashboard reading (09-03) and the ledger's first write (09-04), when nothing was measuring. Migration 033 reconciles it; ledger and dashboard now agree exactly.
+
+### 🔴 A MERGE DEFECT FOUND IN LIVE DATA — WORKAROUND IN USE, FIX OUTSTANDING
+
+**Seven fields are applied only to solicitations that ALREADY EXIST** — `merge.ts:301,314,330,338,351,355,359`: `closes_at`, `posted_at`, `description`, `place_of_performance`, `kind`, `codes`, `set_aside`. On the pass that CREATES a row, `g.solicitation_id` is still null, so **all seven are skipped**. A freshly merged solicitation has no deadline, no description, no codes and no set-aside until merge runs again.
+
+**The deadline is in that list, and the queue sorts by deadline.**
+
+**Workaround, in use and free: ALWAYS RUN `npm run merge` TWICE after an ingest.** Verified directly — descriptions went 0 → 16 of 16 on the second pass. Not fixed at the time of discovery: it is the most delicate layer in the system and thousands of rows were about to pass through it.
+
+---
+
 
 ## ✅ HIGHERGOV INGESTS — THE PURCHASE FINALLY DELIVERS ROWS
 
