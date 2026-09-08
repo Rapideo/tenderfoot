@@ -3,7 +3,12 @@
  * is the real mechanism, in the same style rubric.test.ts pins R7_RATIFIED
  * and THRESHOLDS_RATIFIED. */
 import { expect, test } from "vitest";
-import { COVERAGE, COVERAGE_RATIFIED, SPEND_LIMITS_RATIFIED } from "./thresholds.js";
+import {
+  COVERAGE,
+  COVERAGE_RATIFIED,
+  SPEND_LIMITS_RATIFIED,
+  MAX_CALLS_PER_RUN_RATIFIED,
+} from "./thresholds.js";
 
 /* ⚖️ Ruled 2026-09-07 (D8, D9, D11). This asserts the RULING, not a
  * permanent property -- if Matt ever withdraws it, this test is the thing
@@ -13,14 +18,33 @@ test("the four GRADING thresholds are ratified", () => {
 });
 
 /* 🔴 THE ASSERTION THAT KEEPS THE SPLIT HONEST. One flag over both blocks is
- * how fitness/thresholds.ts made a split answer inexpressible in D4/D5. The
- * three SPEND caps govern money against an allowance that cannot be read
- * back from the vendor, and Matt has never been asked about any of them --
- * so ratifying the grading thresholds must not carry them along. Delete the
- * split and this fails. */
+ * how fitness/thresholds.ts made a split answer inexpressible in D4/D5. Two
+ * of the three SPEND caps (maxRecordsPerRun, unparseableResponseRecords)
+ * govern money against an allowance that cannot be read back from the
+ * vendor, and Matt has never been asked about either -- so ratifying the
+ * grading thresholds must not carry them along. Delete the split and this
+ * fails. (The third spend cap, maxCallsPerRun, WAS separately ruled on
+ * 2026-09-07 -- see MAX_CALLS_PER_RUN_RATIFIED below, which is exactly why
+ * it no longer lives under this flag.) */
 test("the SPEND caps are NOT ratified by the grading ruling", () => {
   expect(SPEND_LIMITS_RATIFIED).toBe(false);
   expect(COVERAGE_RATIFIED).not.toBe(SPEND_LIMITS_RATIFIED);
+});
+
+/* ⚖️ THE SPLIT ITSELF, PINNED. maxCallsPerRun's ratification must not be
+ * expressible via SPEND_LIMITS_RATIFIED -- it needs its OWN true, distinct
+ * from the surrounding false, or the split this file's header argues for
+ * would exist only in prose. */
+test("maxCallsPerRun is ratified separately from the other two spend caps", () => {
+  expect(MAX_CALLS_PER_RUN_RATIFIED).toBe(true);
+  expect(MAX_CALLS_PER_RUN_RATIFIED).not.toBe(SPEND_LIMITS_RATIFIED);
+});
+
+/* A literal number sitting only in a comment pins nothing -- api-spend.ts's
+ * own final-review finding, which is why this asserts the raised value
+ * itself rather than trusting the comment beside it. */
+test("maxCallsPerRun was raised to 500 by the same 2026-09-07 ruling", () => {
+  expect(COVERAGE.maxCallsPerRun).toBe(500);
 });
 
 /* The floor now MATCHES fitness/thresholds.ts's R7 population floor rather

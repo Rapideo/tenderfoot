@@ -367,7 +367,17 @@ test("the ceiling allows a run that would land exactly on it", async () => {
  * bills nothing (CLAUDE.md §5.1), so the record cap alone never trips. This
  * client returns ZERO records on every single day, across a window far wider
  * than maxCallsPerRun, and proves the run stops anyway -- on CALL COUNT, not
- * on spend. */
+ * on spend.
+ *
+ * ⚖️ WINDOW WIDENED 2026-09-07 when maxCallsPerRun was ratified and raised
+ * 100 -> 500 (thresholds.ts): the old window, 2026-01-01 to 2026-06-01, was
+ * 152 days -- "far wider than 100" but no longer far wider than 500, so this
+ * test would stop asserting anything real (the loop would exhaust every day
+ * in the window with calls still under the new cap, and `aborted` would go
+ * false). 2026-01-01 to 2028-01-01 is 731 days, comfortably past 500 again.
+ * Runtime is unaffected by how much wider than the cap this is -- the loop
+ * still breaks at exactly maxCallsPerRun calls, so the padding costs
+ * nothing. */
 test(
   "a run aborts at maxCallsPerRun even when every call returns zero records",
   async () => {
@@ -382,17 +392,18 @@ test(
     };
     const out = await runCoverage({
       from: "2026-01-01",
-      to: "2026-06-01",
+      to: "2028-01-01",
       client: zeroEveryDay,
     });
     expect(out.aborted).toBe(true);
     expect(out.abortReason).toContain("maxCallsPerRun");
     expect(out.recordsSpent).toBe(0);
   },
-  /* maxCallsPerRun (100) real committed api_spend INSERTs, sequential, over
-   * the network -- comfortably past vitest's 5s default. Not a flaky test;
-   * just a genuinely larger one. */
-  30000,
+  /* maxCallsPerRun (500, raised 2026-09-07 from 100) real committed
+   * api_spend INSERTs, sequential, over the network -- 5x the prior count,
+   * so the timeout is raised well past the old 30000ms rather than tuned to
+   * the exact new figure. Not a flaky test; just a genuinely larger one. */
+  90000,
 );
 
 /* 🔴 CRITICAL REGRESSION (review 2026-09-06, ruled by the controller).

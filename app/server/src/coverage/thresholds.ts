@@ -17,7 +17,21 @@
  * Both keep the D4/D5 mechanism: an exported boolean that changes runtime
  * output and is pinned by a test, never merely the word UNRATIFIED in a
  * comment. api-spend.ts's final review found that a comment pins nothing --
- * delete the word and the test stayed green. */
+ * delete the word and the test stayed green.
+ *
+ * ⚖️ THE SAME LESSON, ONE LEVEL DEEPER (2026-09-07, later the same day as
+ * D8/D9/D11). Matt ruled on exactly ONE of the three SPEND caps --
+ * `maxCallsPerRun`, raised from 100 to 500 so a year-long Indiana archive
+ * walk (~365 one-call days, the same trial-ending motivation that raised
+ * `MONTHLY_RECORD_CEILING` to 9,000 in extract/api-spend.ts) does not trip a
+ * call-count cap sized for a much shorter run. `maxRecordsPerRun` and
+ * `unparseableResponseRecords` were NOT put to him and stay exactly where
+ * `SPEND_LIMITS_RATIFIED` already had them. Folding `maxCallsPerRun`'s
+ * ratification into that same flag would recreate the inexpressible answer
+ * this file's own split exists to avoid -- one flag, two calls ruled
+ * differently. So it gets its OWN flag, `MAX_CALLS_PER_RUN_RATIFIED`,
+ * defined right after `SPEND_LIMITS_RATIFIED` below, instead of reopening or
+ * overloading that one. */
 
 /* ⚖️ RATIFIED 2026-09-07 BY MATT. Governs the four GRADING thresholds only:
  * minCoverageRecall, minTimelyRecall, minLeadDays, minCohortSize. Ruling
@@ -31,13 +45,32 @@
 export const COVERAGE_RATIFIED = true;
 
 /* ⚖️ STILL UNRATIFIED, and deliberately so: Matt has never been shown these
- * three. They cap SPENDING, not grading -- maxRecordsPerRun,
- * unparseableResponseRecords and maxCallsPerRun -- and every one of them was
- * picked by an agent from a single dashboard reading. They govern money
- * against an allowance that cannot be read back from the vendor
- * (CLAUDE.md §5.1), which is the reason they are not folded into the flag
- * above and quietly carried along by a ruling that never mentioned them. */
+ * two. They cap SPENDING, not grading -- maxRecordsPerRun and
+ * unparseableResponseRecords -- and both were picked by an agent from a
+ * single dashboard reading. They govern money against an allowance that
+ * cannot be read back from the vendor (CLAUDE.md §5.1), which is the reason
+ * they are not folded into the flag above and quietly carried along by a
+ * ruling that never mentioned them.
+ *
+ * ⚠️ THIS USED TO GOVERN A THIRD CAP, `maxCallsPerRun`, TOO. It was ruled on
+ * separately 2026-09-07 and split out below into its own flag,
+ * `MAX_CALLS_PER_RUN_RATIFIED` -- see this file's own header for why a
+ * single flag over caps ruled on different days would make that difference
+ * inexpressible. Leaving `maxCallsPerRun` listed here after that ruling
+ * would have made this flag claim something no longer true the moment
+ * `coverage-cli.ts` prints it. */
 export const SPEND_LIMITS_RATIFIED = false;
+
+/* ⚖️ RATIFIED 2026-09-07 BY MATT, split out from `SPEND_LIMITS_RATIFIED` the
+ * moment `maxCallsPerRun` diverged from the other two spend caps -- see this
+ * file's own header. Governs ONLY `maxCallsPerRun` below, raised from 100 to
+ * 500: the trial ends in ~2 days with ~9,000 records unspent and Matt ruled
+ * we spend them on a complete Indiana archive rather than lose them, and a
+ * year-long walk is ~365 one-call days -- 100 would have refused that walk
+ * on call count alone long before it ever came near the record ceiling.
+ * `maxRecordsPerRun` and `unparseableResponseRecords` are untouched by this
+ * ruling and remain under `SPEND_LIMITS_RATIFIED` above. */
+export const MAX_CALLS_PER_RUN_RATIFIED = true;
 
 /* Named apart from the object below so `unparseableResponseRecords` can
  * reuse the exact number rather than a second literal that could drift from
@@ -141,8 +174,18 @@ export const COVERAGE = {
    * dashboard reading (CLAUDE.md §5.1); an unbounded call count is a real
    * exposure against a claim that thin, not a hypothetical one.
    *
-   * ⚖️ UNRATIFIED -- see SPEND_LIMITS_RATIFIED. Picked loosely: comfortably above what one run's day loop plus
-   * its per-key id-lookup loop needs at current cohort sizes, without being
-   * so high it stops meaning anything. */
-  maxCallsPerRun: 100,
+   * ⚖️ RATIFIED 2026-09-07 BY MATT (see MAX_CALLS_PER_RUN_RATIFIED above),
+   * raised from 100 to 500. The HigherGov trial ends in ~2 days with ~9,000
+   * records unspent, and Matt ruled we spend them on a complete Indiana
+   * listing archive rather than lose them -- a year-long walk is ~365
+   * one-call days, so 100 would have stopped the walk on call count alone
+   * long before it ever approached the (also-raised) monthly ceiling. The
+   * paragraph below is the ORIGINAL, pre-ruling reasoning for 100 -- kept
+   * because it is still true of what a SHORT run needs, it is just no longer
+   * what set the number: an explicit ruling did.
+   *
+   * ~~UNRATIFIED -- see SPEND_LIMITS_RATIFIED.~~ Picked loosely: comfortably
+   * above what one run's day loop plus its per-key id-lookup loop needs at
+   * current cohort sizes, without being so high it stops meaning anything. */
+  maxCallsPerRun: 500,
 } as const;

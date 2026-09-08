@@ -80,3 +80,13 @@ test("the ceiling is a positive number and its ratification is pinned in source"
    * property: if it is ever withdrawn, this test changes with it. */
   expect(CEILING_RATIFIED).toBe(true);
 });
+
+/* ⚖️ SAME DAY, LATER RULING: 1,000 -> 9,000, so the ~9,000 unspent trial
+ * records are not simply lost before the trial ends (Matt ruled we spend
+ * them on a complete Indiana archive). A literal number sitting only in a
+ * comment is exactly what this file's own final-review finding says pins
+ * nothing -- deleting "1,000" from the comment above left every test green,
+ * so the number itself is asserted here too, not merely described near it. */
+test("the ceiling was raised to 9,000 by the same-day ruling on top of D10", () => {
+  expect(MONTHLY_RECORD_CEILING).toBe(9000);
+});

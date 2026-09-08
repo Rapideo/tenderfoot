@@ -19,7 +19,12 @@ import { close } from "../db/index.js";
 import { runCoverage, gradedItems } from "./run.js";
 import { measureCoverage, settled } from "./measure.js";
 import { idoaKeyFrom } from "./answer-key.js";
-import { COVERAGE, COVERAGE_RATIFIED, SPEND_LIMITS_RATIFIED } from "./thresholds.js";
+import {
+  COVERAGE,
+  COVERAGE_RATIFIED,
+  SPEND_LIMITS_RATIFIED,
+  MAX_CALLS_PER_RUN_RATIFIED,
+} from "./thresholds.js";
 import { IDOA_URL } from "../scrape/adapters/idoa.js";
 import { HIGHERGOV_SOURCE_NAME } from "./highergov-client.js";
 import { MONTHLY_RECORD_CEILING, spentThisMonth } from "../extract/api-spend.js";
@@ -164,11 +169,13 @@ export async function main(): Promise<void> {
     if (p.detail) console.log(`        ${p.detail}`);
   }
 
-  /* Two flags, reported separately, because they went different ways on
-   * 2026-09-07: the GRADING thresholds were ratified and the SPEND caps were
-   * not. Collapsing them would either overclaim (calling an unratified money
-   * cap approved) or underclaim (calling a ruled verdict provisional), and an
-   * operator acts on this line. */
+  /* Flags reported separately, because they went different ways on
+   * 2026-09-07: the GRADING thresholds were ratified and (later the same
+   * day) so was ONE of the three SPEND caps, maxCallsPerRun -- the other
+   * two, maxRecordsPerRun and unparseableResponseRecords, were not.
+   * Collapsing any of these would either overclaim (calling an unratified
+   * money cap approved) or underclaim (calling a ruled number or verdict
+   * provisional), and an operator acts on this line. */
   if (!COVERAGE_RATIFIED) {
     console.log(
       `
@@ -177,13 +184,26 @@ export async function main(): Promise<void> {
     );
   }
 
+  /* ⚠️ maxCallsPerRun DROPPED FROM THIS LINE, 2026-09-07 (SAME DAY): it is
+   * now ratified separately (MAX_CALLS_PER_RUN_RATIFIED, thresholds.ts) and
+   * reported on its own line below instead -- naming it here, next to two
+   * caps that are genuinely still unratified, would call an approved number
+   * unapproved. */
   if (!SPEND_LIMITS_RATIFIED) {
     console.log(
       `
-⚖️  The spend caps are UNRATIFIED — maxRecordsPerRun ` +
-        `${COVERAGE.maxRecordsPerRun}, maxCallsPerRun ${COVERAGE.maxCallsPerRun}. ` +
-        `They were picked by an agent, not ruled. If this run aborted on one of ` +
-        `them, it stopped on a number nobody has approved.`,
+⚖️  These spend caps are UNRATIFIED — maxRecordsPerRun ` +
+        `${COVERAGE.maxRecordsPerRun}, unparseableResponseRecords ` +
+        `${COVERAGE.unparseableResponseRecords}. They were picked by an agent, not ruled. ` +
+        `If this run aborted on one of them, it stopped on a number nobody has approved.`,
+    );
+  }
+
+  if (MAX_CALLS_PER_RUN_RATIFIED) {
+    console.log(
+      `
+⚖️  maxCallsPerRun (${COVERAGE.maxCallsPerRun}) is RATIFIED (Matt, 2026-09-07) -- if this ` +
+        `run aborted on it, that is a ruled number, not an agent's guess.`,
     );
   }
 }

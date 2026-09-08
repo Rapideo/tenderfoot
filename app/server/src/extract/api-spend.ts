@@ -36,8 +36,22 @@ import { all, type Querier } from "../db/index.js";
  * while this governs what the APPLICATION spends while somebody browses.
  * Different actors. Since consumption cannot be read back from the vendor,
  * an unbounded browsing session's first symptom would be a dashboard read
- * days later. */
-export const MONTHLY_RECORD_CEILING = 1000;
+ * days later.
+ *
+ * ⚖️ RAISED TO 9,000, RULED 2026-09-07 BY MATT -- same day as D10 above, a
+ * later ruling on top of it, not a reversal of it. The HigherGov trial ends
+ * in ~2 days with ~9,000 records unspent, and unspent records are simply
+ * lost -- so Matt ruled we spend them on a complete Indiana listing archive
+ * before that happens (highergov-cli.ts's `--max-records` review gate, added
+ * the same day, is the other half of making that safe). 1,000 was never the
+ * guard's PURPOSE, only its first honest value: the purpose, stated plainly
+ * two paragraphs up, was always "refuse before spending money we do not
+ * have." 9,000 is that same purpose re-evaluated against a trial account
+ * that genuinely has 9,000 left and days, not weeks, to spend it in -- the
+ * reasoning above did not stop applying, the balance it was applied to
+ * changed. `CEILING_RATIFIED` stays `true` below: this re-ratifies the
+ * NUMBER, it does not reopen whether a ceiling here is ratified at all. */
+export const MONTHLY_RECORD_CEILING = 9000;
 
 /* ⚠️ FINAL-REVIEW FIX: "exactly the style of ... R7's block" was a claim, not
  * yet a fact. R7's style is `R7_RATIFIED`, an EXPORTED BOOLEAN that changes
@@ -61,7 +75,15 @@ export const MONTHLY_RECORD_CEILING = 1000;
  * measurement run and vice versa, and neither is warned, because
  * consumption cannot be read back from the vendor at all. Option C offered
  * one ceiling per actor; he took A. Recorded here because the next person
- * to hit an unexplained refusal deserves to know it was a choice. */
+ * to hit an unexplained refusal deserves to know it was a choice.
+ *
+ * ⚖️ SAME DAY, LATER RULING: the number moved from 1,000 to 9,000 (see
+ * MONTHLY_RECORD_CEILING's own comment above for why). This flag is not
+ * re-litigated by that -- it was never about the FIGURE 1,000, it was about
+ * whether a ceiling here is Matt's to rule on at all, and that is still
+ * settled. A future change to the number again would not need this flag
+ * touched a third time either, unless it stopped being ratified, which is a
+ * different fact from stopping being 1,000 or 9,000. */
 export const CEILING_RATIFIED = true;
 
 export interface Spend {
