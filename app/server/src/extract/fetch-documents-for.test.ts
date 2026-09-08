@@ -1,5 +1,5 @@
 /* THE SPEND GUARD. Every test here is about not paying twice. */
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { useTestSchema, resetSchema } from "../db/testdb.js";
 
 /* Task 7 review round 2. The new HigherGov-sourced tests below go through
@@ -330,6 +330,71 @@ test("a throw from a SECOND metered source is tallied too, driven by the registr
   } finally {
     delete ADAPTERS.testSecondMetered;
     delete DOCUMENT_CLIENTS[SECOND_METERED_SOURCE];
+  }
+});
+
+/* 🔴 CODE REVIEW OFF THE D2 BRANCH, FIX 2. Same shape as the two equivalent
+ * tests in ingest/highergov-cli.test.ts (commit 05dd64e): the catch above
+ * exists so the VENDOR's own error always reaches the caller, but
+ * `recordSpend` is itself a database write and can throw too (a degraded
+ * compute, CLAUDE.md §4's own "Connection terminated unexpectedly").
+ * Unguarded, that second throw would replace the vendor's "HigherGov
+ * answered 500" with a database error before `throw err` ever ran. A trigger
+ * that fails ONLY on the conservative-bound value simulates the tally itself
+ * failing, without disturbing any other recordSpend call this file makes on
+ * an ordinary path. */
+async function withFailingSpendTally<T>(fn: () => Promise<T>): Promise<T> {
+  await run(`
+    CREATE OR REPLACE FUNCTION test_fail_conservative_spend_fdf() RETURNS trigger AS $BODY$
+    BEGIN
+      IF NEW.records = ${COVERAGE.unparseableResponseRecords} THEN
+        RAISE EXCEPTION 'simulated spend-tally failure for test';
+      END IF;
+      RETURN NEW;
+    END;
+    $BODY$ LANGUAGE plpgsql;
+  `);
+  await run(`
+    CREATE TRIGGER test_fail_conservative_spend_fdf_trigger
+    BEFORE INSERT ON api_spend
+    FOR EACH ROW EXECUTE FUNCTION test_fail_conservative_spend_fdf();
+  `);
+  try {
+    return await fn();
+  } finally {
+    await run(`DROP TRIGGER IF EXISTS test_fail_conservative_spend_fdf_trigger ON api_spend`);
+    await run(`DROP FUNCTION IF EXISTS test_fail_conservative_spend_fdf()`);
+  }
+}
+
+test("a throw from a metered client survives even when its own spend tally throws", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-tally-fails");
+  const failing = (async () => ({
+    ok: false,
+    status: 500,
+    json: async () => ({}),
+  })) as unknown as typeof fetch;
+
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await withFailingSpendTally(async () => {
+      await expect(fetchDocumentsFor(hgSolicitationId, failing)).rejects.toThrow(
+        /HigherGov answered/,
+      );
+    });
+
+    /* No row: the simulated tally failure rolled its own INSERT back, exactly
+     * as a real one would. */
+    expect(
+      await all(`SELECT id FROM api_spend WHERE solicitation_id = $1`, [hgSolicitationId]),
+    ).toHaveLength(0);
+
+    /* The tally's own failure must still be surfaced somewhere -- silently
+     * dropping it entirely would just be a quieter version of the same
+     * defect this fix exists for. */
+    expect(errorSpy).toHaveBeenCalled();
+  } finally {
+    errorSpy.mockRestore();
   }
 });
 

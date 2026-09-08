@@ -21,6 +21,7 @@ import { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING } from "./api-spend
  * site. Cross-importing from extract/ into coverage/ already has precedent:
  * document-clients.ts does it for higherGovClient itself. */
 import { COVERAGE } from "../coverage/thresholds.js";
+import { redact } from "../coverage/highergov-client.js";
 import { isMeteredSourceName } from "../scrape/adapters/registry.js";
 
 export type FetchReason = "fetched" | "already-looked" | "unsupported" | "ceiling";
@@ -125,15 +126,37 @@ export async function fetchDocumentsFor(
      * registry's own flag for however many metered sources ever exist, not a
      * string literal. */
     if (isMeteredSourceName(row.source_name)) {
-      await recordSpend(
-        { run },
-        {
-          sourceId: row.source_id,
-          endpoint: "document",
-          records: COVERAGE.unparseableResponseRecords,
-          solicitationId: row.id,
-        },
-      );
+      /* 🔴 FIXED (same review). The catch this comment sits in exists so the
+       * VENDOR's error always reaches the caller -- but `recordSpend` is a
+       * database write and can itself throw (a degraded compute, CLAUDE.md
+       * §4's own "Connection terminated unexpectedly"). Unguarded, that
+       * second throw would replace `err` before `throw err` below ever ran:
+       * the ledger is unaffected either way (no row is written in either
+       * case), but the operator would see a database error instead of the
+       * vendor's own -- exactly the diagnostic this catch exists to
+       * preserve. Same shape as the two equivalent catches in
+       * ingest/highergov-cli.ts (commit 05dd64e): the tally is wrapped and
+       * its own failure only logged, never allowed to compete with the error
+       * it was recording. */
+      try {
+        await recordSpend(
+          { run },
+          {
+            sourceId: row.source_id,
+            endpoint: "document",
+            records: COVERAGE.unparseableResponseRecords,
+            solicitationId: row.id,
+          },
+        );
+      } catch (tallyErr) {
+        console.error(
+          redact(
+            `Failed to record conservative spend after a vendor error (original error follows): ${
+              tallyErr instanceof Error ? (tallyErr.stack ?? tallyErr.message) : String(tallyErr)
+            }`,
+          ),
+        );
+      }
     }
     throw err;
   }
