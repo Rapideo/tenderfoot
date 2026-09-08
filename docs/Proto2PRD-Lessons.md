@@ -654,6 +654,31 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 
 ---
 
+### 2.31 A ledger that disagrees with an external meter is either a fixed offset or a rate error — and one transaction of known size tells you which
+
+**Observed 2026-09-08, immediately before committing ~9,000 metered records to a purchase that could not be undone.** Our own spend ledger read **699**. The vendor's dashboard — the only external instrument, readable by a person and not by code — read **847**. A gap of **150**, or 21%.
+
+**Two explanations fit that number equally well, and they demand opposite responses:**
+
+| | What it means | What you do |
+|---|---|---|
+| **Fixed offset** | Something happened once, before the ledger existed | Record it, carry on |
+| **Rate error** | Every call is under-counted | **Stop.** Every projection you own is wrong by a percentage |
+
+**Reconciling the number does not distinguish them.** Adding a 150-record correction makes the two figures agree under *either* hypothesis — and if the cause were proportional, the next 9,000 records would have overrun the real allowance by ~1,800 while every guard in the system reported healthy, because every guard reads the ledger.
+
+**The experiment is one transaction of precisely known size, in isolation.** With nothing else touching the API, one call was made that returned exactly 2 records. The dashboard moved **847 → 849**. Delta 2. No rate error, no per-call floor, no charge for matched-but-unreturned rows. The gap was therefore historical: the interval between the last external reading and the ledger's first write, during which nothing was measuring at all.
+
+**Proposed generalisation.** **A discrepancy's SHAPE is more actionable than its size.** A number that is merely reconciled tells you nothing about whether the next thousand units will diverge the same way. Offset and rate look identical at a single point of comparison, and are separated only by a *second* point you create deliberately.
+
+> **The tell is a discrepancy discovered just before a large, irreversible commitment.** That is exactly when the temptation to "apply the correction and proceed" is strongest, and exactly when it is least safe — because the correction fits today's number whether or not the cause recurs.
+
+**The check that catches it.** Before correcting, spend one known quantity in isolation and read the external instrument on both sides of it. It must be done **before** the reconciliation, not after: once the correction is applied, both hypotheses predict agreement and the evidence is gone. Keep the transaction small — a floor or a multiplier shows up most starkly against a tiny known quantity.
+
+**Why not promoted.** One instance. But the mechanism is general to any system that keeps its own count of a resource metered by somebody else — spend, quota, rate limit, seats — and it applies with full force whenever that external authority cannot be queried by code, which is precisely when a home-grown ledger becomes load-bearing.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
