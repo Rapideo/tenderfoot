@@ -72,11 +72,20 @@ export const SPEND_LIMITS_RATIFIED = false;
  * ruling and remain under `SPEND_LIMITS_RATIFIED` above. */
 export const MAX_CALLS_PER_RUN_RATIFIED = true;
 
-/* Named apart from the object below so `unparseableResponseRecords` can
- * reuse the exact number rather than a second literal that could drift from
- * it -- see that field's own comment for why reusing it is deliberate, not
- * laziness. */
+/* The coverage harness's own per-run spend cap. ⚠️ `unparseableResponseRecords`
+ * USED to reuse this number and no longer does -- see that field's comment for
+ * the two 2026-09-08 measurements that separated them. Named apart because the
+ * separation is deliberate: this bounds what a RUN may spend, that one prices a
+ * single unreadable RESPONSE, and paging made those different questions. */
 const MAX_RECORDS_PER_RUN = 40;
+
+/* THE VENDOR'S OWN CEILING ON ONE RESPONSE, MEASURED RATHER THAN DOCUMENTED.
+ * A run on 2026-09-08 requested `page_size=300` and got fourteen calls
+ * returning exactly 100 records each -- so 100 is the most any single
+ * response can bill, whatever we ask for. `unparseableResponseRecords` uses
+ * it because a page that throws after the vendor billed could have cost this
+ * much and no more. */
+const VENDOR_PAGE_RECORD_CAP = 100;
 
 export const COVERAGE = {
   /** C1 — share of answer-key notices HigherGov carried AT ALL. The
@@ -152,19 +161,35 @@ export const COVERAGE = {
    *
    * We cannot know what an unparseable response actually cost, so this picks
    * the largest a single call could plausibly have cost rather than guess a
-   * smaller number. It reuses `maxRecordsPerRun`'s own figure rather than a
-   * fresh one: that number is already this file's answer to "the most one
-   * call in a run is assumed to cost" (R5 measured 5 records for one
-   * filtered Indiana day -- this is an 8x margin over it), so charging a
-   * single unreadable call the full per-run cap is deliberately generous, not
-   * arbitrary. Over-charging this way is OVER-reporting, which api-spend.ts's
-   * header calls "merely conservative, not wrong" -- unlike under-reporting,
-   * it cannot hide real consumption from the one instrument that can still
-   * catch it, a person reading the account dashboard.
+   * smaller number. Over-charging that way is OVER-reporting, which
+   * api-spend.ts's header calls "merely conservative, not wrong" -- unlike
+   * under-reporting, it cannot hide real consumption from the one instrument
+   * that can still catch it, a person reading the account dashboard.
    *
-   * ⚖️ UNRATIFIED -- see SPEND_LIMITS_RATIFIED. The grading thresholds were
-   * ratified 2026-09-07; this was not, and was never put to Matt. */
-  unparseableResponseRecords: MAX_RECORDS_PER_RUN,
+   * 🔴 RAISED 40 -> 100 ON 2026-09-08, AND IT NO LONGER REUSES
+   * `maxRecordsPerRun`. It used to, and the reuse was well argued at the
+   * time: 40 was this file's answer to "the most one call in a run is assumed
+   * to cost", an 8x margin over R5's measured 5 records for a filtered
+   * Indiana day.
+   *
+   * **Two measurements killed that.** The vendor CAPS EVERY RESPONSE AT 100
+   * RECORDS -- proved 2026-09-08 when a run requesting `page_size=300`
+   * produced fourteen calls returning exactly 100 each. And `fetchDay` now
+   * PAGES, so a single unreadable page can genuinely have cost 100. A
+   * throwing page charged 40 would under-report by up to 60, which is the one
+   * direction this whole mechanism exists to avoid.
+   *
+   * So the figure is now the measured page cap: the largest a single response
+   * CAN cost, rather than the largest this file once assumed a call would.
+   * `maxRecordsPerRun` stays at 40 -- it caps what the COVERAGE HARNESS may
+   * spend in a run, a different question that paging did not change, and
+   * raising it as a side effect would have quietly widened that budget.
+   *
+   * ⚖️ UNRATIFIED, but the RAISE was approved by Matt 2026-09-08 on the
+   * reasoning above. `SPEND_LIMITS_RATIFIED` stays false: the number's
+   * derivation is now measured rather than picked, which is not the same as
+   * the value having been put to him as a budget. */
+  unparseableResponseRecords: VENDOR_PAGE_RECORD_CAP,
 
   /** The hard stop on CALL COUNT, independent of records spent. A zero-result
    * day bills nothing (CLAUDE.md §5.1's meter counts records RETURNED), so

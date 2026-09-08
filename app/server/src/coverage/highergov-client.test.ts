@@ -600,14 +600,36 @@ test("fetchDay throws when HIGHERGOV_SEARCH_ID is unset, rather than fetching un
   }
 });
 
-/* Review finding #4: proves the VITEST guard is real, the same way the
- * mutation check proves redact() is real. No fetchImpl is injected here --
- * fetchDay falls through to the real global fetch, which is exactly the
- * "one forgotten argument" scenario the guard exists to catch. If this
- * throws anything other than the guard's own message, it means a live,
- * billed HTTP request was about to be attempted. */
+/* Review finding #4: proves the VITEST guard is real. No fetchImpl is
+ * injected -- fetchDay falls through to whatever `fetch` is, which is exactly
+ * the "one forgotten argument" scenario the guard exists to catch.
+ *
+ * 🔴 THE GLOBAL IS STUBBED, AND THAT IS THE WHOLE POINT OF THIS VERSION.
+ * Added 2026-09-08 after mutation-checking this guard DID open two real
+ * sockets. Proving a guard by deleting it means the deletion is the
+ * experiment -- and this guard's failure mode is *a live billed request*, so
+ * the honest experiment was, briefly, the thing the guard exists to prevent.
+ * (They carried a fake key and returned 403, so nothing was billed. It was
+ * still a real packet to a metered vendor.)
+ *
+ * Stubbing `globalThis.fetch` closes that permanently and PROVES MORE, not
+ * less. The guard compares `fetchImpl === fetch` and the default parameter
+ * resolves the same global, so both sides see the stub and the guard still
+ * fires exactly as in production. Delete the guard and control reaches the
+ * stub, which throws a message this test does not accept -- so the mutation
+ * reddens the test WITHOUT a socket ever opening. A test that can only be
+ * proved by doing the dangerous thing is a test that will be proved that way
+ * again, by someone with less context and a real key in their environment. */
 test("fetchDay refuses a live fetch when fetchImpl is left at its default under vitest", async () => {
-  await expect(higherGovClient.fetchDay("2026-09-03")).rejects.toThrow(/refusing a live fetch/);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (() => {
+    throw new Error("REAL NETWORK REACHED -- the VITEST guard did not fire");
+  }) as unknown as typeof fetch;
+  try {
+    await expect(higherGovClient.fetchDay("2026-09-03")).rejects.toThrow(/refusing a live fetch/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 /* 🔴 CREDENTIAL-ADJACENT (final review, item 1). A truncated or malformed 200
