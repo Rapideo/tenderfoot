@@ -1320,3 +1320,116 @@ Any one of these, and none of them is a code change on its own:
    silently and permanently.
 3. **The duplicate-sighting count starts misleading a reader** — at which point the fix is
    `dedupBySourceId` on the ingest path, which is where §8 thought it already was.
+
+---
+
+## D30 — the Interested step asks for a reason too, and the bundle asks for none
+
+**Matt's ruling, 2026-09-08, before a 150-item triage sitting: capture the good-fit
+reasoning as well.**
+
+> *"So a rejection always carries a written reason, and an acceptance never has to."*
+
+### What the bundle draws
+
+The frozen V1.2 bundle's Interested branch collects **one optional thing**, and says so:
+
+```js
+reasonPrompt: askReason === "pass" ? "WHY NOT? — REQUIRED" : "ANYTHING TO NOTE? — OPTIONAL",
+reasonHelp:   askReason === "pass" ? "A rejection with…"   : "Skip it and the decision still records.",
+confirm() { if (kind === "pass" && !picked.length && !freeText.trim()) return; … }
+```
+
+**That guard names `kind === "pass"` explicitly.** In the bundle, an acceptance confirmed
+with an empty box is a valid acceptance; only a rejection is held to a written reason.
+
+### What we ship instead
+
+The Interested step now asks **two required questions**, and neither is the bundle's:
+
+| | prompt | input | required |
+|---|---|---|---|
+| provenance | `WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED` | seven single-select channel chips | yes, **unswitchable** (D21) |
+| fit | `WHY THIS ONE? — REQUIRED` | free text | yes, **switchable** — `requireReasonOnInterested` |
+
+Help copy, ours, written as the pair of the Pass branch's rather than a copy of it:
+
+- Pass — *"A rejection with no reason is the one event that teaches nothing."* (bundle)
+- Interested — *"A filter trained only on rejections learns only what to exclude."* (ours)
+
+Refusal is the server's, not the screen's: `recordDecision` throws `ReasonRequiredError` and
+the route answers **400, `field: "reason"`** — the same contract the Pass branch has had since
+SP3, and the same field, because it is the same control. The client guard mirrors it so a
+mis-tap never becomes a request.
+
+**D21 predicted this entry almost exactly:** *"If the fit vocabulary turns out to matter, it
+is a second question on this step, not a replacement for this one."* It is the second
+question. What it is **not** is that vocabulary — see below.
+
+### Why — the corpus was being built with only one side of the argument in it
+
+Before today the two branches were asymmetric, and nothing in the product said why:
+
+- **Pass**: reason **required**, free text, refused server-side without one.
+- **Interested**: `reason` accepted, optional, **unprompted** — the field existed, the
+  question did not.
+
+Run 150 items through that and the corpus holds 150 articulated reasons for *no* and close to
+nothing for *yes*. **A filter trained only on rejections learns only what to exclude** — it can
+tell you what is not worth reading and cannot tell you what is. The stated purpose of the Pass
+reason (`decide.ts`: *"the corpus a reason vocabulary would later be derived from"*) applies
+with equal force to the other branch, and it was being collected on one side only.
+
+### 🔴 It is FREE TEXT on both sides, and that is load-bearing
+
+**No preset chips for the good-fit reason, now or as a follow-up "improvement".** The
+argument that parked reason chips on the Pass branch is untouched by which way the decision
+went:
+
+> **SVRC Region 1.1.4** ratified free text only for V1, since *"the chip vocabulary should be
+> DERIVED from that hand-run rather than invented before it"* — a preset reason vocabulary
+> flattens the signal it exists to capture.
+
+**D21's channel chips are not a precedent for it, and D21 says so in its own words:** a
+**reason** is an open judgement, a **channel** is a closed factual set. The bundle's own fit
+chips — `Strong fit`, `Sub / teaming play`, `Known buyer`, `Watch only` — are exactly the
+guess this deviation exists to avoid making. **The sitting this ships for is the hand-run that
+vocabulary would have to be derived from.** `Queue.test.tsx` pins their absence.
+
+### What it costs
+
+1. **The fastest path through the product gets slower, on the branch that was already the
+   slower one.** `I` opened a one-tap step; it now opens a step with a text field in it, and
+   an acceptance can no longer be recorded without typing. Interested is the rare branch —
+   most of a queue is passed — so the cost lands on maybe one item in ten, but it is real,
+   and it is the exact friction argument SVRC 1.1.4 used to make `requireReasonOnPass`
+   switchable. **`requireReasonOnInterested` is switchable for that reason**, and unlike the
+   discovery channel, switching it off loses a corpus rather than a measure — which is the
+   test D21 set for whether a rule may have an off switch.
+2. **More bundle copy is gone.** `ANYTHING TO NOTE? — OPTIONAL` and *"Skip it and the
+   decision still records"* were already removed by D21; this removes the **behaviour** they
+   described. The Interested branch now shares no copy with the bundle's at all.
+3. **The placeholder had to branch.** The bundle uses one string for both branches —
+   *"…or say it in your own words (this is the training signal)"* — which reads correctly
+   where chips answer the same question the box does. Ours do not: the chips answer
+   *provenance*, the box answers *fit*, and both are required. Left verbatim, the leading
+   *"…or"* would invite skipping a required field, so Interested reads *"In your own words
+   (this is the training signal)"*. **Pass keeps the bundle's string exactly.**
+4. **The input's accessible name changed** from `Note` to `Reason` on this branch. `Note` is
+   what an optional field is called.
+5. **Nothing migrates.** `pursuit.reason` already existed and already stored the optional
+   note, so rows written before today are Interested decisions with a NULL reason — honest
+   history, not a gap to backfill. Any later analysis of the corpus has to date-filter rather
+   than assume the column was always required.
+
+### What would reopen it
+
+1. **The sitting produces a vocabulary.** Once there are 150 hand-written fit reasons, the
+   derived-from-evidence chip set SVRC 1.1.4 has been waiting for becomes writable — and it
+   would sit **beside** this box, the way the channel chips do, not replace it.
+2. **Matt turns it off.** `require_reason_on_interested: false` on the request is the
+   supported way to say the friction is not worth it, and it needs no code change.
+3. **The two reasons turn out to be one question asked twice.** If what gets written on
+   Interested is consistently the inverse of what gets written on Pass, one prompt and a
+   direction flag would be the simpler shape — but that is a finding from the corpus, which
+   is the thing this deviation exists to produce.
