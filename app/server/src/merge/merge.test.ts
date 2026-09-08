@@ -534,6 +534,105 @@ test("merge reads kind, codes and set-aside out of the payload, on insert and on
   expect(back?.set_aside).toBe("SBA");
 });
 
+/* 🔴 THE TWO FACTS THAT NEEDED A SECOND MERGE PASS TO ARRIVE.
+ *
+ * `description` and `place_of_performance` were computed in the merge loop
+ * like the other six per-source facts, but they reached the database ONLY
+ * through an update map guarded on `g.solicitation_id !== null` -- which is
+ * precisely what is false for a row being created in that same run. The
+ * INSERT carried neither column. So a freshly ingested solicitation had no
+ * description until some LATER merge ran over it as an existing row.
+ *
+ * Measured on live data before the fix: descriptions read 0 after one pass,
+ * 16 of 16 after a second.
+ *
+ * The cost is not cosmetic. The description is what lets a person triage a
+ * notice off the listing alone; with it absent the only remaining route to a
+ * decision is fetching the documents at ~11 metered records apiece
+ * (CLAUDE.md §5.2). ONE pass is the assertion -- a test that merged twice
+ * would have passed against the broken code and proved nothing. */
+test("a newly created solicitation carries its description and place after ONE merge", async () => {
+  const raw = {
+    noticeId: "NEWFIELDS-1",
+    title: "New-row description fixture",
+    descriptions: [{ content: "<p>Dental services for the Richmond clinic.</p>" }],
+    placeOfPerformance: [{ state: "IN", city: "56890" }],
+  };
+  await sightRaw(sourceSam, "NEWFIELDS-1", raw, "2026-08-20T00:00:00Z");
+
+  const res = await mergeSightings();
+  expect(res.created).toBeGreaterThanOrEqual(1);
+
+  const row = await one<{ description: string | null; place_of_performance: string | null }>(
+    `SELECT description, place_of_performance FROM solicitation WHERE external_id = 'NEWFIELDS-1'`,
+  );
+  /* The stored value is stripped prose, not the raw HTML -- description.ts's
+   * job -- which also proves the INSERT carried the COMPUTED value rather
+   * than something re-read from the payload by SQL. */
+  expect(row?.description).toBe("Dental services for the Richmond clinic.");
+  /* Two letters from `state`, not the numeric `city` beside it. */
+  expect(row?.place_of_performance).toBe("IN");
+});
+
+/* THE OTHER HALF, and the regression guard: the update maps are still the
+ * path for a solicitation that ALREADY exists -- the rows merged before
+ * either column existed have an organisation and nothing unlinked, so the
+ * creation branch never sees them again. Null both columns on a row that is
+ * already canonical and re-merge: they must come back, and the run must SAY
+ * so through its own counters. */
+test("an already-merged solicitation still gets its description and place on a later merge", async () => {
+  const raw = {
+    noticeId: "BACKFILL-FIELDS-1",
+    title: "Backfilled description fixture",
+    descriptions: [{ content: "<p>Groundskeeping at the Terre Haute depot.</p>" }],
+    placeOfPerformance: [{ state: "in" }],
+  };
+  await sightRaw(sourceSam, "BACKFILL-FIELDS-1", raw, "2026-08-20T00:00:00Z");
+  await mergeSightings();
+
+  await run(
+    `UPDATE solicitation SET description = NULL, place_of_performance = NULL
+      WHERE external_id = 'BACKFILL-FIELDS-1'`,
+  );
+  const again = await mergeSightings();
+  /* The counters count the UPDATE path, which is exactly what this half of
+   * the fix exercises -- a creation would report 0 here and still be right. */
+  expect(again.descriptionsSet).toBeGreaterThanOrEqual(1);
+  expect(again.placesSet).toBeGreaterThanOrEqual(1);
+
+  const back = await one<{ description: string | null; place_of_performance: string | null }>(
+    `SELECT description, place_of_performance FROM solicitation WHERE external_id = 'BACKFILL-FIELDS-1'`,
+  );
+  expect(back?.description).toBe("Groundskeeping at the Terre Haute depot.");
+  /* Upper-cased on the way in, so the lower-case payload value round-trips
+   * through the same normalisation on the update path as on the insert. */
+  expect(back?.place_of_performance).toBe("IN");
+});
+
+/* A source that publishes neither must be left null rather than given a
+ * blank, on the CREATION path specifically. Without this, "carry it on the
+ * insert" could have been satisfied by writing "" and the column would hold a
+ * measurable zero where the truth is an absence -- description.ts's own
+ * comment on why that distinction matters to F6. */
+test("a newly created solicitation from a source with neither field stays null, not blank", async () => {
+  /* SAM.gov deliberately, not a source with no reader at all: this must go
+   * through the REAL readers and have them answer null, rather than fall out
+   * of description.ts's `default:` branch and prove nothing about the shape. */
+  await sightRaw(
+    sourceSam,
+    "NEWFIELDS-EMPTY-1",
+    { noticeId: "NEWFIELDS-EMPTY-1", title: "Nothing to read here", descriptions: [], placeOfPerformance: [] },
+    "2026-08-20T00:00:00Z",
+  );
+  await mergeSightings();
+
+  const row = await one<{ description: string | null; place_of_performance: string | null }>(
+    `SELECT description, place_of_performance FROM solicitation WHERE external_id = 'NEWFIELDS-EMPTY-1'`,
+  );
+  expect(row?.description).toBeNull();
+  expect(row?.place_of_performance).toBeNull();
+});
+
 /* ⚠️ THE TWO COLUMNS THAT STAY NULL, asserted so they cannot be quietly
  * filled later without someone meeting the reasoning.
  *

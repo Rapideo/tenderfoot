@@ -83,14 +83,21 @@ export interface MergeResult {
    * all -- and volume per source per week, half of what Plan of Action §6
    * requires the gate to produce, was uncomputable as a result. */
   postedSet: number;
-  /** Solicitations whose `description` was written or corrected on this run.
-   * Reported separately because it is the field a HUMAN reads to decide -- if
-   * this number is 0 on a run that created rows, the triage card is back to a
-   * title and two dates and the gate cannot be run against it. */
+  /** Solicitations whose `description` was CORRECTED on this run -- the update
+   * path only, exactly like `deadlinesSet` and the three listing-fact counters
+   * below. Reported separately because it is the field a HUMAN reads to decide.
+   *
+   * ⚠️ A NEWLY CREATED ROW IS NOT COUNTED HERE, and reading 0 as "no row got a
+   * description" is the trap. New rows carry their description on the INSERT
+   * (see the `inserts.push` below); this counts only the rows that already
+   * existed and had theirs written or changed. A run that is all-new therefore
+   * reports 0 with every card fully populated. */
   descriptionsSet: number;
-  /** Solicitations whose `place_of_performance` was written this run. Reported
-   * separately because coverage is only ~36% by nature of the source, so a low
-   * number here is expected rather than a symptom. */
+  /** Solicitations whose `place_of_performance` was corrected on this run --
+   * the update path only, and NOT newly created rows, exactly as
+   * `descriptionsSet` above. Reported separately because coverage is only ~36%
+   * by nature of the source, so a low number here is expected rather than a
+   * symptom. */
   placesSet: number;
   /* The three listing facts (listing-facts.ts). Reported separately rather
    * than folded into one number because they have different availability in
@@ -237,6 +244,10 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
     kind: string | null;
     codes: string | null;
     set_aside: string | null;
+    /* Both `text` columns (migrations 015 and 017), so unnest carries them as
+     * text[] with no per-row cast -- unlike `codes`, which is jsonb. */
+    description: string | null;
+    place_of_performance: string | null;
   }[] = [];
   /* Keyed by solicitation id so a later group wins, exactly as sequential
    * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
@@ -325,7 +336,11 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * characters, and `solicitation` had no column to put it in.
      *
      * Same null-skips-the-map shape as the three above, so USASpending and the
-     * corpus imports are untouched. See description.ts and migration 015. */
+     * corpus imports are untouched. See description.ts and migration 015.
+     *
+     * The map is the ALREADY-EXISTS path and it is still needed; `desc` is also
+     * read below by the creation branch, which is the only route a new row has
+     * to a description -- this guard is false for exactly those rows. */
     const desc = description(src?.name ?? "", raw);
     if (g.solicitation_id !== null && desc !== null) {
       descriptionUpdates.set(g.solicitation_id, desc);
@@ -333,7 +348,11 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
     /* WHERE THE WORK IS. Same null-skips-the-map shape as every sibling, so a
      * source that publishes no location never overwrites a populated column
-     * with a blank. See place.ts for why only the state is stored. */
+     * with a blank. See place.ts for why only the state is stored.
+     *
+     * As with `desc` above, this map is the already-exists path only -- the
+     * creation branch reads `place` directly, because this guard is false for
+     * every row being created in this same run. */
     const place = placeOfPerformance(src?.name ?? "", raw);
     if (g.solicitation_id !== null && place !== null) {
       placeUpdates.set(g.solicitation_id, place);
@@ -376,6 +395,19 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
         closes_at: closes,
         posted_at: posted?.date ?? null,
         posted_at_origin: posted?.origin ?? null,
+        /* ⚠️ THESE TWO REACH A NEW ROW ONLY HERE. Every update map above is
+         * guarded on `g.solicitation_id !== null`, which is exactly what this
+         * branch has just established is FALSE -- so before they were added to
+         * the insert, a freshly-ingested solicitation had no description and no
+         * place until a SECOND merge pass ran over it. Measured on live data:
+         * descriptions read 0 after one pass, then 16 of 16 after a second.
+         *
+         * That is not a cosmetic lag. The description is what lets a person
+         * triage a notice off the listing alone; without it the only remaining
+         * route to a decision is buying the documents at ~11 metered records a
+         * notice (CLAUDE.md §5.2), so the gap had a direct price. */
+        description: desc,
+        place_of_performance: place,
       });
       if (chain.length) chains.set(g.ident, chain);
     } else if (Number(g.unlinked) > 0) {
@@ -423,13 +455,17 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
            * column's real type. */
           `INSERT INTO solicitation
              (external_id, identity_key, title, source_id, closes_at, posted_at,
-              posted_at_origin, kind, codes, set_aside)
+              posted_at_origin, kind, codes, set_aside, description,
+              place_of_performance)
            SELECT u.external_id, u.ident, u.title, u.source_id, u.closes_at, u.posted_at,
-                  u.posted_at_origin, u.kind, u.codes::jsonb, u.set_aside
+                  u.posted_at_origin, u.kind, u.codes::jsonb, u.set_aside, u.description,
+                  u.place_of_performance
              FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[],
-                         $7::text[], $8::text[], $9::text[], $10::text[])
+                         $7::text[], $8::text[], $9::text[], $10::text[], $11::text[],
+                         $12::text[])
                AS u(external_id, ident, title, source_id, closes_at, posted_at,
-                    posted_at_origin, kind, codes, set_aside)
+                    posted_at_origin, kind, codes, set_aside, description,
+                    place_of_performance)
            RETURNING id, identity_key`,
           [
             inserts.map((i) => i.external_id),
@@ -442,6 +478,8 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
             inserts.map((i) => i.kind),
             inserts.map((i) => i.codes),
             inserts.map((i) => i.set_aside),
+            inserts.map((i) => i.description),
+            inserts.map((i) => i.place_of_performance),
           ],
         )
       : [];
