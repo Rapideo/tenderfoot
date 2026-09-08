@@ -234,7 +234,38 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-08
+## 🔖 RESUME HERE — updated 2026-09-08 (evening)
+
+## 📦 THE COMPLETE-DAY PULL IS DONE — 3,238 SOLICITATIONS, 851 BUYERS, FIVE STATES
+
+**Matt ruled paging first, then complete days, keeping a 2,000-record reserve.** Both done.
+
+| | |
+|---|---|
+| Records spent | **6,767 of 9,000** — **2,233 held**, above the 2,000 reserve |
+| Solicitations | **3,238** |
+| Buyers | **851** |
+| States | OH 1,161 · MI 876 · IL 759 · KY 235 · **IN 213** |
+| Biddable vs forecast | 2,849 · 389 |
+| Descriptions | ~75% |
+| **Contiguous COMPLETE window** | **2026-08-11 → 2026-09-07, 28 days, every page the vendor reported** |
+
+**Every day in that window was bought whole.** The runs say so explicitly — *"No loaded day was truncated: every day was bought whole, every page the vendor reported."* That is the property the whole paging exercise existed to buy, and it is what makes a coverage measurement possible rather than merely plausible.
+
+⚠️ **Data before 2026-08-11 is NOT complete.** The 2026-06-09 → 2026-08-10 rows were bought page-one-only, before paging existed. **Any coverage or recall figure must be computed over the 28-day complete window and nowhere else** — a percentage computed across the older rows would be measuring our purchasing history, not HigherGov.
+
+### 🔴 139 RECORDS WERE SPENT ON NOTHING, AND THE EVIDENCE WAS ALREADY ON SCREEN
+
+Indiana showed 213 solicitations against Ohio's 1,161, which read as missing data, so Indiana was re-pulled complete for the 28-day window. **It returned zero new solicitations.** Indiana was already whole: its days are all under the vendor's 100-row page cap, so the earlier Indiana run had captured every one of them, and **that run's own output said so** — *"No loaded day was truncated."*
+
+**The low number was a small market, not a gap.** A state-by-state count invites comparison, and comparison invites treating the smallest as deficient. The check that would have caught it costs nothing: **ask whether the run that bought those days reported truncation**, rather than inferring completeness from volume.
+
+### What the reserve is for
+
+2,233 records remain. They are deliberately unspent, per Matt's ruling: a trial cannot be topped up, and having budget when a problem appears is worth more than a few more days of history. **If a problem does force a dip, the floor is 1,500.**
+
+---
+
 
 ## 🛒 THE TRIAL WAS SPENT DOWN ON PURPOSE — 1,540 SOLICITATIONS, FIVE STATES, 552 BUYERS
 
