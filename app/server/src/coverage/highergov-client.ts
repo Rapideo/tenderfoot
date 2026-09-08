@@ -87,18 +87,141 @@ export interface FeedNotice {
   raw: Record<string, unknown>;
 }
 
+/* ⚖️ THE VENDOR'S OWN HARD CAP ON ONE RESPONSE, MEASURED 2026-09-08 AND NOT
+ * ASSUMED. A run asking for `--page-size=300` produced 14 calls returning
+ * EXACTLY 100 records each (STATUS.md, "page_size IS CAPPED AT 100 BY THE
+ * VENDOR"). So `page_size` above 100 buys nothing, and 100 is the most a
+ * single page can ever bill.
+ *
+ * 🔴 IT IS USED AS A PRICE, NOT AS A DESCRIPTION. `walkDay` below decides
+ * whether it may afford the NEXT page before buying it, and the only honest
+ * figure available at that moment is "the most that page could cost". Under-
+ * pricing it would let a walk step over a budget it had already been told it
+ * could not cross -- and the vendor's meter cannot be read back at all
+ * (CLAUDE.md §5.1), so an overrun cannot be noticed, let alone undone. */
+export const VENDOR_PAGE_RECORD_CAP = 100;
+
+/* 🛑 THE HARD PER-DAY PAGE CEILING. NOT A BUDGET -- A BACKSTOP, and it is
+ * the one guard that does not depend on any caller remembering to pass
+ * anything.
+ *
+ * A paging loop is the first code in this project that decides for itself how
+ * many billed responses to buy. Every other guard here reads a number the
+ * VENDOR reported (`meta.pagination.pages`) or a number a CALLER supplied
+ * (`maxRecords`). Both can be wrong: a vendor bug reporting `pages: 90000`
+ * and a caller that forgot its budget produce exactly the same unbounded
+ * walk, and there is no way to un-buy it.
+ *
+ * TEN, and here is the arithmetic that picked it:
+ *
+ *  - 10 pages x 100 records (the measured cap above) = 1,000 records, the
+ *    absolute worst case for ONE day. That is 1/9 of MONTHLY_RECORD_CEILING
+ *    (9,000, extract/api-spend.ts) -- so even a vendor reporting something
+ *    absurd cannot spend more than an ninth of a month's allowance on a
+ *    single day before this stops it.
+ *  - It is ~5x the largest day this project has ever measured. The widest
+ *    saved search we own (five states) ran 2026-06-09 -> 2026-09-07 for
+ *    2,605 records across ~91 days, and 14 of 20 sampled weekdays exceeded
+ *    100 -- i.e. real busy days are low hundreds, two or three pages. A
+ *    ceiling of 10 will not truncate a real day.
+ *
+ * So it is high enough never to bind in practice and low enough that binding
+ * is survivable. A day that hits it comes back marked PARTIAL (see
+ * `isPartialDay`), which is a finding, not a silent truncation. */
+export const MAX_PAGES_PER_DAY = 10;
+
+/** The most a SINGLE page can bill, given whatever `page_size` was asked for.
+ * `pageSize` above the vendor's own cap buys nothing (see
+ * VENDOR_PAGE_RECORD_CAP); `pageSize` below it genuinely lowers the price of
+ * a page, and pricing every page at 100 regardless would refuse affordable
+ * pages on a small page size. Exported because ingest/highergov-cli.ts needs
+ * the same figure to budget its dry-run sample down to exactly one page. */
+export function singlePageBudget(pageSize?: number): number {
+  return Math.min(pageSize ?? VENDOR_PAGE_RECORD_CAP, VENDOR_PAGE_RECORD_CAP);
+}
+
 export interface FeedResult {
   notices: FeedNotice[];
-  /** What the VENDOR billed: the row count, BEFORE dedup. */
+  /** What the VENDOR billed: the row count, BEFORE dedup.
+   *
+   * 🔴 SINCE PAGING, THIS IS THE SUM ACROSS EVERY PAGE FETCHED, not one
+   * response's row count. It is what api_spend records and what every
+   * ceiling calculation reads, and under-reporting it is the dangerous
+   * direction (extract/api-spend.ts's header). */
   records: number;
   /** meta.pagination.count -- the saved-search change detector. */
   feedCount: number | null;
-  /** meta.pagination.pages. This client fetches page one only and never
-   * pages further -- spending more records is a design decision, not this
-   * client's to make. Exposing this is the minimum fix for the alternative:
-   * a caller silently treating a truncated day as HigherGov not having the
-   * rows, which is a false miss. */
+  /** meta.pagination.pages, as reported by PAGE ONE: how many pages the
+   * VENDOR says this day has. Null when the vendor said nothing, which is
+   * "unknown", never "one". */
   pages: number | null;
+  /** How many pages this call actually fetched AND PAID FOR. Compare it
+   * against `pages` -- that comparison, and only that comparison, is what
+   * distinguishes a whole day from a half-bought one. `isPartialDay()` below
+   * is the single place that comparison is written down. */
+  pagesFetched: number;
+}
+
+/** Did this day come back INCOMPLETE? True when the vendor said there were
+ * more pages than the walk actually bought -- a budget stop, the per-day page
+ * ceiling, or an empty page ending the walk early.
+ *
+ * ⚠️ `pages === null` reads as NOT partial, deliberately: with no vendor
+ * figure at all there is nothing to be short of, and inventing a truncation
+ * from silence would abort every run against a response shape we have never
+ * seen. That is the same posture coverage/run.ts's old `pages !== null &&
+ * pages > 1` guard took, kept rather than quietly reversed. */
+export function isPartialDay(result: Pick<FeedResult, "pages" | "pagesFetched">): boolean {
+  return result.pages !== null && result.pagesFetched < result.pages;
+}
+
+/* 🔴 A THROW PARTWAY THROUGH A DAY MUST NOT LOSE THE PAGES ALREADY PAID FOR.
+ *
+ * Every existing tally-then-rethrow site in this repo (coverage/run.ts,
+ * extract/fetch-documents-for.ts, ingest/highergov-cli.ts) was written for a
+ * SINGLE call: it charges `COVERAGE.unparseableResponseRecords` and lets the
+ * error propagate. A paged day breaks that assumption -- three pages can
+ * succeed, bill 300 records, and the fourth throw. The error carries no hint
+ * of that, so those sites would tally 40 for a day the vendor billed 300+
+ * for: an under-report of the exact kind api-spend.ts calls the dangerous
+ * direction.
+ *
+ * So the walk re-throws with the already-billed figure ATTACHED, and each
+ * tally site adds `recordsAlreadyBilled(err)` to its own conservative
+ * estimate for the page that failed.
+ *
+ * ⚠️ ONLY WRAPS WHEN SOMETHING WAS ACTUALLY BILLED. A failure on page one
+ * throws the original error untouched, so a single-page day's failure
+ * behaves exactly as it did before paging existed.
+ *
+ * ⚠️ NO `cause`, and the message is re-redacted. Same reasoning as
+ * fetchValidated's transport guard below: console.error prints a cause
+ * chain, and nothing here can vouch for what a runtime put in one. redact()
+ * is idempotent, so re-scrubbing an already-scrubbed message costs nothing
+ * and closes the case where the error came from somewhere that did not. */
+export class PartialDayBilledError extends Error {
+  readonly recordsBilled: number;
+  readonly pagesFetched: number;
+  constructor(message: string, recordsBilled: number, pagesFetched: number) {
+    super(message);
+    this.name = "PartialDayBilledError";
+    this.recordsBilled = recordsBilled;
+    this.pagesFetched = pagesFetched;
+  }
+}
+
+/** What a caught error says was ALREADY BILLED before it was thrown. Zero for
+ * anything that carries no such figure, which is every error in this codebase
+ * except the one above.
+ *
+ * ⚠️ DUCK-TYPED RATHER THAN `instanceof`, on purpose: several test files
+ * reach this module through `await import()`, and an error crossing a module
+ * boundary that resolved twice would fail an `instanceof` check and silently
+ * report zero -- an under-report, which is the one direction that must never
+ * happen by accident. */
+export function recordsAlreadyBilled(err: unknown): number {
+  const billed = (err as { recordsBilled?: unknown } | null | undefined)?.recordsBilled;
+  return typeof billed === "number" && Number.isFinite(billed) && billed > 0 ? billed : 0;
 }
 
 /* Task 7. The vendor's OWN schema doc for /document/ (docs/2026-09-03-
@@ -144,12 +267,25 @@ export interface HigherGovClient {
    * above. Also OFF BY DEFAULT in the same sense: omitted, it is
    * `captured_date`, which is what every caller asked for before this
    * parameter existed. The first argument is named `day` rather than
-   * `capturedDate` precisely because it is no longer always one. */
+   * `capturedDate` precisely because it is no longer always one.
+   *
+   * `maxRecords`: THE CALLER'S BUDGET FOR THIS ONE DAY -- "you may bill at
+   * most this many records here". Omitted, the only limit is
+   * MAX_PAGES_PER_DAY. When the next page would cross it the walk STOPS and
+   * the day comes back marked partial (`isPartialDay`), rather than
+   * overrunning a budget that cannot be un-spent.
+   *
+   * ⚠️ PAGE ONE IS NOT BUDGETED, and that is deliberate rather than an
+   * oversight: calling fetchDay at all IS the decision to buy the day's
+   * first page, and there is no way to learn what a day costs without
+   * buying it. The budget governs every page AFTER that -- which is exactly
+   * where a paging loop's own spending decisions begin. */
   fetchDay(
     day: string,
     fetchImpl?: typeof fetch,
     pageSize?: number,
     axis?: FeedAxis,
+    maxRecords?: number,
   ): Promise<FeedResult>;
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
@@ -380,7 +516,14 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
    * client made the gap live, and fetch-documents-for.ts now tallies the
    * same conservative estimate before rethrowing, for the same reason. Any
    * FOURTH call site added later must do the same, or a call this guard
-   * rejects vanishes from api_spend instead of landing a row in it. */
+   * rejects vanishes from api_spend instead of landing a row in it.
+   *
+   * ⚠️ AND SINCE PAGING, THE CONSERVATIVE ESTIMATE ALONE IS NO LONGER THE
+   * WHOLE ANSWER at the two fetchDay sites. A day is now several calls, and
+   * this guard can fire on the fourth of them with three already billed --
+   * so those sites must ADD `recordsAlreadyBilled(err)` (see
+   * PartialDayBilledError above) to whatever they charge for the call that
+   * failed. The document site is unaffected: /document/ is still one call. */
   const results = body.results ?? [];
   if (!Array.isArray(results)) {
     throw new Error(
@@ -391,7 +534,17 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
   return { ...body, results };
 }
 
-async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+/** ONE response, parsed. Deliberately NOT a FeedResult: a single page has no
+ * opinion about how many pages were fetched, and only the walk that assembles
+ * them can answer that. */
+interface FeedPage {
+  notices: FeedNotice[];
+  records: number;
+  feedCount: number | null;
+  pages: number | null;
+}
+
+async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
   const body = await fetchValidated(url, fetchImpl);
   const notices = body.results.map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
@@ -405,6 +558,114 @@ async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
     feedCount: typeof count === "number" ? count : null,
     pages: typeof pages === "number" ? pages : null,
   };
+}
+
+/** A one-page fetch, presented as a FeedResult. Used by the exact-id lookups,
+ * which are not day walks: a `source_id` query answers about ONE notice, so
+ * paging it would be buying pages of a result set that is a single row by
+ * construction. `pagesFetched: 1` says exactly that, and `isPartialDay` will
+ * report the (never-observed) multi-page case honestly rather than hiding it. */
+async function get(url: URL, fetchImpl: typeof fetch): Promise<FeedResult> {
+  const page = await getPage(url, fetchImpl);
+  return { ...page, pagesFetched: 1 };
+}
+
+/* 🛑 THE MOST DANGEROUS FUNCTION IN THIS REPOSITORY, AND IT IS WORTH SAYING
+ * SO AT THE DEFINITION.
+ *
+ * Every other paid call in this system buys exactly one response. This one
+ * decides for itself how many to buy, against an allowance that CANNOT BE
+ * READ BACK FROM THE VENDOR (CLAUDE.md §5.1) -- only a person reading the
+ * account dashboard can see consumption, and a runaway loop cannot be undone.
+ * So the guards come first and the feature comes second. There are four, and
+ * none of them is optional:
+ *
+ *  1. PAGE ONE PRICES THE REST. The first response is the only one bought
+ *     without a forecast, because there is no way to forecast it. It reports
+ *     `pages`, and from that moment the whole remaining cost is knowable
+ *     BEFORE anything more is bought: at most `(pages - 1) * <one page's
+ *     price>`. Every decision below is made from that figure rather than
+ *     discovered by spending.
+ *
+ *  2. THE HARD PAGE CEILING. `MAX_PAGES_PER_DAY` bounds the walk regardless
+ *     of what the vendor reported and regardless of whether a caller
+ *     remembered to pass a budget -- see its own definition for the
+ *     arithmetic that picked 10.
+ *
+ *  3. THE CALLER'S BUDGET. `maxRecords` is checked BEFORE each page after
+ *     the first, priced at the most that page could bill. When the next page
+ *     would cross it the walk stops and the day is reported partial. Stopping
+ *     short is recoverable; overrunning is not.
+ *
+ *  4. EVERY PAGE TALLIES. A throw on page four does not un-bill pages one
+ *     through three, so the error carries what was already spent --
+ *     PartialDayBilledError above, read back by `recordsAlreadyBilled` at
+ *     each tally site.
+ *
+ * ⚠️ AN EMPTY PAGE ENDS THE WALK. A day whose `pages` says five but whose
+ * third page carries no rows has told us its own pagination is not to be
+ * trusted, and continuing to walk on an untrustworthy figure is precisely
+ * the unbounded-walk risk this function exists to bound. It stops, and
+ * because `pagesFetched` is then short of `pages` the day is reported
+ * PARTIAL -- "we do not know what we missed" rather than "we got it all",
+ * which is the safe direction for a caller deciding whether to grade it. */
+async function walkDay(
+  buildUrl: (pageNumber: number) => URL,
+  fetchImpl: typeof fetch,
+  pageSize: number | undefined,
+  maxRecords: number | undefined,
+): Promise<FeedResult> {
+  const first = await getPage(buildUrl(1), fetchImpl);
+  const notices = [...first.notices];
+  let records = first.records;
+  let pagesFetched = 1;
+  const assemble = (): FeedResult => ({
+    notices,
+    records,
+    feedCount: first.feedCount,
+    pages: first.pages,
+    pagesFetched,
+  });
+
+  /* GUARD 1, first half: the vendor's own answer to "is there more". Null
+   * (it said nothing) is treated as "no more" rather than as a licence to
+   * probe page two and see -- probing costs records. */
+  if (first.pages === null || first.pages <= 1) return assemble();
+
+  /* GUARD 1, second half, and GUARD 2. `nextPagePrice` is the most one more
+   * page can bill; `(first.pages - 1) * nextPagePrice` is therefore the most
+   * the whole remainder can cost, known here, before a single further record
+   * is bought. `ceiling` is where the walk may run to -- the vendor's figure
+   * or this project's own backstop, whichever is smaller. */
+  const nextPagePrice = singlePageBudget(pageSize);
+  const ceiling = Math.min(first.pages, MAX_PAGES_PER_DAY);
+
+  for (let pageNumber = 2; pageNumber <= ceiling; pageNumber += 1) {
+    /* GUARD 3, and the ONE line where the budget is actually enforced. It is
+     * checked BEFORE the call, priced at what that call could cost -- never
+     * after, when the money is already gone. */
+    if (maxRecords !== undefined && records + nextPagePrice > maxRecords) break;
+
+    let next: FeedPage;
+    try {
+      next = await getPage(buildUrl(pageNumber), fetchImpl);
+    } catch (err) {
+      /* GUARD 4. The pages already bought were already billed. */
+      const message = err instanceof Error ? err.message : String(err);
+      throw new PartialDayBilledError(
+        `${redact(message)} -- ${records} record(s) across ${pagesFetched} page(s) were ` +
+          `ALREADY BILLED for this day before page ${pageNumber} failed.`,
+        records,
+        pagesFetched,
+      );
+    }
+    notices.push(...next.notices);
+    records += next.records;
+    pagesFetched += 1;
+    if (next.records === 0) break;
+  }
+
+  return assemble();
 }
 
 /* 🔴 See the FetchedDoc comment above: whatever URL-shaped field this row
@@ -442,63 +703,81 @@ async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<Document
 }
 
 export const higherGovClient: HigherGovClient = {
-  async fetchDay(day, fetchImpl = fetch, pageSize, axis = DEFAULT_FEED_AXIS) {
-    const url = new URL(`${HOST}/opportunity/`);
-    url.searchParams.set("api_key", apiKey());
-    /* ⚖️ ONE CODE PATH, ONE PARAMETER, SELECTED -- not a branch, and above
-     * all not a second `fetchPostedDay` sibling. This file handles a
-     * credential, and the 2026-09-03 leak is what one place is worth (spec
-     * §3.1): a second method would be a second VITEST guard, a second scrub,
-     * a second searchId() check, all of them free to drift.
+  async fetchDay(day, fetchImpl = fetch, pageSize, axis = DEFAULT_FEED_AXIS, maxRecords) {
+    /* 🔴 A BUILDER, NOT A URL, and the reason is the whole inertness
+     * argument. Every page of a day asks the identical question except for
+     * `page_number` -- so the URL is built per page from one place rather
+     * than mutated in a loop, where a stale parameter from the previous
+     * iteration would be invisible.
      *
-     * `axis` IS the parameter name (FeedAxis above), so this line is the
-     * entire implementation of the ruling. Defaulted to `captured_date`,
-     * which makes a call that names no axis byte-identical on the wire to one
-     * made before axes existed -- the same provable inertness `page_size`
-     * below is held to, and for the same reason: this is a metered API and a
-     * silent change to what every existing run asks for is a silent change to
-     * what it costs. */
-    url.searchParams.set(axis, day);
-    /* 🔴 R1: /opportunity/ takes twelve parameters and NONE is a location.
-     * pop_state, state and place_of_performance_state were all accepted and
-     * SILENTLY IGNORED. State filtering exists only through a saved search,
-     * so HIGHERGOV_SEARCH_ID is the Indiana filter -- and it lives in their
-     * account, not in our code. run.ts records it per run for exactly that
-     * reason. Unconditional, not `if (searchId)`: an unset scope must fail
-     * LOUD (searchId() throws) rather than silently billing every row
-     * nationwide -- see searchId()'s own comment. */
-    url.searchParams.set("search_id", searchId());
-    /* 🔴 page_size IS AN EXPLICIT, OPT-IN KNOB -- and an easy one to
-     * misunderstand, so the economics are spelled out here rather than only
-     * at its one caller (ingest/highergov-cli.ts's `--page-size` flag).
-     *
-     * `pageSize === undefined` (the default: nothing threaded a flag through)
-     * sends NO `page_size` parameter at all, not the vendor's own default
-     * written out explicitly -- that is what makes today's request provably
-     * BYTE-IDENTICAL to a request built before this parameter existed. Never
-     * change this to `url.searchParams.set("page_size", String(pageSize ??
-     * 10))` or similar: that would still be inert today, but it stops being
-     * provable from the URL alone, which is the whole point of the test that
-     * pins this branch.
-     *
-     * RAISING page_size DOES NOT REDUCE SPEND. CLAUDE.md §5.1's meter counts
-     * records RETURNED -- a bigger page returns more rows and therefore
-     * bills MORE per call, not less. It only pays for itself when the
-     * alternative was fetching those same rows anyway, across several
-     * page-one-only calls this client does not currently make: then a larger
-     * page buys the identical records in fewer HTTP round trips. That
-     * matters because coverage/thresholds.ts's `maxCallsPerRun` is 100 --
-     * a real dry run on 2026-09-07 measured one day at 10 records on page
-     * one with 4 pages existing, so a 91-day backfill walked one page at a
-     * time (this client's current behaviour) would be 91 days, but WALKING
-     * ALL FOUR PAGES per day would be 364 calls, comfortably over the cap.
-     * This client still only ever reads page one -- raising pageSize today
-     * simply asks page one for more rows, which is real, billed spend with
-     * no free lunch attached. */
-    if (pageSize !== undefined) {
-      url.searchParams.set("page_size", String(pageSize));
-    }
-    return get(url, fetchImpl);
+     * PAGE ONE SETS NO `page_number` AT ALL. Not `page_number=1`, which
+     * would behave identically today but would stop the first request being
+     * provably byte-identical to one built before paging existed -- the same
+     * standard `page_size` and `axis` are already held to below, and for the
+     * same reason: this is a metered API, and a silently changed request is
+     * a silently changed bill. */
+    const buildUrl = (pageNumber: number): URL => {
+      const url = new URL(`${HOST}/opportunity/`);
+      url.searchParams.set("api_key", apiKey());
+      /* ⚖️ ONE CODE PATH, ONE PARAMETER, SELECTED -- not a branch, and above
+       * all not a second `fetchPostedDay` sibling. This file handles a
+       * credential, and the 2026-09-03 leak is what one place is worth (spec
+       * §3.1): a second method would be a second VITEST guard, a second scrub,
+       * a second searchId() check, all of them free to drift.
+       *
+       * `axis` IS the parameter name (FeedAxis above), so this line is the
+       * entire implementation of the ruling. Defaulted to `captured_date`,
+       * which makes a call that names no axis byte-identical on the wire to one
+       * made before axes existed -- the same provable inertness `page_size`
+       * below is held to, and for the same reason: this is a metered API and a
+       * silent change to what every existing run asks for is a silent change to
+       * what it costs. */
+      url.searchParams.set(axis, day);
+      /* 🔴 R1: /opportunity/ takes twelve parameters and NONE is a location.
+       * pop_state, state and place_of_performance_state were all accepted and
+       * SILENTLY IGNORED. State filtering exists only through a saved search,
+       * so HIGHERGOV_SEARCH_ID is the Indiana filter -- and it lives in their
+       * account, not in our code. run.ts records it per run for exactly that
+       * reason. Unconditional, not `if (searchId)`: an unset scope must fail
+       * LOUD (searchId() throws) rather than silently billing every row
+       * nationwide -- see searchId()'s own comment. */
+      url.searchParams.set("search_id", searchId());
+      /* 🔴 page_size IS AN EXPLICIT, OPT-IN KNOB -- and an easy one to
+       * misunderstand, so the economics are spelled out here rather than only
+       * at its one caller (ingest/highergov-cli.ts's `--page-size` flag).
+       *
+       * `pageSize === undefined` (the default: nothing threaded a flag through)
+       * sends NO `page_size` parameter at all, not the vendor's own default
+       * written out explicitly -- that is what makes today's request provably
+       * BYTE-IDENTICAL to a request built before this parameter existed. Never
+       * change this to `url.searchParams.set("page_size", String(pageSize ??
+       * 10))` or similar: that would still be inert today, but it stops being
+       * provable from the URL alone, which is the whole point of the test that
+       * pins this branch.
+       *
+       * RAISING page_size DOES NOT REDUCE SPEND. CLAUDE.md §5.1's meter counts
+       * records RETURNED -- a bigger page returns more rows and therefore
+       * bills MORE per call, not less. Now that this client PAGES, it pays for
+       * itself only in HTTP round trips (and therefore in
+       * coverage/thresholds.ts's `maxCallsPerRun`): the same day's records
+       * arrive in fewer calls, at exactly the same price in records.
+       *
+       * ⚠️ AND ABOVE 100 IT BUYS NOTHING AT ALL. Measured 2026-09-08: the
+       * vendor caps every response at 100 rows whatever `page_size` asks for
+       * (VENDOR_PAGE_RECORD_CAP at the top of this file) -- a run requesting
+       * 300 produced 14 calls of exactly 100. `page_size=300` is therefore
+       * indistinguishable on the wire's RESULTS from `page_size=100`; it is
+       * kept accepted only because refusing a value the vendor tolerates is
+       * not this client's call to make. */
+      if (pageSize !== undefined) {
+        url.searchParams.set("page_size", String(pageSize));
+      }
+      if (pageNumber > 1) {
+        url.searchParams.set("page_number", String(pageNumber));
+      }
+      return url;
+    };
+    return walkDay(buildUrl, fetchImpl, pageSize, maxRecords);
   },
 
   async fetchBySourceId(sourceId, fetchImpl = fetch) {

@@ -33,7 +33,7 @@ const {
   main,
 } = await import("./highergov-cli.js");
 const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
-const { HIGHERGOV_SOURCE_NAME, FEED_AXES, DEFAULT_FEED_AXIS } = await import(
+const { HIGHERGOV_SOURCE_NAME, FEED_AXES, DEFAULT_FEED_AXIS, singlePageBudget } = await import(
   "../coverage/highergov-client.js"
 );
 /* The conservative "what could this call have cost when we cannot read its
@@ -75,13 +75,17 @@ afterAll(async () => {
  * to structurally type this object as HigherGovClient without it. Added
  * here rather than loosening the annotation: dryRun's signature takes the
  * real interface, so the fake must satisfy the real interface. */
-function clientReturning(records: number, pages = 1): HigherGovClient {
+/* `pagesFetched` defaults to 1 rather than to `pages`: dryRun budgets its
+ * sample down to a single page (highergov-cli.ts), so "the vendor says 3, we
+ * bought 1" is what a real truncated sample looks like -- and a fake that
+ * reported 3 of 3 would be testing a case the dry run never produces. */
+function clientReturning(records: number, pages = 1, pagesFetched = 1): HigherGovClient {
   return {
     async fetchDay() {
-      return { notices: [], records, feedCount: records, pages };
+      return { notices: [], records, feedCount: records, pages, pagesFetched };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchDocuments() {
       return { docs: [], records: 0 };
@@ -96,13 +100,24 @@ function clientReturning(records: number, pages = 1): HigherGovClient {
  * `recordsOverride` defaults to notices.length but can diverge from it, the
  * same way a real vendor response can (a row billed but dropped for a
  * missing source_id, highergov-client.ts's own documented gap). */
-function clientWithNotices(notices: FeedNotice[], recordsOverride?: number, pages = 1): HigherGovClient {
+function clientWithNotices(
+  notices: FeedNotice[],
+  recordsOverride?: number,
+  pages = 1,
+  pagesFetched = 1,
+): HigherGovClient {
   return {
     async fetchDay() {
-      return { notices, records: recordsOverride ?? notices.length, feedCount: notices.length, pages };
+      return {
+        notices,
+        records: recordsOverride ?? notices.length,
+        feedCount: notices.length,
+        pages,
+        pagesFetched,
+      };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchDocuments() {
       return { docs: [], records: 0 };
@@ -113,19 +128,32 @@ function clientWithNotices(notices: FeedNotice[], recordsOverride?: number, page
 /* Records the exact arguments client.fetchDay was called with, so a test can
  * assert pageSize actually reached the call -- rather than merely trusting
  * the parsed FeedResult, which would stay identical either way. */
-function clientCapturingFetchDayArgs(records: number): {
+type FetchDayCall = [
+  string,
+  typeof fetch | undefined,
+  number | undefined,
+  FeedAxis | undefined,
+  /* The per-day BUDGET, captured since 2026-09-08: without it a test cannot
+   * tell a sample budgeted to one page from one told to buy the whole day,
+   * and the parsed FeedResult is identical either way. */
+  number | undefined,
+];
+
+function clientCapturingFetchDayArgs(
+  records: number,
+  pages = 1,
+): {
   client: HigherGovClient;
-  calls: Array<[string, typeof fetch | undefined, number | undefined, FeedAxis | undefined]>;
+  calls: FetchDayCall[];
 } {
-  const calls: Array<[string, typeof fetch | undefined, number | undefined, FeedAxis | undefined]> =
-    [];
+  const calls: FetchDayCall[] = [];
   const client: HigherGovClient = {
-    async fetchDay(day, fetchImpl, pageSize, axis) {
-      calls.push([day, fetchImpl, pageSize, axis]);
-      return { notices: [], records, feedCount: records, pages: 1 };
+    async fetchDay(day, fetchImpl, pageSize, axis, maxRecords) {
+      calls.push([day, fetchImpl, pageSize, axis, maxRecords]);
+      return { notices: [], records, feedCount: records, pages, pagesFetched: 1 };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchDocuments() {
       return { docs: [], records: 0 };
@@ -161,7 +189,7 @@ function clientThatThrowsAfterBilling(): HigherGovClient {
       throw new Error('HigherGov returned a non-array "results" field (got object)');
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchDocuments() {
       return { docs: [], records: 0 };
@@ -196,6 +224,12 @@ function fakeAdapter(
        * "unknown", not as untruncated -- see pagesFromArtifact's own
        * comment). */
       pages?: number;
+      /* How many of those pages the walk actually bought. Absent, the reader
+       * defaults it to 1 -- which is what an artifact written before this
+       * field existed truthfully means, and the conservative reading for
+       * anything else. `pages: 3` with no `pagesFetched` is therefore still a
+       * truncated day, exactly as it was before paging. */
+      pagesFetched?: number;
     }
   >,
 ): WindowedAdapter {
@@ -222,6 +256,9 @@ function fakeAdapter(
         : { axis: "captured_date", day: since, records: billed };
       if (entry.pages !== undefined) {
         envelope.pages = entry.pages;
+      }
+      if (entry.pagesFetched !== undefined) {
+        envelope.pagesFetched = entry.pagesFetched;
       }
       return {
         items: entry.items,
@@ -333,6 +370,74 @@ test("a truncated sample day carries its page count forward", async () => {
 test("an untruncated sample day carries pages: 1", async () => {
   const r = await dryRun("2026-09-01", "2026-09-05", clientReturning(5, 1), 0);
   expect(r.samplePages).toBe(1);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * THE PROJECTION, MADE HONEST (2026-09-08). It measured page one and treated
+ * it as the day -- a 30-day window projected 780 records and cost 151, and a
+ * different window projected 240 and cost 1,556. Both are the same error, and
+ * it is the direction that lets a window be ACCEPTED that the remaining
+ * allowance cannot pay for.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+/* 🔴 THE DEFECT, PINNED. Five records on page one of a three-page day is not
+ * a five-record day: it is at most fifteen. The old line
+ * (`projectWindow(sample.records, windowDays)`) gave 5 * 5 = 25 for this
+ * window; the honest one gives 15 * 5 = 75. */
+test("the projection uses the sampled day's TRUE size, not the page the sample bought", async () => {
+  const r = await dryRun("2026-09-01", "2026-09-05", clientReturning(5, 3), 0);
+  expect(r.recordsThatDay).toBe(5); // what was actually billed, unchanged
+  expect(r.samplePagesFetched).toBe(1);
+  expect(r.estimatedRecordsPerDay).toBe(15); // 5 per page x 3 pages
+  expect(r.projectedRecords).toBe(75); // and 15/day across 5 days
+});
+
+/* The inert half: a day that came back WHOLE needs no inference, and its
+ * projection must be byte-identical to what it was before paging existed. */
+test("a whole single-page sample projects exactly as it always did", async () => {
+  const r = await dryRun("2026-09-01", "2026-09-30", clientReturning(5), 0);
+  expect(r.estimatedRecordsPerDay).toBe(5);
+  expect(r.projectedRecords).toBe(150);
+});
+
+/* A day bought whole across three pages is also no inference: `records` IS
+ * the day. Multiplying again would triple-count it. */
+test("a multi-page sample bought WHOLE projects its own records, not records x pages", async () => {
+  const r = await dryRun("2026-09-01", "2026-09-05", clientReturning(30, 3, 3), 0);
+  expect(r.estimatedRecordsPerDay).toBe(30);
+  expect(r.projectedRecords).toBe(150);
+});
+
+/* 🔴 AND THE REFUSAL MUST FIRE ON THE HONEST NUMBER. This is what the whole
+ * projection change is FOR: a window that looks affordable on page-one
+ * arithmetic and is not. 60 records on page one of a 5-page day is a 300/day
+ * window; across 40 days that is 12,000, well past the 9,000 ceiling -- while
+ * the old projection would have made it 2,400 and waved it through. */
+test("a window affordable only on page-one arithmetic is now refused", async () => {
+  const r = await dryRun("2026-09-01", "2026-10-10", clientReturning(60, 5), 0);
+  expect(r.projectedRecords).toBeGreaterThan(MONTHLY_RECORD_CEILING);
+  expect(r.affordable).toBe(false);
+});
+
+/* 🛑 THE SAMPLE MUST STAY CHEAP. Without a budget, "sample one day" would
+ * walk that day whole -- up to 1,000 records -- BEFORE the affordability
+ * check that might refuse the window anyway, so refusing a window could cost
+ * a thousand records. Asserted on the argument handed to fetchDay, because
+ * the parsed FeedResult is identical either way. */
+test("the dry run budgets its sample down to a single page", async () => {
+  const { client, calls } = clientCapturingFetchDayArgs(5, 4);
+  await dryRun("2026-09-01", "2026-09-30", client, 0);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]![4]).toBe(singlePageBudget(undefined));
+});
+
+/* And priced against --page-size when one is given: a flat 100 would let a
+ * page-size of 10 buy ten pages inside "one page's budget". */
+test("the sample's budget follows page_size, so a small page size still buys one page", async () => {
+  const { client, calls } = clientCapturingFetchDayArgs(5, 4);
+  await dryRun("2026-09-01", "2026-09-30", client, 0, 10);
+  expect(calls[0]![4]).toBe(10);
 });
 
 /* Review round 3, item 2: a zero-record sample must not look "free forever".
@@ -1050,6 +1155,161 @@ test("a truncated day is reported during the walk, and the end-of-run summary co
     expect(process.exitCode).toBeUndefined(); // the run still completed in full
   } finally {
     logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 A DAY BOUGHT WHOLE ACROSS THREE PAGES IS NOT TRUNCATED, and reading
+ * `pages` alone would say it was. Before paging, `pages: 3` and "truncated"
+ * were the same fact; now they are not, and a warning that fires on almost
+ * every busy day is a warning nobody reads. The artifact carries both
+ * numbers, and truncation is their comparison. */
+test("a multi-page day bought whole is NOT reported truncated", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-02": {
+        items: [{ externalId: "HG-2", modifiedAt: "2026-09-02", raw: {} }],
+        pages: 3,
+        pagesFetched: 3,
+      },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir);
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("TRUNCATED"))).toBe(false);
+    expect(lines.some((l) => l.includes("No loaded day was truncated"))).toBe(true);
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🛑 THE PER-DAY BUDGET REACHES THE ADAPTER, and it is recomputed every day.
+ * One paged day can bill up to MAX_PAGES_PER_DAY * 100 records, so a day
+ * handed no budget could overshoot the monthly ceiling between two of the
+ * checks that are supposed to protect it -- both of those run BEFORE the call
+ * and can only reason about an estimate. Injecting a FACTORY rather than an
+ * adapter is the only way to see what each day was actually told. */
+test("each day's adapter is handed the budget that is genuinely left", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const budgets: Array<number | undefined> = [];
+    const inner = fakeAdapter({
+      "2026-09-02": { items: [{ externalId: "HG-D2", modifiedAt: "2026-09-02", raw: {} }] },
+      "2026-09-03": { items: [{ externalId: "HG-D3", modifiedAt: "2026-09-03", raw: {} }] },
+    });
+
+    await main(
+      ["--from=2026-09-01", "--to=2026-09-03", "--max-records=50"],
+      client,
+      (maxRecordsPerDay) => {
+        budgets.push(maxRecordsPerDay);
+        return inner;
+      },
+      dir,
+    );
+
+    /* Day one is the sample, whole, and reused -- no adapter, no budget. Days
+     * two and three each get the SMALLER of what remains monthly and what
+     * remains of --max-records=50: 50 - 1 (the sample) = 49, then 50 - 1 - 1
+     * (day two's own record) = 48. A budget that ignored the run's own spend
+     * would repeat 49; one that ignored --max-records would be in the
+     * thousands. */
+    expect(budgets).toEqual([49, 48]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 A PARTIAL SAMPLE IS RE-FETCHED, NOT COMMITTED AS A FRAGMENT. The dry
+ * run buys one page to price the window; reusing that page as the sampled
+ * day's archive entry would put a knowingly incomplete first day into every
+ * backfill -- the opposite of "buy complete days". Page one is bought twice,
+ * knowingly, and the day is loaded whole.
+ *
+ * The adapter here answers for the SAMPLED day, which under the old
+ * reuse-always rule it would never have been asked about at all. */
+test("a partial sample's day is re-fetched in full rather than committed as one page", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    /* 5 records on page one of a 3-page day: the sample is a fragment. */
+    const client = clientWithNotices(
+      [{ externalId: "HG-FRAGMENT", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      5,
+      3,
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-01": {
+        items: [
+          { externalId: "HG-FULL-1", modifiedAt: "2026-09-01", raw: {} },
+          { externalId: "HG-FULL-2", modifiedAt: "2026-09-01", raw: {} },
+        ],
+        billedRecords: 12,
+        pages: 3,
+        pagesFetched: 3,
+      },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-01"], client, adapter, dir);
+
+    const sightings = await all<{ external_id: string }>(
+      `SELECT sg.external_id FROM sighting sg
+         JOIN source s ON s.id = sg.source_id WHERE s.name = $1 ORDER BY sg.external_id`,
+      [HIGHERGOV_SOURCE_NAME],
+    );
+    /* The WHOLE day landed. The sample's own single fragment row did not --
+     * it was priced, not archived. */
+    expect(sightings.map((s) => s.external_id)).toEqual(["HG-FULL-1", "HG-FULL-2"]);
+    /* 5 (the sample, billed and recorded) + 12 (the day, re-fetched whole).
+     * The double-billing of page one is real, acknowledged, and the price of
+     * a complete archive. */
+    expect(await totalSpend()).toBe(17);
+    expect(process.exitCode).toBeUndefined();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* THE INERT CONTROL for the test above: a WHOLE sample is still reused
+ * exactly as it always was, never re-fetched. Without this, "always re-fetch"
+ * would pass the test above and silently double the cost of every quiet day. */
+test("a whole sample's day is still reused, never re-fetched", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-WHOLE", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const throwingAdapter: WindowedAdapter = {
+      shape: "windowed",
+      name: HIGHERGOV_SOURCE_NAME,
+      async fetchListing() {
+        throw new Error("TEST FAILURE: a whole sample's day must be reused, never re-fetched");
+      },
+    };
+
+    await main(["--from=2026-09-01", "--to=2026-09-01"], client, throwingAdapter, dir);
+
+    expect(await totalSpend()).toBe(1); // the sample only -- billed once
+    const sightings = await all<{ external_id: string }>(`SELECT external_id FROM sighting`);
+    expect(sightings.map((s) => s.external_id)).toEqual(["HG-WHOLE"]);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

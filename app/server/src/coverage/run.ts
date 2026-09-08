@@ -20,7 +20,13 @@ import {
   recordSpend,
   spentThisMonth,
 } from "../extract/api-spend.js";
-import { higherGovClient, HIGHERGOV_SOURCE_NAME, type HigherGovClient } from "./highergov-client.js";
+import {
+  higherGovClient,
+  HIGHERGOV_SOURCE_NAME,
+  isPartialDay,
+  recordsAlreadyBilled,
+  type HigherGovClient,
+} from "./highergov-client.js";
 import { IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
 import { dedupBySourceId, observe, type Observation } from "./compare.js";
 import { COVERAGE } from "./thresholds.js";
@@ -106,7 +112,20 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
    * rests on one dashboard reading (CLAUDE.md §5.1); this is the guard for
    * when that reading is wrong. Counted across BOTH loops below -- the day
    * loop and the per-key id-lookup loop -- because both are live HTTP calls
-   * against the same metered API. */
+   * against the same metered API.
+   *
+   * 🔴 IT COUNTS HTTP REQUESTS, NOT fetchDay INVOCATIONS -- and that
+   * distinction only came into existence when the client learned to page
+   * (2026-09-08). One day is now up to MAX_PAGES_PER_DAY requests, so
+   * `calls += 1` per day would have left this cap counting something other
+   * than what it says it counts, and quietly made it up to ten times weaker
+   * than the figure Matt ratified. The RATIFIED VALUE (500,
+   * thresholds.ts's `maxCallsPerRun`) is untouched; what changed is that the
+   * counter now measures the thing that value was chosen to bound. See the
+   * report accompanying this change: a year-long walk was ~365 one-call days
+   * when 500 was ratified, and a paging walk over busy days can exceed that
+   * -- which is a question for Matt, not something to settle by inflating
+   * the constant here. */
   let calls = 0;
 
   /* Notices an earlier run already saw carried. Spec §5.5: a notice enters
@@ -131,7 +150,20 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
     }
     let result: FeedResult;
     try {
-      result = await client.fetchDay(day, opts.fetchImpl);
+      /* 🔴 THE PER-DAY BUDGET, AND IT IS NOT OPTIONAL HERE. Since the client
+       * pages, ONE day can cost up to MAX_PAGES_PER_DAY * 100 records --
+       * twenty-five times this whole run's record cap. Handing fetchDay the
+       * budget that is actually left is what keeps `maxRecordsPerRun` a cap
+       * on this run rather than a cap it discovers it has blown. `Math.max`
+       * because `spent` can already sit at the cap on the loop's last
+       * iteration, and a negative budget is not a smaller budget. */
+      result = await client.fetchDay(
+        day,
+        opts.fetchImpl,
+        undefined,
+        undefined,
+        Math.max(0, COVERAGE.maxRecordsPerRun - spent),
+      );
     } catch (err) {
       /* 🔴 THE OPEN FINDING THIS CLOSES: a call that THROWS was still
        * BILLED. highergov-client.ts's two guards (a malformed 200, a
@@ -145,15 +177,24 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
        * (thresholds.ts's `unparseableResponseRecords`) BEFORE the error
        * propagates, then let it propagate unchanged -- a malformed response
        * must still fail the run loudly, it just fails having recorded that
-       * it spent something. */
+       * it spent something.
+       *
+       * 🔴 PLUS WHATEVER THE EARLIER PAGES OF THIS DAY ALREADY COST. A day
+       * is several calls now: pages one to three can succeed and bill 300
+       * records before page four throws. `unparseableResponseRecords` alone
+       * -- a figure chosen when a day WAS exactly one call -- would tally 40
+       * for that day, an under-report of 260 against a ceiling that cannot
+       * be read back from the vendor. `recordsAlreadyBilled` returns 0 for
+       * every error that carries no such figure, so the single-page case is
+       * byte-identical to what it was before paging existed. */
       await recordSpend({ run: exec }, {
         sourceId: source.id,
         endpoint: "opportunity",
-        records: COVERAGE.unparseableResponseRecords,
+        records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
       });
       throw err;
     }
-    calls += 1;
+    calls += result.pagesFetched;
 
     /* THE TALLY COMMITS ON ITS OWN, BEFORE ANYTHING ELSE. The vendor has
      * already billed by the time fetchDay returns -- nothing after this
@@ -169,18 +210,27 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
 
     feed.push(...result.notices);
 
-    /* 🔴 A TRUNCATED DAY MUST NOT BE GRADED. The client reads page one and
-     * cannot request page two -- deliberately, because paging spends records.
-     * But rows we never received are indistinguishable downstream from rows
-     * HigherGov does not carry: they become FALSE MISSES, the same defect the
-     * id-lookup guard below exists to prevent. Refusing to grade is the safe
-     * direction; narrowing the window is the operator's fix. */
-    if (result.pages !== null && result.pages > 1) {
+    /* 🔴 A HALF-BOUGHT DAY MUST NOT BE GRADED. Rows we never received are
+     * indistinguishable downstream from rows HigherGov does not carry: they
+     * become FALSE MISSES, the same defect the id-lookup guard below exists
+     * to prevent. Refusing to grade is the safe direction.
+     *
+     * ⚖️ THE QUESTION CHANGED WHEN THE CLIENT LEARNED TO PAGE. This used to
+     * be `result.pages > 1` -- "more than one page exists" -- because the
+     * client could only ever read the first one, so those two facts were the
+     * same fact. They are not any more: a three-page day the client bought
+     * WHOLE is complete evidence and grades fine. What must still be refused
+     * is a day the client came back SHORT on, whatever stopped it -- the
+     * per-day record budget above, the hard page ceiling, or an empty page
+     * mid-walk. `isPartialDay` is that question, asked in the one place it
+     * is defined rather than re-derived here. */
+    if (isPartialDay(result)) {
       aborted = true;
       abortReason =
-        `Day ${day} returned page 1 of ${result.pages}. This client does not page, ` +
-        `so grading would count rows we never received as rows HigherGov does not ` +
-        `carry. Narrow the window and re-run.`;
+        `Day ${day} came back PARTIAL: ${result.pagesFetched} of ${result.pages} page(s) ` +
+        `fetched, so grading would count rows we never received as rows HigherGov does ` +
+        `not carry. The per-day budget is what is left of maxRecordsPerRun ` +
+        `(${COVERAGE.maxRecordsPerRun}) -- narrow the window, or raise that cap, and re-run.`;
       break;
     }
 
@@ -262,11 +312,18 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
       } catch (err) {
         /* Same reasoning as the day-loop's try/catch above: this call was
          * billed before it could throw, so the conservative tally must land
-         * before the error does, and the error must still propagate. */
+         * before the error does, and the error must still propagate.
+         *
+         * `recordsAlreadyBilled` is here for symmetry only and is always 0
+         * today: fetchBySourceId does NOT page (an exact-id lookup is one
+         * row by construction -- highergov-client.ts's `get()`), so it can
+         * never carry a part-billed figure. Written the same way as the day
+         * loop's so that the day someone does page it, this site is already
+         * honest rather than quietly 40 short. */
         await recordSpend({ run: exec }, {
           sourceId: source.id,
           endpoint: "opportunity",
-          records: COVERAGE.unparseableResponseRecords,
+          records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
         });
         throw err;
       }

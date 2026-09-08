@@ -92,11 +92,22 @@ export function axisValue(n: FeedNotice, axis: FeedAxis): string | null {
  * `captured_date` -- see FeedAxis in highergov-client.ts for Matt's
  * 2026-09-07 ruling and why backfill and live now want different questions.
  * registry.ts constructs this adapter with no arguments at all, so the
- * ordinary scrape path is untouched by the existence of the parameter. */
+ * ordinary scrape path is untouched by the existence of the parameter.
+ *
+ * 🔴 `maxRecordsPerDay` IS THE BUDGET FOR ONE DAY, and it exists because the
+ * client now PAGES. Before that, one day was one call and its cost could not
+ * meaningfully exceed one page; now a day can walk up to
+ * MAX_PAGES_PER_DAY responses. ingest/highergov-cli.ts recomputes this for
+ * every day from what is actually left of the monthly ceiling (and of
+ * `--max-records`, when set), so a day that would overshoot comes back marked
+ * partial instead of spending past a limit that cannot be un-spent. Left
+ * unset -- which is how registry.ts builds it -- the client's own
+ * MAX_PAGES_PER_DAY backstop is the only bound. */
 export function higherGovAdapter(
   fetchImpl: typeof fetch = fetch,
   pageSize?: number,
   axis: FeedAxis = DEFAULT_FEED_AXIS,
+  maxRecordsPerDay?: number,
 ): WindowedAdapter {
   return {
     shape: "windowed",
@@ -136,7 +147,13 @@ export function higherGovAdapter(
        * accepts a RANGE is unverified -- the dry run in highergov-cli.ts
        * answers it for free. Until it does, the caller walks days and this
        * reads one. `since` IS the day, on whichever axis was asked for. */
-      const result = await higherGovClient.fetchDay(since, fetchImpl, pageSize, axis);
+      const result = await higherGovClient.fetchDay(
+        since,
+        fetchImpl,
+        pageSize,
+        axis,
+        maxRecordsPerDay,
+      );
 
       let undatedSkipped = 0;
       const items: ListingItem[] = [];
@@ -170,7 +187,7 @@ export function higherGovAdapter(
          * record in the artifact of what was actually asked for. */
         requestUrl: `highergov:/opportunity/?${axis}=${since}`,
         httpStatus: 200,
-        /* The envelope carries FOUR scalars beyond the rows, and dropping
+        /* The envelope carries FIVE scalars beyond the rows, and dropping
          * any of them turns this artifact into evidence it cannot answer:
          *
          *  - `pages`: the client's own comment on FeedResult.pages says why
@@ -179,6 +196,13 @@ export function higherGovAdapter(
          *    silently treat a truncated day as HigherGov not having the
          *    rows -- a false miss this adapter is the caller that must not
          *    manufacture.
+         *  - `pagesFetched`: HOW MANY OF THEM WE ACTUALLY BOUGHT, and since
+         *    the client learned to page this is the half that carries the
+         *    meaning. `pages: 3` alone used to imply truncation because the
+         *    client could only read one; now a three-page day bought WHOLE
+         *    and a three-page day stopped after one look identical in the
+         *    artifact unless this is written beside it. Truncation is the
+         *    comparison of the two, never either one alone.
          *  - `feedCount`: the saved-search change detector (meta.pagination
          *    .count) -- the only signal that the search itself moved.
          *  - `records`: what the VENDOR BILLED, not `items.length +
@@ -196,16 +220,16 @@ export function higherGovAdapter(
          *    cannot say whether it was published or crawled then, and this
          *    file is the only place that still knows.
          *
-         * All four are scalars, so carrying them costs no extra API
+         * All five are scalars, so carrying them costs no extra API
          * records and does not touch the scrub or the hash's stability.
          *
          * ⚠️ NOTHING READ THE OLD `capturedDate` KEY -- checked, not assumed.
          * ingest/highergov-cli.ts's readArtifactEnvelope (the single reader of
          * this envelope, feeding billedRecordsFromArtifact and
-         * pagesFromArtifact) reads `records` and `pages` only, and no other
-         * module in the repo parses a capture payload at all. Renaming it is
-         * therefore safe today; it is named here so a future reader knows the
-         * question was asked. */
+         * truncationFromArtifact) reads `records`, `pages` and `pagesFetched`
+         * only, and no other module in the repo parses a capture payload at
+         * all. Renaming it is therefore safe today; it is named here so a
+         * future reader knows the question was asked. */
         payload: scrubPayload(
           JSON.stringify({
             axis,
@@ -213,6 +237,7 @@ export function higherGovAdapter(
             records: result.records,
             feedCount: result.feedCount,
             pages: result.pages,
+            pagesFetched: result.pagesFetched,
             results: result.notices.map((n) => n.raw),
           }),
         ),

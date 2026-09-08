@@ -190,12 +190,12 @@ test("a key-shaped PROPERTY NAME does not survive into items[].raw either", asyn
  * one test that exercised that function used a fake adapter writing its own
  * payload, so it never touched this file's envelope at all.
  *
- * `feedCount` and `pages` are asserted in the same breath for the same
- * reason: this adapter's own comment argues all three are load-bearing, and
- * an argument in a comment is not a test. */
-test("the payload envelope carries records, feedCount and pages -- the vendor's own scalars", async () => {
+ * `feedCount`, `pages` and `pagesFetched` are asserted in the same breath for
+ * the same reason: this adapter's own comment argues all of them are
+ * load-bearing, and an argument in a comment is not a test. */
+test("the payload envelope carries records, feedCount, pages and pagesFetched", async () => {
   const body = JSON.stringify({
-    meta: { pagination: { page: 1, pages: 3, count: 41 } },
+    meta: { pagination: { page: 1, pages: 1, count: 41 } },
     results: [
       { source_id: "A", captured_date: "2026-09-03", title: "a" },
       /* Billed, but dropped by the client for a missing source_id -- the exact
@@ -211,17 +211,77 @@ test("the payload envelope carries records, feedCount and pages -- the vendor's 
     records?: unknown;
     feedCount?: unknown;
     pages?: unknown;
+    pagesFetched?: unknown;
   };
   /* 2, not 1: both rows were billed, only one became an item. */
   expect(envelope.records).toBe(2);
   expect(page.items).toHaveLength(1);
   expect(page.undatedSkipped).toBe(0);
   expect(envelope.feedCount).toBe(41);
-  expect(envelope.pages).toBe(3);
+  expect(envelope.pages).toBe(1);
+  expect(envelope.pagesFetched).toBe(1);
 });
 
-/* A single page and done: paginating costs records, and this adapter reads
- * one page per day-window call by design. */
+/* 🔴 THE ADAPTER PAGES, AND THE ENVELOPE MUST SAY WHAT THAT COST. Before
+ * 2026-09-08 this adapter bought page one of a three-page day and wrote
+ * `pages: 3` beside a one-page record count -- an artifact that looked
+ * complete to anything reading `records` alone. It now walks the day, and the
+ * envelope's `records` is the SUM across the pages it bought (under-reporting
+ * it is what a ceiling that cannot be read back from the vendor cannot
+ * survive, CLAUDE.md §5.1), with `pagesFetched` beside `pages` to say the day
+ * was bought WHOLE rather than truncated.
+ *
+ * Three identical two-row pages: 6 billed, 3 items (the same source_id
+ * repeats, which the adapter does not dedup -- that is merge's job), 3 of 3
+ * pages fetched. */
+test("a multi-page day is walked whole, and the envelope's records is the SUM of every page", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { page: 1, pages: 3, count: 6 } },
+    results: [
+      { source_id: "A", captured_date: "2026-09-03", title: "a" },
+      { captured_date: "2026-09-03", title: "no source_id" },
+    ],
+  });
+  const fetchImpl = fakeFetchCapturing(body);
+  const page = await higherGovAdapter(fetchImpl).fetchListing("2026-09-03", "2026-09-03", null);
+  const envelope = JSON.parse(page.payload) as { records?: unknown; pagesFetched?: unknown };
+  expect(fetchImpl.calls).toHaveLength(3);
+  expect(envelope.records).toBe(6);
+  expect(envelope.pagesFetched).toBe(3);
+  expect(page.items).toHaveLength(3);
+});
+
+/* The adapter's per-day budget, threaded to the client's own paging walk.
+ * The same three-page day, told it may bill at most 2 records, must buy page
+ * one and stop -- and the envelope must record that it stopped, or the
+ * artifact would claim a complete day. */
+test("a per-day budget stops the adapter's walk, and the envelope records the shortfall", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { page: 1, pages: 3, count: 6 } },
+    results: [
+      { source_id: "A", captured_date: "2026-09-03", title: "a" },
+      { source_id: "B", captured_date: "2026-09-03", title: "b" },
+    ],
+  });
+  const fetchImpl = fakeFetchCapturing(body);
+  const page = await higherGovAdapter(fetchImpl, undefined, undefined, 2).fetchListing(
+    "2026-09-03", "2026-09-03", null,
+  );
+  const envelope = JSON.parse(page.payload) as {
+    records?: unknown;
+    pages?: unknown;
+    pagesFetched?: unknown;
+  };
+  expect(fetchImpl.calls).toHaveLength(1);
+  expect(envelope.records).toBe(2);
+  expect(envelope.pages).toBe(3);
+  expect(envelope.pagesFetched).toBe(1);
+});
+
+/* One adapter call is one whole DAY, however many pages that took: the
+ * client walks the pages internally, so scrape/run.ts's windowed loop --
+ * which trusts nextCursor alone to decide `done` -- must always be told the
+ * day is finished. */
 test("a single-page response reports no next cursor", async () => {
   const page = await higherGovAdapter(fakeFetch(FIXTURE)).fetchListing(
     "2026-09-03", "2026-09-03", null,

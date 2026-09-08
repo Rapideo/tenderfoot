@@ -36,6 +36,19 @@
  * sample's own already-paid-for data for that one day instead of
  * re-fetching it (review round 3, item 4).
  *
+ * ⚖️ QUALIFIED 2026-09-08, WHEN THE CLIENT LEARNED TO PAGE. The sample is now
+ * budgeted down to ONE PAGE (dryRun's own comment says why: an unbudgeted
+ * sample would buy a whole day, up to 1,000 records, BEFORE the affordability
+ * check that might refuse the window anyway). A one-page sample of a busy day
+ * is a FRAGMENT, and committing a fragment as that day's archive entry would
+ * put a knowingly incomplete first day into every backfill -- so a partial
+ * sample's day is re-fetched in full and page one is bought twice. A WHOLE
+ * sample -- a quiet single-page day -- is still reused exactly as before, and
+ * costs nothing new. The projection is unaffected either way: it infers the
+ * day's true size from `pages` (estimateFullDay) rather than treating the
+ * page it bought as the day, which is the defect that made a 30-day window
+ * project 780 records and cost 151.
+ *
  * ⚖️ `--axis`, ADDED 2026-09-07 ON MATT'S RULING (design spec §3.2's
  * amendment). The BACKFILL runs on `posted_date`; LIVE operation stays on
  * `captured_date`, which is the default and stays the default. A historical
@@ -86,7 +99,10 @@ import {
   FEED_AXES,
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
+  isPartialDay,
+  recordsAlreadyBilled,
   redact,
+  singlePageBudget,
   type FeedAxis,
   type FeedResult,
   type HigherGovClient,
@@ -281,6 +297,34 @@ export function projectWindow(recordsPerDay: number, windowDays: number): number
   return recordsPerDay * windowDays;
 }
 
+/* ⚖️ THE PER-DAY RATE THE PROJECTION SHOULD ACTUALLY USE, and getting this
+ * wrong was measured rather than theorised: a 30-day window projected 780
+ * records and cost 151, and a different window projected 240 and cost 1,556.
+ * Both errors came from the same place -- the sample measured PAGE ONE and
+ * the projection treated it as the whole day.
+ *
+ * The sample is still deliberately page-one-sized (see dryRun below: buying a
+ * whole day to price a window would spend up to 1,000 records BEFORE the
+ * affordability check that might refuse the window anyway). So the true day
+ * size has to be inferred rather than bought, and page one carries exactly
+ * what is needed to infer it: `pages`.
+ *
+ * `records / pagesFetched` is the observed price of a page; multiplied by the
+ * vendor's own page count it is the most the whole day can cost. It is an
+ * UPPER bound, not a best guess, and that is deliberate -- the failure mode
+ * of over-projecting is a window refused that was affordable; the failure
+ * mode of under-projecting is a window accepted that crosses a ceiling which
+ * cannot be read back from the vendor (CLAUDE.md §5.1). `Math.ceil` for the
+ * same reason: a fractional record is not a smaller record.
+ *
+ * A day that came back WHOLE needs no inference at all -- `records` IS the
+ * day -- so it is returned unchanged, which is what keeps every single-page
+ * day's projection byte-identical to what it was before paging existed. */
+export function estimateFullDay(sample: FeedResult): number {
+  if (!isPartialDay(sample) || sample.pagesFetched < 1) return sample.records;
+  return Math.ceil(sample.records / sample.pagesFetched) * sample.pages!;
+}
+
 export interface DryRunResult {
   sampledDay: string;
   /** WHICH AXIS THE SAMPLE WAS MEASURED ON. A projection is a spending
@@ -296,11 +340,19 @@ export interface DryRunResult {
   sampled: boolean;
   recordsThatDay: number;
   /* meta.pagination.pages on the sampled day, carried rather than
-   * discarded. >1 means the client's page-one-only read truncated the
-   * SAMPLE itself -- the measured rate is a floor, not the true rate, and
-   * an operator committing 90 days on the strength of it needs to know
-   * before, not after. */
+   * discarded: how many pages the VENDOR says that day has. Compared against
+   * `samplePagesFetched` below, it is what says whether the sample saw the
+   * whole day -- and, when it did not, it is what `estimateFullDay` uses to
+   * project the rest rather than pretending page one was the day. */
   samplePages: number | null;
+  /** How many of those pages the sample actually bought. The sample is
+   * budgeted down to one page on purpose (see dryRun), so on any busy day
+   * this is 1 and `samplePages` is more. */
+  samplePagesFetched: number;
+  /** The sampled day's TRUE size, inferred where it had to be -- see
+   * estimateFullDay. This, not `recordsThatDay`, is what the projection and
+   * the day-walk's own per-day guard are built on. */
+  estimatedRecordsPerDay: number;
   windowDays: number;
   projectedRecords: number;
   remainingThisMonth: number;
@@ -354,10 +406,34 @@ function sampleAsPage(sample: FeedResult, day: string, axis: FeedAxis): Windowed
         records: sample.records,
         feedCount: sample.feedCount,
         pages: sample.pages,
+        pagesFetched: sample.pagesFetched,
         results: sample.notices.map((n) => n.raw),
       }),
     ),
   };
+}
+
+/* HOW THE DAY-WALK OBTAINS THE ADAPTER FOR ONE DAY. A factory rather than an
+ * adapter, because since the client learned to page the adapter carries a
+ * BUDGET -- and the budget is recomputed for every day from what is actually
+ * left of the monthly ceiling and of `--max-records`. One adapter built once
+ * would be carrying day one's budget on day ninety.
+ *
+ * main() accepts either shape: a plain WindowedAdapter (what every existing
+ * test injects, and what a caller with no interest in the budget wants) or a
+ * factory, which is the only way to SEE the budget a given day was handed.
+ * The real CLI always uses a factory. */
+export type DayAdapterFactory = (maxRecordsPerDay: number | undefined) => WindowedAdapter;
+
+function resolveDayAdapter(
+  injected: WindowedAdapter | DayAdapterFactory | undefined,
+  budget: number | undefined,
+  pageSize: number | undefined,
+  axis: FeedAxis,
+): WindowedAdapter {
+  if (typeof injected === "function") return injected(budget);
+  if (injected) return injected;
+  return higherGovAdapter(fetch, pageSize, axis, budget);
 }
 
 /* A one-page WindowedAdapter that always answers with `page`, whatever
@@ -401,23 +477,29 @@ function reuseSampleAdapter(page: WindowedPage): WindowedAdapter {
  * constant would then under-count a figure we can partially see. */
 /* THE ONE WAY TO INTERROGATE A DAY'S ARTIFACT, not two. Both
  * billedRecordsFromArtifact (the vendor's own billed count) and
- * pagesFromArtifact (whether this day's capture was truncated) below read
+ * truncationFromArtifact (whether this day's capture was complete) below read
  * the same envelope -- adapters/highergov.ts's own comment names `records`,
- * `feedCount`, `pages` and (since the axis ruling) `axis`+`day` as the scalars
- * it carries specifically so a caller can answer both questions from one
- * parse. THESE TWO READ `records` AND `pages` ONLY: the envelope's day label
- * was renamed from `capturedDate` to `axis`+`day` when the axis became a
- * choice, and nothing here -- or anywhere else in the repo -- ever read the
- * old key. Returns null on anything
+ * `feedCount`, `pages`, `pagesFetched` and (since the axis ruling) `axis`+`day`
+ * as the scalars it carries specifically so a caller can answer both questions
+ * from one parse. THESE TWO READ `records`, `pages` AND `pagesFetched` ONLY:
+ * the envelope's day label was renamed from `capturedDate` to `axis`+`day`
+ * when the axis became a choice, and nothing here -- or anywhere else in the
+ * repo -- ever read the old key. Returns null on anything
  * that stops this from answering (missing capture, non-string payload, bad
  * JSON) -- both callers already have their own conservative fallback for
  * that case, which is why this itself never needs one. */
-function readArtifactEnvelope(artifactPath: string): { records?: unknown; pages?: unknown } | null {
+function readArtifactEnvelope(
+  artifactPath: string,
+): { records?: unknown; pages?: unknown; pagesFetched?: unknown } | null {
   try {
     const art = readArtifact(artifactPath);
     const capture = art.captures[0] as { payload?: unknown } | undefined;
     if (!capture || typeof capture.payload !== "string") return null;
-    return JSON.parse(capture.payload) as { records?: unknown; pages?: unknown };
+    return JSON.parse(capture.payload) as {
+      records?: unknown;
+      pages?: unknown;
+      pagesFetched?: unknown;
+    };
   } catch {
     return null;
   }
@@ -429,19 +511,36 @@ function billedRecordsFromArtifact(artifactPath: string, atLeast: number): numbe
   return envelope && typeof envelope.records === "number" ? envelope.records : conservative;
 }
 
-/* >1 means THIS DAY's capture was truncated -- coverage/highergov-client.ts's
- * fetchDay reads page one only, so a day whose meta.pagination.pages exceeded
- * 1 handed back less than HigherGov actually held for it. Before this, that
- * fact was only ever surfaced for the ONE sampled day (main()'s own
- * `result.samplePages` check below) -- every other day's artifact carried
- * `pages` faithfully (adapters/highergov.ts:139) and nothing ever read it
- * back. Null when the envelope carries no usable `pages` field at all (an
- * artifact from a source that never wrote one, or one that failed to parse)
- * -- that is "unknown", not "not truncated", and callers must not conflate
- * the two by defaulting this to 1. */
-function pagesFromArtifact(artifactPath: string): number | null {
+/* WAS THIS DAY'S CAPTURE COMPLETE? Returns the two figures the answer is made
+ * of -- how many pages the vendor said there were, and how many this run
+ * actually bought -- or null when the envelope cannot answer at all (an
+ * artifact from a source that never wrote them, or one that failed to parse).
+ * Null is "unknown", not "not truncated", and callers must not conflate the
+ * two.
+ *
+ * ⚖️ THIS USED TO BE `pagesFromArtifact`, RETURNING `pages` ALONE, and the
+ * rename is the change rather than decoration. While fetchDay read page one
+ * only, `pages > 1` and "truncated" were the same fact, so one number
+ * answered both. Now that it pages, a three-page day bought WHOLE and a
+ * three-page day stopped after one both write `pages: 3` -- and only
+ * `pagesFetched` beside it separates them. A caller left reading `pages`
+ * alone would report every complete busy day as truncated, which is the kind
+ * of false alarm that gets a real warning ignored.
+ *
+ * ⚠️ A MISSING `pagesFetched` DEFAULTS TO 1, not to `pages`. Artifacts
+ * written before this field existed came from a client that genuinely read
+ * one page, so 1 is the true value for them -- and it is also the
+ * conservative direction for anything else: it reports "we may have missed
+ * rows" rather than quietly asserting completeness nobody recorded. */
+function truncationFromArtifact(
+  artifactPath: string,
+): { pages: number; pagesFetched: number } | null {
   const envelope = readArtifactEnvelope(artifactPath);
-  return envelope && typeof envelope.pages === "number" ? envelope.pages : null;
+  if (!envelope || typeof envelope.pages !== "number") return null;
+  return {
+    pages: envelope.pages,
+    pagesFetched: typeof envelope.pagesFetched === "number" ? envelope.pagesFetched : 1,
+  };
 }
 
 /* Pure-ish and testable without a network: `client` is injectable (the real
@@ -483,6 +582,8 @@ export async function dryRun(
       sampled: false,
       recordsThatDay: 0,
       samplePages: null,
+      samplePagesFetched: 0,
+      estimatedRecordsPerDay: 0,
       windowDays,
       projectedRecords: 0,
       remainingThisMonth: remainingBeforeSample,
@@ -527,7 +628,29 @@ export async function dryRun(
    * vendor failures bill, which is exactly the thing nobody can read back. */
   let sample: FeedResult;
   try {
-    sample = await client.fetchDay(from, undefined, pageSize, axis);
+    /* 🛑 THE SAMPLE IS BUDGETED DOWN TO EXACTLY ONE PAGE, and this is the
+     * single most important line in this function now that the client pages.
+     *
+     * Without a budget, "sample one day" would walk that day whole -- up to
+     * MAX_PAGES_PER_DAY * 100 = 1,000 records -- and it would do so BEFORE
+     * the affordability check below, which might then refuse the window
+     * anyway. A window that gets refused would cost a thousand records to
+     * refuse. The whole argument for a dry run is that measuring is cheap
+     * relative to committing.
+     *
+     * `singlePageBudget(pageSize)` is the client's own answer to "what is
+     * the most one page can bill", so passing it as the day's whole budget
+     * makes the walk stop before page two by construction: page one is
+     * unbudgeted (it IS the measurement), and page two would cross. It works
+     * for a small --page-size too, where pricing a page at a flat 100 would
+     * instead have let the sample buy ten pages of ten.
+     *
+     * What is lost is completeness of the SAMPLED day, and it is not lost
+     * silently: `samplePages` vs `samplePagesFetched` records it, the
+     * projection infers the rest from it (estimateFullDay), and main()'s
+     * day-walk re-fetches that day properly rather than committing a page of
+     * it. */
+    sample = await client.fetchDay(from, undefined, pageSize, axis, singlePageBudget(pageSize));
   } catch (err) {
     /* 🔴 THE TALLY ITSELF MUST NOT SWALLOW `err` (final review, fix 2). This
      * whole catch exists so the vendor's error is never lost -- but `one()`
@@ -547,7 +670,13 @@ export async function dryRun(
         await recordSpend({ run: exec }, {
           sourceId: src.id,
           endpoint: "opportunity",
-          records: COVERAGE.unparseableResponseRecords,
+          /* 🔴 PLUS WHAT THE SAMPLE'S EARLIER PAGES ALREADY COST. The sample
+           * is budgeted to one page, so this is normally 0 -- but a caller
+           * passing a larger budget, or a page size small enough to fit
+           * several pages inside one page's price, makes a part-billed throw
+           * reachable, and 40 flat would then under-report it. Zero for any
+           * error that carries no such figure. */
+          records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
         });
       }
     } catch (tallyErr) {
@@ -561,7 +690,14 @@ export async function dryRun(
     }
     throw err;
   }
-  const projectedRecords = projectWindow(sample.records, windowDays);
+  /* 🔴 THE PROJECTION IS BUILT ON THE DAY'S TRUE SIZE, NOT ON WHAT THE
+   * SAMPLE HAPPENED TO BUY. `projectWindow(sample.records, ...)` was the old
+   * line, and on a busy day it projected page one as if it were the day --
+   * measured under-projections of 5x and 6x, in the one direction that lets
+   * a window be accepted that the ceiling cannot afford. estimateFullDay()
+   * carries the whole argument. */
+  const estimatedRecordsPerDay = estimateFullDay(sample);
+  const projectedRecords = projectWindow(estimatedRecordsPerDay, windowDays);
   /* 🔴 NOT `MONTHLY_RECORD_CEILING - spent`. The sample above just billed
    * `sample.records` -- by the time this line runs, that spend is real,
    * whether or not it has been written to api_spend yet (recordSpend is the
@@ -584,6 +720,8 @@ export async function dryRun(
     sampled: true,
     recordsThatDay: sample.records,
     samplePages: sample.pages,
+    samplePagesFetched: sample.pagesFetched,
+    estimatedRecordsPerDay,
     windowDays,
     projectedRecords,
     remainingThisMonth,
@@ -600,8 +738,10 @@ export async function main(
    * a parameter's default expression runs at call time, before this
    * function's own body does. `undefined` (a test always supplies its own
    * fake adapter, so this only matters for the real CLI entrypoint at the
-   * bottom of this file) is resolved further down, AFTER pageSize exists. */
-  adapter?: WindowedAdapter,
+   * bottom of this file) is resolved further down, AFTER pageSize exists --
+   * and now also after each day's own budget exists, which is why a FACTORY
+   * is accepted alongside a plain adapter (see DayAdapterFactory above). */
+  adapter?: WindowedAdapter | DayAdapterFactory,
   /* Injectable so a test can point the day-walk's artifact files at a
    * temp directory instead of the repo's own gitignored `runs/` -- the
    * real CLI's default matches scrape/cli.ts's own convention exactly. */
@@ -718,22 +858,29 @@ export async function main(
    * itself, not only in the window announcement above, so that the one line an
    * operator is most likely to paste into a decision carries its own units. */
   console.log(
-    `\nDry run: sampled ${result.axis}=${result.sampledDay} at ${result.recordsThatDay} ` +
-      `record(s)/day. Projected ${result.projectedRecords} record(s) across ` +
-      `${result.windowDays} day(s), all on ${result.axis}.`,
+    `\nDry run: sampled ${result.axis}=${result.sampledDay} at ` +
+      `${result.estimatedRecordsPerDay} record(s)/day. Projected ` +
+      `${result.projectedRecords} record(s) across ${result.windowDays} day(s), all on ` +
+      `${result.axis}.`,
   );
   console.log(
     `Remaining this month: ${result.remainingThisMonth} of ${MONTHLY_RECORD_CEILING} ` +
       `(source '${HIGHERGOV_SOURCE_NAME}', after the sample above).`,
   );
-  /* Paid for, not discarded. >1 means the sampled day was itself truncated
-   * -- the single most important thing to know before committing to a much
-   * wider window on the strength of this measurement. */
-  if (result.samplePages !== null && result.samplePages > 1) {
+  /* Paid for, not discarded. The sample is budgeted to ONE page on purpose
+   * (dryRun's own comment), so on any busy day this fires -- and what it
+   * reports is no longer "the rate above is a floor" but "the rate above is
+   * an INFERENCE, and here is what it was inferred from". An operator
+   * committing 90 days on the strength of one page is entitled to see that
+   * the arithmetic happened. */
+  if (result.samplePages !== null && result.samplePages > result.samplePagesFetched) {
     console.log(
-      `⚠️  The sampled day was TRUNCATED: ${result.samplePages} page(s) exist but this ` +
-        `client reads page one only. The measured rate above is a FLOOR -- the true ` +
-        `per-day rate, and the true projection, may be higher.`,
+      `ℹ️  The sampled day spans ${result.samplePages} page(s); the sample deliberately ` +
+        `bought ${result.samplePagesFetched} of them (${result.recordsThatDay} record(s)) so ` +
+        `that pricing a window stays cheap. The ${result.estimatedRecordsPerDay} record(s)/day ` +
+        `above is that page's rate carried across all ${result.samplePages} page(s) -- an ` +
+        `UPPER bound, not a measurement. The day-walk below re-fetches this day in full ` +
+        `rather than committing a fraction of it.`,
     );
   }
 
@@ -781,7 +928,14 @@ export async function main(
    * ②'s 90-day backfill has no executor anywhere in this slice.
    * `resolved` was already computed above, before the sample -- not
    * re-resolved here. */
-  const perDayEstimate = result.recordsThatDay;
+  /* 🔴 THE DAY'S TRUE SIZE, NOT THE SAMPLE'S RECEIPT. This used to be
+   * `result.recordsThatDay` -- the records the sample happened to buy -- and
+   * that is now page one of a day, not the day. Every forward-looking guard
+   * below ("can we afford the next day?") is built on this number, so an
+   * under-stated rate silently disables all of them at once: the walk would
+   * step past both the run cap and the monthly ceiling believing each day
+   * cost a fifth of what it did. estimateFullDay() carries the argument. */
+  const perDayEstimate = result.estimatedRecordsPerDay;
   let committedDays = 0;
   let committedRecords = 0;
   /* Named `days`, not `windowDays` -- `result.windowDays` (a count) already
@@ -804,33 +958,55 @@ export async function main(
    * should resume from. */
   let stopReason: "cap" | "ceiling" | null = null;
   let stoppedAtDay: string | null = null;
-  /* Resolved HERE, not via the parameter's own default expression -- see
-   * this function's `adapter` parameter comment for why the default cannot
-   * know `pageSize` in time. A test always injects its own `adapter`, so
-   * this branch is only ever live for the real CLI entrypoint. */
-  const dayWalkAdapter = adapter ?? higherGovAdapter(fetch, pageSize, axis);
 
   for (const day of days) {
     /* THE SAMPLED DAY IS NEVER BILLED TWICE (review round 3, item 4). `day`
      * equals `result.sampledDay` on exactly the first iteration (dryRun()
      * always samples `from`, and `from` is always daysInRange's first
      * entry) -- reuse its already-paid-for data instead of re-fetching the
-     * same day through the network a second time. */
-    const isSampledDay = day === result.sampledDay;
+     * same day through the network a second time.
+     *
+     * ⚖️ BUT ONLY WHEN THE SAMPLE IS A WHOLE DAY, and that qualifier is new
+     * with paging. The sample is budgeted to one page (dryRun's own comment),
+     * so on a busy day `result.sampleResult` is a FRACTION of that day.
+     * Reusing it would commit page one of day one into the archive
+     * permanently and mark it loaded -- a knowingly incomplete first day in
+     * every backfill, which is the exact opposite of the ruling this work
+     * exists to serve ("build paging, then buy complete days").
+     *
+     * So a partial sample is re-fetched properly, and page one of that day is
+     * bought a second time. That is a real, acknowledged cost of at most one
+     * page (<=100 records) per run, paid once, to keep the archive honest --
+     * and it is the same direction of error this file's own projectWindow()
+     * comment already accepts for the same reason. A whole sample is still
+     * reused exactly as before, so a quiet single-page day costs nothing new. */
+    const reusesSample = day === result.sampledDay && !isPartialDay(result.sampleResult!);
 
-    /* Stop BEFORE the call that would cross the ceiling -- skipped for the
-     * sampled day, which makes no new network call and so cannot cross
-     * anything. Re-read fresh each iteration rather than tracked locally:
-     * recordSpend below commits immediately, so a fresh read reflects this
-     * loop's own prior days, the dry run's own sample, and anything else
-     * recorded meanwhile. perDayEstimate -- the dry run's own measured rate
-     * -- is the only forward-looking signal available for a day not yet
-     * fetched. `<= 0 ||` is defence in depth: dryRun() already refuses a
-     * zero-record sample above, so perDayEstimate should never reach here
-     * as 0, but a per-day guard that only fires on a STRICT less-than would
-     * itself go silent at exactly zero remaining and zero estimated, the
-     * same failure mode one layer up (review round 3, item 2). */
-    if (!isSampledDay) {
+    /* THE BUDGET HANDED TO THIS ONE DAY'S OWN PAGING WALK. Null for a reused
+     * sample (no call is made at all). See where it is set below: it is what
+     * is genuinely left, so a day that turns out much bigger than the
+     * estimate comes back PARTIAL instead of walking past the ceiling. */
+    let dayBudget: number | undefined;
+
+    /* Stop BEFORE the call that would cross the ceiling -- skipped when the
+     * sample is being reused, which makes no new network call and so cannot
+     * cross anything. Re-read fresh each iteration rather than tracked
+     * locally: recordSpend below commits immediately, so a fresh read
+     * reflects this loop's own prior days, the dry run's own sample, and
+     * anything else recorded meanwhile. perDayEstimate -- the dry run's own
+     * measured rate -- is the only forward-looking signal available for a day
+     * not yet fetched. `<= 0 ||` is defence in depth: dryRun() already
+     * refuses a zero-record sample above, so perDayEstimate should never
+     * reach here as 0, but a per-day guard that only fires on a STRICT
+     * less-than would itself go silent at exactly zero remaining and zero
+     * estimated, the same failure mode one layer up (review round 3, item 2).
+     *
+     * ⚠️ THE GATE IS `!reusesSample`, NOT `!isSampledDay`. Since a PARTIAL
+     * sample's day is now re-fetched (see above), the sampled day can make a
+     * real, billed call -- and a day that makes a call must pass the same
+     * checks every other day does. Gating on "is this the sampled day" would
+     * have exempted the one day most likely to be large. */
+    if (!reusesSample) {
       /* THE CAP CHECK RUNS FIRST, and needs no database read to decide --
        * unlike the ceiling check right below it, "how much has THIS RUN
        * spent" is fully known from local totals: the dry run's own
@@ -872,6 +1048,23 @@ export async function main(
         );
         break;
       }
+
+      /* 🛑 THE PER-DAY CEILING ON THE PAGING WALK ITSELF, and it is the guard
+       * the checks above cannot be. Both of those refuse a day whose
+       * ESTIMATED cost will not fit; neither can do anything about a day
+       * whose REAL cost turns out to be five times the estimate, because
+       * they run before the call. That gap used to be worth at most one page;
+       * with paging it is worth up to MAX_PAGES_PER_DAY pages.
+       *
+       * So the day is told what it may spend, from the two limits that are
+       * actually binding right now: what remains of the monthly ceiling, and
+       * (when set) what remains of this run's own --max-records review gate.
+       * A day that would exceed either stops mid-walk and comes back partial,
+       * which the truncation reporting below then makes loud. */
+      dayBudget = remainingNow;
+      if (maxRecords !== undefined) {
+        dayBudget = Math.min(dayBudget, maxRecords - (result.recordsThatDay + committedRecords));
+      }
     }
 
     const req: RunRequest = {
@@ -886,13 +1079,22 @@ export async function main(
     const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
     const outPath = join(runsDir, `run-highergov-${day}-${stamp}.db`);
 
-    /* The sampled day reuses `result.sampleResult` (guaranteed non-null:
+    /* A WHOLE sampled day reuses `result.sampleResult` (guaranteed non-null:
      * `result.sampled` was already checked true above) through a one-page
      * adapter instead of the real one -- same runScrape path, same
-     * artifact-writing code, zero new network calls. */
-    const dayAdapter = isSampledDay
+     * artifact-writing code, zero new network calls.
+     *
+     * ⚠️ THE REAL ADAPTER IS BUILT HERE, INSIDE THE LOOP, and not once above
+     * it. It carries `dayBudget`, which is recomputed every iteration from
+     * what is actually left -- an adapter constructed once would be carrying
+     * the first day's budget on the ninetieth day, which is a budget that
+     * stopped being true the moment the first day billed. A test always
+     * injects its own `adapter`, so the constructed branch is only ever live
+     * for the real CLI entrypoint (see this function's `adapter` parameter
+     * comment for why the default cannot be an eager one). */
+    const dayAdapter = reusesSample
       ? reuseSampleAdapter(sampleAsPage(result.sampleResult!, day, axis))
-      : dayWalkAdapter;
+      : resolveDayAdapter(adapter, dayBudget, pageSize, axis);
 
     /* 🔴 THE SECOND PLACE A BILLED CALL COULD VANISH (final review, fix 1).
      * runScrape does not catch what the adapter throws -- its own loop is
@@ -902,14 +1104,17 @@ export async function main(
      * recorded nothing for a day the vendor already billed. Same shape and
      * same conservative figure as the dry run's own sample above.
      *
-     * ⚠️ SCOPED TO !isSampledDay, and that scope is the whole correctness of
-     * it. The sampled day runs through reuseSampleAdapter, which returns an
-     * in-memory page and makes NO network call -- a throw on that iteration
-     * (an artifact write failing, say) cost zero vendor records, and its
-     * real cost was already tallied once as the dry run's own spend. Tallying
-     * there would not be conservative, it would be fabricated, and it would
-     * double-count the sample. Same distinction fetch-documents-for.ts draws
-     * between HigherGov and free SAM.gov at its own catch. */
+     * ⚠️ SCOPED TO !reusesSample, and that scope is the whole correctness of
+     * it. A REUSED sampled day runs through reuseSampleAdapter, which returns
+     * an in-memory page and makes NO network call -- a throw on that
+     * iteration (an artifact write failing, say) cost zero vendor records,
+     * and its real cost was already tallied once as the dry run's own spend.
+     * Tallying there would not be conservative, it would be fabricated, and
+     * it would double-count the sample. Same distinction
+     * fetch-documents-for.ts draws between HigherGov and free SAM.gov at its
+     * own catch. A RE-FETCHED sampled day (the partial-sample case) does make
+     * a real call, and falls on the tallying side of this line exactly like
+     * every other day. */
     let runResult: Awaited<ReturnType<typeof runScrape>>;
     try {
       runResult = await runScrape(req, dayAdapter, outPath);
@@ -919,12 +1124,17 @@ export async function main(
        * would replace `err` before it ever reached the `throw err` below --
        * trading the vendor's own diagnostic for a database error, on the one
        * call site where the vendor's message is the thing worth keeping. */
-      if (!isSampledDay) {
+      if (!reusesSample) {
         try {
           await recordSpend({ run: exec }, {
             sourceId: source.id,
             endpoint: "opportunity",
-            records: COVERAGE.unparseableResponseRecords,
+            /* 🔴 PLUS THE PAGES OF THIS DAY THAT ALREADY BILLED. runScrape
+             * does not catch what the adapter throws, so a PartialDayBilledError
+             * from a mid-day failure arrives here intact carrying what pages
+             * one to N-1 cost. Charging the flat conservative figure alone
+             * would drop them. Zero for every other error. */
+            records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
           });
         } catch (tallyErr) {
           console.error(
@@ -946,20 +1156,24 @@ export async function main(
       runResult.rows + runResult.undatedSkipped,
     );
 
-    /* TRUNCATION, FOR THIS DAY -- not only the sampled one. `pages` rides on
-     * every day's artifact (adapters/highergov.ts:139, and sampleAsPage()
-     * above for the reused sampled day), so this is the first place anything
-     * has ever read it back for a day other than the sample. */
-    const dayPages = pagesFromArtifact(runResult.artifactPath);
-    if (dayPages !== null && dayPages > 1) {
+    /* TRUNCATION, FOR THIS DAY -- not only the sampled one. `pages` and
+     * `pagesFetched` ride on every day's artifact (adapters/highergov.ts,
+     * and sampleAsPage() above for the reused sampled day). Truncation is
+     * the COMPARISON of the two, never `pages > 1`: since the client walks
+     * pages, a three-page day bought whole is complete, and calling it
+     * truncated would cry wolf on almost every busy day. */
+    const dayTruncation = truncationFromArtifact(runResult.artifactPath);
+    const dayTruncated = dayTruncation !== null && dayTruncation.pagesFetched < dayTruncation.pages;
+    if (dayTruncated) {
       truncatedDays.push(day);
     }
 
-    /* Recorded ONLY for a day that made a real, new call -- the sampled
+    /* Recorded ONLY for a day that made a real, new call -- a REUSED sampled
      * day's cost was already recorded once, above, as the dry run's own
      * spend. Recording it again here would double-count a call that never
-     * happened a second time. */
-    if (!isSampledDay) {
+     * happened a second time. A re-fetched sampled day did make a call, and
+     * is billed like any other. */
+    if (!reusesSample) {
       await recordSpend({ run: exec }, {
         sourceId: source.id,
         endpoint: "opportunity",
@@ -984,7 +1198,7 @@ export async function main(
      * thing that happened for an ordinary reason. */
     console.log(
       `  ${day}: ${dayRecords} record(s) ` +
-        (isSampledDay ? "(reused from the dry run's sample -- not re-billed)" : "billed") +
+        (reusesSample ? "(reused from the dry run's sample -- not re-billed)" : "billed") +
         `, ${imported.imported} sighting(s) imported` +
         (imported.skipped
           ? " (UNEXPECTED: importArtifact reported this artifact's hash as already " +
@@ -998,10 +1212,12 @@ export async function main(
      * only for the end-of-run summary below -- an operator watching a long
      * run scroll by should not have to wait for the last line to learn that
      * today's day was incomplete. */
-    if (dayPages !== null && dayPages > 1) {
+    if (dayTruncated) {
       console.log(
-        `    ⚠️  ${day} was TRUNCATED: ${dayPages} page(s) exist but this client reads page ` +
-          "one only -- this day's capture is INCOMPLETE.",
+        `    ⚠️  ${day} was TRUNCATED: ${dayTruncation!.pagesFetched} of ` +
+          `${dayTruncation!.pages} page(s) were fetched -- this day's capture is ` +
+          "INCOMPLETE. The walk stopped on a budget or on the per-day page ceiling, " +
+          "not because the rows were absent.",
       );
     }
   }
@@ -1009,7 +1225,11 @@ export async function main(
   console.log(
     `\nDone: ${committedDays} of ${days.length} day(s) loaded, ${committedRecords} ` +
       `record(s) newly billed this run (plus ${result.recordsThatDay} sampled by the dry ` +
-      `run above, reused for the sampled day rather than billed twice).`,
+      `run above, ` +
+      (isPartialDay(result.sampleResult!)
+        ? `whose day was re-fetched in full rather than committed as a fragment`
+        : `reused for the sampled day rather than billed twice`) +
+      `).`,
   );
 
   /* ⚖️ TRUNCATION IS A SEPARATE FACT FROM A PARTIAL WINDOW, and this summary
@@ -1031,14 +1251,19 @@ export async function main(
   if (truncatedDays.length > 0) {
     console.log(
       `\n⚠️  TRUNCATED ARCHIVE: ${truncatedDays.length} of ${committedDays} loaded day(s) ` +
-        `captured page one only, with more pages existing for that day: ` +
+        `were bought only in part, with more pages existing for that day: ` +
         `${truncatedDays.join(", ")}. The archive for those days is INCOMPLETE -- ` +
-        "coverage/highergov-client.ts's fetchDay reads page one only by design; only a " +
-        "wider --page-size (still billed per record returned, CLAUDE.md §5.1) or future " +
-        "multi-page walking would capture the rest.",
+        "coverage/highergov-client.ts's fetchDay DOES walk pages, so this is a BUDGET " +
+        "outcome, not a design limit: the walk stopped on what was left of the monthly " +
+        "ceiling, on --max-records, or on the hard MAX_PAGES_PER_DAY backstop. Re-run " +
+        "those days with more allowance (still billed per record returned, CLAUDE.md §5.1) " +
+        "to complete them.",
     );
   } else {
-    console.log(`\nNo loaded day was truncated: every day's capture fit on page one.`);
+    console.log(
+      `\nNo loaded day was truncated: every day was bought whole, every page the vendor ` +
+        `reported.`,
+    );
   }
 
   /* A mid-walk stop is a SUCCESSFUL refusal, not a crash -- it does not

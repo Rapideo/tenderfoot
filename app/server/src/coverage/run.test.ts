@@ -23,10 +23,10 @@ async function noDocuments() {
 function fakeClient(byDay: Record<string, FeedResult>): HigherGovClient {
   return {
     async fetchDay(capturedDate) {
-      return byDay[capturedDate] ?? { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return byDay[capturedDate] ?? { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     fetchDocuments: noDocuments,
   };
@@ -58,6 +58,8 @@ test("a run records what the vendor billed in api_spend", async () => {
         records: 5,
         feedCount: 5,
         pages: 1,
+
+        pagesFetched: 1,
       },
     }),
   });
@@ -81,10 +83,12 @@ test("the spend is recorded even when the item write fails", async () => {
         records: 7,
         feedCount: 7,
         pages: 1,
+
+        pagesFetched: 1,
       };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     fetchDocuments: noDocuments,
   };
@@ -120,7 +124,7 @@ test("a fetchDay throw still tallies a conservative spend before the error propa
       throw new Error('HigherGov returned a non-array "results" field (test double)');
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     fetchDocuments: noDocuments,
   };
@@ -140,7 +144,7 @@ test("a fetchDay throw still tallies a conservative spend before the error propa
 test("a fetchBySourceId throw still tallies a conservative spend before the error propagates", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchBySourceId() {
       throw new Error("HigherGov returned a malformed JSON body (test double)");
@@ -176,6 +180,8 @@ test("a run aborts at maxRecordsPerRun rather than continuing", async () => {
     records: COVERAGE.maxRecordsPerRun + 1,
     feedCount: 9999,
     pages: 1,
+
+    pagesFetched: 1,
   };
   const out = await runCoverage({
     from: "2026-09-03",
@@ -197,7 +203,7 @@ const keyOf = (...ids: string[]): KeyEntry[] =>
   }));
 
 test("an aborted run's unqueried days leave no misses behind", async () => {
-  const heavy: FeedResult = { notices: [], records: COVERAGE.maxRecordsPerRun + 1, feedCount: 1, pages: 1 };
+  const heavy: FeedResult = { notices: [], records: COVERAGE.maxRecordsPerRun + 1, feedCount: 1, pages: 1, pagesFetched: 1 };
   await runCoverage({
     from: "2026-09-03",
     to: "2026-09-05",
@@ -220,7 +226,7 @@ test("an aborted run's unqueried days leave no misses behind", async () => {
 test("a notice absent from the window is looked up by id before being called missing", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchBySourceId(sourceId) {
       return {
@@ -230,6 +236,8 @@ test("a notice absent from the window is looked up by id before being called mis
         records: 1,
         feedCount: 1,
         pages: 1,
+
+        pagesFetched: 1,
       };
     },
     fetchDocuments: noDocuments,
@@ -248,10 +256,10 @@ test("a notice absent from the window is looked up by id before being called mis
 test("a notice in neither the window nor the id lookup is a real miss, and cost nothing", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     fetchDocuments: noDocuments,
   };
@@ -268,24 +276,160 @@ test("a notice in neither the window nor the id lookup is a real miss, and cost 
   expect(out.recordsSpent).toBe(0);
 });
 
-/* 🔴 A day the client could only half-read must not be graded. Page one of
+/* 🔴 A day the client could only half-buy must not be graded. One page of
  * three means two pages of notices we never saw, and every one of them would
- * read downstream as a notice HigherGov does not carry. */
-test("a day whose feed spans more than one page aborts rather than grading a truncation", async () => {
+ * read downstream as a notice HigherGov does not carry.
+ *
+ * ⚖️ THE FAKE NOW HAS TO SAY `pagesFetched: 1` EXPLICITLY, and that is the
+ * change 2026-09-08's paging made to this test. `pages: 3` alone used to BE
+ * the truncation, because the client could only ever read the first one.
+ * Now it is only half the fact, and the day below is short because it was
+ * stopped -- by the per-day budget, the page ceiling, or an empty page --
+ * not because a third page merely exists. */
+test("a day the client came back short on aborts rather than grading a truncation", async () => {
   const out = await runCoverage({
     from: "2026-09-03",
     to: "2026-09-03",
     key: keyOf("003000000088067"),
     client: fakeClient({
-      "2026-09-03": { notices: [], records: 5, feedCount: 500, pages: 3 },
+      "2026-09-03": { notices: [], records: 5, feedCount: 500, pages: 3, pagesFetched: 1 },
     }),
   });
   expect(out.aborted).toBe(true);
-  expect(out.abortReason).toContain("page 1 of 3");
+  expect(out.abortReason).toContain("PARTIAL");
+  expect(out.abortReason).toContain("1 of 3 page(s)");
   /* Unchecked, NOT missing -- we did not establish anything about this notice. */
   const row = await one<{ carried: string }>(`SELECT carried FROM coverage_item`);
   expect(row!.carried).toBe("unchecked");
 });
+
+/* 🔴 THE OTHER HALF, AND WITHOUT IT THE TEST ABOVE WOULD STILL PASS WITH THE
+ * OLD `pages > 1` GUARD IN PLACE. A three-page day the client bought WHOLE is
+ * complete evidence: every row HigherGov had for that day is in hand, so
+ * grading it is not merely allowed, it is the entire point of building paging.
+ * A guard that still refused it would leave the feature unreachable. */
+test("a multi-page day bought WHOLE is graded, not refused", async () => {
+  const out = await runCoverage({
+    from: "2026-09-03",
+    to: "2026-09-03",
+    key: keyOf("003000000088067"),
+    client: fakeClient({
+      "2026-09-03": {
+        notices: [
+          {
+            externalId: "003000000088067",
+            capturedDate: "2026-09-03",
+            postedDate: null,
+            versionKey: null,
+            title: null,
+            raw: {},
+          },
+        ],
+        records: 3,
+        feedCount: 3,
+        pages: 3,
+        pagesFetched: 3,
+      },
+    }),
+  });
+  expect(out.aborted).toBe(false);
+  const row = await one<{ carried: string }>(`SELECT carried FROM coverage_item`);
+  expect(row!.carried).toBe("carried");
+});
+
+/* 🛑 THE PER-DAY BUDGET IS ACTUALLY HANDED TO THE CLIENT, not merely intended.
+ * One paged day can bill up to MAX_PAGES_PER_DAY * 100 records -- twenty-five
+ * times this whole run's cap -- so a run that called fetchDay with no budget
+ * would blow maxRecordsPerRun on its FIRST day and only discover it
+ * afterwards. Asserted on the argument itself, because a FeedResult looks
+ * identical either way. */
+test("the day loop tells fetchDay what is left of maxRecordsPerRun", async () => {
+  const budgets: Array<number | undefined> = [];
+  const client: HigherGovClient = {
+    async fetchDay(_day, _fetchImpl, _pageSize, _axis, maxRecords) {
+      budgets.push(maxRecords);
+      return { notices: [], records: 6, feedCount: 6, pages: 1, pagesFetched: 1 };
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    fetchDocuments: noDocuments,
+  };
+  await runCoverage({ from: "2026-09-03", to: "2026-09-05", client });
+  /* Day one may spend the whole cap; each later day only what is left after
+   * the days before it -- a budget that ignored `spent` would repeat 40. */
+  expect(budgets).toEqual([
+    COVERAGE.maxRecordsPerRun,
+    COVERAGE.maxRecordsPerRun - 6,
+    COVERAGE.maxRecordsPerRun - 12,
+  ]);
+});
+
+/* 🔴 GUARD 4 AT THIS TALLY SITE. A day is several calls now, so a throw can
+ * arrive with pages already billed. This site charges the conservative bound
+ * for the call that failed and must ADD what the earlier pages cost --
+ * charging 40 flat for a day the vendor billed 140 for is exactly the
+ * under-report api-spend.ts's header calls the dangerous direction. */
+test("a mid-day throw tallies the conservative bound PLUS the pages already billed", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      const err = new Error('HigherGov answered 500 -- 100 record(s) across 2 page(s) were ALREADY BILLED');
+      (err as Error & { recordsBilled?: number }).recordsBilled = 100;
+      throw err;
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    fetchDocuments: noDocuments,
+  };
+  await expect(runCoverage({ from: "2026-09-03", to: "2026-09-03", client })).rejects.toThrow(
+    /ALREADY BILLED/,
+  );
+  const spend = await one<{ total: string }>(
+    `SELECT coalesce(sum(records),0)::text AS total FROM api_spend`,
+  );
+  expect(Number(spend!.total)).toBe(COVERAGE.unparseableResponseRecords + 100);
+});
+
+/* 🔴 THE CALL COUNTER COUNTS HTTP REQUESTS, NOT DAYS. maxCallsPerRun is a cap
+ * on live requests against a metered API (its own comment in thresholds.ts
+ * says so), and one day is now up to MAX_PAGES_PER_DAY of them. Counting a
+ * ten-page day as one call would leave the ratified 500 bounding something
+ * ten times smaller than what it names. The window here is one day and the
+ * client reports four pages fetched. */
+test("a paged day counts every page against maxCallsPerRun, not one call per day", async () => {
+  const budgets: Array<number | undefined> = [];
+  const client: HigherGovClient = {
+    async fetchDay(_day, _fetchImpl, _pageSize, _axis, maxRecords) {
+      budgets.push(maxRecords);
+      /* Zero records on purpose: the RECORD cap must never be what stops
+       * this run, or the assertion below would be about the wrong guard --
+       * the same reasoning the zero-every-day maxCallsPerRun test above
+       * already rests on. */
+      return { notices: [], records: 0, feedCount: 0, pages: 4, pagesFetched: 4 };
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    fetchDocuments: noDocuments,
+  };
+  /* A key entry the day did not carry forces the per-key probe loop, which is
+   * where `calls` is next read -- and the probe is skipped when the counter
+   * has already reached the cap. Rather than run 500 days to observe that,
+   * this asserts the counter's effect where it is cheap: the abort reason
+   * names the call count. */
+  const out = await runCoverage({
+    from: "2026-01-01",
+    to: "2028-01-01",
+    client,
+  });
+  expect(out.aborted).toBe(true);
+  expect(out.abortReason).toContain("maxCallsPerRun");
+  /* 4 pages a day, so the cap is reached in a quarter of the days it would
+   * have taken at one call per day -- and `budgets` is the witness: 125
+   * days, not 500. */
+  expect(budgets.length).toBe(Math.ceil(COVERAGE.maxCallsPerRun / 4));
+}, 90000);
 
 /* 🔴 THE SAVED-SEARCH DETECTOR. R1: state filtering exists ONLY through a
  * saved search living in HigherGov's account, not our code. feed_count is
@@ -295,7 +439,7 @@ test("the run records the feed count for the saved-search detector", async () =>
     from: "2026-09-03",
     to: "2026-09-03",
     client: fakeClient({
-      "2026-09-03": { notices: [], records: 0, feedCount: 4242, pages: 1 },
+      "2026-09-03": { notices: [], records: 0, feedCount: 4242, pages: 1, pagesFetched: 1 },
     }),
   });
   const row = await one<{ feed_count: number }>(`SELECT feed_count FROM coverage_run LIMIT 1`);
@@ -356,7 +500,7 @@ test("the ceiling allows a run that would land exactly on it", async () => {
     from: "2026-09-03",
     to: "2026-09-03",
     client: fakeClient({
-      "2026-09-03": { notices: [], records: 1, feedCount: 0, pages: 1 },
+      "2026-09-03": { notices: [], records: 1, feedCount: 0, pages: 1, pagesFetched: 1 },
     }),
   });
   expect(out.aborted).toBe(false);
@@ -383,10 +527,10 @@ test(
   async () => {
     const zeroEveryDay: HigherGovClient = {
       async fetchDay() {
-        return { notices: [], records: 0, feedCount: 0, pages: 1 };
+        return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
       },
       async fetchBySourceId() {
-        return { notices: [], records: 0, feedCount: 0, pages: 1 };
+        return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
       },
       fetchDocuments: noDocuments,
     };
@@ -435,12 +579,14 @@ test("a notice settled as carried by an earlier run is not re-asked, and does no
           records: 1,
           feedCount: 1,
           pages: 1,
+
+          pagesFetched: 1,
         };
       }
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchBySourceId() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     fetchDocuments: noDocuments,
   };
@@ -458,7 +604,7 @@ test("a notice settled as carried by an earlier run is not re-asked, and does no
 
   const mustNotAskAgain: HigherGovClient = {
     async fetchDay() {
-      return { notices: [], records: 0, feedCount: 0, pages: 1 };
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
     },
     async fetchBySourceId() {
       /* X is already settled as carried -- reaching this at all is the bug. */
