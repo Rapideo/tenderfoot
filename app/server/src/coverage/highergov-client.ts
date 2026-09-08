@@ -32,11 +32,56 @@ const HOST = "https://www.highergov.com/api-external";
  * miscount against the wrong source_id. */
 export const HIGHERGOV_SOURCE_NAME = "HigherGov";
 
+/* ⚖️ THE AXIS A WINDOW IS WALKED ON. Ruled 2026-09-07 by Matt and recorded as
+ * an amendment to the design spec's §3.2: **the BACKFILL runs on
+ * `posted_date`; LIVE operation stays on `captured_date`.**
+ *
+ * `captured_date` is HigherGov's CRAWL watermark (R9). For live operation --
+ * "what did they notice since yesterday" -- it is exactly the right question,
+ * and nothing about that changes. For a BACKFILL it is the wrong question and
+ * expensively so: a historical crawl window returns whatever their crawler
+ * touched that day, INCLUDING re-captures of notices we already hold. The
+ * vendor bills per record RETURNED (CLAUDE.md §5.1), so a re-capture costs
+ * full price and delivers nothing -- the merge layer dedups it correctly and
+ * the money is gone. `posted_date` asks what was PUBLISHED in the window,
+ * which is what a backfill actually means.
+ *
+ * The values ARE the vendor's own parameter names rather than nicknames for
+ * them, so `url.searchParams.set(axis, day)` is the whole implementation and
+ * there is no mapping table to drift out of step. Both are accepted
+ * parameters -- R1 read /opportunity/'s twelve from their own OpenAPI schema
+ * (docs/2026-09-03-platform-comparison.md) and these are two of them.
+ *
+ * 🔴 WHICHEVER AXIS IS WALKED IS THE AXIS `modifiedAt` MUST REPORT. Querying
+ * on one and reporting the other gives a notice published in June but crawled
+ * in September a September `modifiedAt` -- outside the window just requested.
+ * scrape/adapters/highergov.ts is where that is enforced; this comment exists
+ * because the two files must not drift. */
+export type FeedAxis = "captured_date" | "posted_date";
+
+/** Every accepted axis in one place, so a caller validating operator input
+ * checks against this rather than against a second hand-typed list. */
+export const FEED_AXES: readonly FeedAxis[] = ["captured_date", "posted_date"];
+
+/** ⚠️ `captured_date` ON PURPOSE, and it must stay that way. An invocation
+ * that names no axis has to produce the request it produced before axes
+ * existed -- the same "default provably inert" discipline `pageSize` follows
+ * in fetchDay below. */
+export const DEFAULT_FEED_AXIS: FeedAxis = "captured_date";
+
 export interface FeedNotice {
   /** Their `source_id`. For Indiana this IS IDOA's own 15-digit Event ID,
    * which is what makes exact-match comparison possible at all. */
   externalId: string;
   capturedDate: string | null;
+  /** The vendor's own PUBLICATION date -- docs/2026-09-03-highergov-field-
+   * mapping.md §1 maps it to `posted_at`, and merge/posted-at.ts already
+   * reads it off `sighting.raw`. Parsed HERE, beside `capturedDate`, because
+   * the adapter must be able to report either one as `modifiedAt` depending
+   * on which axis the window is being walked on -- and a field the adapter
+   * has to dig out of `raw` by hand is a field the next reader will forget
+   * to keep in step with the query parameter. */
+  postedDate: string | null;
   versionKey: string | null;
   title: string | null;
   raw: Record<string, unknown>;
@@ -93,8 +138,19 @@ export interface HigherGovClient {
   /* `pageSize`: OPTIONAL and OFF BY DEFAULT, on purpose -- see fetchDay's own
    * implementation below for the full economics. Omitting it (or passing
    * `undefined`) must produce a request byte-identical to one that never
-   * knew this parameter existed. */
-  fetchDay(capturedDate: string, fetchImpl?: typeof fetch, pageSize?: number): Promise<FeedResult>;
+   * knew this parameter existed.
+   *
+   * `axis`: which date field the `day` is asked against -- see FeedAxis
+   * above. Also OFF BY DEFAULT in the same sense: omitted, it is
+   * `captured_date`, which is what every caller asked for before this
+   * parameter existed. The first argument is named `day` rather than
+   * `capturedDate` precisely because it is no longer always one. */
+  fetchDay(
+    day: string,
+    fetchImpl?: typeof fetch,
+    pageSize?: number,
+    axis?: FeedAxis,
+  ): Promise<FeedResult>;
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
    * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
@@ -149,6 +205,7 @@ export function redact<T>(value: T): T {
 interface RawResult {
   source_id?: unknown;
   captured_date?: unknown;
+  posted_date?: unknown;
   version_key?: unknown;
   title?: unknown;
   [key: string]: unknown;
@@ -176,7 +233,18 @@ function toNotice(r: RawResult): FeedNotice | null {
   const { document_path: _dropped, ...rest } = r;
   return {
     externalId,
-    capturedDate: str(r.captured_date),
+    /* 🔴 BOTH DATES GO THROUGH redact(), and it is not decoration. Either one
+     * can become the item's `modifiedAt` (scrape/adapters/highergov.ts), and
+     * `modifiedAt` is persisted -- scrape/run.ts folds it into the run's
+     * low-water resume marker, which rides into the hashed artifact. These are
+     * vendor-controlled strings like any other field on the row, so the
+     * boundary rule (CLAUDE.md §5.3 rule 2) applies to them exactly as it
+     * applies to `raw`. redact() is the identity on a real date, and it is
+     * idempotent, so this costs nothing and closes the one route by which a
+     * key-shaped string could reach a persisted scalar without ever passing
+     * through `raw`. */
+    capturedDate: redact(str(r.captured_date)),
+    postedDate: redact(str(r.posted_date)),
     versionKey: str(r.version_key),
     title: str(r.title),
     raw: redact(rest),
@@ -206,8 +274,9 @@ function searchId(): string {
     throw new Error(
       "HIGHERGOV_SEARCH_ID is not set. /opportunity/ has no location " +
         "parameter -- the saved search is the ONLY geographic filter, so an " +
-        "unscoped fetchDay call would ask for every opportunity captured " +
-        "nationwide that day and pay for every row (measured: 5,266 records " +
+        "unscoped fetchDay call would ask for every opportunity nationwide on " +
+        "the requested day, on whichever axis, and pay for every row " +
+        "(measured: 5,266 records " +
         "for one unfiltered Indiana day, against a 10,000/month allowance " +
         "that cannot be read back from the vendor).",
     );
@@ -373,10 +442,23 @@ async function getDocuments(url: URL, fetchImpl: typeof fetch): Promise<Document
 }
 
 export const higherGovClient: HigherGovClient = {
-  async fetchDay(capturedDate, fetchImpl = fetch, pageSize) {
+  async fetchDay(day, fetchImpl = fetch, pageSize, axis = DEFAULT_FEED_AXIS) {
     const url = new URL(`${HOST}/opportunity/`);
     url.searchParams.set("api_key", apiKey());
-    url.searchParams.set("captured_date", capturedDate);
+    /* ⚖️ ONE CODE PATH, ONE PARAMETER, SELECTED -- not a branch, and above
+     * all not a second `fetchPostedDay` sibling. This file handles a
+     * credential, and the 2026-09-03 leak is what one place is worth (spec
+     * §3.1): a second method would be a second VITEST guard, a second scrub,
+     * a second searchId() check, all of them free to drift.
+     *
+     * `axis` IS the parameter name (FeedAxis above), so this line is the
+     * entire implementation of the ruling. Defaulted to `captured_date`,
+     * which makes a call that names no axis byte-identical on the wire to one
+     * made before axes existed -- the same provable inertness `page_size`
+     * below is held to, and for the same reason: this is a metered API and a
+     * silent change to what every existing run asks for is a silent change to
+     * what it costs. */
+    url.searchParams.set(axis, day);
     /* 🔴 R1: /opportunity/ takes twelve parameters and NONE is a location.
      * pop_state, state and place_of_performance_state were all accepted and
      * SILENTLY IGNORED. State filtering exists only through a saved search,

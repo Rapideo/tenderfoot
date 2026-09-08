@@ -172,6 +172,104 @@ test("fetchDay puts page_size on the request when one is explicitly given", asyn
   expect(fetchImpl.calls[0]).toContain("page_size=50");
 });
 
+/* ⚖️ THE AXIS (Matt's ruling, 2026-09-07; design spec §3.2's amendment).
+ * BACKFILL runs on posted_date, LIVE stays on captured_date.
+ *
+ * 🔴 THE MANDATORY INERT-DEFAULT TEST, and it is the one that stops this whole
+ * change from silently altering what every EXISTING run asks for. Omitting the
+ * axis must put `captured_date` on the wire and `posted_date` nowhere on it --
+ * asserted on the query string itself, because a parsed FeedResult looks
+ * identical either way (the same trap review finding #2 caught for search_id,
+ * which stayed green with its line deleted). */
+test("fetchDay asks captured_date and never posted_date when no axis is given", async () => {
+  const fetchImpl = fakeFetch(FIXTURE);
+  await higherGovClient.fetchDay("2026-09-03", fetchImpl);
+  expect(fetchImpl.calls).toHaveLength(1);
+  expect(fetchImpl.calls[0]).toContain("captured_date=2026-09-03");
+  expect(fetchImpl.calls[0]).not.toContain("posted_date");
+});
+
+/* 🔴 AND THE OTHER AXIS MUST ACTUALLY REPLACE IT, not join it. Sending both
+ * would intersect two filters on this endpoint and return a window nobody
+ * asked for -- billed in full, since the meter counts records returned. */
+test("an explicit posted_date axis asks posted_date and never captured_date", async () => {
+  const fetchImpl = fakeFetch(FIXTURE);
+  await higherGovClient.fetchDay("2026-06-09", fetchImpl, undefined, "posted_date");
+  expect(fetchImpl.calls).toHaveLength(1);
+  expect(fetchImpl.calls[0]).toContain("posted_date=2026-06-09");
+  expect(fetchImpl.calls[0]).not.toContain("captured_date");
+});
+
+/* Naming the default explicitly must be indistinguishable from omitting it --
+ * that is what lets ingest/highergov-cli.ts always pass a resolved axis (so it
+ * can PRINT which one it measured on) without that itself being a change to
+ * the request. Compared as whole URLs, not by substring: a difference anywhere
+ * in the query string is a difference in what was billed. */
+test("naming captured_date explicitly builds the identical URL to omitting the axis", async () => {
+  const omitted = fakeFetch(FIXTURE);
+  const explicit = fakeFetch(FIXTURE);
+  await higherGovClient.fetchDay("2026-09-03", omitted);
+  await higherGovClient.fetchDay("2026-09-03", explicit, undefined, "captured_date");
+  expect(explicit.calls[0]).toBe(omitted.calls[0]);
+});
+
+/* The search_id scope is not an accident of the captured_date branch: an
+ * unscoped posted_date pull bills every row nationwide exactly as an unscoped
+ * captured_date one does (R1 -- /opportunity/ has no location parameter at
+ * all). One code path is what makes this true without a second assertion
+ * somewhere else. */
+test("a posted_date request still carries search_id and the api_key", async () => {
+  const fetchImpl = fakeFetch(FIXTURE);
+  await higherGovClient.fetchDay("2026-06-09", fetchImpl, undefined, "posted_date");
+  expect(fetchImpl.calls[0]).toContain("search_id=TESTSEARCHIDTESTSEARCHID0000");
+  expect(fetchImpl.calls[0]).toContain("api_key=");
+});
+
+/* The vendor's PUBLICATION date, parsed at the same boundary as capturedDate
+ * -- the adapter needs it as a named field to use as `modifiedAt`, and a
+ * field it has to dig out of `raw` by hand is a field that drifts out of step
+ * with the query parameter. The fixture's posted dates differ from its
+ * captured dates on purpose: reading the wrong one would be invisible if they
+ * matched. */
+test("a parsed notice carries posted_date, distinct from captured_date", async () => {
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
+  const first = out.notices[0]!;
+  expect(first.capturedDate).toBe("2026-09-03");
+  expect(first.postedDate).toBe("2026-06-09");
+});
+
+/* A row with no posted_date at all yields null, not the captured date and not
+ * a guess -- the adapter's undated-skip depends on being able to tell "this
+ * row has no position on the axis I am walking" from "it has one". */
+test("a row with no posted_date yields null rather than borrowing captured_date", async () => {
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(FIXTURE));
+  const row = out.notices.find((n) => n.externalId === "003000000088200")!;
+  expect(row.capturedDate).toBe("2026-09-05T14:30:00Z");
+  expect(row.postedDate).toBeNull();
+});
+
+/* 🔴 BOTH DATE SCALARS CROSS THE BOUNDARY, so both go through redact() --
+ * either can become an item's `modifiedAt`, which scrape/run.ts folds into the
+ * run's low-water marker and writes into the artifact. Before the axis work
+ * these were the only vendor-controlled strings on a FeedNotice that skipped
+ * the scrub entirely; `raw` was redacted and they were not. */
+test("a key-shaped value in either date field is redacted, not carried through", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1, pages: 1 } },
+    results: [
+      {
+        source_id: "Z",
+        captured_date: "https://x/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0010",
+        posted_date: "https://y/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0010",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(body));
+  expect(JSON.stringify(out)).not.toContain("FAKEKEYFAKEKEYFAKEKEYFAKEKEY0010");
+  expect(out.notices[0]!.capturedDate).toContain("api_key=REDACTED");
+  expect(out.notices[0]!.postedDate).toContain("api_key=REDACTED");
+});
+
 /* fetchBySourceId had NO test at all -- the one asymmetry Task 7 depends on
  * (an exact-id lookup must never be narrowed by a saved search) was
  * unverified. This exercises it end to end against the fixture AND asserts

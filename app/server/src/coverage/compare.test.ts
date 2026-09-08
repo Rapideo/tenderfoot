@@ -13,6 +13,11 @@ const key = (externalId: string, deadline: string | null = "2026-09-30"): KeyEnt
 const notice = (externalId: string, capturedDate: string | null = "2026-09-03"): FeedNotice => ({
   externalId,
   capturedDate,
+  /* compare.ts is the COVERAGE comparison, which is a captured_date question
+   * by definition ("did HigherGov carry this, and how early") -- the posted
+   * axis (Matt's 2026-09-07 backfill ruling) has no bearing on it. Present
+   * because FeedNotice requires it, and null because nothing here reads it. */
+  postedDate: null,
   versionKey: "v1",
   title: "t",
   raw: {},

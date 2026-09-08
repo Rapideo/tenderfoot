@@ -501,7 +501,7 @@ test("committing an affordable window walks every day and imports what it finds"
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", versionKey: null, title: null, raw: { a: 1 } }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: { a: 1 } }],
       1,
     );
     const adapter = fakeAdapter({
@@ -548,7 +548,7 @@ test("a truncated day is reported during the walk, and the end-of-run summary co
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -596,7 +596,7 @@ test("no truncated days -- the summary says so explicitly, not by omission", asy
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -634,6 +634,7 @@ test("a mid-walk stop and a truncated day are reported as two distinct facts", a
       Array.from({ length: sampleRate }, (_, i) => ({
         externalId: `HG-S-${i}`,
         capturedDate: "2026-09-01",
+        postedDate: null,
         versionKey: null,
         title: null,
         raw: {},
@@ -688,7 +689,7 @@ test("per-day spend is read from the artifact's billed count, not rows + undated
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -725,6 +726,7 @@ test("the day-walk stops before the call that would cross the ceiling", async ()
       Array.from({ length: sampleRate }, (_, i) => ({
         externalId: `HG-S-${i}`,
         capturedDate: "2026-09-01",
+        postedDate: null,
         versionKey: null,
         title: null,
         raw: {},
@@ -830,7 +832,7 @@ test("a day-walk call that throws still writes a conservative spend row before f
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });
@@ -860,7 +862,7 @@ test("an artifact with no billed count falls back UP to the conservative bound, 
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -950,7 +952,7 @@ test("a day-walk's vendor error survives even when its own spend tally throws", 
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });
