@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useTestSchema, resetSchema } from "../db/testdb.js";
-import type { FeedNotice, HigherGovClient } from "../coverage/highergov-client.js";
+import type { FeedAxis, FeedNotice, HigherGovClient } from "../coverage/highergov-client.js";
 import type { WindowedAdapter, WindowedItem } from "../scrape/adapter.js";
 
 process.env.HIGHERGOV_API_KEY = "TESTKEYTESTKEYTESTKEYTESTKEY0000";
@@ -22,10 +22,19 @@ await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
 const { all, close, one, run } = await import("../db/index.js");
-const { dryRun, projectWindow, assertValidDate, assertValidPageSize, MAX_PAGE_SIZE, main } =
-  await import("./highergov-cli.js");
+const {
+  dryRun,
+  projectWindow,
+  assertValidDate,
+  assertValidPageSize,
+  assertValidAxis,
+  MAX_PAGE_SIZE,
+  main,
+} = await import("./highergov-cli.js");
 const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
-const { HIGHERGOV_SOURCE_NAME } = await import("../coverage/highergov-client.js");
+const { HIGHERGOV_SOURCE_NAME, FEED_AXES, DEFAULT_FEED_AXIS } = await import(
+  "../coverage/highergov-client.js"
+);
 /* The conservative "what could this call have cost when we cannot read its
  * response" bound, imported rather than retyped as 40 -- the same constant
  * coverage/run.ts and extract/fetch-documents-for.ts tally at their own
@@ -105,12 +114,13 @@ function clientWithNotices(notices: FeedNotice[], recordsOverride?: number, page
  * the parsed FeedResult, which would stay identical either way. */
 function clientCapturingFetchDayArgs(records: number): {
   client: HigherGovClient;
-  calls: Array<[string, typeof fetch | undefined, number | undefined]>;
+  calls: Array<[string, typeof fetch | undefined, number | undefined, FeedAxis | undefined]>;
 } {
-  const calls: Array<[string, typeof fetch | undefined, number | undefined]> = [];
+  const calls: Array<[string, typeof fetch | undefined, number | undefined, FeedAxis | undefined]> =
+    [];
   const client: HigherGovClient = {
-    async fetchDay(capturedDate, fetchImpl, pageSize) {
-      calls.push([capturedDate, fetchImpl, pageSize]);
+    async fetchDay(day, fetchImpl, pageSize, axis) {
+      calls.push([day, fetchImpl, pageSize, axis]);
       return { notices: [], records, feedCount: records, pages: 1 };
     },
     async fetchBySourceId() {
@@ -412,6 +422,234 @@ test("main() refuses an absurdly large --page-size before any call is made", asy
     ),
   ).rejects.toThrow(/does NOT reduce spend/);
   expect(await totalSpend()).toBe(0);
+});
+
+/* ═══ THE AXIS ═══ Matt's ruling, 2026-09-07 (design spec §3.2's amendment):
+ * the BACKFILL runs on posted_date, LIVE operation stays on captured_date.
+ * `--axis` is the flag; captured_date is and stays the default. */
+
+test("every accepted axis is accepted, and parsed back as itself", () => {
+  for (const axis of FEED_AXES) {
+    expect(assertValidAxis(axis)).toBe(axis);
+  }
+  expect(FEED_AXES).toContain(DEFAULT_FEED_AXIS);
+});
+
+/* 🔴 SHARPER THAN A TYPE CHECK. HigherGov SILENTLY IGNORES parameters it does
+ * not recognise and bills the response in full -- R1 measured exactly that
+ * (pop_state, state and place_of_performance_state all accepted, all ignored,
+ * 5,266 records for one unfiltered Indiana day). So a near-miss spelling must
+ * die before any call, not succeed at asking the wrong question. */
+test("a near-miss axis spelling is refused, naming the silent-ignore cost", () => {
+  expect(() => assertValidAxis("posted-date")).toThrow(/not a recognised axis/);
+  expect(() => assertValidAxis("posted")).toThrow(/SILENTLY IGNORES/);
+  expect(() => assertValidAxis("")).toThrow(/not a recognised axis/);
+  expect(() => assertValidAxis("captured_date ")).toThrow(/not a recognised axis/);
+});
+
+/* 🔴 THE MANDATORY INERT DEFAULT, at the dryRun level: omitting the axis must
+ * measure on captured_date -- the same question every invocation asked before
+ * the flag existed. coverage/highergov-client.test.ts proves the identical
+ * thing one layer down, on the wire itself, where it is what the vendor bills
+ * against. */
+test("dryRun samples captured_date when no axis is given -- the default is inert", async () => {
+  const { client, calls } = clientCapturingFetchDayArgs(5);
+  const r = await dryRun("2026-09-01", "2026-09-01", client, 0);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]![3]).toBe("captured_date");
+  expect(r.axis).toBe("captured_date");
+});
+
+test("dryRun threads an explicit posted_date axis through to client.fetchDay", async () => {
+  const { client, calls } = clientCapturingFetchDayArgs(5);
+  const r = await dryRun("2026-06-01", "2026-06-30", client, 0, undefined, "posted_date");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]![3]).toBe("posted_date");
+  expect(r.axis).toBe("posted_date");
+});
+
+/* The axis rides on the result even when NOTHING was sampled -- that branch
+ * returns a whole DryRunResult of zeroes, and an axis field that went missing
+ * exactly there would be missing from the one report an operator reads when a
+ * run refuses. */
+test("the unsampled (no-allowance) result still reports which axis was asked for", async () => {
+  const r = await dryRun(
+    "2026-06-01",
+    "2026-06-30",
+    clientThatMustNotBeCalled(),
+    MONTHLY_RECORD_CEILING,
+    undefined,
+    "posted_date",
+  );
+  expect(r.sampled).toBe(false);
+  expect(r.axis).toBe("posted_date");
+});
+
+/* main()-LEVEL: an unrecognised --axis must never reach the source lookup, let
+ * alone the sample. HigherGov is disabled by default here (beforeEach), so if
+ * this validated any later it would fail with "disabled" instead. */
+test("main() refuses an unrecognised --axis before any call is made", async () => {
+  await expect(
+    main(
+      ["--from=2026-06-01", "--to=2026-06-02", "--axis=posted-date"],
+      clientThatMustNotBeCalled(),
+      fakeAdapter({}),
+    ),
+  ).rejects.toThrow(/not a recognised axis/);
+  expect(await totalSpend()).toBe(0);
+});
+
+/* 🔴 A PROJECTION IS A SPENDING DECISION, so it must not be axis-ambiguous.
+ * The same saved search on the same parameter has been measured 7x apart on
+ * two days (spec §3.2's amendment) -- a rate printed without its axis is a
+ * number an operator cannot act on or audit afterwards. */
+test("the dry run reports which axis it sampled", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const { client, calls } = clientCapturingFetchDayArgs(5);
+    await main(
+      ["--from=2026-06-01", "--to=2026-06-05", "--axis=posted_date", "--dry-run"],
+      client,
+      fakeAdapter({}),
+    );
+    expect(calls[0]![3]).toBe("posted_date");
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    /* The SAMPLE line itself, not merely the window announcement -- that is
+     * the line an operator pastes into a decision, so it has to carry its own
+     * units. */
+    expect(lines.some((l) => l.includes("Dry run: sampled posted_date=2026-06-01"))).toBe(true);
+    expect(lines.some((l) => l.includes("Dry run: sampled captured_date"))).toBe(false);
+  } finally {
+    logSpy.mockRestore();
+  }
+});
+
+test("a dry run with no --axis reports captured_date, not silence", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await main(
+      ["--from=2026-09-01", "--to=2026-09-05", "--dry-run"],
+      clientReturning(5),
+      fakeAdapter({}),
+    );
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("Dry run: sampled captured_date=2026-09-01"))).toBe(true);
+    expect(lines.some((l) => l.includes("posted_date"))).toBe(false);
+  } finally {
+    logSpy.mockRestore();
+  }
+});
+
+/* 🔴 THE SAME modifiedAt TRAP, ON THE PATH THAT DOES NOT GO THROUGH THE
+ * ADAPTER. The sampled day is committed from the dry run's own already-paid-
+ * for data (sampleAsPage), not re-fetched -- so it builds its OWN items and
+ * could have chosen the wrong date field entirely independently of
+ * adapters/highergov.ts. Here both notices carry a captured_date; only one
+ * carries a posted_date. On a posted_date walk the other has no position in
+ * the window and must be skipped, exactly as the real adapter skips it. */
+test("the reused sample places items on the WALKED axis, not always captured_date", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const notices: FeedNotice[] = [
+      {
+        externalId: "HG-POSTED",
+        capturedDate: "2026-09-07",
+        postedDate: "2026-06-09",
+        versionKey: null,
+        title: null,
+        raw: {},
+      },
+      {
+        externalId: "HG-NO-POSTED",
+        capturedDate: "2026-09-07",
+        postedDate: null,
+        versionKey: null,
+        title: null,
+        raw: {},
+      },
+    ];
+    const throwingAdapter: WindowedAdapter = {
+      shape: "windowed",
+      name: HIGHERGOV_SOURCE_NAME,
+      async fetchListing() {
+        throw new Error("TEST FAILURE: the sampled day must be reused, never re-fetched");
+      },
+    };
+
+    await main(
+      ["--from=2026-06-09", "--to=2026-06-09", "--axis=posted_date"],
+      clientWithNotices(notices, 2),
+      throwingAdapter,
+      dir,
+    );
+
+    const sightings = await all<{ external_id: string }>(
+      `SELECT sg.external_id FROM sighting sg
+         JOIN source s ON s.id = sg.source_id WHERE s.name = $1 ORDER BY sg.external_id`,
+      [HIGHERGOV_SOURCE_NAME],
+    );
+    /* Only the row that HAS a posted_date can be placed in a posted_date
+     * window. Borrowing captured_date for the other would fabricate a
+     * position (adapter.ts §5.4). */
+    expect(sightings.map((s) => s.external_id)).toEqual(["HG-POSTED"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* The control for the test above: the very same two notices, walked on the
+ * default axis, both land -- so the exclusion is a fact about the WALK, not
+ * about the rows. Without this, deleting the axis logic and always skipping
+ * would look identical from one direction. */
+test("the same two notices both land on the default captured_date walk", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const notices: FeedNotice[] = [
+      {
+        externalId: "HG-POSTED",
+        capturedDate: "2026-09-07",
+        postedDate: "2026-06-09",
+        versionKey: null,
+        title: null,
+        raw: {},
+      },
+      {
+        externalId: "HG-NO-POSTED",
+        capturedDate: "2026-09-07",
+        postedDate: null,
+        versionKey: null,
+        title: null,
+        raw: {},
+      },
+    ];
+    const throwingAdapter: WindowedAdapter = {
+      shape: "windowed",
+      name: HIGHERGOV_SOURCE_NAME,
+      async fetchListing() {
+        throw new Error("TEST FAILURE: the sampled day must be reused, never re-fetched");
+      },
+    };
+
+    await main(
+      ["--from=2026-09-07", "--to=2026-09-07"],
+      clientWithNotices(notices, 2),
+      throwingAdapter,
+      dir,
+    );
+
+    const sightings = await all<{ external_id: string }>(
+      `SELECT sg.external_id FROM sighting sg
+         JOIN source s ON s.id = sg.source_id WHERE s.name = $1 ORDER BY sg.external_id`,
+      [HIGHERGOV_SOURCE_NAME],
+    );
+    expect(sightings.map((s) => s.external_id)).toEqual(["HG-NO-POSTED", "HG-POSTED"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 /* Review round 3, item 3 (CRITICAL regression from round 1): resolveSource()

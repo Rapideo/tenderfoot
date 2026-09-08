@@ -36,6 +36,17 @@
  * sample's own already-paid-for data for that one day instead of
  * re-fetching it (review round 3, item 4).
  *
+ * ⚖️ `--axis`, ADDED 2026-09-07 ON MATT'S RULING (design spec §3.2's
+ * amendment). The BACKFILL runs on `posted_date`; LIVE operation stays on
+ * `captured_date`, which is the default and stays the default. A historical
+ * `captured_date` window returns re-captures of notices we already hold, and
+ * the vendor bills per record RETURNED -- so the money is spent and the merge
+ * layer correctly throws the row away. The flag threads all the way down: the
+ * query parameter, the item's `modifiedAt`, the requestUrl, the artifact
+ * envelope, and the dry run's own printed projection all name the SAME axis,
+ * because a projection measured on one axis and reported as another is a
+ * spending decision made on evidence that lies.
+ *
  * Mirrors coverage/coverage-cli.ts's shape deliberately: the same
  * shape-then-round-trip date validation (a bare regex lets 2026-13-01
  * through; Date.parse alone rolls 2026-02-30 forward to March 2nd), and the
@@ -54,13 +65,17 @@ import { MONTHLY_RECORD_CEILING, recordSpend, spentThisMonth } from "../extract/
  * the same question at their own metered call sites. */
 import { COVERAGE } from "../coverage/thresholds.js";
 import {
+  DEFAULT_FEED_AXIS,
+  FEED_AXES,
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
   redact,
+  type FeedAxis,
   type FeedResult,
   type HigherGovClient,
 } from "../coverage/highergov-client.js";
 import {
+  axisValue,
   higherGovAdapter,
   HIGHERGOV_ADAPTER_KEY,
   scrubPayload,
@@ -74,7 +89,7 @@ import { importArtifact } from "../ingest/import-artifact.js";
 
 const USAGE =
   "Usage: npm run ingest:highergov -- --from=YYYY-MM-DD --to=YYYY-MM-DD [--dry-run] " +
-  "[--page-size=N]";
+  `[--page-size=N] [--axis=${FEED_AXES.join("|")}]`;
 
 function arg(argv: string[], name: string): string | undefined {
   const hit = argv.find((a) => a.startsWith(`--${name}=`));
@@ -143,6 +158,38 @@ export function assertValidPageSize(raw: string): number {
   return value;
 }
 
+/* Validates and parses `--axis`'s raw string value. CALLED ONLY WHEN THE FLAG
+ * IS PRESENT -- main() leaves the axis at DEFAULT_FEED_AXIS otherwise, which
+ * is the same "an unasked-for knob changes nothing" discipline
+ * assertValidPageSize is held to just above.
+ *
+ * ⚖️ WHY THE DEFAULT IS `captured_date` AND NOT THE NEW THING. Matt's
+ * 2026-09-07 ruling moved the BACKFILL to `posted_date` and left LIVE
+ * operation on `captured_date`. This command serves both, so the axis is a
+ * flag rather than a new default -- and an invocation that does not ask must
+ * be byte-identical to one made before the flag existed, because this is a
+ * metered API and a silently changed question is a silently changed bill.
+ *
+ * 🔴 REFUSED BEFORE ANY CALL IS MADE, like every other guard in this file. An
+ * unrecognised axis sent to the vendor would be SILENTLY IGNORED and billed in
+ * full -- R1 measured exactly that behaviour on this endpoint, where
+ * pop_state, state and place_of_performance_state were all accepted, ignored,
+ * and charged (5,266 records for one unfiltered Indiana day). So a typo like
+ * `--axis=posted-date` must die here, at zero cost, rather than quietly
+ * becoming an unaxised nationwide-shaped pull. */
+export function assertValidAxis(raw: string): FeedAxis {
+  const hit = FEED_AXES.find((a) => a === raw);
+  if (!hit) {
+    throw new Error(
+      `${USAGE}\n--axis=${raw} is not a recognised axis. Accepted: ${FEED_AXES.join(", ")}. ` +
+        "HigherGov SILENTLY IGNORES parameters it does not know and bills the response in " +
+        "full (R1, CLAUDE.md §5.1), so an unrecognised axis is refused before any call is " +
+        "made rather than sent to the vendor to see what happens.",
+    );
+  }
+  return hit;
+}
+
 /* Inclusive day count -- "2026-09-01" to "2026-09-30" is 30 days, not 29. */
 function windowDayCount(from: string, to: string): number {
   const start = Date.parse(`${from}T00:00:00Z`);
@@ -186,6 +233,12 @@ export function projectWindow(recordsPerDay: number, windowDays: number): number
 
 export interface DryRunResult {
   sampledDay: string;
+  /** WHICH AXIS THE SAMPLE WAS MEASURED ON. A projection is a spending
+   * decision, and the two axes return materially different volumes for the
+   * same day -- spec §3.2's amendment records the same saved search
+   * disagreeing by 7x between two days. So a rate carried without its axis is
+   * a number nobody can act on. Reported, not merely stored (main() below). */
+  axis: FeedAxis;
   /* Whether the sample's own network call actually happened. False only
    * when no allowance remained BEFORE sampling -- see dryRun()'s own guard
    * below. When false, every other numeric field reflects "nothing was
@@ -214,30 +267,40 @@ export interface DryRunResult {
  * same day -- so the day-walk can commit day one through runScrape's
  * ordinary artifact-writing path without a second live call for data
  * already billed (review round 3, item 4). Mirrors fetchListing's own
- * undated-skip logic exactly: a notice with no capturedDate is counted, not
- * silently dropped (adapter.ts §5.4). */
-function sampleAsPage(sample: FeedResult, day: string): WindowedPage {
+ * undated-skip logic exactly: a notice with no value ON THE WALKED AXIS is
+ * counted, not silently dropped (adapter.ts §5.4).
+ *
+ * 🔴 `axis` IS NOT DECORATION HERE. This page is fed to runScrape exactly as
+ * the real adapter's would be, so its `modifiedAt` values become the run's
+ * low-water resume marker and its envelope becomes the artifact. It uses the
+ * adapter's own exported `axisValue()` rather than choosing the field a second
+ * time, because two independent choices of "which date is this" is precisely
+ * how the sampled day would come to disagree with every other day in the same
+ * window. */
+function sampleAsPage(sample: FeedResult, day: string, axis: FeedAxis): WindowedPage {
   let undatedSkipped = 0;
   const items: WindowedItem[] = [];
   for (const n of sample.notices) {
-    if (!n.capturedDate) {
+    const modifiedAt = axisValue(n, axis);
+    if (!modifiedAt) {
       undatedSkipped++;
       continue;
     }
-    items.push({ externalId: n.externalId, modifiedAt: n.capturedDate, raw: n.raw });
+    items.push({ externalId: n.externalId, modifiedAt, raw: n.raw });
   }
   return {
     items,
     undatedSkipped,
     nextCursor: null,
-    requestUrl: `highergov:/opportunity/?captured_date=${day}&reused=dry-run-sample`,
+    requestUrl: `highergov:/opportunity/?${axis}=${day}&reused=dry-run-sample`,
     httpStatus: 200,
     /* scrubPayload() is idempotent (its own header) -- `n.raw` is already
      * redacted by highergov-client.ts's toNotice(), so this is a defensive
      * second pass, not a required one, and cannot change the bytes. */
     payload: scrubPayload(
       JSON.stringify({
-        capturedDate: day,
+        axis,
+        day,
         records: sample.records,
         feedCount: sample.feedCount,
         pages: sample.pages,
@@ -290,8 +353,12 @@ function reuseSampleAdapter(page: WindowedPage): WindowedAdapter {
  * billedRecordsFromArtifact (the vendor's own billed count) and
  * pagesFromArtifact (whether this day's capture was truncated) below read
  * the same envelope -- adapters/highergov.ts's own comment names `records`,
- * `feedCount` and `pages` as the three scalars it carries specifically so a
- * caller can answer both questions from one parse. Returns null on anything
+ * `feedCount`, `pages` and (since the axis ruling) `axis`+`day` as the scalars
+ * it carries specifically so a caller can answer both questions from one
+ * parse. THESE TWO READ `records` AND `pages` ONLY: the envelope's day label
+ * was renamed from `capturedDate` to `axis`+`day` when the axis became a
+ * choice, and nothing here -- or anywhere else in the repo -- ever read the
+ * old key. Returns null on anything
  * that stops this from answering (missing capture, non-string payload, bad
  * JSON) -- both callers already have their own conservative fallback for
  * that case, which is why this itself never needs one. */
@@ -343,6 +410,13 @@ export async function dryRun(
    * default) it changes nothing about the sample's own request -- see
    * highergov-client.ts's fetchDay for why that has to be provably true. */
   pageSize?: number,
+  /* Threaded straight from main()'s `--axis` flag, already validated by
+   * assertValidAxis before this ever runs. Defaulted rather than left
+   * `undefined` so the value can be REPORTED on the result: an operator
+   * reading a projection must be able to see which question produced it, and
+   * "undefined" is not an answer to that. The default IS what the client would
+   * have used anyway, so the request is unchanged. */
+  axis: FeedAxis = DEFAULT_FEED_AXIS,
 ): Promise<DryRunResult> {
   const spent = alreadySpent ?? (await spentThisMonth(HIGHERGOV_SOURCE_NAME));
   const windowDays = windowDayCount(from, to);
@@ -355,6 +429,7 @@ export async function dryRun(
   if (remainingBeforeSample <= 0) {
     return {
       sampledDay: from,
+      axis,
       sampled: false,
       recordsThatDay: 0,
       samplePages: null,
@@ -402,7 +477,7 @@ export async function dryRun(
    * vendor failures bill, which is exactly the thing nobody can read back. */
   let sample: FeedResult;
   try {
-    sample = await client.fetchDay(from, undefined, pageSize);
+    sample = await client.fetchDay(from, undefined, pageSize, axis);
   } catch (err) {
     /* 🔴 THE TALLY ITSELF MUST NOT SWALLOW `err` (final review, fix 2). This
      * whole catch exists so the vendor's error is never lost -- but `one()`
@@ -455,6 +530,7 @@ export async function dryRun(
   const affordable = sample.records > 0 && projectedRecords <= remainingThisMonth;
   return {
     sampledDay: from,
+    axis,
     sampled: true,
     recordsThatDay: sample.records,
     samplePages: sample.pages,
@@ -509,11 +585,26 @@ export async function main(
   const pageSize: number | undefined =
     pageSizeArg === undefined ? undefined : assertValidPageSize(pageSizeArg);
 
+  /* Same posture again, and for a sharper reason than page-size: an axis the
+   * vendor does not recognise is SILENTLY IGNORED and billed in full (R1), so
+   * a typo would not fail -- it would succeed at asking the wrong question and
+   * charge for the answer. Absent, this is DEFAULT_FEED_AXIS (`captured_date`)
+   * and every existing invocation is unchanged. */
+  const axisArg = arg(argv, "axis");
+  const axis: FeedAxis = axisArg === undefined ? DEFAULT_FEED_AXIS : assertValidAxis(axisArg);
+
   /* api_spend is PER-DATABASE. Same format as db/migrate.ts's own print and
    * coverage-cli.ts's, matched deliberately so all three operator commands
    * read the same way. */
   console.log(`database: ${new URL(process.env.DATABASE_URL!).host}`);
-  console.log(`Window: ${from} to ${to}.`);
+  /* THE AXIS IS ANNOUNCED BESIDE THE WINDOW, because on its own the window is
+   * ambiguous: "2026-06-01 to 2026-08-31" means two different pulls, at two
+   * different prices, depending on whether it is asking what was PUBLISHED or
+   * what was CRAWLED then (spec §3.2's amendment). */
+  console.log(
+    `Window: ${from} to ${to}, on ${axis} ` +
+      `(${axis === "posted_date" ? "what was PUBLISHED" : "what HigherGov CRAWLED"} that day).`,
+  );
 
   /* Checked BEFORE the dry run's own network call: a missing source row is
    * a misconfiguration, not a reason to spend first and discover it second
@@ -545,7 +636,7 @@ export async function main(
    * execution AFTER it. This is the one unavoidable spend: measuring the
    * window costs one sampled day, and there is no way to know whether a
    * window is affordable without spending that much to find out. */
-  const result = await dryRun(from, to, client, undefined, pageSize);
+  const result = await dryRun(from, to, client, undefined, pageSize, axis);
 
   if (!result.sampled) {
     /* No allowance remained even before the sample -- nothing was spent,
@@ -557,9 +648,17 @@ export async function main(
     );
   }
 
+  /* 🔴 THE AXIS IS PART OF THE MEASUREMENT, NOT CONTEXT AROUND IT. A
+   * projection is a spending decision, and the same saved search on the same
+   * parameter has been measured 7x apart on two days (spec §3.2's amendment) --
+   * so "5 record(s)/day" with no axis attached is a number an operator cannot
+   * act on and cannot audit afterwards. It is printed on the sample line
+   * itself, not only in the window announcement above, so that the one line an
+   * operator is most likely to paste into a decision carries its own units. */
   console.log(
-    `\nDry run: sampled ${result.sampledDay} at ${result.recordsThatDay} record(s)/day. ` +
-      `Projected ${result.projectedRecords} record(s) across ${result.windowDays} day(s).`,
+    `\nDry run: sampled ${result.axis}=${result.sampledDay} at ${result.recordsThatDay} ` +
+      `record(s)/day. Projected ${result.projectedRecords} record(s) across ` +
+      `${result.windowDays} day(s), all on ${result.axis}.`,
   );
   console.log(
     `Remaining this month: ${result.remainingThisMonth} of ${MONTHLY_RECORD_CEILING} ` +
@@ -637,7 +736,7 @@ export async function main(
    * this function's `adapter` parameter comment for why the default cannot
    * know `pageSize` in time. A test always injects its own `adapter`, so
    * this branch is only ever live for the real CLI entrypoint. */
-  const dayWalkAdapter = adapter ?? higherGovAdapter(fetch, pageSize);
+  const dayWalkAdapter = adapter ?? higherGovAdapter(fetch, pageSize, axis);
 
   for (const day of days) {
     /* THE SAMPLED DAY IS NEVER BILLED TWICE (review round 3, item 4). `day`
@@ -690,7 +789,7 @@ export async function main(
      * adapter instead of the real one -- same runScrape path, same
      * artifact-writing code, zero new network calls. */
     const dayAdapter = isSampledDay
-      ? reuseSampleAdapter(sampleAsPage(result.sampleResult!, day))
+      ? reuseSampleAdapter(sampleAsPage(result.sampleResult!, day, axis))
       : dayWalkAdapter;
 
     /* 🔴 THE SECOND PLACE A BILLED CALL COULD VANISH (final review, fix 1).
