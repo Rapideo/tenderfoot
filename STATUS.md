@@ -234,6 +234,30 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
+## ⏸️ FIRST THING NEXT SESSION — MATT ASKED FOR THE TRIAGE QUEUE TO BE REOPENED
+
+**He is coming back to work sample #2 and asked that this be noted as outstanding.** Nothing is broken; the dev servers were shut down deliberately at the end of 2026-09-08 so nothing of ours was left running on his machine.
+
+```
+PORT=3010 npm run dev --workspace app/server
+VITE_API_TARGET=http://localhost:3010 npm run dev --workspace app/client
+```
+
+**Then: `http://localhost:5175/?sample=2`** — 150 items, HigherGov, seed `1788890660565-4atkg6bi`.
+
+⚠️ **The port override is not optional on this machine.** IDE8 runs here too and its Express server takes **3003**, which Tenderfoot's Vite proxy targets by default. When IDE8 has it, every `/api` call reaches the wrong application — and that application answers **404 rather than refusing**, so it presents as a broken route in Tenderfoot rather than a port collision. Check `netstat -ano | grep :3003` before assuming a bug.
+
+🔴 **STILL DO NOT CLICK THE DOCUMENTS ACTION ON A HIGHERGOV ROW** until the accounting fix below is in: it answers 400, records a phantom 100 records, and does not stamp the row, so it is re-clickable at 100 a time.
+
+**Three things queued for the controller, in order:**
+1. **The document-fetch accounting fix** — a non-OK HTTP status must tally **zero**, not the conservative 100. CLAUDE.md §5.1 already implies it: *"errors and zero-result calls appear not to count."*
+2. **Look at the Interested screen in a browser.** D30's new prompt is served but has never been seen — the extension was disconnected and restarting Chrome would have closed the page Matt was about to use.
+3. **`maxCallsPerRun`** — 500 was ratified as *"a year-long walk is ~365 one-call days"*, which paging made untrue. Needs Matt's number, not a controller's guess.
+
+**Three things waiting on Matt:** the 150-item triage (F5 needs 100, and nothing else can produce it) · whether F6's 200-character floor is right for state and local data · a dashboard reading, to settle whether that 400 billed anything.
+
+---
+
 ## 🔖 RESUME HERE — updated 2026-09-08 (late)
 
 ## 🎯 THE QUEUE IS READY TO TRIAGE, AND THE SAMPLE IS SCOPED TO THE NEW DATA
