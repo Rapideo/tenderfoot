@@ -20,6 +20,8 @@ const { all, one, close, insert, run } = await import("../db/index.js");
 const { fetchDocumentsFor } = await import("./fetch-documents-for.js");
 const { MONTHLY_RECORD_CEILING } = await import("./api-spend.js");
 const { COVERAGE } = await import("../coverage/thresholds.js");
+const { ADAPTERS } = await import("../scrape/adapters/registry.js");
+const { DOCUMENT_CLIENTS } = await import("./document-clients.js");
 
 let samId: number;
 let higherGovId: number;
@@ -271,6 +273,64 @@ test("a throw from a metered client still tallies a conservative spend before th
   expect(hgStamp!.attachments_checked_at).toBeNull();
   expect(await all(`SELECT id FROM document WHERE solicitation_id = $1`, [hgSolicitationId]))
     .toHaveLength(0);
+});
+
+/* 🔴 CODE REVIEW OFF THE D2 BRANCH, FIX 1 -- THE LOAD-BEARING TEST. The catch
+ * above used to tally against `row.source_name === HIGHERGOV_SOURCE_NAME`, a
+ * positive equality check against ONE hardcoded name. That was correct only
+ * because HigherGov happened to be the sole metered document client -- the
+ * day a SECOND one was registered, a billed call that throws would vanish
+ * from `api_spend` silently, and no existing test (including the one right
+ * above, which only ever exercises HigherGov) would catch it.
+ *
+ * This registers a second, entirely fictitious metered source directly on
+ * the registry (`metered: true`, matching HigherGov's own shape) and a
+ * throwing document client for it, then proves the tally fires for THAT
+ * source too -- driven by the registry's `metered` flag, not by a string
+ * literal naming HigherGov. Reverting fetch-documents-for.ts's guard back to
+ * `row.source_name === HIGHERGOV_SOURCE_NAME` must turn this red: "Second
+ * Metered Test Source" is never equal to "HigherGov". */
+test("a throw from a SECOND metered source is tallied too, driven by the registry flag not a name", async () => {
+  const SECOND_METERED_SOURCE = "Second Metered Test Source";
+  ADAPTERS.testSecondMetered = {
+    sourceName: SECOND_METERED_SOURCE,
+    make: () => {
+      throw new Error("never constructed by this test");
+    },
+    metered: true,
+  };
+  DOCUMENT_CLIENTS[SECOND_METERED_SOURCE] = {
+    async fetchFor() {
+      throw new Error("second metered vendor exploded");
+    },
+  };
+
+  try {
+    const secondSourceId = await insert(
+      `INSERT INTO source (name) VALUES ($1) RETURNING id`,
+      [SECOND_METERED_SOURCE],
+    );
+    const secondSolicitationId = await insert(
+      `INSERT INTO solicitation (title, source_id, external_id, posted_at, posted_at_origin)
+       VALUES ('doc fixture', $1, 'second-metered-1', '2026-08-01', 'published') RETURNING id`,
+      [secondSourceId],
+    );
+
+    await expect(
+      fetchDocumentsFor(secondSolicitationId, stubFetch({}, false)),
+    ).rejects.toThrow(/second metered vendor exploded/);
+
+    const rows = await all<{ records: number; endpoint: string }>(
+      `SELECT records, endpoint FROM api_spend WHERE solicitation_id = $1`,
+      [secondSolicitationId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.endpoint).toBe("document");
+    expect(rows[0]!.records).toBe(COVERAGE.unparseableResponseRecords);
+  } finally {
+    delete ADAPTERS.testSecondMetered;
+    delete DOCUMENT_CLIENTS[SECOND_METERED_SOURCE];
+  }
 });
 
 /* 🔴 Task 7 review round 2, finding 2. HigherGov's /document/ response

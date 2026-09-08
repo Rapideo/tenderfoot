@@ -21,7 +21,7 @@ import { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING } from "./api-spend
  * site. Cross-importing from extract/ into coverage/ already has precedent:
  * document-clients.ts does it for higherGovClient itself. */
 import { COVERAGE } from "../coverage/thresholds.js";
-import { HIGHERGOV_SOURCE_NAME } from "../coverage/highergov-client.js";
+import { isMeteredSourceName } from "../scrape/adapters/registry.js";
 
 export type FetchReason = "fetched" | "already-looked" | "unsupported" | "ceiling";
 
@@ -109,8 +109,22 @@ export async function fetchDocumentsFor(
      * for exactly that reason -- real evidence, not a guess, that the
      * unscoped version was wrong. The risk this branch exists for is
      * specific to a source whose true cost cannot be read back from the
-     * vendor at all (CLAUDE.md §5.1); today that is HigherGov alone. */
-    if (row.source_name === HIGHERGOV_SOURCE_NAME) {
+     * vendor at all (CLAUDE.md §5.1); today that is HigherGov alone.
+     *
+     * 🔴 FIXED (code review off the D2 branch): this used to compare
+     * `row.source_name === HIGHERGOV_SOURCE_NAME` -- a positive equality
+     * check against one hardcoded name, correct today only because HigherGov
+     * happens to be the only metered document client. The day a second one
+     * is registered, a billed call that throws would vanish from `api_spend`
+     * silently, and no existing test would fail, because every test here was
+     * written around the one source named in the comparison. `registry.ts`
+     * already carries `metered: true` as a structural property of the
+     * registry entry (`resolve-source.ts` already refuses metered sources on
+     * that property, not on a name) -- `isMeteredSourceName` is the
+     * name-keyed form of the same question, so this branch now tracks the
+     * registry's own flag for however many metered sources ever exist, not a
+     * string literal. */
+    if (isMeteredSourceName(row.source_name)) {
       await recordSpend(
         { run },
         {

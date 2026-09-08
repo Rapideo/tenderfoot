@@ -108,3 +108,29 @@ export const ADAPTERS: Record<string, AdapterRegistryEntry> = {
    * refused there, not re-taught the rule locally. */
   highergov: { sourceName: "HigherGov", make: () => higherGovAdapter(), metered: true },
 };
+
+/* ⚖️ THE NAME-KEYED FORM OF THE SAME QUESTION (extract/fetch-documents-for.ts
+ * fix, code review off the D2 branch). `resolve-source.ts` checks
+ * `entry.metered` directly because it already holds the RESOLVED registry
+ * entry -- it got there via the short registry key ('highergov'). Other
+ * callers only ever hold the canonical `source.name` row (joined from
+ * `solicitation`/`source`, e.g. 'HigherGov'), never the registry key, and
+ * cannot index `ADAPTERS` with it directly.
+ *
+ * Before this existed, fetch-documents-for.ts asked the question by
+ * comparing `row.source_name` against `HIGHERGOV_SOURCE_NAME` -- a positive
+ * equality check against ONE hardcoded name, correct only because HigherGov
+ * happened to be the sole metered document client. Registering a second one
+ * would have made a billed throw vanish from `api_spend` silently, and no
+ * existing test would have failed, because every test was written around the
+ * one source named there. This function answers the same question a
+ * name-holding caller needs, by walking every registry entry for the one
+ * whose `sourceName` matches and asking ITS `metered` flag -- so the answer
+ * tracks the registry's own `metered: true`/`false` for however many entries
+ * ever carry it, not a string literal frozen at the time one caller was
+ * written. */
+export function isMeteredSourceName(sourceName: string): boolean {
+  return Object.values(ADAPTERS).some(
+    (entry) => entry.sourceName === sourceName && entry.metered === true,
+  );
+}
