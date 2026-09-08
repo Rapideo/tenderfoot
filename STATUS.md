@@ -254,6 +254,8 @@ VITE_API_TARGET=http://localhost:3010 npm run dev --workspace app/client
 2. **Look at the Interested screen in a browser.** D30's new prompt is served but has never been seen — the extension was disconnected and restarting Chrome would have closed the page Matt was about to use.
 3. **`maxCallsPerRun`** — 500 was ratified as *"a year-long walk is ~365 one-call days"*, which paging made untrue. Needs Matt's number, not a controller's guess.
 
+**Also queued: `docs/superpowers/plans/2026-09-09-working-set-scoping.md`** — Matt's question about dropping the federal and incomplete rows, written up. **The measured answer is that the cleanup is far smaller than it looked: only 84 rows predate the complete window, not the ~1,000 first estimated**, because the fourteen truncated days from the first four-state pull all sit inside the range the paging run later re-bought in full. The plan is to LABEL rather than delete — SAM.gov's federal rows are the evidence for recalibrating F6 (median 917 characters against HigherGov's 156), and IDOA's 71 cannot be re-fetched at all.
+
 **Three things waiting on Matt:** the 150-item triage (F5 needs 100, and nothing else can produce it) · whether F6's 200-character floor is right for state and local data · a dashboard reading, to settle whether that 400 billed anything.
 
 ---
