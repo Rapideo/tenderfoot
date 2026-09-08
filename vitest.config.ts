@@ -22,6 +22,37 @@ import { defineConfig } from "vitest/config";
  * rather than extending it. */
 export default defineConfig({
   test: {
+    /* 🔴 THE 5-SECOND DEFAULT IS WRONG FOR THIS PROJECT, AND 23 FILES ALREADY
+     * SAID SO ONE AT A TIME.
+     *
+     * Almost every server test talks to a REMOTE Postgres (Neon, us-east-1),
+     * and many build their own schema first. That is tens of round trips
+     * before an assertion runs, so Vitest's 5s default is not a generous
+     * ceiling here -- it is below the honest cost of the work.
+     *
+     * The project already knew this and encoded it the expensive way: 23 of
+     * 31 server test files pass an explicit `}, 120000)` on their tests or
+     * hooks. Eight did not, and on 2026-09-07 those eight produced 14 timeout
+     * failures in a single gate run -- scattered across unrelated files, which
+     * reads exactly like a flaky database rather than a missing setting.
+     * `routes.test.ts` cost this project a separate debugging session earlier
+     * the same day for the identical reason: a beforeAll hook on the default
+     * while its own tests took 13.3s.
+     *
+     * ⚖️ So it is set ONCE, here, where every file converges -- rather than
+     * remaining a value each new file must remember to repeat. The existing
+     * per-file 120000 arguments are now redundant; they are harmless and are
+     * left alone rather than touched in eight files for no behaviour change.
+     *
+     * ⚠️ WHAT THIS COSTS, STATED RATHER THAN DISCOVERED: a genuinely hung test
+     * now takes two minutes to report instead of five seconds. That is the
+     * deliberate trade -- a slow failure is annoying, whereas a fast failure
+     * that is really a slow database is MISLEADING, and this project has now
+     * twice spent real time chasing infrastructure for what was a timeout
+     * value. hookTimeout matches, because a beforeAll that builds a schema is
+     * the single slowest thing in the suite. */
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
     exclude: [
       "**/node_modules/**",
       "**/dist/**",

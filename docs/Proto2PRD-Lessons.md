@@ -618,7 +618,19 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 
 **The check that catches it.** Before writing the second copy of a guard, trace every caller and find what they all pass through. Prefer a data-driven property on the resource (`metered: true`) over a condition on a name at each site: it fires after normalisation, so it cannot be defeated by spelling, and a new entry point inherits it by default instead of by memory. Default the permission to **denied**, so the failure mode of forgetting is refusal rather than spending.
 
-**Why not promoted.** One instance, but the mechanism is stated and the instance is unusually strong: the per-site shape had *already* failed on the spelling axis before it was proposed, and the central version closed a route that had not been enumerated. Worth promoting on a second sighting, in any project where a policy is enforced at more than one entrance.
+**✅ TWO MORE INSTANCES THE SAME DAY, AND THE THIRD ONE COST A REAL DEBUGGING SESSION AND A CLOUD BILL.**
+
+**Second, 2026-09-07:** four test helpers hand-enumerate the tables they delete before `DELETE FROM source`. A new migration added one row to a table with a foreign key to `source`, and two of the four went red — in files that have never mentioned that table. The list was a maintenance obligation nobody knew they had.
+
+**Third, the same afternoon, and this is the expensive one.** Vitest's default test timeout is 5 seconds. Almost every server test in the project talks to a remote Postgres and many build a schema first, so 23 of 31 files had each independently written `}, 120000)` on their own tests. **Eight had not.** Those eight produced 14 timeout failures in a single gate run, scattered across unrelated subsystems and landing on *different tests each run* — which is the exact signature of a flaky database.
+
+**So it was diagnosed as one.** Time went into cleaning abandoned schemas, then into a cloud console: the compute's autoscaling floor was raised, which cost money and did genuinely halve the setup phase — and the suite still failed. **The fix was two lines in the one config file all 31 files already share**, after which the gate went green with zero timeouts.
+
+**The generalisation gets sharper with the third instance.** A duplicated guard does not merely risk being forgotten at entrance N+1. **When it is forgotten, the symptom appears at the shared resource rather than at the missing copy** — so the evidence points at infrastructure, at flakiness, at anything *except* the file that failed to repeat the line. The eight files with no timeout were invisible; what was visible was a database appearing to fail at random.
+
+> **The tell, refined:** when failures scatter across unrelated components and move between runs, ask *what single value or check are these components each supposed to be repeating* before concluding the shared dependency is unhealthy. A missing copy and a sick dependency produce the same scatter, and only one of them is cheap to fix.
+
+**Why it is now promotable.** Three instances, one project, one day, in three different registers — a security guard, a fixture teardown list, and a test-runner setting. The mechanism is identical each time and the third demonstrates the diagnostic trap the first two only implied.
 
 ---
 
