@@ -241,18 +241,27 @@ test("a failure while writing leaves no documents, no stamp, but DOES leave the 
  * own thrown paths cost nothing regardless of whether anything tallied them.
  * Registering the first METERED document client made a genuinely billed
  * throw reachable: this goes through the REAL higherGovDocumentClient ->
- * higherGovClient.fetchDocuments chain (not a fake client), so a non-OK
- * response throws from inside highergov-client.ts's fetchValidated() AFTER
- * the vendor has already billed. */
+ * higherGovClient.fetchDocuments chain (not a fake client), so a throw from
+ * inside highergov-client.ts's fetchValidated() AFTER the vendor has already
+ * billed is reachable.
+ *
+ * ⚠️ THIS USED TO STAND A `500` IN FOR "billed, then threw", and that was the
+ * misreading the 2026-09-08 accounting fix corrects: a non-OK status is the
+ * vendor answering with NO records, which the meter does not bill. The case
+ * this test exists to pin -- billed, unreadable -- is a 200 whose body will
+ * not parse, so that is what it now sends. The refusal case has its own test
+ * at the foot of this file. */
 test("a throw from a metered client still tallies a conservative spend before the error propagates", async () => {
   const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-throw");
   const failing = (async () => ({
-    ok: false,
-    status: 500,
-    json: async () => ({}),
+    ok: true,
+    status: 200,
+    json: async () => {
+      throw new SyntaxError("Unexpected end of JSON input");
+    },
   })) as unknown as typeof fetch;
 
-  await expect(fetchDocumentsFor(hgSolicitationId, failing)).rejects.toThrow(/HigherGov answered/);
+  await expect(fetchDocumentsFor(hgSolicitationId, failing)).rejects.toThrow(/malformed JSON body/);
 
   const spendRows = await all<{ records: number; endpoint: string; solicitation_id: number }>(
     `SELECT records, endpoint, solicitation_id FROM api_spend WHERE solicitation_id = $1`,
@@ -338,11 +347,13 @@ test("a throw from a SECOND metered source is tallied too, driven by the registr
  * exists so the VENDOR's own error always reaches the caller, but
  * `recordSpend` is itself a database write and can throw too (a degraded
  * compute, CLAUDE.md §4's own "Connection terminated unexpectedly").
- * Unguarded, that second throw would replace the vendor's "HigherGov
- * answered 500" with a database error before `throw err` ever ran. A trigger
- * that fails ONLY on the conservative-bound value simulates the tally itself
- * failing, without disturbing any other recordSpend call this file makes on
- * an ordinary path. */
+ * Unguarded, that second throw would replace the vendor's own error with a
+ * database error before `throw err` ever ran. A trigger that fails ONLY on
+ * the conservative-bound value simulates the tally itself failing, without
+ * disturbing any other recordSpend call this file makes on an ordinary path
+ * -- which is also why the test below sends a malformed 200 and not a 500:
+ * since the 2026-09-08 accounting fix a refusal tallies 0, and the trigger
+ * would never fire on it. */
 async function withFailingSpendTally<T>(fn: () => Promise<T>): Promise<T> {
   await run(`
     CREATE OR REPLACE FUNCTION test_fail_conservative_spend_fdf() RETURNS trigger AS $BODY$
@@ -370,16 +381,18 @@ async function withFailingSpendTally<T>(fn: () => Promise<T>): Promise<T> {
 test("a throw from a metered client survives even when its own spend tally throws", async () => {
   const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-tally-fails");
   const failing = (async () => ({
-    ok: false,
-    status: 500,
-    json: async () => ({}),
+    ok: true,
+    status: 200,
+    json: async () => {
+      throw new SyntaxError("Unexpected end of JSON input");
+    },
   })) as unknown as typeof fetch;
 
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     await withFailingSpendTally(async () => {
       await expect(fetchDocumentsFor(hgSolicitationId, failing)).rejects.toThrow(
-        /HigherGov answered/,
+        /malformed JSON body/,
       );
     });
 
@@ -544,4 +557,89 @@ test("the ceiling allows a fetch that would land exactly on it", async () => {
   ]);
   const out = await fetchDocumentsFor(solicitationId, stubFetch(ONE_ATTACHMENT));
   expect(out.reason).toBe("fetched");
+});
+
+/* 🔴 THE PHANTOM 100 (STATUS.md, 2026-09-08). A click on a HigherGov row
+ * answered `HigherGov answered 400` -- the request SHAPE was wrong, the key
+ * was live -- and the catch above priced it at the conservative bound
+ * anyway, because until now it could not tell a rejected request from a
+ * billed-then-unparseable 200. Unstamped (correctly: we never looked), the
+ * row stayed re-clickable, at a phantom 100 records each time; ~22 clicks
+ * would have exhausted the real headroom against calls that cost nothing.
+ *
+ * The vendor bills on records RETURNED (migration 033: an isolated call
+ * returning 2 moved the dashboard by exactly 2). A non-OK status returns no
+ * records. So a refusal is priced at ZERO -- not out of hope, but because
+ * that is what the meter does. A malformed 200 is a different animal: the
+ * vendor DID return records, we just could not read them, and the
+ * conservative bound stands for that case (the test below this one).
+ *
+ * A row is still written, at 0: it is the observation "a metered call was
+ * answered, and answered with nothing", which is exactly what a later
+ * dashboard reading reconciles against. No row would leave nothing to
+ * compare. */
+test("a refused request (non-OK status) tallies zero, not the conservative bound, and stays re-askable at zero", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-refused");
+  const refused = (async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({}),
+  })) as unknown as typeof fetch;
+
+  await expect(fetchDocumentsFor(hgSolicitationId, refused)).rejects.toThrow(
+    /HigherGov answered 400/,
+  );
+
+  const rows = await all<{ records: number; endpoint: string }>(
+    `SELECT records, endpoint FROM api_spend WHERE solicitation_id = $1`,
+    [hgSolicitationId],
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.endpoint).toBe("document");
+  expect(rows[0]!.records).toBe(0);
+
+  /* Not stamped -- we did not look -- so the row can be asked again, and the
+   * second refusal must cost exactly what the first did: nothing. This is
+   * the assertion that would have caught the phantom: two clicks, zero
+   * records, not two hundred. */
+  const stamp = await one<{ attachments_checked_at: Date | null }>(
+    `SELECT attachments_checked_at FROM solicitation WHERE id = $1`,
+    [hgSolicitationId],
+  );
+  expect(stamp!.attachments_checked_at).toBeNull();
+
+  await expect(fetchDocumentsFor(hgSolicitationId, refused)).rejects.toThrow(
+    /HigherGov answered 400/,
+  );
+  const total = await one<{ total: string }>(
+    `SELECT coalesce(sum(records), 0)::text AS total FROM api_spend WHERE solicitation_id = $1`,
+    [hgSolicitationId],
+  );
+  expect(Number(total!.total)).toBe(0);
+});
+
+/* The other side of the same rule, pinned so the fix above cannot be
+ * over-applied: a 200 whose body cannot be parsed DID return records -- the
+ * vendor billed them whether or not we could read them -- so the conservative
+ * bound still stands there. Price every throw at zero and this turns red. */
+test("a malformed 200 still tallies the conservative bound: the vendor returned records we could not read", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-malformed");
+  const malformed = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => {
+      throw new SyntaxError("Unexpected end of JSON input");
+    },
+  })) as unknown as typeof fetch;
+
+  await expect(fetchDocumentsFor(hgSolicitationId, malformed)).rejects.toThrow(
+    /malformed JSON body/,
+  );
+
+  const rows = await all<{ records: number }>(
+    `SELECT records FROM api_spend WHERE solicitation_id = $1`,
+    [hgSolicitationId],
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.records).toBe(COVERAGE.unparseableResponseRecords);
 });

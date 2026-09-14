@@ -202,17 +202,49 @@ export function isPartialDay(result: Pick<FeedResult, "pages" | "pagesFetched">)
 export class PartialDayBilledError extends Error {
   readonly recordsBilled: number;
   readonly pagesFetched: number;
-  constructor(message: string, recordsBilled: number, pagesFetched: number) {
+  /** The failing page's status, when the vendor REFUSED it -- carried
+   * through from the HigherGovHttpError this wraps, so `costOfThrownCall`
+   * can still price that page at zero. Undefined when the page failed some
+   * other way (unreadable 200, transport), which keeps the estimate. */
+  readonly httpStatus: number | undefined;
+  constructor(
+    message: string,
+    recordsBilled: number,
+    pagesFetched: number,
+    httpStatus?: number,
+  ) {
     super(message);
     this.name = "PartialDayBilledError";
     this.recordsBilled = recordsBilled;
     this.pagesFetched = pagesFetched;
+    this.httpStatus = httpStatus;
+  }
+}
+
+/* 🔴 THE VENDOR ANSWERED, AND THE ANSWER WAS A REFUSAL. A non-OK status is
+ * distinct BY TYPE from every other throw in this module, because what it
+ * COSTS is different: the meter counts records returned (CLAUDE.md §5.1,
+ * proven exact by migration 033's calibration -- 2 results, dashboard +2),
+ * and a refused request returns none. Until 2026-09-08 the tally sites could
+ * not tell this from a billed-but-unreadable 200 and priced both at the
+ * conservative bound; one real 400 on /document/ landed a phantom 100 in the
+ * ledger, on a row that stayed re-clickable at 100 a time.
+ *
+ * The MESSAGE is unchanged ("HigherGov answered N"): every operator-facing
+ * string and every test that matches on it still holds. The URL is still
+ * not in it -- it carries the api_key. */
+export class HigherGovHttpError extends Error {
+  readonly httpStatus: number;
+  constructor(status: number) {
+    super(`HigherGov answered ${status}`);
+    this.name = "HigherGovHttpError";
+    this.httpStatus = status;
   }
 }
 
 /** What a caught error says was ALREADY BILLED before it was thrown. Zero for
  * anything that carries no such figure, which is every error in this codebase
- * except the one above.
+ * except PartialDayBilledError above.
  *
  * ⚠️ DUCK-TYPED RATHER THAN `instanceof`, on purpose: several test files
  * reach this module through `await import()`, and an error crossing a module
@@ -222,6 +254,38 @@ export class PartialDayBilledError extends Error {
 export function recordsAlreadyBilled(err: unknown): number {
   const billed = (err as { recordsBilled?: unknown } | null | undefined)?.recordsBilled;
   return typeof billed === "number" && Number.isFinite(billed) && billed > 0 ? billed : 0;
+}
+
+/** Did the vendor refuse this call outright -- answer with a non-OK status
+ * and therefore no records? Same duck-typing as recordsAlreadyBilled, on
+ * `httpStatus`, a name only this module's own two errors carry: NOT the
+ * message (a wrapper may rewrite it) and NOT a bare `status` (other
+ * libraries' errors carry one too). A false "refused" is an under-report,
+ * so the check is strict and everything unrecognised is NOT a refusal. */
+function vendorRefused(err: unknown): boolean {
+  const status = (err as { httpStatus?: unknown } | null | undefined)?.httpStatus;
+  return typeof status === "number" && Number.isInteger(status);
+}
+
+/** WHAT A CALL THAT THREW ACTUALLY COST -- the one rule every tally site
+ * applies before it re-throws. Three cases, and the middle one is the fix:
+ *
+ *  - unreadable (a 200 we could not parse, a non-array `results`): the
+ *    vendor returned records and billed them; we tally `unparseableEstimate`,
+ *    the most one response can bill, because we cannot know how many;
+ *  - REFUSED (a non-OK status): the vendor returned nothing and billed
+ *    nothing. Zero -- not hope, arithmetic;
+ *  - transport (rejected before any response): nothing proves the vendor did
+ *    not serve and bill a response the connection then dropped. Estimate.
+ *
+ * Plus whatever earlier pages of the same day already billed, which a
+ * refusal on page three does not un-bill.
+ *
+ * The estimate is a parameter, not an import: this module does not depend on
+ * thresholds.ts and should not start to. Callers pass
+ * `COVERAGE.unparseableResponseRecords`. */
+export function costOfThrownCall(err: unknown, unparseableEstimate: number): number {
+  return (vendorRefused(err) ? 0 : unparseableEstimate) + recordsAlreadyBilled(err);
 }
 
 /* Task 7. The vendor's OWN schema doc for /document/ (docs/2026-09-03-
@@ -467,8 +531,10 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
     throw new Error(`HigherGov request failed before any response: ${redact(message)}`);
   }
   if (!res.ok) {
-    /* The URL is NOT in this message: it carries the api_key. */
-    throw new Error(`HigherGov answered ${res.status}`);
+    /* A typed refusal, so the tally sites price it at zero -- see
+     * HigherGovHttpError. The URL is NOT in its message: it carries the
+     * api_key. */
+    throw new HigherGovHttpError(res.status);
   }
   /* 🔴 THE PARSE MUST NOT THROW RAW. A truncated or malformed 200 can make
    * JSON.parse throw a SyntaxError whose message quotes a window of raw
@@ -521,9 +587,17 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
    * ⚠️ AND SINCE PAGING, THE CONSERVATIVE ESTIMATE ALONE IS NO LONGER THE
    * WHOLE ANSWER at the two fetchDay sites. A day is now several calls, and
    * this guard can fire on the fourth of them with three already billed --
-   * so those sites must ADD `recordsAlreadyBilled(err)` (see
-   * PartialDayBilledError above) to whatever they charge for the call that
-   * failed. The document site is unaffected: /document/ is still one call. */
+   * so what the failed call is charged must ADD what the earlier pages cost
+   * (see PartialDayBilledError above). The document site is unaffected:
+   * /document/ is still one call.
+   *
+   * ⚠️ AND SINCE 2026-09-08, THE ESTIMATE IS NOT CHARGED FOR A REFUSAL AT
+   * ALL: a non-OK status (HigherGovHttpError above) returned no records and
+   * billed none. Every tally site now prices its throw through ONE function,
+   * `costOfThrownCall(err, COVERAGE.unparseableResponseRecords)`, which
+   * settles all three concerns -- unreadable vs refused vs transport, plus
+   * the already-billed pages. A new site should call it rather than
+   * re-derive the sum. */
   const results = body.results ?? [];
   if (!Array.isArray(results)) {
     throw new Error(
@@ -650,13 +724,17 @@ async function walkDay(
     try {
       next = await getPage(buildUrl(pageNumber), fetchImpl);
     } catch (err) {
-      /* GUARD 4. The pages already bought were already billed. */
+      /* GUARD 4. The pages already bought were already billed. The failing
+       * page's own status rides along when the vendor refused it, so that
+       * page is still priced at zero after the wrap -- see costOfThrownCall. */
       const message = err instanceof Error ? err.message : String(err);
+      const status = (err as { httpStatus?: unknown } | null | undefined)?.httpStatus;
       throw new PartialDayBilledError(
         `${redact(message)} -- ${records} record(s) across ${pagesFetched} page(s) were ` +
           `ALREADY BILLED for this day before page ${pageNumber} failed.`,
         records,
         pagesFetched,
+        typeof status === "number" ? status : undefined,
       );
     }
     notices.push(...next.notices);

@@ -20,6 +20,7 @@ process.env.HIGHERGOV_API_KEY = "TESTKEYTESTKEYTESTKEYTESTKEY0000";
 process.env.HIGHERGOV_SEARCH_ID = "TESTSEARCHIDTESTSEARCHID0000";
 
 import {
+  costOfThrownCall,
   higherGovClient,
   isPartialDay,
   MAX_PAGES_PER_DAY,
@@ -288,6 +289,115 @@ test("recordsAlreadyBilled is zero for anything that carries no such figure", ()
   expect(recordsAlreadyBilled("a string")).toBe(0);
   expect(recordsAlreadyBilled({ recordsBilled: "12" })).toBe(0);
   expect(recordsAlreadyBilled({ recordsBilled: Number.NaN })).toBe(0);
+});
+
+/* 🔴 WHAT A CALL THAT THREW ACTUALLY COST -- one rule, one home, every tally
+ * site a caller. Until 2026-09-08 every throw was priced at the conservative
+ * bound, which could not tell a REFUSED request (a non-OK status: the vendor
+ * answered, and answered with no records -- billed nothing, since the meter
+ * counts records returned, migration 033) from a BILLED-BUT-UNREADABLE one
+ * (a 200 we could not parse: records came back, we just could not read
+ * them). One real 400 on the document endpoint landed a phantom 100 in the
+ * ledger, on a row that stayed re-clickable at 100 a time.
+ *
+ * The estimate is passed in rather than imported: this module does not
+ * depend on thresholds.ts, and should not start to. */
+test("costOfThrownCall prices a refused request (non-OK status) at zero", async () => {
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fakeFetch("nope", 400));
+  } catch (err) {
+    caught = err;
+  }
+  expect((caught as Error).message).toBe("HigherGov answered 400");
+  expect(costOfThrownCall(caught, 100)).toBe(0);
+});
+
+test("costOfThrownCall prices a malformed 200 at the estimate: records came back, unreadable", async () => {
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fakeFetch("{not json", 200));
+  } catch (err) {
+    caught = err;
+  }
+  expect((caught as Error).message).toMatch(/malformed JSON body/);
+  expect(costOfThrownCall(caught, 100)).toBe(100);
+});
+
+/* A transport failure -- the request rejected before any response -- is NOT
+ * a refusal. The vendor may have served and billed a response the connection
+ * then dropped; nothing here can know. The estimate stands. */
+test("costOfThrownCall prices a transport failure at the estimate: nothing proves it was free", async () => {
+  const dead = (async () => {
+    throw new TypeError("fetch failed");
+  }) as unknown as typeof fetch;
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", dead);
+  } catch (err) {
+    caught = err;
+  }
+  expect((caught as Error).message).toMatch(/before any response/);
+  expect(costOfThrownCall(caught, 100)).toBe(100);
+});
+
+/* The paged case, and the one that makes the rule worth carrying THROUGH the
+ * PartialDayBilledError wrapper rather than stopping at page one: pages one
+ * and two bill 100 real records, page three is refused. The day cost 100 --
+ * not 100 + a phantom bound for a page that returned nothing. */
+function twoGoodPagesThen(third: () => Response): typeof fetch {
+  let call = 0;
+  return (async () => {
+    call += 1;
+    if (call === 3) return third();
+    const body = JSON.stringify({
+      meta: { pagination: { page: call, pages: 5, count: 250 } },
+      results: Array.from({ length: 50 }, (_, i) => ({
+        source_id: `C${call}-R${i}`,
+        captured_date: "2026-09-03",
+      })),
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+}
+
+async function thrownBy(fetchImpl: typeof fetch): Promise<unknown> {
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fetchImpl);
+  } catch (err) {
+    return err;
+  }
+  throw new Error("expected fetchDay to throw");
+}
+
+test("costOfThrownCall prices a refusal on page three at what pages one and two billed, and nothing more", async () => {
+  const refused = await thrownBy(
+    twoGoodPagesThen(() => new Response("rate limited", { status: 429 })),
+  );
+  expect(recordsAlreadyBilled(refused)).toBe(100);
+  expect(costOfThrownCall(refused, 100)).toBe(100);
+
+  /* The unreadable-page sibling, so the two cannot be confused: page three
+   * answers 200 with garbage, and the estimate is added ON TOP of the 100. */
+  const garbled = await thrownBy(
+    twoGoodPagesThen(() => new Response("{not json", { status: 200 })),
+  );
+  expect(recordsAlreadyBilled(garbled)).toBe(100);
+  expect(costOfThrownCall(garbled, 100)).toBe(200);
+});
+
+/* Every ordinary error is priced at the estimate. A refusal is recognised by
+ * a property only this module's own errors carry -- never by message text,
+ * which a wrapper may rewrite, and never by a bare `status` field, which
+ * other libraries' errors also carry. A false "refused" is an under-report,
+ * the one direction that must not happen by accident. */
+test("costOfThrownCall prices anything it does not recognise at the estimate", () => {
+  expect(costOfThrownCall(new Error("plain"), 40)).toBe(40);
+  expect(costOfThrownCall(undefined, 40)).toBe(40);
+  expect(costOfThrownCall(null, 40)).toBe(40);
+  expect(costOfThrownCall({ status: 400 }, 40)).toBe(40);
+  expect(costOfThrownCall({ httpStatus: "400" }, 40)).toBe(40);
+  expect(costOfThrownCall({ recordsBilled: 30 }, 40)).toBe(70);
 });
 
 /* A vendor that reports more pages than it can actually serve has told us its

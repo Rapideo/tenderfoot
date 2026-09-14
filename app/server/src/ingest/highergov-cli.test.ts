@@ -33,9 +33,13 @@ const {
   main,
 } = await import("./highergov-cli.js");
 const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
-const { HIGHERGOV_SOURCE_NAME, FEED_AXES, DEFAULT_FEED_AXIS, singlePageBudget } = await import(
-  "../coverage/highergov-client.js"
-);
+const {
+  HIGHERGOV_SOURCE_NAME,
+  FEED_AXES,
+  DEFAULT_FEED_AXIS,
+  HigherGovHttpError,
+  singlePageBudget,
+} = await import("../coverage/highergov-client.js");
 /* The conservative "what could this call have cost when we cannot read its
  * response" bound, imported rather than retyped as 40 -- the same constant
  * coverage/run.ts and extract/fetch-documents-for.ts tally at their own
@@ -216,6 +220,10 @@ function fakeAdapter(
       items: WindowedItem[];
       billedRecords?: number;
       throws?: boolean;
+      /* The day is REFUSED -- the vendor answers a non-OK status, returning
+       * (and billing) nothing. The other way a real day fails, and since the
+       * 2026-09-08 accounting fix priced differently from `throws`. */
+      refusedWith?: number;
       omitBilledRecords?: boolean;
       /* meta.pagination.pages for this day's envelope -- adapters/
        * highergov.ts:139 carries this on every real day, so a fake day that
@@ -243,6 +251,9 @@ function fakeAdapter(
       const entry = byDay[since] ?? { items: [] };
       if (entry.throws) {
         throw new Error('HigherGov returned a non-array "results" field (got object)');
+      }
+      if (entry.refusedWith !== undefined) {
+        throw new HigherGovHttpError(entry.refusedWith);
       }
       const billed = entry.billedRecords ?? entry.items.length;
       /* The envelope's day label is `axis` + `day`, matching adapters/
@@ -1571,6 +1582,56 @@ test("a day-walk call that throws still writes a conservative spend row before f
     ).rejects.toThrow(/non-array "results"/);
 
     expect(await totalSpend()).toBe(1 + COVERAGE.unparseableResponseRecords);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 THE PHANTOM 100, at the two sites in THIS file (2026-09-08). Both
+ * catches priced every throw at the conservative bound -- including a
+ * REFUSAL, a non-OK status: the vendor answering with no records and billing
+ * none, since the meter counts records returned (migration 033 proved it
+ * exact). This is the command that walks the reserve, and a rate-limited day
+ * booking a phantom 100 is what would make the loader refuse legitimate work
+ * against a ledger inflated by calls that cost nothing. The rule lives in
+ * highergov-client.ts's costOfThrownCall; these pin that both sites ask it.
+ * The error still propagates either way. */
+test("a refused sample (non-OK status) tallies zero, not the conservative bound", async () => {
+  const refusing: HigherGovClient = {
+    async fetchDay() {
+      throw new HigherGovHttpError(429);
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    async fetchDocuments() {
+      return { docs: [], records: 0 };
+    },
+  };
+  await expect(dryRun("2026-09-01", "2026-09-30", refusing, 0)).rejects.toThrow(
+    /HigherGov answered 429/,
+  );
+  expect(await totalSpend()).toBe(0);
+});
+
+test("a refused day in the walk tallies zero for that day, on top of the sample's own cost", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({ "2026-09-02": { items: [], refusedWith: 429 } });
+
+    await expect(
+      main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir),
+    ).rejects.toThrow(/HigherGov answered 429/);
+
+    /* 1 for the sample, recorded normally; 0 for the refused day. The
+     * sibling test above reads 1 + the bound for a day that threw after
+     * billing -- that is the whole difference. */
+    expect(await totalSpend()).toBe(1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

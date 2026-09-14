@@ -21,7 +21,7 @@ import { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING } from "./api-spend
  * site. Cross-importing from extract/ into coverage/ already has precedent:
  * document-clients.ts does it for higherGovClient itself. */
 import { COVERAGE } from "../coverage/thresholds.js";
-import { redact } from "../coverage/highergov-client.js";
+import { costOfThrownCall, redact } from "../coverage/highergov-client.js";
 import { isMeteredSourceName } from "../scrape/adapters/registry.js";
 
 export type FetchReason = "fetched" | "already-looked" | "unsupported" | "ceiling";
@@ -97,6 +97,15 @@ export async function fetchDocumentsFor(
      * propagate, rather than silently losing a call the vendor already
      * booked.
      *
+     * 🔴 BUT NOT FOR A REFUSAL (2026-09-08, the phantom 100). A non-OK
+     * status is the vendor answering with NO records, and the meter counts
+     * records returned -- so that call cost nothing, and tallying the bound
+     * for it inflated the ledger by 100 per click on a row that, correctly
+     * unstamped, stayed clickable. `costOfThrownCall` is the one place that
+     * tells the two apart; this site only asks it. A zero-record row is
+     * still written: it is the observation "answered, with nothing", which
+     * is what a dashboard reading reconciles against.
+     *
      * ⚠️ SCOPED TO A KNOWN-METERED SOURCE, NOT EVERY THROW. `client` here is
      * whichever `DOCUMENT_CLIENTS[row.source_name]` resolves to, and SAM.gov
      * is UNCONDITIONALLY free -- no path through it, success or failure, was
@@ -144,7 +153,7 @@ export async function fetchDocumentsFor(
           {
             sourceId: row.source_id,
             endpoint: "document",
-            records: COVERAGE.unparseableResponseRecords,
+            records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
             solicitationId: row.id,
           },
         );

@@ -95,12 +95,12 @@ import { MONTHLY_RECORD_CEILING, recordSpend, spentThisMonth } from "../extract/
  * the same question at their own metered call sites. */
 import { COVERAGE } from "../coverage/thresholds.js";
 import {
+  costOfThrownCall,
   DEFAULT_FEED_AXIS,
   FEED_AXES,
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
   isPartialDay,
-  recordsAlreadyBilled,
   redact,
   singlePageBudget,
   type FeedAxis,
@@ -671,12 +671,15 @@ export async function dryRun(
           sourceId: src.id,
           endpoint: "opportunity",
           /* 🔴 PLUS WHAT THE SAMPLE'S EARLIER PAGES ALREADY COST. The sample
-           * is budgeted to one page, so this is normally 0 -- but a caller
-           * passing a larger budget, or a page size small enough to fit
-           * several pages inside one page's price, makes a part-billed throw
-           * reachable, and 40 flat would then under-report it. Zero for any
-           * error that carries no such figure. */
-          records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
+           * is budgeted to one page, so that share is normally 0 -- but a
+           * caller passing a larger budget, or a page size small enough to
+           * fit several pages inside one page's price, makes a part-billed
+           * throw reachable, and the flat bound alone would under-report it.
+           *
+           * 🔴 AND ZERO FOR A REFUSAL (2026-09-08, the phantom 100): a
+           * non-OK status returned no records and billed none. One rule,
+           * highergov-client.ts's costOfThrownCall, at every tally site. */
+          records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
         });
       }
     } catch (tallyErr) {
@@ -1133,8 +1136,15 @@ export async function main(
              * does not catch what the adapter throws, so a PartialDayBilledError
              * from a mid-day failure arrives here intact carrying what pages
              * one to N-1 cost. Charging the flat conservative figure alone
-             * would drop them. Zero for every other error. */
-            records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
+             * would drop them.
+             *
+             * 🔴 AND ZERO FOR THE REFUSED PAGE ITSELF (2026-09-08, the
+             * phantom 100). This is the command that walks the reserve; a
+             * rate-limited day booking a bound it never spent is what would
+             * make the loader refuse legitimate work against a ledger
+             * inflated by calls that cost nothing. costOfThrownCall tells a
+             * refusal from an unreadable page, in one place. */
+            records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
           });
         } catch (tallyErr) {
           console.error(

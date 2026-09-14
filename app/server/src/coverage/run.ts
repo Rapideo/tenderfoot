@@ -21,10 +21,10 @@ import {
   spentThisMonth,
 } from "../extract/api-spend.js";
 import {
+  costOfThrownCall,
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
   isPartialDay,
-  recordsAlreadyBilled,
   type HigherGovClient,
 } from "./highergov-client.js";
 import { IDOA_SOURCE_NAME, type KeyEntry } from "./answer-key.js";
@@ -184,13 +184,19 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
        * records before page four throws. `unparseableResponseRecords` alone
        * -- a figure chosen when a day WAS exactly one call -- would tally 40
        * for that day, an under-report of 260 against a ceiling that cannot
-       * be read back from the vendor. `recordsAlreadyBilled` returns 0 for
-       * every error that carries no such figure, so the single-page case is
-       * byte-identical to what it was before paging existed. */
+       * be read back from the vendor. The already-billed figure is 0 for
+       * every error that carries none, so the single-page case is
+       * byte-identical to what it was before paging existed.
+       *
+       * 🔴 AND NOTHING AT ALL FOR A REFUSAL (2026-09-08, the phantom 100).
+       * A non-OK status returned no records and billed none; pricing it at
+       * the bound inflated the ledger by 100 per refused call. The three
+       * cases -- unreadable, refused, transport -- are told apart in ONE
+       * place, highergov-client.ts's costOfThrownCall; this site asks it. */
       await recordSpend({ run: exec }, {
         sourceId: source.id,
         endpoint: "opportunity",
-        records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
+        records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
       });
       throw err;
     }
@@ -310,20 +316,21 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
       try {
         probe = await client.fetchBySourceId(entry.externalId, opts.fetchImpl);
       } catch (err) {
-        /* Same reasoning as the day-loop's try/catch above: this call was
-         * billed before it could throw, so the conservative tally must land
-         * before the error does, and the error must still propagate.
+        /* Same reasoning as the day-loop's try/catch above: a call that was
+         * billed before it could throw must be tallied before the error
+         * lands, a refused one must be tallied at zero, and the error must
+         * still propagate. costOfThrownCall decides which.
          *
-         * `recordsAlreadyBilled` is here for symmetry only and is always 0
-         * today: fetchBySourceId does NOT page (an exact-id lookup is one
-         * row by construction -- highergov-client.ts's `get()`), so it can
-         * never carry a part-billed figure. Written the same way as the day
-         * loop's so that the day someone does page it, this site is already
-         * honest rather than quietly 40 short. */
+         * The already-billed share it adds is always 0 here today:
+         * fetchBySourceId does NOT page (an exact-id lookup is one row by
+         * construction -- highergov-client.ts's `get()`), so it can never
+         * carry a part-billed figure. Written the same way as the day loop's
+         * so that the day someone does page it, this site is already honest
+         * rather than quietly short. */
         await recordSpend({ run: exec }, {
           sourceId: source.id,
           endpoint: "opportunity",
-          records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
+          records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
         });
         throw err;
       }
