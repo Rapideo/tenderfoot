@@ -234,6 +234,39 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
+## ⏸️ FIRST THING NEXT SESSION — START HERE (written 2026-09-13, end of night, at Matt's request)
+
+**State on disk: `main == origin/main` at the commit carrying this block, working tree clean, gate 1139 tests / 104 files, exit 0. Dev servers were shut down deliberately at the end of the night — nothing of ours is running. The Vercel deploy of tonight's push will have applied migration 034 (`solicitation.document_key`, nullable) to production — confirm on `/api/health`'s migration list; it touches no data.**
+
+**Matt's plan for the morning, in his words: review the ruling sheets first thing.** Three questions, none costs a record to answer, all in the D-series artifact style with answers saved into each page's own store (`read_db`, collection `rulings`):
+
+| Sheet | Asks | Recommended | Read it back |
+|---|---|---|---|
+| **D15/D16** — <https://claude.ai/code/artifact/87cdf0b6-aca8-4274-b8ec-49da0d0e9fff> | D15: how the **3,238 keyless HigherGov rows** get a document key (on demand +1–2 records · backfill the 150 · backfill only the Interested · nothing). D16: what the record screen says for a row it **could not ask about** (today `BUNDLE — 0 FILES`, which is D3's error on screen — a §7.10 question) | D15 **A** (on demand) · D16 **A** (one invented head, `DOCUMENTS NOT REQUESTED`, numbered) | docs `d15`, `d16` |
+| **D17** — <https://claude.ai/code/artifact/4654f19d-f3d3-4c60-b63c-edbfc8b21a72> | What **F6** should measure: `p10 ≥ 200` fails every live source, SAM included (p10 40 combined, 68 SAM, 29 HigherGov); Matt's own reasons put "too thin to decide" **under 100 chars** | **C** — change the statistic to "≤ 30% of biddable rows under 100 chars" | doc `d17` |
+
+**Then, in order:**
+
+1. **Build the rulings.** D15-A is one extra call inside `fetchDocumentsFor` (fetch the opportunity by `source_id`, store the key, then the documents — tallied on `opportunity`, priced into the ceiling check). D16-A is one head string in `Record.tsx` and a numbered deviation. D17-C is `measureF6` in `fitness/floor.ts` plus `THRESHOLDS`, and it changes a D4-ratified predicate — the amendment goes in the spec, per CLAUDE.md §1. **Whatever is chosen, nothing spends a record until D15 is ruled and the first live use is watched.**
+2. **The chip derivation, with Matt, from [`docs/2026-09-13-reason-corpus.md`](docs/2026-09-13-reason-corpus.md).** 150 blocks, 11 Interested. Fill the `→ chip:` lines together; each chip carries a class on the way in (SVRC 1.1.4), and the capacity class is excluded from anything that learns. Then unpin `Queue.test.tsx`'s no-chips assertion, record the deviation, build the chips with the free-text escape hatch the SVRC requires. *(If the 150 were touched again — an Undo, a re-decision — re-run `node --env-file-if-exists=.env scripts/reason-corpus.mjs --sample=2 --out=docs/2026-09-13-reason-corpus.md` first; it is read-only and idempotent.)*
+3. **The first post-merge HigherGov ingest is a measurement, not a load.** The document-key parse assumes `related_key` is a query parameter on `document_path`; no fixture confirms it. The ingest now prints `KEYLESS PATHS: N` when rows carried a path with no key in it. **If N is every row, the parse shape is wrong, not the vendor** — fix it before D15 spends anything. A one-day sample (`--dry-run`, ~5 records at R5's rate) settles it. §5.1 applies: propose, price, wait.
+4. Still waiting on Matt from before: a **dashboard reading** to settle whether the 400 on `api_spend` row 211 billed (then correct that row with evidence) · the working-set plan's **§5**.
+
+**To bring the app up for anything above:**
+
+```
+PORT=3010 npm run dev --workspace app/server
+VITE_API_TARGET=http://localhost:3010 npm run dev --workspace app/client
+```
+
+(3003 belongs to IDE8 on this machine and answers 404, not a refusal.) **Opening a HigherGov record no longer costs anything** — a keyless row is refused as `no-document-key`, unstamped, before any request.
+
+⚠️ **Two things a fresh context should know about the harness, both learned tonight and both in memory:** work in a worktree while Matt is in the app (the dev server is `tsx watch`), but the gate's build step migrates `DATABASE_URL_TEST`'s public schema, **which is the same Neon branch the dev server reads** — a new migration lands live the moment the gate runs. And remove a merged worktree before gating from the main checkout (`.claude/` is now excluded from vitest, but remove it anyway).
+
+**The rest of this block is the night as it was written, newest first.**
+
+---
+
 ## 🔖 RESUME HERE — updated 2026-09-13 (late)
 
 ## ✅ THE 150 ARE TRIAGED — 11 INTERESTED, 139 NOT INTERESTED, EVERY ONE WITH A REASON IN MATT'S OWN WORDS
