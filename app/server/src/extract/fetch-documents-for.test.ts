@@ -34,8 +34,13 @@ const ONE_ATTACHMENT = {
     ],
   },
 };
+/* Carries a status, not only `ok`: through the real HigherGov chain a
+ * status-less `ok:false` would become `HigherGovHttpError(undefined)` and
+ * be priced at the estimate rather than as the refusal it stands for
+ * (review finding, 2026-09-13). 500 for the failing form, on purpose -- the
+ * tests that need a 4xx refusal build their own response. */
 const stubFetch = (body: unknown, ok = true) =>
-  (async () => ({ ok, json: async () => body })) as unknown as typeof fetch;
+  (async () => ({ ok, status: ok ? 200 : 500, json: async () => body })) as unknown as typeof fetch;
 
 beforeAll(async () => {
   await migrate(false);

@@ -419,6 +419,9 @@ function sampleAsPage(sample: FeedResult, day: string, axis: FeedAxis): Windowed
         feedCount: sample.feedCount,
         pages: sample.pages,
         pagesFetched: sample.pagesFetched,
+        /* Same field the adapter writes, so the reused sampled day reports
+         * its keyless paths like every other day. */
+        keylessPaths: sample.keylessPaths ?? 0,
         results: sample.notices.map((n) => n.raw),
       }),
     ),
@@ -553,6 +556,21 @@ function truncationFromArtifact(
     pages: envelope.pages,
     pagesFetched: typeof envelope.pagesFetched === "number" ? envelope.pagesFetched : 1,
   };
+}
+
+/* HOW MANY OF THIS DAY'S ROWS CARRIED A document_path WITH NO related_key IN
+ * IT. The client lifts the document key out of that URL by a parameter name
+ * the vendor's schema implies and no fixture confirms (highergov-client.ts,
+ * documentKeyFrom). If the live shape is different, every row lands keyless
+ * and looks exactly like a vendor that sent no key -- and D15's proposed
+ * re-fetch would spend records to learn nothing. This count, printed per day
+ * and in the summary, is how that shows on the FIRST live run instead.
+ * Absent on an artifact written before the field existed, which reads as 0:
+ * those runs were made by a client that never looked, so they have nothing
+ * to report either way (review finding, 2026-09-13). */
+function keylessPathsFromArtifact(artifactPath: string): number {
+  const envelope = readArtifactEnvelope(artifactPath) as { keylessPaths?: unknown } | null;
+  return envelope && typeof envelope.keylessPaths === "number" ? envelope.keylessPaths : 0;
 }
 
 /* Pure-ish and testable without a network: `client` is injectable (the real
@@ -963,6 +981,9 @@ export async function main(
    * that day is incomplete, which is a DIFFERENT fact from a mid-walk stop
    * (see the `committedDays < days.length` check at the very end). */
   const truncatedDays: string[] = [];
+  /* Rows across the whole walk whose document_path carried no related_key --
+   * see keylessPathsFromArtifact. Summed for the end-of-run line. */
+  let keylessPathsTotal = 0;
   /* Which of the two independent stop conditions, if either, ended the walk
    * before the requested window finished -- read only by the end-of-run
    * summary below, so a --max-records stop and a ceiling stop are reported
@@ -1242,6 +1263,26 @@ export async function main(
           "not because the rows were absent.",
       );
     }
+
+    /* THE DOCUMENT-KEY SHAPE CHECK, per day. Zero prints nothing: the
+     * common case must not add a line to every day of a long walk. */
+    const dayKeyless = keylessPathsFromArtifact(runResult.artifactPath);
+    keylessPathsTotal += dayKeyless;
+    if (dayKeyless > 0) {
+      console.log(
+        `    ⚠️  ${day}: ${dayKeyless} row(s) carried a document_path with no related_key ` +
+          `in it. Those rows have no document key and cannot fetch documents. If this is ` +
+          `every row, the parse shape (highergov-client.ts, documentKeyFrom) is wrong, not ` +
+          `the vendor -- check before spending anything on a re-fetch.`,
+      );
+    }
+  }
+
+  if (keylessPathsTotal > 0) {
+    console.log(
+      `\n⚠️  KEYLESS PATHS: ${keylessPathsTotal} row(s) this run carried a document_path ` +
+        `with no related_key. See the per-day lines above.`,
+    );
   }
 
   console.log(

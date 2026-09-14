@@ -82,8 +82,12 @@ export async function fetchDocumentsFor(
    * the only thing sending anything else buys is a 400. So the request is
    * not made: nothing spent, nothing stamped (we did not look, and the row
    * must stay askable once a merge lands its key), and a reason of its own
-   * so the screen can say WHY rather than "no documents". SAM is keyed by
-   * external_id, already checked above, and is untouched by this. */
+   * so a caller CAN tell it from "no documents". ⚠️ Today no caller does:
+   * Record.tsx clears CHECKING on every settled outcome and renders
+   * `BUNDLE — 0 FILES` for this one, as it already did for "unsupported" and
+   * "ceiling" -- the bundle has no "could not ask" state, and inventing one
+   * is a §7.10 question, on the D16 sheet. SAM is keyed by external_id,
+   * already checked above, and is untouched by this. */
   const key = client.keyedBy === "document-key" ? row.document_key : row.external_id;
   if (!key) return { reason: "no-document-key", spent: 0, documents: 0 };
 

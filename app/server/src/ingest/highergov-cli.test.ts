@@ -238,6 +238,9 @@ function fakeAdapter(
        * anything else. `pages: 3` with no `pagesFetched` is therefore still a
        * truncated day, exactly as it was before paging. */
       pagesFetched?: number;
+      /* Rows whose document_path carried no related_key -- the client's
+       * count, written to the envelope by adapters/highergov.ts. */
+      keylessPaths?: number;
     }
   >,
 ): WindowedAdapter {
@@ -270,6 +273,9 @@ function fakeAdapter(
       }
       if (entry.pagesFetched !== undefined) {
         envelope.pagesFetched = entry.pagesFetched;
+      }
+      if (entry.keylessPaths !== undefined) {
+        envelope.keylessPaths = entry.keylessPaths;
       }
       return {
         items: entry.items,
@@ -1203,6 +1209,47 @@ test("a multi-page day bought whole is NOT reported truncated", async () => {
     const lines = logSpy.mock.calls.map((c) => String(c[0]));
     expect(lines.some((l) => l.includes("TRUNCATED"))).toBe(false);
     expect(lines.some((l) => l.includes("No loaded day was truncated"))).toBe(true);
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 THE DOCUMENT-KEY SHAPE IS AN ASSUMPTION UNTIL A LIVE RUN CONFIRMS IT
+ * (review finding, 2026-09-13). The client lifts `related_key` out of
+ * document_path by that parameter name, which the vendor's schema implies and
+ * no fixture confirms. If the live shape differs, every row lands keyless and
+ * is indistinguishable from a vendor that sent no key -- and D15's re-fetch
+ * would spend records to learn nothing. So the client counts rows that
+ * carried a path with no key in it, the envelope carries the count, and the
+ * walk PRINTS it per day and in the summary. A shape mismatch is then visible
+ * on the first run, at the cost of nothing. A day with zero prints nothing. */
+test("a day whose paths carried no document key is reported, per day and in the summary", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-02": {
+        items: [{ externalId: "HG-2", modifiedAt: "2026-09-02", raw: {} }],
+        keylessPaths: 3,
+      },
+      "2026-09-03": {
+        items: [{ externalId: "HG-3", modifiedAt: "2026-09-03", raw: {} }],
+        keylessPaths: 0,
+      },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-03"], client, adapter, dir);
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("2026-09-02") && l.includes("3 row(s) carried a document_path with no related_key"))).toBe(true);
+    expect(lines.some((l) => l.includes("2026-09-03") && l.includes("no related_key"))).toBe(false);
+    expect(lines.some((l) => l.includes("KEYLESS PATHS") && l.includes("3"))).toBe(true);
   } finally {
     logSpy.mockRestore();
     rmSync(dir, { recursive: true, force: true });

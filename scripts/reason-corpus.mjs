@@ -36,7 +36,9 @@ const args = Object.fromEntries(
   }),
 );
 const sampleId = Number(args.sample);
-if (!Number.isInteger(sampleId) || sampleId <= 0) {
+if (!Number.isInteger(sampleId) || sampleId <= 0 || args.out === "true") {
+  /* A bare `--out` parses to the string "true" and would write a file
+   * literally named `true` (review finding, 2026-09-13). Refuse it. */
   console.error("Usage: node --env-file-if-exists=.env scripts/reason-corpus.mjs --sample=<id> [--out=path.md]");
   process.exit(2);
 }
@@ -75,7 +77,7 @@ try {
           ORDER BY solicitation_id, created_at DESC, id DESC)
        SELECT i.position, s.id AS solicitation_id, s.title, s.external_id,
               o.name AS buyer, s.place_of_performance, s.closes_at, s.posted_at,
-              s.kind, s.set_aside, s.value_cents, s.codes,
+              s.kind, s.set_aside, s.value_cents,
               left(coalesce(s.description, ''), 320) AS description_head,
               length(coalesce(s.description, '')) AS description_len,
               l.state, l.reason, l.discovery_channel, l.decided_by, l.created_at AS decided_at
@@ -89,10 +91,15 @@ try {
     )
   ).rows;
 
-  const decided = rows.filter((r) => r.state && r.state !== "New");
-  const interested = decided.filter((r) => r.state === "Interested");
-  const passed = decided.filter((r) => r.state === "Not Interested");
-  const undecided = rows.filter((r) => !r.state || r.state === "New");
+  /* A DECISION is Interested or Not Interested -- the two states decide.ts
+   * writes. `Triaged` is a legal pursuit.state (migration 002) that nothing
+   * writes today; it is NOT a decision and must not vanish between the
+   * counts (review finding, 2026-09-13), so anything else lists below with
+   * its state named. */
+  const interested = rows.filter((r) => r.state === "Interested");
+  const passed = rows.filter((r) => r.state === "Not Interested");
+  const decided = [...interested, ...passed];
+  const undecided = rows.filter((r) => r.state !== "Interested" && r.state !== "Not Interested");
 
   line(`# Reason corpus — sample #${sample.id} (${sample.source_name})`);
   line();
@@ -173,7 +180,10 @@ try {
 
   line(`## Undecided — ${undecided.length}`);
   line();
-  for (const r of undecided) line(`- ${r.position}. ${r.title ?? "(untitled)"} — ${r.buyer ?? "—"}`);
+  for (const r of undecided) {
+    const st = r.state && r.state !== "New" ? ` _(state: ${r.state})_` : "";
+    line(`- ${r.position}. ${r.title ?? "(untitled)"} — ${r.buyer ?? "—"}${st}`);
+  }
   line();
 } finally {
   await client.end();

@@ -313,6 +313,25 @@ test("costOfThrownCall prices a refused request (non-OK status) at zero", async 
   expect(costOfThrownCall(caught, 100)).toBe(0);
 });
 
+/* 🔴 REVIEW FINDING (2026-09-13): a REFUSAL is a 4xx -- the vendor examined
+ * the request and rejected it, so no records were produced. A 5xx is NOT
+ * that: a 502/504 from a gateway can arrive after the origin has already
+ * served and billed the response, which is the same unknowability as a
+ * transport failure. The one measured "errors do not bill" observation is a
+ * 400. So 5xx keeps the estimate -- over-reporting is the safe direction. */
+test("costOfThrownCall prices a 5xx at the estimate: the origin may have served and billed before the gateway failed", async () => {
+  for (const status of [500, 502, 504]) {
+    let caught: unknown;
+    try {
+      await higherGovClient.fetchDay("2026-09-03", fakeFetch("gateway", status));
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as Error).message).toBe(`HigherGov answered ${status}`);
+    expect(costOfThrownCall(caught, 100)).toBe(100);
+  }
+});
+
 test("costOfThrownCall prices a malformed 200 at the estimate: records came back, unreadable", async () => {
   let caught: unknown;
   try {
@@ -893,6 +912,31 @@ test("a notice with no document_path, or one without related_key, carries no doc
     expect("document_path" in n.raw).toBe(false);
   }
   expect(JSON.stringify(out)).not.toContain("FAKEKEY");
+  /* 🔴 REVIEW FINDING (2026-09-13): the parameter name `related_key` inside
+   * document_path is what the vendor's schema implies, and no fixture in the
+   * repo confirms the live shape. If it is wrong, every row lands keyless
+   * and nothing distinguishes "the vendor sent no key" from "we never
+   * captured". So a page COUNTS the rows that carried a document_path with
+   * no key in it, and the ingest prints the count -- a shape mismatch is
+   * then visible on the first live run, before D15 spends a record on it.
+   * Two of the three above carried a path; one carried none. */
+  expect(out.keylessPaths).toBe(2);
+});
+
+test("a page whose paths all carry a key counts no keyless paths", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1, pages: 1 } },
+    results: [
+      {
+        source_id: "keyed-2",
+        captured_date: "2026-09-03",
+        document_path:
+          "https://www.highergov.com/api-external/document/?related_key=DOCKEY-x&api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0009",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(body));
+  expect(out.keylessPaths).toBe(0);
 });
 
 /* Task 7: fetchDocuments. Verified 2026-09-03: 478 -> 489 on one call

@@ -165,6 +165,14 @@ export interface FeedResult {
    * VENDOR says this day has. Null when the vendor said nothing, which is
    * "unknown", never "one". */
   pages: number | null;
+  /** Rows on this walk that carried a `document_path` with NO `related_key`
+   * in it. The parameter name is what the vendor's schema implies, and no
+   * fixture confirms the live shape -- if it is wrong, every row lands
+   * keyless and looks exactly like a vendor that sent no key. This count is
+   * how a shape mismatch shows on the FIRST live run, before anything is
+   * spent on the assumption (review finding, 2026-09-13). Optional only so
+   * hand-built results in tests need not carry it; every real walk sets it. */
+  keylessPaths?: number;
   /** How many pages this call actually fetched AND PAID FOR. Compare it
    * against `pages` -- that comparison, and only that comparison, is what
    * distinguishes a whole day from a half-bought one. `isPartialDay()` below
@@ -266,15 +274,28 @@ export function recordsAlreadyBilled(err: unknown): number {
   return typeof billed === "number" && Number.isFinite(billed) && billed > 0 ? billed : 0;
 }
 
-/** Did the vendor refuse this call outright -- answer with a non-OK status
- * and therefore no records? Same duck-typing as recordsAlreadyBilled, on
- * `httpStatus`, a name only this module's own two errors carry: NOT the
- * message (a wrapper may rewrite it) and NOT a bare `status` (other
- * libraries' errors carry one too). A false "refused" is an under-report,
- * so the check is strict and everything unrecognised is NOT a refusal. */
-function vendorRefused(err: unknown): boolean {
+/** The HTTP status an error carries, if it is one of this module's own two
+ * (HigherGovHttpError, or a PartialDayBilledError wrapping one). Same
+ * duck-typing as recordsAlreadyBilled, on `httpStatus` -- a name only those
+ * two carry: NOT the message (a wrapper may rewrite it) and NOT a bare
+ * `status` (other libraries' errors carry one too). The ONE reader of that
+ * property, used by both the wrap in walkDay and the pricing below, so the
+ * two cannot drift. */
+export function httpStatusOf(err: unknown): number | undefined {
   const status = (err as { httpStatus?: unknown } | null | undefined)?.httpStatus;
-  return typeof status === "number" && Number.isInteger(status);
+  return typeof status === "number" && Number.isInteger(status) ? status : undefined;
+}
+
+/** Did the vendor REFUSE this call -- examine the request and reject it, so
+ * that no records were produced? That is a 4xx. A 5xx is deliberately NOT a
+ * refusal: a 502 or 504 can come from a gateway after the origin has already
+ * served and billed the response, which is the same unknowability as a
+ * transport failure, and the one measured "errors do not bill" observation
+ * is a 400. A false "refused" is an under-report, so everything outside 4xx
+ * keeps the estimate. */
+function vendorRefused(err: unknown): boolean {
+  const status = httpStatusOf(err);
+  return status !== undefined && status >= 400 && status <= 499;
 }
 
 /** WHAT A CALL THAT THREW ACTUALLY COST -- the one rule every tally site
@@ -283,10 +304,11 @@ function vendorRefused(err: unknown): boolean {
  *  - unreadable (a 200 we could not parse, a non-array `results`): the
  *    vendor returned records and billed them; we tally `unparseableEstimate`,
  *    the most one response can bill, because we cannot know how many;
- *  - REFUSED (a non-OK status): the vendor returned nothing and billed
- *    nothing. Zero -- not hope, arithmetic;
- *  - transport (rejected before any response): nothing proves the vendor did
- *    not serve and bill a response the connection then dropped. Estimate.
+ *  - REFUSED (a 4xx): the vendor returned nothing and billed nothing. Zero
+ *    -- not hope, arithmetic;
+ *  - transport (rejected before any response) and 5xx (a gateway may have
+ *    failed after the origin billed): nothing proves the call was free.
+ *    Estimate.
  *
  * Plus whatever earlier pages of the same day already billed, which a
  * refusal on page three does not un-bill.
@@ -665,6 +687,7 @@ interface FeedPage {
   records: number;
   feedCount: number | null;
   pages: number | null;
+  keylessPaths: number;
 }
 
 async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
@@ -672,6 +695,11 @@ async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
   const notices = body.results.map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
   const pages = body.meta?.pagination?.pages;
+  /* Counted here, the one place that still sees document_path: a row that
+   * carried a path but yielded no key. See FeedResult.keylessPaths. */
+  const keylessPaths = body.results.filter(
+    (r) => typeof r.document_path === "string" && documentKeyFrom(r.document_path) === null,
+  ).length;
   return {
     notices,
     /* The row count, not notices.length: a row we could not parse was still
@@ -680,6 +708,7 @@ async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
     records: body.results.length,
     feedCount: typeof count === "number" ? count : null,
     pages: typeof pages === "number" ? pages : null,
+    keylessPaths,
   };
 }
 
@@ -742,12 +771,14 @@ async function walkDay(
   const notices = [...first.notices];
   let records = first.records;
   let pagesFetched = 1;
+  let keylessPaths = first.keylessPaths;
   const assemble = (): FeedResult => ({
     notices,
     records,
     feedCount: first.feedCount,
     pages: first.pages,
     pagesFetched,
+    keylessPaths,
   });
 
   /* GUARD 1, first half: the vendor's own answer to "is there more". Null
@@ -777,17 +808,17 @@ async function walkDay(
        * page's own status rides along when the vendor refused it, so that
        * page is still priced at zero after the wrap -- see costOfThrownCall. */
       const message = err instanceof Error ? err.message : String(err);
-      const status = (err as { httpStatus?: unknown } | null | undefined)?.httpStatus;
       throw new PartialDayBilledError(
         `${redact(message)} -- ${records} record(s) across ${pagesFetched} page(s) were ` +
           `ALREADY BILLED for this day before page ${pageNumber} failed.`,
         records,
         pagesFetched,
-        typeof status === "number" ? status : undefined,
+        httpStatusOf(err),
       );
     }
     notices.push(...next.notices);
     records += next.records;
+    keylessPaths += next.keylessPaths;
     pagesFetched += 1;
     if (next.records === 0) break;
   }

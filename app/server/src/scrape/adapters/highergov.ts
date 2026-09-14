@@ -238,6 +238,12 @@ export function higherGovAdapter(
             feedCount: result.feedCount,
             pages: result.pages,
             pagesFetched: result.pagesFetched,
+            /* Rows whose document_path carried no related_key -- the
+             * client's own count (FeedResult.keylessPaths), carried so the
+             * ingest can print it: a document-key shape mismatch must show
+             * on the first live run, not after a re-fetch has been spent on
+             * the assumption (review finding, 2026-09-13). */
+            keylessPaths: result.keylessPaths ?? 0,
             results: result.notices.map((n) => n.raw),
           }),
         ),
