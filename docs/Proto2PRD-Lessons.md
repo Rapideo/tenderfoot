@@ -709,6 +709,22 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 
 ---
 
+### 2.34 Before pricing a question in metered calls, check whether the vendor's own documentation answers it for free
+
+**Observed 2026-09-13.** Every document fetch against HigherGov had answered `400` since the first attempt on 09-08. The diagnosis was right — *the request shape is wrong* — and the remedy was priced honestly: *"settling it costs one metered call."* It sat for five days at that price. The vendor's public OpenAPI schema, which this project had **already read once** on 09-03 to settle `/opportunity/`'s parameters, lists `/document/`'s five parameters and says in one sentence where the required one comes from. Zero records, one `curl` with an `accept` header.
+
+**Why it was missed.** The 09-03 reading was done for one endpoint and recorded as a finding about that endpoint. The habit that formed was *"we confirmed the parameter set from the schema"* — a completed action — rather than *"the schema is the free instrument for any parameter question"* — a standing method. When the next parameter question arrived it was framed as an experiment, because experiments are how this project settles most things, and the free instrument was not on the shelf.
+
+**Proposed generalisation.** **A metered API's documentation is a free oracle for every question about request shape, and it should be consulted before any spend is proposed to settle one.** More generally: when a question is priced in an expensive unit, ask first whether a cheaper instrument already exists — and record such instruments as *methods*, not as *findings*, so the next question finds them.
+
+> **The tell is a sentence of the form "settling it costs N units" about a question of fact.** Facts about a vendor's interface are usually documented. Facts about a vendor's *behaviour* (what bills, what rate-limits) usually are not — those earn the experiment.
+
+**The check that catches it.** Keep a short list, per external system, of the free instruments: the schema URL, the status page, the documented limits. Any proposal to spend against that system on a question of *shape* cites the list first.
+
+**Why not promoted.** One instance. But it cost a working feature five days and the phantom-100 defect (2.32) was only ever reachable because the request was wrong, so the two compound.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
