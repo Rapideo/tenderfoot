@@ -679,6 +679,52 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 
 ---
 
+### 2.32 A "conservative" fallback applied to every failure alike is a phantom cost, and a retriable failure multiplies it
+
+**Observed 2026-09-08/13.** Every site that tallied a metered call priced any throw at the conservative upper bound — the most one response could have billed — on the sound argument that under-reporting is the dangerous direction. One click on a HigherGov row answered `400`. The bound was tallied: **100 records, for a call that returned nothing.** And because the row was — correctly — left unstamped (we never looked), it stayed clickable, at a phantom 100 a time. Twenty-two clicks would have exhausted the real headroom against calls that cost nothing, and the loader would have begun refusing legitimate work.
+
+**The fallback was conservative in the wrong axis.** "Conservative" was defined against *under-reporting*. It was never checked against the other failure, a ledger inflated until the ceiling refuses real work — which is the same outcome as running out, reached from the safe side. A refusal is not an unreadable response: the meter counts records *returned*, and a non-OK status returns none. Three cases had been collapsed into one price — unreadable (billed, unknown amount), refused (not billed), transport (unknowable) — and only the first deserved the bound.
+
+**Proposed generalisation.** **When a fallback prices every failure the same, ask which failures provably cost nothing, and whether the failing operation can be retried.** A uniform fallback on a one-shot operation over-reports once; on a retriable one it over-reports without limit, and the very guard it was written to protect turns into the thing that stops the work.
+
+> **The tell is the phrase "conservative estimate" applied to a whole `catch` block.** A catch block is a union of failure modes. If the estimate is not derived per mode, it is a guess dressed as prudence.
+
+**The check that catches it.** Enumerate the throw sites the catch can receive, and for each write down what the external meter did *before* the throw. Anything with a proven zero gets zero. Then make the distinction a **type** the error carries, decided at the one place that saw the response — not message text a wrapper can rewrite, not a generic `status` field other libraries' errors also carry — so a false "free" (the under-report) cannot happen by accident.
+
+**Why not promoted.** One instance. But the shape — a safety fallback that is safe in one direction and unbounded in the other — recurs anywhere a retry loop meets a pessimistic default.
+
+---
+
+### 2.33 Before re-asking for a number, measure what the number actually governs — the cap that motivated the ruling may not be the cap being ruled
+
+**Observed 2026-09-13.** `maxCallsPerRun` was ratified at 500 on 09-07 with the reasoning *"a year-long archive walk is ~365 one-call days."* Paging made a day up to ten calls the next morning, the counter was corrected to count requests, and the question was queued back to Matt as "needs his number, not a controller's guess" — reasonably. Before re-asking, two measurements: **the cap is enforced in one place, `npm run recall`, and the archive walk that the 500 was sized for never consults it** (its guard is `--max-records`, which is optional). And from the 379 day-artifacts on disk: the largest run ever made was **132 calls**, the paged runs averaged **1.06 calls/day** with a worst day of **4**, and the recall run's *record* cap bit first on every live run. The ruling had been made about a walk the number did not govern, and the re-ask would have repeated the error with a bigger number.
+
+**Proposed generalisation.** **A number's ruling is only as good as the sentence naming what it bounds.** When a threshold is put to a decision-maker, the artefact must state *which code path reads it*, *what has actually been observed against it*, and *what binds first* — otherwise the decision is made against a mental model of the system rather than the system, and a ratified value can be simultaneously "approved" and irrelevant.
+
+> **The tell is a ratification whose stated reason names an operation.** Check that the operation named is one the constant is on the path of. Here the reason named the archive walk; the constant sat in the recall run.
+
+**The check that catches it.** Before drafting the options, grep the constant's readers (not its mentions) and pull the observed values from wherever the runs left evidence — artifacts, ledgers, logs. Put those on the sheet as measured facts, above the options. The options then price against reality; the decision-maker's domain judgement is spent on the real trade, not on a premise.
+
+**Why not promoted.** One instance, though it pairs with 2.31's shape: the cheap measurement taken *before* the expensive decision. Sheet: <https://claude.ai/code/artifact/11570fba-9908-496f-b5d8-45db5a2b27bf> (D13–D14).
+
+---
+
+### 2.34 Before pricing a question in metered calls, check whether the vendor's own documentation answers it for free
+
+**Observed 2026-09-13.** Every document fetch against HigherGov had answered `400` since the first attempt on 09-08. The diagnosis was right — *the request shape is wrong* — and the remedy was priced honestly: *"settling it costs one metered call."* It sat for five days at that price. The vendor's public OpenAPI schema, which this project had **already read once** on 09-03 to settle `/opportunity/`'s parameters, lists `/document/`'s five parameters and says in one sentence where the required one comes from. Zero records, one `curl` with an `accept` header.
+
+**Why it was missed.** The 09-03 reading was done for one endpoint and recorded as a finding about that endpoint. The habit that formed was *"we confirmed the parameter set from the schema"* — a completed action — rather than *"the schema is the free instrument for any parameter question"* — a standing method. When the next parameter question arrived it was framed as an experiment, because experiments are how this project settles most things, and the free instrument was not on the shelf.
+
+**Proposed generalisation.** **A metered API's documentation is a free oracle for every question about request shape, and it should be consulted before any spend is proposed to settle one.** More generally: when a question is priced in an expensive unit, ask first whether a cheaper instrument already exists — and record such instruments as *methods*, not as *findings*, so the next question finds them.
+
+> **The tell is a sentence of the form "settling it costs N units" about a question of fact.** Facts about a vendor's interface are usually documented. Facts about a vendor's *behaviour* (what bills, what rate-limits) usually are not — those earn the experiment.
+
+**The check that catches it.** Keep a short list, per external system, of the free instruments: the schema URL, the status page, the documented limits. Any proposal to spend against that system on a question of *shape* cites the list first.
+
+**Why not promoted.** One instance. But it cost a working feature five days and the phantom-100 defect (2.32) was only ever reachable because the request was wrong, so the two compound.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.

@@ -20,6 +20,7 @@ process.env.HIGHERGOV_API_KEY = "TESTKEYTESTKEYTESTKEYTESTKEY0000";
 process.env.HIGHERGOV_SEARCH_ID = "TESTSEARCHIDTESTSEARCHID0000";
 
 import {
+  costOfThrownCall,
   higherGovClient,
   isPartialDay,
   MAX_PAGES_PER_DAY,
@@ -288,6 +289,134 @@ test("recordsAlreadyBilled is zero for anything that carries no such figure", ()
   expect(recordsAlreadyBilled("a string")).toBe(0);
   expect(recordsAlreadyBilled({ recordsBilled: "12" })).toBe(0);
   expect(recordsAlreadyBilled({ recordsBilled: Number.NaN })).toBe(0);
+});
+
+/* 🔴 WHAT A CALL THAT THREW ACTUALLY COST -- one rule, one home, every tally
+ * site a caller. Until 2026-09-08 every throw was priced at the conservative
+ * bound, which could not tell a REFUSED request (a non-OK status: the vendor
+ * answered, and answered with no records -- billed nothing, since the meter
+ * counts records returned, migration 033) from a BILLED-BUT-UNREADABLE one
+ * (a 200 we could not parse: records came back, we just could not read
+ * them). One real 400 on the document endpoint landed a phantom 100 in the
+ * ledger, on a row that stayed re-clickable at 100 a time.
+ *
+ * The estimate is passed in rather than imported: this module does not
+ * depend on thresholds.ts, and should not start to. */
+test("costOfThrownCall prices a refused request (non-OK status) at zero", async () => {
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fakeFetch("nope", 400));
+  } catch (err) {
+    caught = err;
+  }
+  expect((caught as Error).message).toBe("HigherGov answered 400");
+  expect(costOfThrownCall(caught, 100)).toBe(0);
+});
+
+/* 🔴 REVIEW FINDING (2026-09-13): a REFUSAL is a 4xx -- the vendor examined
+ * the request and rejected it, so no records were produced. A 5xx is NOT
+ * that: a 502/504 from a gateway can arrive after the origin has already
+ * served and billed the response, which is the same unknowability as a
+ * transport failure. The one measured "errors do not bill" observation is a
+ * 400. So 5xx keeps the estimate -- over-reporting is the safe direction. */
+test("costOfThrownCall prices a 5xx at the estimate: the origin may have served and billed before the gateway failed", async () => {
+  for (const status of [500, 502, 504]) {
+    let caught: unknown;
+    try {
+      await higherGovClient.fetchDay("2026-09-03", fakeFetch("gateway", status));
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as Error).message).toBe(`HigherGov answered ${status}`);
+    expect(costOfThrownCall(caught, 100)).toBe(100);
+  }
+});
+
+test("costOfThrownCall prices a malformed 200 at the estimate: records came back, unreadable", async () => {
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fakeFetch("{not json", 200));
+  } catch (err) {
+    caught = err;
+  }
+  expect((caught as Error).message).toMatch(/malformed JSON body/);
+  expect(costOfThrownCall(caught, 100)).toBe(100);
+});
+
+/* A transport failure -- the request rejected before any response -- is NOT
+ * a refusal. The vendor may have served and billed a response the connection
+ * then dropped; nothing here can know. The estimate stands. */
+test("costOfThrownCall prices a transport failure at the estimate: nothing proves it was free", async () => {
+  const dead = (async () => {
+    throw new TypeError("fetch failed");
+  }) as unknown as typeof fetch;
+  let caught: unknown;
+  try {
+    await higherGovClient.fetchDay("2026-09-03", dead);
+  } catch (err) {
+    caught = err;
+  }
+  expect((caught as Error).message).toMatch(/before any response/);
+  expect(costOfThrownCall(caught, 100)).toBe(100);
+});
+
+/* The paged case, and the one that makes the rule worth carrying THROUGH the
+ * PartialDayBilledError wrapper rather than stopping at page one: pages one
+ * and two bill 100 real records, page three is refused. The day cost 100 --
+ * not 100 + a phantom bound for a page that returned nothing. */
+function twoGoodPagesThen(third: () => Response): typeof fetch {
+  let call = 0;
+  return (async () => {
+    call += 1;
+    if (call === 3) return third();
+    const body = JSON.stringify({
+      meta: { pagination: { page: call, pages: 5, count: 250 } },
+      results: Array.from({ length: 50 }, (_, i) => ({
+        source_id: `C${call}-R${i}`,
+        captured_date: "2026-09-03",
+      })),
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+}
+
+async function thrownBy(fetchImpl: typeof fetch): Promise<unknown> {
+  try {
+    await higherGovClient.fetchDay("2026-09-03", fetchImpl);
+  } catch (err) {
+    return err;
+  }
+  throw new Error("expected fetchDay to throw");
+}
+
+test("costOfThrownCall prices a refusal on page three at what pages one and two billed, and nothing more", async () => {
+  const refused = await thrownBy(
+    twoGoodPagesThen(() => new Response("rate limited", { status: 429 })),
+  );
+  expect(recordsAlreadyBilled(refused)).toBe(100);
+  expect(costOfThrownCall(refused, 100)).toBe(100);
+
+  /* The unreadable-page sibling, so the two cannot be confused: page three
+   * answers 200 with garbage, and the estimate is added ON TOP of the 100. */
+  const garbled = await thrownBy(
+    twoGoodPagesThen(() => new Response("{not json", { status: 200 })),
+  );
+  expect(recordsAlreadyBilled(garbled)).toBe(100);
+  expect(costOfThrownCall(garbled, 100)).toBe(200);
+});
+
+/* Every ordinary error is priced at the estimate. A refusal is recognised by
+ * a property only this module's own errors carry -- never by message text,
+ * which a wrapper may rewrite, and never by a bare `status` field, which
+ * other libraries' errors also carry. A false "refused" is an under-report,
+ * the one direction that must not happen by accident. */
+test("costOfThrownCall prices anything it does not recognise at the estimate", () => {
+  expect(costOfThrownCall(new Error("plain"), 40)).toBe(40);
+  expect(costOfThrownCall(undefined, 40)).toBe(40);
+  expect(costOfThrownCall(null, 40)).toBe(40);
+  expect(costOfThrownCall({ status: 400 }, 40)).toBe(40);
+  expect(costOfThrownCall({ httpStatus: "400" }, 40)).toBe(40);
+  expect(costOfThrownCall({ recordsBilled: 30 }, 40)).toBe(70);
 });
 
 /* A vendor that reports more pages than it can actually serve has told us its
@@ -725,11 +854,111 @@ test("redact() removes key-shaped values nested deeply in raw", async () => {
   expect(serialized).toContain("api_key=REDACTED");
 });
 
+/* 🔴 THE KEY THE DOCUMENT ENDPOINT ACTUALLY WANTS (2026-09-13). The vendor's
+ * own OpenAPI description of /document/: "The related_key is required and
+ * is found in the document_path field in the Opportunity endpoint." We were
+ * dropping document_path at parse time -- correctly, it embeds the api_key
+ * -- WITHOUT lifting related_key out of it first, so no row could ever make
+ * a valid document call, and every attempt answered 400. The key is an
+ * identifier, not a credential: the api_key is a separate query parameter
+ * on the same URL and is still dropped. It rides in `raw` as `document_key`
+ * so the merge can land it on the solicitation like any other field. */
+test("the parse lifts related_key out of document_path before dropping it", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1, pages: 1 } },
+    results: [
+      {
+        source_id: "keyed-1",
+        captured_date: "2026-09-03",
+        title: "Keyed",
+        document_path:
+          "https://www.highergov.com/api-external/document/?related_key=DOCKEY-abc123&api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0007",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(body));
+  const n = out.notices[0]!;
+  expect(n.documentKey).toBe("DOCKEY-abc123");
+  expect(n.raw.document_key).toBe("DOCKEY-abc123");
+  expect("document_path" in n.raw).toBe(false);
+  const serialized = JSON.stringify(n);
+  expect(serialized).not.toContain("FAKEKEY");
+  expect(serialized).not.toContain("api_key");
+});
+
+test("a notice with no document_path, or one without related_key, carries no document key", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 2, pages: 1 } },
+    results: [
+      { source_id: "unkeyed-1", captured_date: "2026-09-03", title: "No path" },
+      {
+        source_id: "unkeyed-2",
+        captured_date: "2026-09-03",
+        title: "Path without key",
+        document_path: "https://www.highergov.com/api-external/document/?api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0008",
+      },
+      {
+        source_id: "unkeyed-3",
+        captured_date: "2026-09-03",
+        title: "Not a URL at all",
+        document_path: "nonsense api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0008",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(body));
+  for (const n of out.notices) {
+    expect(n.documentKey).toBeNull();
+    expect("document_key" in n.raw).toBe(false);
+    expect("document_path" in n.raw).toBe(false);
+  }
+  expect(JSON.stringify(out)).not.toContain("FAKEKEY");
+  /* 🔴 REVIEW FINDING (2026-09-13): the parameter name `related_key` inside
+   * document_path is what the vendor's schema implies, and no fixture in the
+   * repo confirms the live shape. If it is wrong, every row lands keyless
+   * and nothing distinguishes "the vendor sent no key" from "we never
+   * captured". So a page COUNTS the rows that carried a document_path with
+   * no key in it, and the ingest prints the count -- a shape mismatch is
+   * then visible on the first live run, before D15 spends a record on it.
+   * Two of the three above carried a path; one carried none. */
+  expect(out.keylessPaths).toBe(2);
+});
+
+test("a page whose paths all carry a key counts no keyless paths", async () => {
+  const body = JSON.stringify({
+    meta: { pagination: { count: 1, pages: 1 } },
+    results: [
+      {
+        source_id: "keyed-2",
+        captured_date: "2026-09-03",
+        document_path:
+          "https://www.highergov.com/api-external/document/?related_key=DOCKEY-x&api_key=FAKEKEYFAKEKEYFAKEKEYFAKEKEY0009",
+      },
+    ],
+  });
+  const out = await higherGovClient.fetchDay("2026-09-03", fakeFetch(body));
+  expect(out.keylessPaths).toBe(0);
+});
+
 /* Task 7: fetchDocuments. Verified 2026-09-03: 478 -> 489 on one call
  * returning 1 opportunity + 10 documents -- ~11 records per call, the single
  * most expensive thing in this codebase per invocation. Every one of
  * fetchDay's protections (apiKey(), the VITEST guard, the redact()-wrapped
  * parse) must hold for it too. */
+
+/* The other half of the same finding: the request must carry related_key,
+ * and must NOT carry source_id, which the endpoint does not accept and which
+ * is what earned the 400. The argument is a DOCUMENT key now, not a notice
+ * id -- the name changes with the meaning. */
+test("fetchDocuments asks by related_key, and sends no source_id", async () => {
+  const fetchImpl = fakeFetch(DOCUMENTS_BODY);
+  await higherGovClient.fetchDocuments("DOCKEY-abc123", fetchImpl);
+  expect(fetchImpl.calls).toHaveLength(1);
+  const url = new URL(fetchImpl.calls[0]!);
+  expect(url.pathname).toBe("/api-external/document/");
+  expect(url.searchParams.get("related_key")).toBe("DOCKEY-abc123");
+  expect(url.searchParams.has("source_id")).toBe(false);
+  expect(url.searchParams.has("search_id")).toBe(false);
+});
 
 const DOCUMENTS_BODY = JSON.stringify({
   meta: { pagination: { count: 2, pages: 1 } },
@@ -767,16 +996,11 @@ test("fetchDocuments reports what the vendor billed, not what we kept", async ()
   expect(out.records).toBe(2);
 });
 
-/* 🔴 THE HARD CONSTRAINT. An exact-id lookup narrowed by a saved search
- * would report a notice's documents as absent when they were merely out of
- * scope -- the same reasoning fetchBySourceId already carries. */
-test("fetchDocuments sends source_id and no search_id", async () => {
-  const fetchImpl = fakeFetch(DOCUMENTS_BODY);
-  await higherGovClient.fetchDocuments("003000000088067", fetchImpl);
-  expect(fetchImpl.calls).toHaveLength(1);
-  expect(fetchImpl.calls[0]).toContain("source_id=003000000088067");
-  expect(fetchImpl.calls[0]).not.toContain("search_id");
-});
+/* ~~"fetchDocuments sends source_id and no search_id"~~ -- retired
+ * 2026-09-13. It pinned the wrong parameter: /document/ does not accept
+ * source_id, and sending it is what every live attempt's 400 was. Its
+ * search_id half lives on in "fetchDocuments asks by related_key, and sends
+ * no source_id" above, alongside the parameter the endpoint actually takes. */
 
 /* Same guard as fetchDay's own test: no fetchImpl injected, so this falls
  * through to the real global fetch -- the "one forgotten argument" scenario

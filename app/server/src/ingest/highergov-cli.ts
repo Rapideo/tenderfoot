@@ -83,6 +83,18 @@
  * to `undefined` (unset), like `--page-size` and `--axis` before it: an
  * invocation that never asks for a cap must behave exactly as it did before
  * this flag existed.
+ *
+ * ⚖️ AND IT STAYS OPTIONAL, AND THIS COMMAND ANSWERS TO NO CALL CAP -- D14,
+ * MATT, 2026-09-13 (ruling sheet
+ * claude.ai/code/artifact/11570fba-9908-496f-b5d8-45db5a2b27bf). Put to him
+ * once it was measured that `COVERAGE.maxCallsPerRun` is read only by the
+ * recall run and this walk has no call counter at all, so an invocation
+ * without `--max-records` is bounded by the monthly ceiling and by its
+ * dates alone. He chose "leave it as designed" over making the flag
+ * required or applying the recall run's cap here (which would have made one
+ * number serve two actors with opposite needs -- the conflict D10 declined
+ * for the record ceiling). The 132-call Jan-Jun sweep of empty days was a
+ * deliberate use of exactly this freedom.
  */
 import { pathToFileURL } from "node:url";
 import { mkdirSync } from "node:fs";
@@ -95,12 +107,12 @@ import { MONTHLY_RECORD_CEILING, recordSpend, spentThisMonth } from "../extract/
  * the same question at their own metered call sites. */
 import { COVERAGE } from "../coverage/thresholds.js";
 import {
+  costOfThrownCall,
   DEFAULT_FEED_AXIS,
   FEED_AXES,
   higherGovClient,
   HIGHERGOV_SOURCE_NAME,
   isPartialDay,
-  recordsAlreadyBilled,
   redact,
   singlePageBudget,
   type FeedAxis,
@@ -407,6 +419,9 @@ function sampleAsPage(sample: FeedResult, day: string, axis: FeedAxis): Windowed
         feedCount: sample.feedCount,
         pages: sample.pages,
         pagesFetched: sample.pagesFetched,
+        /* Same field the adapter writes, so the reused sampled day reports
+         * its keyless paths like every other day. */
+        keylessPaths: sample.keylessPaths ?? 0,
         results: sample.notices.map((n) => n.raw),
       }),
     ),
@@ -543,6 +558,21 @@ function truncationFromArtifact(
   };
 }
 
+/* HOW MANY OF THIS DAY'S ROWS CARRIED A document_path WITH NO related_key IN
+ * IT. The client lifts the document key out of that URL by a parameter name
+ * the vendor's schema implies and no fixture confirms (highergov-client.ts,
+ * documentKeyFrom). If the live shape is different, every row lands keyless
+ * and looks exactly like a vendor that sent no key -- and D15's proposed
+ * re-fetch would spend records to learn nothing. This count, printed per day
+ * and in the summary, is how that shows on the FIRST live run instead.
+ * Absent on an artifact written before the field existed, which reads as 0:
+ * those runs were made by a client that never looked, so they have nothing
+ * to report either way (review finding, 2026-09-13). */
+function keylessPathsFromArtifact(artifactPath: string): number {
+  const envelope = readArtifactEnvelope(artifactPath) as { keylessPaths?: unknown } | null;
+  return envelope && typeof envelope.keylessPaths === "number" ? envelope.keylessPaths : 0;
+}
+
 /* Pure-ish and testable without a network: `client` is injectable (the real
  * `higherGovClient` only by default) and `alreadySpent` is a parameter with
  * a live-lookup default, exactly as the brief specifies. Requires a
@@ -671,12 +701,15 @@ export async function dryRun(
           sourceId: src.id,
           endpoint: "opportunity",
           /* 🔴 PLUS WHAT THE SAMPLE'S EARLIER PAGES ALREADY COST. The sample
-           * is budgeted to one page, so this is normally 0 -- but a caller
-           * passing a larger budget, or a page size small enough to fit
-           * several pages inside one page's price, makes a part-billed throw
-           * reachable, and 40 flat would then under-report it. Zero for any
-           * error that carries no such figure. */
-          records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
+           * is budgeted to one page, so that share is normally 0 -- but a
+           * caller passing a larger budget, or a page size small enough to
+           * fit several pages inside one page's price, makes a part-billed
+           * throw reachable, and the flat bound alone would under-report it.
+           *
+           * 🔴 AND ZERO FOR A REFUSAL (2026-09-08, the phantom 100): a
+           * non-OK status returned no records and billed none. One rule,
+           * highergov-client.ts's costOfThrownCall, at every tally site. */
+          records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
         });
       }
     } catch (tallyErr) {
@@ -948,6 +981,9 @@ export async function main(
    * that day is incomplete, which is a DIFFERENT fact from a mid-walk stop
    * (see the `committedDays < days.length` check at the very end). */
   const truncatedDays: string[] = [];
+  /* Rows across the whole walk whose document_path carried no related_key --
+   * see keylessPathsFromArtifact. Summed for the end-of-run line. */
+  let keylessPathsTotal = 0;
   /* Which of the two independent stop conditions, if either, ended the walk
    * before the requested window finished -- read only by the end-of-run
    * summary below, so a --max-records stop and a ceiling stop are reported
@@ -1133,8 +1169,15 @@ export async function main(
              * does not catch what the adapter throws, so a PartialDayBilledError
              * from a mid-day failure arrives here intact carrying what pages
              * one to N-1 cost. Charging the flat conservative figure alone
-             * would drop them. Zero for every other error. */
-            records: COVERAGE.unparseableResponseRecords + recordsAlreadyBilled(err),
+             * would drop them.
+             *
+             * 🔴 AND ZERO FOR THE REFUSED PAGE ITSELF (2026-09-08, the
+             * phantom 100). This is the command that walks the reserve; a
+             * rate-limited day booking a bound it never spent is what would
+             * make the loader refuse legitimate work against a ledger
+             * inflated by calls that cost nothing. costOfThrownCall tells a
+             * refusal from an unreadable page, in one place. */
+            records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
           });
         } catch (tallyErr) {
           console.error(
@@ -1220,6 +1263,26 @@ export async function main(
           "not because the rows were absent.",
       );
     }
+
+    /* THE DOCUMENT-KEY SHAPE CHECK, per day. Zero prints nothing: the
+     * common case must not add a line to every day of a long walk. */
+    const dayKeyless = keylessPathsFromArtifact(runResult.artifactPath);
+    keylessPathsTotal += dayKeyless;
+    if (dayKeyless > 0) {
+      console.log(
+        `    ⚠️  ${day}: ${dayKeyless} row(s) carried a document_path with no related_key ` +
+          `in it. Those rows have no document key and cannot fetch documents. If this is ` +
+          `every row, the parse shape (highergov-client.ts, documentKeyFrom) is wrong, not ` +
+          `the vendor -- check before spending anything on a re-fetch.`,
+      );
+    }
+  }
+
+  if (keylessPathsTotal > 0) {
+    console.log(
+      `\n⚠️  KEYLESS PATHS: ${keylessPathsTotal} row(s) this run carried a document_path ` +
+        `with no related_key. See the per-day lines above.`,
+    );
   }
 
   console.log(

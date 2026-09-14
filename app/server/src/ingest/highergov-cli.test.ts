@@ -33,9 +33,13 @@ const {
   main,
 } = await import("./highergov-cli.js");
 const { MONTHLY_RECORD_CEILING } = await import("../extract/api-spend.js");
-const { HIGHERGOV_SOURCE_NAME, FEED_AXES, DEFAULT_FEED_AXIS, singlePageBudget } = await import(
-  "../coverage/highergov-client.js"
-);
+const {
+  HIGHERGOV_SOURCE_NAME,
+  FEED_AXES,
+  DEFAULT_FEED_AXIS,
+  HigherGovHttpError,
+  singlePageBudget,
+} = await import("../coverage/highergov-client.js");
 /* The conservative "what could this call have cost when we cannot read its
  * response" bound, imported rather than retyped as 40 -- the same constant
  * coverage/run.ts and extract/fetch-documents-for.ts tally at their own
@@ -216,6 +220,10 @@ function fakeAdapter(
       items: WindowedItem[];
       billedRecords?: number;
       throws?: boolean;
+      /* The day is REFUSED -- the vendor answers a non-OK status, returning
+       * (and billing) nothing. The other way a real day fails, and since the
+       * 2026-09-08 accounting fix priced differently from `throws`. */
+      refusedWith?: number;
       omitBilledRecords?: boolean;
       /* meta.pagination.pages for this day's envelope -- adapters/
        * highergov.ts:139 carries this on every real day, so a fake day that
@@ -230,6 +238,9 @@ function fakeAdapter(
        * anything else. `pages: 3` with no `pagesFetched` is therefore still a
        * truncated day, exactly as it was before paging. */
       pagesFetched?: number;
+      /* Rows whose document_path carried no related_key -- the client's
+       * count, written to the envelope by adapters/highergov.ts. */
+      keylessPaths?: number;
     }
   >,
 ): WindowedAdapter {
@@ -243,6 +254,9 @@ function fakeAdapter(
       const entry = byDay[since] ?? { items: [] };
       if (entry.throws) {
         throw new Error('HigherGov returned a non-array "results" field (got object)');
+      }
+      if (entry.refusedWith !== undefined) {
+        throw new HigherGovHttpError(entry.refusedWith);
       }
       const billed = entry.billedRecords ?? entry.items.length;
       /* The envelope's day label is `axis` + `day`, matching adapters/
@@ -259,6 +273,9 @@ function fakeAdapter(
       }
       if (entry.pagesFetched !== undefined) {
         envelope.pagesFetched = entry.pagesFetched;
+      }
+      if (entry.keylessPaths !== undefined) {
+        envelope.keylessPaths = entry.keylessPaths;
       }
       return {
         items: entry.items,
@@ -700,6 +717,7 @@ test("main() with no --max-records: the walk is unchanged and no cap logic fires
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -760,6 +778,7 @@ test("a run with --max-records stops before the crossing call, distinctly from a
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -882,6 +901,7 @@ test("the reused sample places items on the WALKED axis, not always captured_dat
         postedDate: "2026-06-09",
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
       {
@@ -890,6 +910,7 @@ test("the reused sample places items on the WALKED axis, not always captured_dat
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
     ];
@@ -937,6 +958,7 @@ test("the same two notices both land on the default captured_date walk", async (
         postedDate: "2026-06-09",
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
       {
@@ -945,6 +967,7 @@ test("the same two notices both land on the default captured_date walk", async (
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
     ];
@@ -1075,7 +1098,7 @@ test("committing an affordable window walks every day and imports what it finds"
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: { a: 1 } }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: { a: 1 } }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1122,7 +1145,7 @@ test("a truncated day is reported during the walk, and the end-of-run summary co
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1170,7 +1193,7 @@ test("a multi-page day bought whole is NOT reported truncated", async () => {
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1192,6 +1215,47 @@ test("a multi-page day bought whole is NOT reported truncated", async () => {
   }
 });
 
+/* 🔴 THE DOCUMENT-KEY SHAPE IS AN ASSUMPTION UNTIL A LIVE RUN CONFIRMS IT
+ * (review finding, 2026-09-13). The client lifts `related_key` out of
+ * document_path by that parameter name, which the vendor's schema implies and
+ * no fixture confirms. If the live shape differs, every row lands keyless and
+ * is indistinguishable from a vendor that sent no key -- and D15's re-fetch
+ * would spend records to learn nothing. So the client counts rows that
+ * carried a path with no key in it, the envelope carries the count, and the
+ * walk PRINTS it per day and in the summary. A shape mismatch is then visible
+ * on the first run, at the cost of nothing. A day with zero prints nothing. */
+test("a day whose paths carried no document key is reported, per day and in the summary", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({
+      "2026-09-02": {
+        items: [{ externalId: "HG-2", modifiedAt: "2026-09-02", raw: {} }],
+        keylessPaths: 3,
+      },
+      "2026-09-03": {
+        items: [{ externalId: "HG-3", modifiedAt: "2026-09-03", raw: {} }],
+        keylessPaths: 0,
+      },
+    });
+
+    await main(["--from=2026-09-01", "--to=2026-09-03"], client, adapter, dir);
+
+    const lines = logSpy.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("2026-09-02") && l.includes("3 row(s) carried a document_path with no related_key"))).toBe(true);
+    expect(lines.some((l) => l.includes("2026-09-03") && l.includes("no related_key"))).toBe(false);
+    expect(lines.some((l) => l.includes("KEYLESS PATHS") && l.includes("3"))).toBe(true);
+  } finally {
+    logSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 /* 🛑 THE PER-DAY BUDGET REACHES THE ADAPTER, and it is recomputed every day.
  * One paged day can bill up to MAX_PAGES_PER_DAY * 100 records, so a day
  * handed no budget could overshoot the monthly ceiling between two of the
@@ -1203,7 +1267,7 @@ test("each day's adapter is handed the budget that is genuinely left", async () 
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const budgets: Array<number | undefined> = [];
@@ -1248,7 +1312,7 @@ test("a partial sample's day is re-fetched in full rather than committed as one 
   try {
     /* 5 records on page one of a 3-page day: the sample is a fragment. */
     const client = clientWithNotices(
-      [{ externalId: "HG-FRAGMENT", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-FRAGMENT", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       5,
       3,
       1,
@@ -1293,7 +1357,7 @@ test("a whole sample's day is still reused, never re-fetched", async () => {
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-WHOLE", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-WHOLE", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const throwingAdapter: WindowedAdapter = {
@@ -1325,7 +1389,7 @@ test("no truncated days -- the summary says so explicitly, not by omission", asy
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1366,6 +1430,7 @@ test("a mid-walk stop and a truncated day are reported as two distinct facts", a
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -1418,7 +1483,7 @@ test("per-day spend is read from the artifact's billed count, not rows + undated
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1458,6 +1523,7 @@ test("the day-walk stops before the call that would cross the ceiling", async ()
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -1561,7 +1627,7 @@ test("a day-walk call that throws still writes a conservative spend row before f
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });
@@ -1571,6 +1637,56 @@ test("a day-walk call that throws still writes a conservative spend row before f
     ).rejects.toThrow(/non-array "results"/);
 
     expect(await totalSpend()).toBe(1 + COVERAGE.unparseableResponseRecords);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* 🔴 THE PHANTOM 100, at the two sites in THIS file (2026-09-08). Both
+ * catches priced every throw at the conservative bound -- including a
+ * REFUSAL, a non-OK status: the vendor answering with no records and billing
+ * none, since the meter counts records returned (migration 033 proved it
+ * exact). This is the command that walks the reserve, and a rate-limited day
+ * booking a phantom 100 is what would make the loader refuse legitimate work
+ * against a ledger inflated by calls that cost nothing. The rule lives in
+ * highergov-client.ts's costOfThrownCall; these pin that both sites ask it.
+ * The error still propagates either way. */
+test("a refused sample (non-OK status) tallies zero, not the conservative bound", async () => {
+  const refusing: HigherGovClient = {
+    async fetchDay() {
+      throw new HigherGovHttpError(429);
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    async fetchDocuments() {
+      return { docs: [], records: 0 };
+    },
+  };
+  await expect(dryRun("2026-09-01", "2026-09-30", refusing, 0)).rejects.toThrow(
+    /HigherGov answered 429/,
+  );
+  expect(await totalSpend()).toBe(0);
+});
+
+test("a refused day in the walk tallies zero for that day, on top of the sample's own cost", async () => {
+  await run(`UPDATE source SET enabled = true WHERE name = $1`, [HIGHERGOV_SOURCE_NAME]);
+  const dir = tempRunsDir();
+  try {
+    const client = clientWithNotices(
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
+      1,
+    );
+    const adapter = fakeAdapter({ "2026-09-02": { items: [], refusedWith: 429 } });
+
+    await expect(
+      main(["--from=2026-09-01", "--to=2026-09-02"], client, adapter, dir),
+    ).rejects.toThrow(/HigherGov answered 429/);
+
+    /* 1 for the sample, recorded normally; 0 for the refused day. The
+     * sibling test above reads 1 + the bound for a day that threw after
+     * billing -- that is the whole difference. */
+    expect(await totalSpend()).toBe(1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1591,7 +1707,7 @@ test("an artifact with no billed count falls back UP to the conservative bound, 
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1681,7 +1797,7 @@ test("a day-walk's vendor error survives even when its own spend tally throws", 
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });

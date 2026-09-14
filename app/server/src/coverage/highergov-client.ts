@@ -84,6 +84,16 @@ export interface FeedNotice {
   postedDate: string | null;
   versionKey: string | null;
   title: string | null;
+  /** The vendor's `related_key` for this notice's documents, lifted out of
+   * `document_path` at parse time -- the ONLY place that field is ever read
+   * -- because /document/ requires it and nothing else identifies the set
+   * (the endpoint's own description: "found in the document_path field in
+   * the Opportunity endpoint"). An identifier, not a credential: the api_key
+   * is a separate query parameter on the same URL and is still dropped. Also
+   * present in `raw` as `document_key`, so it survives the artifact and the
+   * merge like any other sourced field. Null when the vendor sent no path or
+   * a path without the key. */
+  documentKey: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -155,6 +165,14 @@ export interface FeedResult {
    * VENDOR says this day has. Null when the vendor said nothing, which is
    * "unknown", never "one". */
   pages: number | null;
+  /** Rows on this walk that carried a `document_path` with NO `related_key`
+   * in it. The parameter name is what the vendor's schema implies, and no
+   * fixture confirms the live shape -- if it is wrong, every row lands
+   * keyless and looks exactly like a vendor that sent no key. This count is
+   * how a shape mismatch shows on the FIRST live run, before anything is
+   * spent on the assumption (review finding, 2026-09-13). Optional only so
+   * hand-built results in tests need not carry it; every real walk sets it. */
+  keylessPaths?: number;
   /** How many pages this call actually fetched AND PAID FOR. Compare it
    * against `pages` -- that comparison, and only that comparison, is what
    * distinguishes a whole day from a half-bought one. `isPartialDay()` below
@@ -202,17 +220,49 @@ export function isPartialDay(result: Pick<FeedResult, "pages" | "pagesFetched">)
 export class PartialDayBilledError extends Error {
   readonly recordsBilled: number;
   readonly pagesFetched: number;
-  constructor(message: string, recordsBilled: number, pagesFetched: number) {
+  /** The failing page's status, when the vendor REFUSED it -- carried
+   * through from the HigherGovHttpError this wraps, so `costOfThrownCall`
+   * can still price that page at zero. Undefined when the page failed some
+   * other way (unreadable 200, transport), which keeps the estimate. */
+  readonly httpStatus: number | undefined;
+  constructor(
+    message: string,
+    recordsBilled: number,
+    pagesFetched: number,
+    httpStatus?: number,
+  ) {
     super(message);
     this.name = "PartialDayBilledError";
     this.recordsBilled = recordsBilled;
     this.pagesFetched = pagesFetched;
+    this.httpStatus = httpStatus;
+  }
+}
+
+/* 🔴 THE VENDOR ANSWERED, AND THE ANSWER WAS A REFUSAL. A non-OK status is
+ * distinct BY TYPE from every other throw in this module, because what it
+ * COSTS is different: the meter counts records returned (CLAUDE.md §5.1,
+ * proven exact by migration 033's calibration -- 2 results, dashboard +2),
+ * and a refused request returns none. Until 2026-09-08 the tally sites could
+ * not tell this from a billed-but-unreadable 200 and priced both at the
+ * conservative bound; one real 400 on /document/ landed a phantom 100 in the
+ * ledger, on a row that stayed re-clickable at 100 a time.
+ *
+ * The MESSAGE is unchanged ("HigherGov answered N"): every operator-facing
+ * string and every test that matches on it still holds. The URL is still
+ * not in it -- it carries the api_key. */
+export class HigherGovHttpError extends Error {
+  readonly httpStatus: number;
+  constructor(status: number) {
+    super(`HigherGov answered ${status}`);
+    this.name = "HigherGovHttpError";
+    this.httpStatus = status;
   }
 }
 
 /** What a caught error says was ALREADY BILLED before it was thrown. Zero for
  * anything that carries no such figure, which is every error in this codebase
- * except the one above.
+ * except PartialDayBilledError above.
  *
  * ⚠️ DUCK-TYPED RATHER THAN `instanceof`, on purpose: several test files
  * reach this module through `await import()`, and an error crossing a module
@@ -222,6 +272,52 @@ export class PartialDayBilledError extends Error {
 export function recordsAlreadyBilled(err: unknown): number {
   const billed = (err as { recordsBilled?: unknown } | null | undefined)?.recordsBilled;
   return typeof billed === "number" && Number.isFinite(billed) && billed > 0 ? billed : 0;
+}
+
+/** The HTTP status an error carries, if it is one of this module's own two
+ * (HigherGovHttpError, or a PartialDayBilledError wrapping one). Same
+ * duck-typing as recordsAlreadyBilled, on `httpStatus` -- a name only those
+ * two carry: NOT the message (a wrapper may rewrite it) and NOT a bare
+ * `status` (other libraries' errors carry one too). The ONE reader of that
+ * property, used by both the wrap in walkDay and the pricing below, so the
+ * two cannot drift. */
+export function httpStatusOf(err: unknown): number | undefined {
+  const status = (err as { httpStatus?: unknown } | null | undefined)?.httpStatus;
+  return typeof status === "number" && Number.isInteger(status) ? status : undefined;
+}
+
+/** Did the vendor REFUSE this call -- examine the request and reject it, so
+ * that no records were produced? That is a 4xx. A 5xx is deliberately NOT a
+ * refusal: a 502 or 504 can come from a gateway after the origin has already
+ * served and billed the response, which is the same unknowability as a
+ * transport failure, and the one measured "errors do not bill" observation
+ * is a 400. A false "refused" is an under-report, so everything outside 4xx
+ * keeps the estimate. */
+function vendorRefused(err: unknown): boolean {
+  const status = httpStatusOf(err);
+  return status !== undefined && status >= 400 && status <= 499;
+}
+
+/** WHAT A CALL THAT THREW ACTUALLY COST -- the one rule every tally site
+ * applies before it re-throws. Three cases, and the middle one is the fix:
+ *
+ *  - unreadable (a 200 we could not parse, a non-array `results`): the
+ *    vendor returned records and billed them; we tally `unparseableEstimate`,
+ *    the most one response can bill, because we cannot know how many;
+ *  - REFUSED (a 4xx): the vendor returned nothing and billed nothing. Zero
+ *    -- not hope, arithmetic;
+ *  - transport (rejected before any response) and 5xx (a gateway may have
+ *    failed after the origin billed): nothing proves the call was free.
+ *    Estimate.
+ *
+ * Plus whatever earlier pages of the same day already billed, which a
+ * refusal on page three does not un-bill.
+ *
+ * The estimate is a parameter, not an import: this module does not depend on
+ * thresholds.ts and should not start to. Callers pass
+ * `COVERAGE.unparseableResponseRecords`. */
+export function costOfThrownCall(err: unknown, unparseableEstimate: number): number {
+  return (vendorRefused(err) ? 0 : unparseableEstimate) + recordsAlreadyBilled(err);
 }
 
 /* Task 7. The vendor's OWN schema doc for /document/ (docs/2026-09-03-
@@ -290,8 +386,17 @@ export interface HigherGovClient {
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
    * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
-   * the single most expensive thing in the codebase per invocation. */
-  fetchDocuments(sourceId: string, fetchImpl?: typeof fetch): Promise<DocumentsResult>;
+   * the single most expensive thing in the codebase per invocation.
+   *
+   * 🔴 TAKES THE DOCUMENT KEY, NOT THE NOTICE ID (2026-09-13). /document/
+   * accepts exactly five parameters -- api_key, related_key, ordering,
+   * page_number, page_size -- and `source_id` is not one of them. This
+   * method used to send it, which is what every attempt's `400` was: a
+   * rejected request, not a burned key. The key is FeedNotice.documentKey,
+   * lifted out of document_path at parse time and stored on the
+   * solicitation; a row ingested before that was captured has none, and
+   * fetch-documents-for.ts refuses (free) rather than guess. */
+  fetchDocuments(documentKey: string, fetchImpl?: typeof fetch): Promise<DocumentsResult>;
 }
 
 /* Matches an api_key wherever it appears in a string, in any nesting. Broad
@@ -356,6 +461,27 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
+/* THE ONE READ OF document_path, AND IT READS ONE QUERY PARAMETER. The field
+ * is the vendor's pre-signed URL into /document/, shaped
+ * `.../document/?related_key=<key>&api_key=<credential>`. `related_key` is
+ * the identifier that endpoint requires ("found in the document_path field
+ * in the Opportunity endpoint" -- its own schema description); `api_key` is
+ * the credential CLAUDE.md §5.3 exists for. This takes the first and never
+ * touches the second. Anything that is not a parseable URL, or a URL without
+ * the parameter, yields null -- the row is then simply a row whose documents
+ * cannot be asked for, which fetch-documents-for.ts reports as such rather
+ * than guessing a key. */
+function documentKeyFrom(documentPath: unknown): string | null {
+  if (typeof documentPath !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(documentPath);
+  } catch {
+    return null;
+  }
+  return str(url.searchParams.get("related_key"));
+}
+
 function toNotice(r: RawResult): FeedNotice | null {
   const externalId = str(r.source_id);
   if (!externalId) return null;
@@ -365,10 +491,19 @@ function toNotice(r: RawResult): FeedNotice | null {
    * else, so "we only copy four fields" is no longer the guarantee. Then
    * redact() walks every remaining value recursively to scrub any key-shaped
    * strings nested at any depth -- CLAUDE.md §5.3 rule 2: scrubbing happens
-   * at the BOUNDARY, making this the one place the guarantee is enforced. */
-  const { document_path: _dropped, ...rest } = r;
+   * at the BOUNDARY, making this the one place the guarantee is enforced.
+   *
+   * ONE thing is read off it before it goes: related_key (documentKeyFrom
+   * above). It lands in `raw` under a name of ours, `document_key`, so it
+   * rides the artifact and the merge exactly as `pop_state` does -- a
+   * sourced value, just one the vendor delivers inside a URL rather than as
+   * a field. Set only when present, so a keyless row has no such field
+   * rather than a null one. */
+  const { document_path, ...rest } = r;
+  const documentKey = documentKeyFrom(document_path);
   return {
     externalId,
+    documentKey,
     /* 🔴 BOTH DATES GO THROUGH redact(), and it is not decoration. Either one
      * can become the item's `modifiedAt` (scrape/adapters/highergov.ts), and
      * `modifiedAt` is persisted -- scrape/run.ts folds it into the run's
@@ -383,7 +518,7 @@ function toNotice(r: RawResult): FeedNotice | null {
     postedDate: redact(str(r.posted_date)),
     versionKey: str(r.version_key),
     title: str(r.title),
-    raw: redact(rest),
+    raw: redact(documentKey === null ? rest : { ...rest, document_key: documentKey }),
   };
 }
 
@@ -467,8 +602,10 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
     throw new Error(`HigherGov request failed before any response: ${redact(message)}`);
   }
   if (!res.ok) {
-    /* The URL is NOT in this message: it carries the api_key. */
-    throw new Error(`HigherGov answered ${res.status}`);
+    /* A typed refusal, so the tally sites price it at zero -- see
+     * HigherGovHttpError. The URL is NOT in its message: it carries the
+     * api_key. */
+    throw new HigherGovHttpError(res.status);
   }
   /* 🔴 THE PARSE MUST NOT THROW RAW. A truncated or malformed 200 can make
    * JSON.parse throw a SyntaxError whose message quotes a window of raw
@@ -521,9 +658,17 @@ async function fetchValidated(url: URL, fetchImpl: typeof fetch): Promise<RawBod
    * ⚠️ AND SINCE PAGING, THE CONSERVATIVE ESTIMATE ALONE IS NO LONGER THE
    * WHOLE ANSWER at the two fetchDay sites. A day is now several calls, and
    * this guard can fire on the fourth of them with three already billed --
-   * so those sites must ADD `recordsAlreadyBilled(err)` (see
-   * PartialDayBilledError above) to whatever they charge for the call that
-   * failed. The document site is unaffected: /document/ is still one call. */
+   * so what the failed call is charged must ADD what the earlier pages cost
+   * (see PartialDayBilledError above). The document site is unaffected:
+   * /document/ is still one call.
+   *
+   * ⚠️ AND SINCE 2026-09-08, THE ESTIMATE IS NOT CHARGED FOR A REFUSAL AT
+   * ALL: a non-OK status (HigherGovHttpError above) returned no records and
+   * billed none. Every tally site now prices its throw through ONE function,
+   * `costOfThrownCall(err, COVERAGE.unparseableResponseRecords)`, which
+   * settles all three concerns -- unreadable vs refused vs transport, plus
+   * the already-billed pages. A new site should call it rather than
+   * re-derive the sum. */
   const results = body.results ?? [];
   if (!Array.isArray(results)) {
     throw new Error(
@@ -542,6 +687,7 @@ interface FeedPage {
   records: number;
   feedCount: number | null;
   pages: number | null;
+  keylessPaths: number;
 }
 
 async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
@@ -549,6 +695,11 @@ async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
   const notices = body.results.map(toNotice).filter((n): n is FeedNotice => n !== null);
   const count = body.meta?.pagination?.count;
   const pages = body.meta?.pagination?.pages;
+  /* Counted here, the one place that still sees document_path: a row that
+   * carried a path but yielded no key. See FeedResult.keylessPaths. */
+  const keylessPaths = body.results.filter(
+    (r) => typeof r.document_path === "string" && documentKeyFrom(r.document_path) === null,
+  ).length;
   return {
     notices,
     /* The row count, not notices.length: a row we could not parse was still
@@ -557,6 +708,7 @@ async function getPage(url: URL, fetchImpl: typeof fetch): Promise<FeedPage> {
     records: body.results.length,
     feedCount: typeof count === "number" ? count : null,
     pages: typeof pages === "number" ? pages : null,
+    keylessPaths,
   };
 }
 
@@ -619,12 +771,14 @@ async function walkDay(
   const notices = [...first.notices];
   let records = first.records;
   let pagesFetched = 1;
+  let keylessPaths = first.keylessPaths;
   const assemble = (): FeedResult => ({
     notices,
     records,
     feedCount: first.feedCount,
     pages: first.pages,
     pagesFetched,
+    keylessPaths,
   });
 
   /* GUARD 1, first half: the vendor's own answer to "is there more". Null
@@ -650,17 +804,21 @@ async function walkDay(
     try {
       next = await getPage(buildUrl(pageNumber), fetchImpl);
     } catch (err) {
-      /* GUARD 4. The pages already bought were already billed. */
+      /* GUARD 4. The pages already bought were already billed. The failing
+       * page's own status rides along when the vendor refused it, so that
+       * page is still priced at zero after the wrap -- see costOfThrownCall. */
       const message = err instanceof Error ? err.message : String(err);
       throw new PartialDayBilledError(
         `${redact(message)} -- ${records} record(s) across ${pagesFetched} page(s) were ` +
           `ALREADY BILLED for this day before page ${pageNumber} failed.`,
         records,
         pagesFetched,
+        httpStatusOf(err),
       );
     }
     notices.push(...next.notices);
     records += next.records;
+    keylessPaths += next.keylessPaths;
     pagesFetched += 1;
     if (next.records === 0) break;
   }
@@ -791,13 +949,16 @@ export const higherGovClient: HigherGovClient = {
     return get(url, fetchImpl);
   },
 
-  async fetchDocuments(sourceId, fetchImpl = fetch) {
+  async fetchDocuments(documentKey, fetchImpl = fetch) {
     const url = new URL(`${HOST}/document/`);
     url.searchParams.set("api_key", apiKey());
-    url.searchParams.set("source_id", sourceId);
+    /* related_key, the endpoint's one required identifier -- see the
+     * interface comment. NOT source_id: the endpoint does not take it, and
+     * sending it was the 400. */
+    url.searchParams.set("related_key", documentKey);
     /* 🔴 No search_id, for the exact reason fetchBySourceId gives above: this
-     * is a lookup by a specific notice's id, and narrowing it by a saved
-     * search would report real documents as absent merely because the
+     * is a lookup by a specific document set's key, and narrowing it by a
+     * saved search would report real documents as absent merely because the
      * opportunity fell outside that search's scope. */
     return getDocuments(url, fetchImpl);
   },

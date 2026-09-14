@@ -202,8 +202,9 @@ export async function main(): Promise<void> {
   if (MAX_CALLS_PER_RUN_RATIFIED) {
     console.log(
       `
-⚖️  maxCallsPerRun (${COVERAGE.maxCallsPerRun}) is RATIFIED (Matt, 2026-09-07) -- if this ` +
-        `run aborted on it, that is a ruled number, not an agent's guess.`,
+⚖️  maxCallsPerRun (${COVERAGE.maxCallsPerRun}) is RATIFIED (Matt, 2026-09-07; re-ruled D13, ` +
+        `2026-09-13, as this run's stop against a sweep of empty days) -- if this run aborted ` +
+        `on it, that is a ruled number, not an agent's guess.`,
     );
   }
 }

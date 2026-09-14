@@ -21,10 +21,19 @@ import { recordSpend, spentThisMonth, MONTHLY_RECORD_CEILING } from "./api-spend
  * site. Cross-importing from extract/ into coverage/ already has precedent:
  * document-clients.ts does it for higherGovClient itself. */
 import { COVERAGE } from "../coverage/thresholds.js";
-import { redact } from "../coverage/highergov-client.js";
+import { costOfThrownCall, redact } from "../coverage/highergov-client.js";
 import { isMeteredSourceName } from "../scrape/adapters/registry.js";
 
-export type FetchReason = "fetched" | "already-looked" | "unsupported" | "ceiling";
+/* "no-document-key" (2026-09-13): the source's client is keyed by
+ * `document_key` and this row has none -- ingested before the key was
+ * captured. Refused before any request, so it costs nothing and stamps
+ * nothing; the row becomes askable the moment a merge lands its key. */
+export type FetchReason =
+  | "fetched"
+  | "already-looked"
+  | "unsupported"
+  | "no-document-key"
+  | "ceiling";
 
 export interface FetchOutcome {
   reason: FetchReason;
@@ -36,6 +45,7 @@ export interface FetchOutcome {
 interface Row {
   id: number;
   external_id: string | null;
+  document_key: string | null;
   source_id: number;
   source_name: string;
   checked: Date | null;
@@ -46,7 +56,7 @@ export async function fetchDocumentsFor(
   fetchImpl: typeof fetch = fetch,
 ): Promise<FetchOutcome> {
   const row = await one<Row>(
-    `SELECT s.id, s.external_id, s.source_id, src.name AS source_name,
+    `SELECT s.id, s.external_id, s.document_key, s.source_id, src.name AS source_name,
             s.attachments_checked_at AS checked
        FROM solicitation s
        JOIN source src ON src.id = s.source_id
@@ -66,6 +76,21 @@ export async function fetchDocumentsFor(
    * is the D3 error in a third place. */
   if (!client || !row.external_id) return { reason: "unsupported", spent: 0, documents: 0 };
 
+  /* 🔴 THE KEY THE CLIENT IS ASKED BY, and the refusal when there is none
+   * (2026-09-13). HigherGov's /document/ takes `related_key`, stored as
+   * `document_key`; a row ingested before that was captured has none, and
+   * the only thing sending anything else buys is a 400. So the request is
+   * not made: nothing spent, nothing stamped (we did not look, and the row
+   * must stay askable once a merge lands its key), and a reason of its own
+   * so a caller CAN tell it from "no documents". ⚠️ Today no caller does:
+   * Record.tsx clears CHECKING on every settled outcome and renders
+   * `BUNDLE — 0 FILES` for this one, as it already did for "unsupported" and
+   * "ceiling" -- the bundle has no "could not ask" state, and inventing one
+   * is a §7.10 question, on the D16 sheet. SAM is keyed by external_id,
+   * already checked above, and is untouched by this. */
+  const key = client.keyedBy === "document-key" ? row.document_key : row.external_id;
+  if (!key) return { reason: "no-document-key", spent: 0, documents: 0 };
+
   /* 🔴 FIXED (Task 7 review round 2, the same defect run.ts was fixed for).
    * `>= MONTHLY_RECORD_CEILING` only refuses once the ceiling is ALREADY
    * crossed -- a month sitting one record under it would still wave through
@@ -80,7 +105,7 @@ export async function fetchDocumentsFor(
   /* Page one and stop -- CLAUDE.md §5.2. The client does not page. */
   let fetched: DocumentFetchResult;
   try {
-    fetched = await client.fetchFor(row.external_id, fetchImpl);
+    fetched = await client.fetchFor(key, fetchImpl);
   } catch (err) {
     /* 🔴 THE THIRD CALL SITE (Task 7 review round 2). Before HigherGov was
      * registered, `client` here was always SAM.gov -- free, and every one of
@@ -96,6 +121,15 @@ export async function fetchDocumentsFor(
      * so we tally the conservative upper bound before letting the error
      * propagate, rather than silently losing a call the vendor already
      * booked.
+     *
+     * 🔴 BUT NOT FOR A REFUSAL (2026-09-08, the phantom 100). A non-OK
+     * status is the vendor answering with NO records, and the meter counts
+     * records returned -- so that call cost nothing, and tallying the bound
+     * for it inflated the ledger by 100 per click on a row that, correctly
+     * unstamped, stayed clickable. `costOfThrownCall` is the one place that
+     * tells the two apart; this site only asks it. A zero-record row is
+     * still written: it is the observation "answered, with nothing", which
+     * is what a dashboard reading reconciles against.
      *
      * ⚠️ SCOPED TO A KNOWN-METERED SOURCE, NOT EVERY THROW. `client` here is
      * whichever `DOCUMENT_CLIENTS[row.source_name]` resolves to, and SAM.gov
@@ -144,7 +178,7 @@ export async function fetchDocumentsFor(
           {
             sourceId: row.source_id,
             endpoint: "document",
-            records: COVERAGE.unparseableResponseRecords,
+            records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
             solicitationId: row.id,
           },
         );

@@ -42,8 +42,12 @@ test("maxCallsPerRun is ratified separately from the other two spend caps", () =
 
 /* A literal number sitting only in a comment pins nothing -- api-spend.ts's
  * own final-review finding, which is why this asserts the raised value
- * itself rather than trusting the comment beside it. */
-test("maxCallsPerRun was raised to 500 by the same 2026-09-07 ruling", () => {
+ * itself rather than trusting the comment beside it.
+ *
+ * ⚖️ Re-ruled 2026-09-13 (D13): same 500, on the corrected reason -- it is
+ * the recall run's runaway-sweep stop, not an archive-walk allowance. The
+ * value this pins did not move; the sentence beside it in thresholds.ts did. */
+test("maxCallsPerRun was raised to 500 by the 2026-09-07 ruling and kept there by D13", () => {
   expect(COVERAGE.maxCallsPerRun).toBe(500);
 });
 

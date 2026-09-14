@@ -11,6 +11,7 @@ const { migrate } = await import("../db/migrate.js");
 const { all, close, insert, one, run } = await import("../db/index.js");
 const { runCoverage, gradedItems } = await import("./run.js");
 const { COVERAGE } = await import("./thresholds.js");
+const { HigherGovHttpError, PartialDayBilledError } = await import("./highergov-client.js");
 
 /* Task 7 added fetchDocuments to HigherGovClient. Nothing in run.ts calls it
  * (that is fetch-documents-for.ts's job, a separate on-demand path) -- every
@@ -53,7 +54,7 @@ test("a run records what the vendor billed in api_spend", async () => {
     client: fakeClient({
       "2026-09-03": {
         notices: [
-          { externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: "v1", title: "t", raw: {} },
+          { externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: "v1", title: "t", documentKey: null, raw: {} },
         ],
         records: 5,
         feedCount: 5,
@@ -79,7 +80,7 @@ test("the spend is recorded even when the item write fails", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
       return {
-        notices: [{ externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, raw: {} }],
+        notices: [{ externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
         records: 7,
         feedCount: 7,
         pages: 1,
@@ -231,7 +232,7 @@ test("a notice absent from the window is looked up by id before being called mis
     async fetchBySourceId(sourceId) {
       return {
         notices: [
-          { externalId: sourceId, capturedDate: "2026-08-01", postedDate: null, versionKey: null, title: null, raw: {} },
+          { externalId: sourceId, capturedDate: "2026-08-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} },
         ],
         records: 1,
         feedCount: 1,
@@ -322,6 +323,7 @@ test("a multi-page day bought WHOLE is graded, not refused", async () => {
             postedDate: null,
             versionKey: null,
             title: null,
+            documentKey: null,
             raw: {},
           },
         ],
@@ -389,6 +391,60 @@ test("a mid-day throw tallies the conservative bound PLUS the pages already bill
     `SELECT coalesce(sum(records),0)::text AS total FROM api_spend`,
   );
   expect(Number(spend!.total)).toBe(COVERAGE.unparseableResponseRecords + 100);
+});
+
+/* 🔴 THE PHANTOM 100, at this site (2026-09-08). The catch above priced
+ * every throw at the conservative bound, including a REFUSAL -- a non-OK
+ * status, the vendor answering with no records and therefore billing none
+ * (the meter counts records returned; migration 033 proved it exact). A run
+ * that hits a 429 on its first call would have booked 100 records it never
+ * spent, against a ceiling nothing can read back from the vendor. The rule
+ * lives in highergov-client.ts's costOfThrownCall; this pins that the site
+ * asks it. The error still propagates: a refusal fails the run loudly. */
+test("a refused fetchDay (non-OK status) tallies zero, not the conservative bound", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      throw new HigherGovHttpError(429);
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    fetchDocuments: noDocuments,
+  };
+  await expect(runCoverage({ from: "2026-09-03", to: "2026-09-03", client })).rejects.toThrow(
+    /HigherGov answered 429/,
+  );
+  const spend = await one<{ total: string }>(
+    `SELECT coalesce(sum(records),0)::text AS total FROM api_spend`,
+  );
+  expect(Number(spend!.total)).toBe(0);
+});
+
+/* And the paged form of the same thing: pages one and two billed 100, page
+ * three was refused. The day cost 100 -- not 100 plus a bound for a page
+ * that returned nothing. */
+test("a refusal on page three tallies what pages one and two billed, and nothing for the refused page", async () => {
+  const client: HigherGovClient = {
+    async fetchDay() {
+      throw new PartialDayBilledError(
+        "HigherGov answered 429 -- 100 record(s) across 2 page(s) were ALREADY BILLED",
+        100,
+        2,
+        429,
+      );
+    },
+    async fetchBySourceId() {
+      return { notices: [], records: 0, feedCount: 0, pages: 1, pagesFetched: 1 };
+    },
+    fetchDocuments: noDocuments,
+  };
+  await expect(runCoverage({ from: "2026-09-03", to: "2026-09-03", client })).rejects.toThrow(
+    /ALREADY BILLED/,
+  );
+  const spend = await one<{ total: string }>(
+    `SELECT coalesce(sum(records),0)::text AS total FROM api_spend`,
+  );
+  expect(Number(spend!.total)).toBe(100);
 });
 
 /* 🔴 THE CALL COUNTER COUNTS HTTP REQUESTS, NOT DAYS. maxCallsPerRun is a cap
@@ -575,7 +631,7 @@ test("a notice settled as carried by an earlier run is not re-asked, and does no
     async fetchDay(capturedDate) {
       if (capturedDate === "2026-09-03") {
         return {
-          notices: [{ externalId: "X", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, raw: {} }],
+          notices: [{ externalId: "X", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
           records: 1,
           feedCount: 1,
           pages: 1,
