@@ -273,9 +273,19 @@ Two facts before re-asking, which are what the ruling was made on: **the cap is 
 
 ⚖️ **Ruling sheet D15–D16: <https://claude.ai/code/artifact/87cdf0b6-aca8-4274-b8ec-49da0d0e9fff>** (answers in its own store, `read_db`, collection `rulings`, docs `d15`, `d16`). **D15** — how the rows already in get a key: on demand (+1–2 records the first time a keyless row is opened, then ~11 as before; recommended) · backfill the 150-sample now (150–300 records, mostly on rows that will be passed) · backfill only the Interested rows after the sitting (~15–30) · nothing. Every price assumes the trial's 2,233 are still spendable. **D16** — what the record screen says for a row it could not ask about: today `unsupported`, `ceiling` and now `no-document-key` all render `BUNDLE — 0 FILES`, which is D3's error on screen; the bundle has no "could not ask" state, so it is a §7.10 question (recommended: one invented head, `DOCUMENTS NOT REQUESTED`, with the reason beneath). **Neither is built; both are for Matt.**
 
-**Also this session:** the admin secret was copied to Matt's clipboard on request, without display.
+### 📏 F6 IS MEASURED AGAINST THE REAL DATA AND AGAINST TONIGHT'S DECISIONS, AND THE STATISTIC IS THE PROBLEM
 
-**Waiting on Matt, unchanged from 09-08:** the 150 decisions (in progress) · ~~D13/D14~~ ruled · F6's 200-character floor · a dashboard reading for row 211 · the working-set plan's §5.
+**F6 (`p10 description length ≥ 200`, ratified D4 on a 25-row federal sample, median 515) reads `40` on the combined population tonight — and SAM.gov's own p10 is 68.** Every live source fails the floor it was calibrated on. Per source (biddable rows with a description or fetched documents, ruling ①): HigherGov n=2,056 · p10 29 · median 279 · **39.9% under 200, 27.8% under 100** · SAM.gov n=1,229 · p10 68 · median 917 · 19.1% / 14.0% · IDOA 45 · p10 472 · corpus 26 · p10 682. A 10th percentile clears a floor only if fewer than one row in ten is below it; the state/local market publishes thin listings as a matter of course (Kentucky's non-empty median is **38 characters**), so `p10 ≥ 200` cannot pass on it at any number.
+
+**Where "too short to decide" actually sits, from Matt's own reasons (66 decided at the reading):** reasons citing thin information — **7 of 13** on empty descriptions, **4 of 11** at 1–99 chars, **0 of 4** at 100–199, then 2 of 23 and 2 of 15 above. He decided every row; the ones where the listing failed him sit under 100, not under 200. Sample #2 as drawn: 29 empty · 28 under 100 · 13 at 100–199 · 49 at 200–499 · 31 at 500+.
+
+**The price of this market's listings, stated once:** ~48% of HigherGov's biddable rows have no description or one under 100 chars; covering all of them with D2's fetch is ~1,365 × ~11 ≈ **15,000 records**. That is why documents are on demand and never a backfill (§5.2), now with a number on it.
+
+⚖️ **Ruling sheet D17: <https://claude.ai/code/artifact/4654f19d-f3d3-4c60-b63c-edbfc8b21a72>** (`read_db`, collection `rulings`, doc `d17`). Options: keep `p10 ≥ 200` (permanent fail, floor cannot pass) · lower to 100 (still fails — p10 29/68) · **change the statistic to "at most 30% of biddable rows under 100 chars"** (HigherGov 27.8%, SAM 14.0%, combined ≈22% — passes; the sheet says plainly that 30% is set to the market as found; recommended) · retire F6 from the floor and leave description length to R7. **Changes a predicate Matt ratified in D4, so it is his.**
+
+**Also this session:** the admin secret was copied to Matt's clipboard on request, without display. `scripts/reason-corpus.mjs` — the read-only worksheet generator for the chip derivation — is committed and smoke-tested against the partial corpus (61 of 150 at the time); run it against sample #2 when the 150 are in.
+
+**Waiting on Matt:** the 150 decisions (in progress) · ~~D13/D14~~ ruled · **D15/D16** (document key for existing rows; the record screen's "could not ask" state) · **D17** (F6's statistic, now measured) · a dashboard reading for row 211 · the working-set plan's §5 · **the merge**, the moment he is done triaging: `git merge --no-ff worktree-doc-fetch-accounting`, then `npm run migrate` against the dev database, then the gate on the merged result.
 
 ---
 
