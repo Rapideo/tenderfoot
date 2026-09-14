@@ -13,3 +13,8 @@ runs/
 # Subagent-driven-development scratch: ledgers, briefs, review packages.
 # Git-ignored on purpose -- the commits are the record, not this directory.
 .superpowers/
+
+# Claude Code's per-machine settings and its git worktrees (EnterWorktree puts
+# them under .claude/worktrees/). A worktree here is a second copy of the whole
+# tree; vitest.config.ts excludes it from the gate for the same reason.
+.claude/

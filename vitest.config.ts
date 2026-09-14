@@ -60,6 +60,15 @@ export default defineConfig({
       "**/cypress/**",
       "**/.{idea,git,cache,output,temp}/**",
       "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
+      /* 🔴 A GIT WORKTREE INSIDE THE REPO IS A SECOND COPY OF EVERY TEST
+       * FILE, and the default glob finds it. Claude Code's EnterWorktree
+       * puts worktrees under .claude/worktrees/; on 2026-09-13 a gate run
+       * from the main checkout, with a merged worktree still on disk, ran
+       * 208 files instead of 104 -- the two copies of each schema-building
+       * test collided on their schema names and 86 tests failed for nothing.
+       * The directory is also gitignored, but the exclude is what protects
+       * the gate; the ignore only protects the commit. */
+      "**/.claude/**",
     ],
   },
 });
