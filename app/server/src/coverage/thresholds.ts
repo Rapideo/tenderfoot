@@ -24,7 +24,10 @@
  * `maxCallsPerRun`, raised from 100 to 500 so a year-long Indiana archive
  * walk (~365 one-call days, the same trial-ending motivation that raised
  * `MONTHLY_RECORD_CEILING` to 9,000 in extract/api-spend.ts) does not trip a
- * call-count cap sized for a much shorter run. `maxRecordsPerRun` and
+ * call-count cap sized for a much shorter run. (⚠️ That walk never reads
+ * this cap -- see `maxCallsPerRun`'s own comment for the 2026-09-13
+ * re-ruling, D13, which kept 500 on the reason that actually applies.)
+ * `maxRecordsPerRun` and
  * `unparseableResponseRecords` were NOT put to him and stay exactly where
  * `SPEND_LIMITS_RATIFIED` already had them. Folding `maxCallsPerRun`'s
  * ratification into that same flag would recreate the inexpressible answer
@@ -69,7 +72,12 @@ export const SPEND_LIMITS_RATIFIED = false;
  * year-long walk is ~365 one-call days -- 100 would have refused that walk
  * on call count alone long before it ever came near the record ceiling.
  * `maxRecordsPerRun` and `unparseableResponseRecords` are untouched by this
- * ruling and remain under `SPEND_LIMITS_RATIFIED` above. */
+ * ruling and remain under `SPEND_LIMITS_RATIFIED` above.
+ *
+ * ⚖️ RE-RATIFIED 2026-09-13 BY MATT (D13) -- same number, corrected reason.
+ * The archive walk named above does not read this cap; the recall run does,
+ * and 500 is its runaway-sweep stop. Still `true`: the flag was never about
+ * the figure, it is about whether the number is Matt's, and it still is. */
 export const MAX_CALLS_PER_RUN_RATIFIED = true;
 
 /* The coverage harness's own per-run spend cap. ⚠️ `unparseableResponseRecords`
@@ -200,14 +208,42 @@ export const COVERAGE = {
    * exposure against a claim that thin, not a hypothetical one.
    *
    * ⚖️ RATIFIED 2026-09-07 BY MATT (see MAX_CALLS_PER_RUN_RATIFIED above),
-   * raised from 100 to 500. The HigherGov trial ends in ~2 days with ~9,000
+   * raised from 100 to 500. ~~The HigherGov trial ends in ~2 days with ~9,000
    * records unspent, and Matt ruled we spend them on a complete Indiana
    * listing archive rather than lose them -- a year-long walk is ~365
    * one-call days, so 100 would have stopped the walk on call count alone
-   * long before it ever approached the (also-raised) monthly ceiling. The
-   * paragraph below is the ORIGINAL, pre-ruling reasoning for 100 -- kept
-   * because it is still true of what a SHORT run needs, it is just no longer
-   * what set the number: an explicit ruling did.
+   * long before it ever approached the (also-raised) monthly ceiling.~~
+   *
+   * 🔴 THAT REASONING NAMED THE WRONG WALK, AND THE NUMBER WAS RE-RULED ON
+   * THE RIGHT ONE -- D13, MATT, 2026-09-13 (ruling sheet
+   * claude.ai/code/artifact/11570fba-9908-496f-b5d8-45db5a2b27bf). This cap
+   * is read in ONE place: coverage/run.ts, the recall measurement. The
+   * ingest CLI that walks the archive -- the "year-long walk" above -- has
+   * no call counter and never consults it (its guards are the monthly
+   * ceiling and the optional `--max-records`; D14, same sheet, ruled that
+   * stays as designed). So the 09-07 argument was about a walk this
+   * constant does not govern. Measured before re-asking, from the 379
+   * day-artifacts in runs/: the largest run ever made was 132 calls (a
+   * Jan-Jun sweep of empty days, 0 records -- exactly the zero-result
+   * exposure this cap exists for), the paged runs averaged 1.06 calls/day
+   * with a worst day of 4 pages, and every live recall run stopped on
+   * maxRecordsPerRun (40) first. What the recall run actually needs: a
+   * 28-day window at the worst measured rate is <=112 calls, plus one
+   * exact-id lookup per unsettled key entry (up to 100 at the cohort
+   * floor) -- worst case ~210, typical 60-130.
+   *
+   * WHAT 500 IS, THEN: the recall run's runaway-sweep stop. 2-4x the run's
+   * real need, and a walk through empty days halts at 500 zero-result calls
+   * -- 5% of a month even if the "zero-result calls do not bill" claim
+   * turned out wrong. Matt kept the number and changed the reason; the
+   * options he declined were 250 (fits the worst case with little headroom,
+   * halves the exposure) and ~4,000 (fits a year-long paged walk, which
+   * rests on the false premise above and makes the number one that never
+   * binds).
+   *
+   * The paragraph below is the ORIGINAL, pre-ruling reasoning for 100 --
+   * kept because it is still true of what a SHORT run needs, it is just no
+   * longer what set the number: an explicit ruling did.
    *
    * ~~UNRATIFIED -- see SPEND_LIMITS_RATIFIED.~~ Picked loosely: comfortably
    * above what one run's day loop plus its per-key id-lookup loop needs at

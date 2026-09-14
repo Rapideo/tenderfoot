@@ -125,7 +125,13 @@ export async function runCoverage(opts: RunOptions): Promise<RunOutcome> {
    * report accompanying this change: a year-long walk was ~365 one-call days
    * when 500 was ratified, and a paging walk over busy days can exceed that
    * -- which is a question for Matt, not something to settle by inflating
-   * the constant here. */
+   * the constant here.
+   *
+   * ⚖️ ASKED AND RULED, D13, 2026-09-13: 500 stands. The "year-long walk"
+   * was never this loop -- it is the ingest CLI's, which does not read this
+   * cap at all. THIS is the only reader, and measured against it (see
+   * thresholds.ts's own comment on `maxCallsPerRun`) 500 is 2-4x what a
+   * run needs and a hard stop on a sweep of empty days. */
   let calls = 0;
 
   /* Notices an earlier run already saw carried. Spec §5.5: a notice enters

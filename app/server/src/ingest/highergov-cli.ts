@@ -83,6 +83,18 @@
  * to `undefined` (unset), like `--page-size` and `--axis` before it: an
  * invocation that never asks for a cap must behave exactly as it did before
  * this flag existed.
+ *
+ * ⚖️ AND IT STAYS OPTIONAL, AND THIS COMMAND ANSWERS TO NO CALL CAP -- D14,
+ * MATT, 2026-09-13 (ruling sheet
+ * claude.ai/code/artifact/11570fba-9908-496f-b5d8-45db5a2b27bf). Put to him
+ * once it was measured that `COVERAGE.maxCallsPerRun` is read only by the
+ * recall run and this walk has no call counter at all, so an invocation
+ * without `--max-records` is bounded by the monthly ceiling and by its
+ * dates alone. He chose "leave it as designed" over making the flag
+ * required or applying the recall run's cap here (which would have made one
+ * number serve two actors with opposite needs -- the conflict D10 declined
+ * for the record ceiling). The 132-call Jan-Jun sweep of empty days was a
+ * deliberate use of exactly this freedom.
  */
 import { pathToFileURL } from "node:url";
 import { mkdirSync } from "node:fs";
