@@ -1,6 +1,6 @@
 # Tenderfoot — status
 
-**Updated 2026-09-06.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-09-13.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
 > **⚖️ ALL SEVEN DECISIONS ARE ANSWERED (2026-09-04), AND ~~FIVE ARE BUILT~~ ALL SEVEN ARE BUILT (2026-09-05).** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>; the answers live in its own store (`read_db`, collection `rulings`, docs `d1`…`d7`). **Do not re-ask any of them.** Built and pushed to `main`: **D3** (R9's null check — Illinois BidBuy now grades `weak` by measurement where Kentucky stays `unknown`), **D1** (HigherGov's R7 ruled, narrow reading — data only, no grading code moved), **D4/D5** (the single ratification flag split in two: the floor is RATIFIED, R7 stays PROVISIONAL and every R7 grade now says so), **D6** and **D7** (both now fully DONE, not just pushed — see the correction directly below). **D2 is also built** — the on-demand-documents mechanism, proven against SAM.gov at zero metered cost — ~~but on branch `d2-on-demand-documents`, not yet merged~~ **✅ AND MERGED, `--no-ff`, at `d60ae40` — corrected 2026-09-06.** This clause described the branch state and stayed unchanged through the merge that ended it, the same way SP2's and SP3.6's rows once did. **Gate re-run on the merged result 2026-09-06: 825 tests / 93 files, exit 0** — the identical figure the branch carried, so the merge introduced nothing. `main == origin/main`. See the ruling table and the 2026-09-05 RESUME HERE entry for what it does and does not cover.
 >
@@ -234,7 +234,37 @@ Clicked first by Matt in his own browser, then **independently re-verified by Cl
 
 ---
 
-## ⏸️ FIRST THING NEXT SESSION — MATT ASKED FOR THE TRIAGE QUEUE TO BE REOPENED
+## 🔖 RESUME HERE — updated 2026-09-13 (evening, mid-triage)
+
+## 🎯 THE TRIAGE IS UNDER WAY — 150 ITEMS, FREE TEXT, BY VOICE, NO SHORTCUT
+
+**Matt reopened sample #2 on 2026-09-13 and is working through all 150 by dictation, in batches of ten.** The servers are up (`PORT=3010` / `VITE_API_TARGET=http://localhost:3010`, tab open on `?sample=2`, header verified reading `SAMPLE · 150 of 1,755 · HigherGov · seed 1788890660565-4atkg6bi`).
+
+⚖️ **RULING, 2026-09-13: no preset chips, no mid-run derivation — the whole 150 in his own words, then the chips are derived from what he wrote.** He asked why chips were deferred, was shown SVRC 1.1.4 and D30's argument (*the vocabulary should be derived from the hand-run, not invented before it*) and the three options — full free text · bundle's chips now with an escape hatch · free text for ~40 then derive — and chose the first, explicitly: *"I don't think I'm going to shortcut this."* The follow-up, once the 150 are in, is the chip derivation. Under SVRC 1.1.4 the eventual chips carry a class on the way in, and the capacity class is excluded from anything that learns.
+
+**Nothing on the reason field truncates**: the column is `text`, the server checks no length, the input has no `maxLength`. ⚠️ It IS single-line and **Enter confirms** — dictation must avoid "new line"/"new paragraph" commands. Left as the bundle's control; not changed to a textarea without a ruling.
+
+### ✅ THE THREE QUEUED TASKS, AND WHERE EACH STANDS
+
+**1. The document-fetch accounting fix — BUILT, GATE-GREEN, ON A WORKTREE BRANCH, NOT YET MERGED.** Branch `worktree-doc-fetch-accounting` at `baf6474`, from `d07ce75`. Gate on the branch **1128 tests / 104 files, exit 0** (+13 over baseline). **Deliberately not merged while Matt is triaging** — the dev server watches `app/server/src`, and a merge into `main` would restart the API under him mid-decision. **Merge `--no-ff` the moment he is done.**
+
+What it does: a **refused** call (non-OK HTTP status) now tallies **zero**, because the meter counts records returned and a refusal returns none (migration 033 proved the meter exact). An **unreadable** 200 and a **transport** failure still tally the conservative bound. One rule, one home — `costOfThrownCall()` in `highergov-client.ts` — applied at **all five** tally sites (the document fetch, `run.ts` ×2, the ingest CLI ×2), not only the one that bit: the ingest CLI is what walks the reserve, and a rate-limited day booking a phantom 100 there is what would make the loader refuse legitimate work. The refusal is a typed error (`HigherGovHttpError`, same message as before) and `PartialDayBilledError` carries the refused page's status through the wrap, so page three of a walk that gets a 429 is priced at what pages one and two billed and nothing more. A zero-record `api_spend` row is still written for a refusal — the observation "answered, with nothing" that a dashboard reading reconciles against. Mutation-checked both ways: delete the refusal branch, 7 tests go red; price everything at zero, 16 go red. Lesson 2.32.
+
+🔴 **UNTIL THE MERGE, THE RUNNING SERVER STILL HAS THE OLD CODE: DO NOT CLICK THE DOCUMENTS ACTION ON A HIGHERGOV ROW.** After the merge a click is free — but it still *fails* (the request shape is wrong, `source_id` on `/document/` is an assumption; settling it costs one metered call). **The phantom 100 in `api_spend` id 211 is left in place** pending Matt's dashboard reading, as before.
+
+**2. The Interested screen — LOOKED AT, in a real browser, both branches.** Opened in a second tab against the unscoped queue, the step opened by a DOM `.click()` on the real Interested button (a synthetic `i` keypress did not land — page focus), screenshot taken and zoomed, then Back and the tab closed. **Nothing was confirmed; nothing was written.** It renders as D30 specified: the seven channel chips under `WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED`, then `WHY THIS ONE? — REQUIRED` with *"A filter trained only on rejections learns only what to exclude,"* the input with the branched placeholder (no "…or"), Back, and the accent `Save & next`. The Pass branch alongside: `WHY NOT? — REQUIRED`, the bundle's placeholder verbatim, the danger `Pass & next`. Same prompt/help/input/Back/confirm frame on both — they read as a pair. §4's gap for D30 is closed.
+
+**3. `maxCallsPerRun` — MEASURED, AND THE QUESTION CHANGED. Ruling sheet D13–D14: <https://claude.ai/code/artifact/11570fba-9908-496f-b5d8-45db5a2b27bf>** (answers in its own store, `read_db`, collection `rulings`, docs `d13`, `d14`). Two facts before re-asking: **the cap is enforced in ONE place, `npm run recall` — the ingest CLI that walked the archive (the walk 500 was sized for) has no call counter at all**, its guards being the monthly ceiling and the *optional* `--max-records`. And from the 379 day-artifacts in `runs/`: the largest run ever was **132 calls** (the Jan–Jun sweep, 0 records — precisely the zero-result exposure the cap exists for), the paged runs averaged **1.06 calls/day** with a worst day of **4 pages**, and every live recall run stopped on `maxRecordsPerRun` (40) first. **D13** asks the number (recommended: keep 500, re-stated as the recall run's runaway-sweep stop — `thresholds.ts` currently cites the wrong walk). **D14** asks whether the ingest walk should answer to a call cap at all (recommended: no change). Lesson 2.33.
+
+**Also this session:** the admin secret was copied to Matt's clipboard on request, without display.
+
+**Waiting on Matt, unchanged from 09-08 plus two:** the 150 decisions (in progress) · D13/D14 · F6's 200-character floor · a dashboard reading for row 211 · the working-set plan's §5.
+
+---
+
+## 🗄️ Earlier resume block — updated 2026-09-08 (late)
+
+## ⏸️ ~~FIRST THING NEXT SESSION~~ — DONE 2026-09-13: THE TRIAGE QUEUE WAS REOPENED
 
 **He is coming back to work sample #2 and asked that this be noted as outstanding.** Nothing is broken; the dev servers were shut down deliberately at the end of 2026-09-08 so nothing of ours was left running on his machine.
 
@@ -259,8 +289,6 @@ VITE_API_TARGET=http://localhost:3010 npm run dev --workspace app/client
 **Three things waiting on Matt:** the 150-item triage (F5 needs 100, and nothing else can produce it) · whether F6's 200-character floor is right for state and local data · a dashboard reading, to settle whether that 400 billed anything.
 
 ---
-
-## 🔖 RESUME HERE — updated 2026-09-08 (late)
 
 ## 🎯 THE QUEUE IS READY TO TRIAGE, AND THE SAMPLE IS SCOPED TO THE NEW DATA
 
