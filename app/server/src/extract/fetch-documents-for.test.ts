@@ -60,12 +60,33 @@ beforeEach(async () => {
   );
 });
 
-async function insertHigherGovSolicitation(externalId: string): Promise<number> {
+/* A KEYED HigherGov row, by default: `document_key` is what /document/ is
+ * asked by (2026-09-13), so a fixture without one exercises the refusal path
+ * below and nothing else. Pass null to build exactly that row. */
+async function insertHigherGovSolicitation(
+  externalId: string,
+  documentKey: string | null = `dk-${externalId}`,
+): Promise<number> {
   return insert(
-    `INSERT INTO solicitation (title, source_id, external_id, posted_at, posted_at_origin)
-     VALUES ('doc fixture', $1, $2, '2026-08-01', 'published') RETURNING id`,
-    [higherGovId, externalId],
+    `INSERT INTO solicitation (title, source_id, external_id, posted_at, posted_at_origin, document_key)
+     VALUES ('doc fixture', $1, $2, '2026-08-01', 'published', $3) RETURNING id`,
+    [higherGovId, externalId, documentKey],
   );
+}
+
+/* A fetch double that also records the URL it was asked, so a test can
+ * assert on the QUERY STRING -- which parameter the request carried -- and
+ * not merely on what came back. */
+function recordingFetch(
+  respond: () => { ok: boolean; status: number; json: () => Promise<unknown> },
+): typeof fetch & { urls: string[] } {
+  const urls: string[] = [];
+  const impl = (async (url: string | URL) => {
+    urls.push(String(url));
+    return respond();
+  }) as unknown as typeof fetch & { urls: string[] };
+  impl.urls = urls;
+  return impl;
 }
 
 afterAll(async () => {
@@ -309,6 +330,7 @@ test("a throw from a SECOND metered source is tallied too, driven by the registr
     metered: true,
   };
   DOCUMENT_CLIENTS[SECOND_METERED_SOURCE] = {
+    keyedBy: "external-id",
     async fetchFor() {
       throw new Error("second metered vendor exploded");
     },
@@ -642,4 +664,77 @@ test("a malformed 200 still tallies the conservative bound: the vendor returned 
   );
   expect(rows).toHaveLength(1);
   expect(rows[0]!.records).toBe(COVERAGE.unparseableResponseRecords);
+});
+
+/* 🔴 WHY EVERY LIVE ATTEMPT ANSWERED 400 (2026-09-13). /document/ takes
+ * `related_key` -- the vendor's own schema: "required and is found in the
+ * document_path field in the Opportunity endpoint" -- and nothing else
+ * identifies the set. We sent `source_id`, which the endpoint does not
+ * accept. The key now lives on the row (migration 034, `document_key`), and
+ * this is the site that must hand it to the client: a HigherGov row is asked
+ * for BY ITS DOCUMENT KEY, and the request carries no source_id. The
+ * response here is a genuine, well-formed document list, so this also proves
+ * the whole path lands documents once the right parameter is sent. */
+test("a HigherGov row is asked for by its document key, not its notice id", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-keyed", "DOCKEY-keyed-77");
+  const fetchImpl = recordingFetch(() => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      meta: { pagination: { count: 1, pages: 1 } },
+      results: [{ file_name: "sow.pdf", text_extract: "Scope of work." }],
+    }),
+  }));
+
+  const out = await fetchDocumentsFor(hgSolicitationId, fetchImpl);
+  expect(out.reason).toBe("fetched");
+  expect(out.documents).toBe(1);
+
+  expect(fetchImpl.urls).toHaveLength(1);
+  const url = new URL(fetchImpl.urls[0]!);
+  expect(url.pathname).toBe("/api-external/document/");
+  expect(url.searchParams.get("related_key")).toBe("DOCKEY-keyed-77");
+  expect(url.searchParams.has("source_id")).toBe(false);
+});
+
+/* THE ROWS THAT PREDATE THE KEY. Every HigherGov solicitation ingested before
+ * 2026-09-13 was parsed by a client that threw document_path away, so none
+ * carries a key and none can be asked for. Guessing one -- sending source_id
+ * as before -- costs a 400 and, until this week, a phantom 100. So the row
+ * is refused HERE, before any request: a distinct outcome, nothing spent,
+ * nothing stamped (we did not look, and the row must stay askable once it
+ * has a key), and the vendor never called. The same reasoning as
+ * "unsupported": an absence of capability is not an absence of documents. */
+test("a HigherGov row with no document key is refused before any request: free, unstamped, distinct", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-unkeyed", null);
+  const exploding = (async () => {
+    throw new Error("the vendor must not be called for a row that cannot be asked for");
+  }) as unknown as typeof fetch;
+
+  const out = await fetchDocumentsFor(hgSolicitationId, exploding);
+  expect(out.reason).toBe("no-document-key");
+  expect(out.spent).toBe(0);
+  expect(out.documents).toBe(0);
+
+  const stamp = await one<{ attachments_checked_at: Date | null }>(
+    `SELECT attachments_checked_at FROM solicitation WHERE id = $1`,
+    [hgSolicitationId],
+  );
+  expect(stamp!.attachments_checked_at).toBeNull();
+  expect(await all(`SELECT id FROM api_spend WHERE solicitation_id = $1`, [hgSolicitationId]))
+    .toHaveLength(0);
+  expect(await all(`SELECT id FROM document WHERE solicitation_id = $1`, [hgSolicitationId]))
+    .toHaveLength(0);
+});
+
+/* SAM is keyed by its notice id and has no document key; the new column must
+ * change nothing on that path. A SAM row with a stray document_key is still
+ * asked for by external_id -- the key is HigherGov's concept alone. */
+test("a SAM.gov row is still asked for by its notice id, whatever document_key holds", async () => {
+  await run(`UPDATE solicitation SET document_key = 'not-a-sam-concept' WHERE id = $1`, [solicitationId]);
+  const fetchImpl = recordingFetch(() => ({ ok: true, status: 200, json: async () => ONE_ATTACHMENT }));
+  const out = await fetchDocumentsFor(solicitationId, fetchImpl);
+  expect(out.reason).toBe("fetched");
+  expect(fetchImpl.urls[0]).toContain("/opportunities/notice-1/resources");
+  expect(fetchImpl.urls[0]).not.toContain("not-a-sam-concept");
 });

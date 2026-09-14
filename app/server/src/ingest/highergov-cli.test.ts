@@ -711,6 +711,7 @@ test("main() with no --max-records: the walk is unchanged and no cap logic fires
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -771,6 +772,7 @@ test("a run with --max-records stops before the crossing call, distinctly from a
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -893,6 +895,7 @@ test("the reused sample places items on the WALKED axis, not always captured_dat
         postedDate: "2026-06-09",
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
       {
@@ -901,6 +904,7 @@ test("the reused sample places items on the WALKED axis, not always captured_dat
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
     ];
@@ -948,6 +952,7 @@ test("the same two notices both land on the default captured_date walk", async (
         postedDate: "2026-06-09",
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
       {
@@ -956,6 +961,7 @@ test("the same two notices both land on the default captured_date walk", async (
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       },
     ];
@@ -1086,7 +1092,7 @@ test("committing an affordable window walks every day and imports what it finds"
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: { a: 1 } }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: { a: 1 } }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1133,7 +1139,7 @@ test("a truncated day is reported during the walk, and the end-of-run summary co
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1181,7 +1187,7 @@ test("a multi-page day bought whole is NOT reported truncated", async () => {
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1214,7 +1220,7 @@ test("each day's adapter is handed the budget that is genuinely left", async () 
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const budgets: Array<number | undefined> = [];
@@ -1259,7 +1265,7 @@ test("a partial sample's day is re-fetched in full rather than committed as one 
   try {
     /* 5 records on page one of a 3-page day: the sample is a fragment. */
     const client = clientWithNotices(
-      [{ externalId: "HG-FRAGMENT", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-FRAGMENT", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       5,
       3,
       1,
@@ -1304,7 +1310,7 @@ test("a whole sample's day is still reused, never re-fetched", async () => {
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-WHOLE", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-WHOLE", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const throwingAdapter: WindowedAdapter = {
@@ -1336,7 +1342,7 @@ test("no truncated days -- the summary says so explicitly, not by omission", asy
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-1", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1377,6 +1383,7 @@ test("a mid-walk stop and a truncated day are reported as two distinct facts", a
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -1429,7 +1436,7 @@ test("per-day spend is read from the artifact's billed count, not rows + undated
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1469,6 +1476,7 @@ test("the day-walk stops before the call that would cross the ceiling", async ()
         postedDate: null,
         versionKey: null,
         title: null,
+        documentKey: null,
         raw: {},
       })),
       sampleRate,
@@ -1572,7 +1580,7 @@ test("a day-walk call that throws still writes a conservative spend row before f
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });
@@ -1619,7 +1627,7 @@ test("a refused day in the walk tallies zero for that day, on top of the sample'
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], refusedWith: 429 } });
@@ -1652,7 +1660,7 @@ test("an artifact with no billed count falls back UP to the conservative bound, 
   const dir = tempRunsDir();
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({
@@ -1742,7 +1750,7 @@ test("a day-walk's vendor error survives even when its own spend tally throws", 
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     const client = clientWithNotices(
-      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, raw: {} }],
+      [{ externalId: "HG-S", capturedDate: "2026-09-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
       1,
     );
     const adapter = fakeAdapter({ "2026-09-02": { items: [], throws: true } });

@@ -633,6 +633,76 @@ test("a newly created solicitation from a source with neither field stays null, 
   expect(row?.place_of_performance).toBeNull();
 });
 
+/* 🔴 THE DOCUMENT KEY (2026-09-13). /document/ requires `related_key`, which
+ * the vendor delivers only inside `document_path` on the opportunity --
+ * highergov-client.ts lifts it out at parse time into `raw.document_key`
+ * before the credential-bearing path is dropped. It is worthless unless it
+ * reaches the solicitation row that fetch-documents-for.ts reads, on BOTH
+ * paths, for the same reason description and place needed both: a row
+ * created in this run never sees the update map. ONE merge, same as above. */
+test("a newly created HigherGov solicitation carries its document key after ONE merge", async () => {
+  const sourceHg = (await one<{ id: number }>(`SELECT id FROM source WHERE name = 'HigherGov'`))!.id;
+  await sightRaw(
+    sourceHg,
+    "HG-DOCKEY-1",
+    { source_id: "HG-DOCKEY-1", title: "Keyed notice", document_key: "DOCKEY-new-1" },
+    "2026-09-01T00:00:00Z",
+  );
+  const res = await mergeSightings();
+  expect(res.created).toBeGreaterThanOrEqual(1);
+
+  const row = await one<{ document_key: string | null }>(
+    `SELECT document_key FROM solicitation WHERE external_id = 'HG-DOCKEY-1'`,
+  );
+  expect(row?.document_key).toBe("DOCKEY-new-1");
+});
+
+test("an already-merged HigherGov solicitation gets its document key on a later merge, and the run says so", async () => {
+  const sourceHg = (await one<{ id: number }>(`SELECT id FROM source WHERE name = 'HigherGov'`))!.id;
+  await sightRaw(
+    sourceHg,
+    "HG-DOCKEY-2",
+    { source_id: "HG-DOCKEY-2", title: "Keyed later", document_key: "DOCKEY-later-2" },
+    "2026-09-01T00:00:00Z",
+  );
+  await mergeSightings();
+  await run(`UPDATE solicitation SET document_key = NULL WHERE external_id = 'HG-DOCKEY-2'`);
+
+  const again = await mergeSightings();
+  expect(again.documentKeysSet).toBeGreaterThanOrEqual(1);
+  const back = await one<{ document_key: string | null }>(
+    `SELECT document_key FROM solicitation WHERE external_id = 'HG-DOCKEY-2'`,
+  );
+  expect(back?.document_key).toBe("DOCKEY-later-2");
+});
+
+/* A SAM row's payload has no such field, and a HigherGov row ingested before
+ * the key was captured has none either. Both stay null -- never blank, and
+ * never read off some other field by guesswork. */
+test("a solicitation with no document key in its payload stays null", async () => {
+  const sourceHg = (await one<{ id: number }>(`SELECT id FROM source WHERE name = 'HigherGov'`))!.id;
+  await sightRaw(
+    sourceHg,
+    "HG-NOKEY-1",
+    { source_id: "HG-NOKEY-1", title: "Ingested before the key was captured" },
+    "2026-09-01T00:00:00Z",
+  );
+  await sightRaw(
+    sourceSam,
+    "SAM-NOKEY-1",
+    { noticeId: "SAM-NOKEY-1", title: "SAM has no such field", document_key: "not-ours-to-read" },
+    "2026-09-01T00:00:00Z",
+  );
+  await mergeSightings();
+  const rows = await all<{ external_id: string; document_key: string | null }>(
+    `SELECT external_id, document_key FROM solicitation
+      WHERE external_id IN ('HG-NOKEY-1', 'SAM-NOKEY-1') ORDER BY external_id`,
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[0]!.document_key).toBeNull();
+  expect(rows[1]!.document_key).toBeNull();
+});
+
 /* ⚠️ THE TWO COLUMNS THAT STAY NULL, asserted so they cannot be quietly
  * filled later without someone meeting the reasoning.
  *

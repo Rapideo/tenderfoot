@@ -82,10 +82,21 @@ export interface DocumentFetchResult {
 }
 
 export interface DocumentClient {
-  fetchFor(externalId: string, fetchImpl?: typeof fetch): Promise<DocumentFetchResult>;
+  /* WHICH COLUMN ON THE SOLICITATION IDENTIFIES ITS DOCUMENTS TO THIS SOURCE.
+   * SAM lists attachments by notice id, so `external_id` is the key. HigherGov's
+   * /document/ takes `related_key`, an identifier the vendor delivers only
+   * inside the opportunity's document_path and which we store as
+   * `document_key` (migration 034) -- external_id is NOT accepted there, and
+   * sending it was every live attempt's 400 (2026-09-13). fetch-documents-for.ts
+   * reads this to choose the column, and refuses -- free, unstamped -- a row
+   * whose chosen column is null rather than guess. */
+  keyedBy: "external-id" | "document-key";
+  /** `key` is the value of the column `keyedBy` names. */
+  fetchFor(key: string, fetchImpl?: typeof fetch): Promise<DocumentFetchResult>;
 }
 
 export const samDocumentClient: DocumentClient = {
+  keyedBy: "external-id",
   async fetchFor(externalId, fetchImpl = fetch) {
     /* The User-Agent is not decoration -- sam.ts's adapter and probe both
      * treat it as mandatory; the default Node agent is rejected. */
@@ -120,8 +131,9 @@ export const samDocumentClient: DocumentClient = {
  * download_url value. All of that stays inside coverage/highergov-client.ts,
  * behind fetchDocuments(). */
 export const higherGovDocumentClient: DocumentClient = {
-  async fetchFor(externalId, fetchImpl = fetch) {
-    const { docs, records } = await higherGovClient.fetchDocuments(externalId, fetchImpl);
+  keyedBy: "document-key",
+  async fetchFor(documentKey, fetchImpl = fetch) {
+    const { docs, records } = await higherGovClient.fetchDocuments(documentKey, fetchImpl);
     /* 🔴 CASE HIT: "a document with no reachable URL is still a document."
      * docs/2026-09-03-highergov-field-mapping.md §2 says the /document/
      * endpoint's own address field (`download_url`, or `document_path` per

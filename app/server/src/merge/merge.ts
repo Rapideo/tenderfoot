@@ -63,6 +63,7 @@ import { closesAt } from "./closes-at.js";
 import { postedAt, type PostedAt } from "./posted-at.js";
 import { description } from "./description.js";
 import { placeOfPerformance } from "./place.js";
+import { documentKey } from "./document-key.js";
 import { noticeKind, listingCodes, setAside } from "./listing-facts.js";
 import { title as resolveTitle } from "./title.js";
 
@@ -99,6 +100,10 @@ export interface MergeResult {
    * by nature of the source, so a low number here is expected rather than a
    * symptom. */
   placesSet: number;
+  /** Solicitations whose `document_key` was set on this run -- the update
+   * path only, as the two above. HigherGov only, by construction
+   * (document-key.ts); every other source reports 0 here forever. */
+  documentKeysSet: number;
   /* The three listing facts (listing-facts.ts). Reported separately rather
    * than folded into one number because they have different availability in
    * the payload -- kind 100%, codes ~98%, set_aside 56% of SAM rows -- so a
@@ -248,6 +253,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
      * text[] with no per-row cast -- unlike `codes`, which is jsonb. */
     description: string | null;
     place_of_performance: string | null;
+    document_key: string | null;
   }[] = [];
   /* Keyed by solicitation id so a later group wins, exactly as sequential
    * UPDATEs did. Two distinct external_ids CAN resolve to one solicitation
@@ -266,6 +272,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
   const postedUpdates = new Map<number, PostedAt>();
   const descriptionUpdates = new Map<number, string>();
   const placeUpdates = new Map<number, string>();
+  const documentKeyUpdates = new Map<number, string>();
   /* The three listing facts (listing-facts.ts). Keyed and guarded exactly as
    * the two above: a null never enters the map, so a source that states none
    * of them can never clobber a populated column. */
@@ -358,6 +365,16 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
       placeUpdates.set(g.solicitation_id, place);
     }
 
+    /* WHICH KEY OPENS THE DOCUMENTS. Same shape as the two above, and it
+     * matters on both paths for the same reason they did: a row created in
+     * this run never sees the update map, and a row that was ingested before
+     * the key was captured gets it the first time a keyed sighting of it is
+     * merged -- which is the only free route those rows have to one. */
+    const docKey = documentKey(src?.name ?? "", raw);
+    if (g.solicitation_id !== null && docKey !== null) {
+      documentKeyUpdates.set(g.solicitation_id, docKey);
+    }
+
     /* THE THIRD INSTANCE of the closes_at / posted_at defect, and the largest:
      * five columns null on 1,724 of 1,724 SAM.gov rows while the payload that
      * fills three of them sat unread in `sighting.raw`. Collected for every
@@ -408,6 +425,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
          * notice (CLAUDE.md §5.2), so the gap had a direct price. */
         description: desc,
         place_of_performance: place,
+        document_key: docKey,
       });
       if (chain.length) chains.set(g.ident, chain);
     } else if (Number(g.unlinked) > 0) {
@@ -456,16 +474,16 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
           `INSERT INTO solicitation
              (external_id, identity_key, title, source_id, closes_at, posted_at,
               posted_at_origin, kind, codes, set_aside, description,
-              place_of_performance)
+              place_of_performance, document_key)
            SELECT u.external_id, u.ident, u.title, u.source_id, u.closes_at, u.posted_at,
                   u.posted_at_origin, u.kind, u.codes::jsonb, u.set_aside, u.description,
-                  u.place_of_performance
+                  u.place_of_performance, u.document_key
              FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[],
                          $7::text[], $8::text[], $9::text[], $10::text[], $11::text[],
-                         $12::text[])
+                         $12::text[], $13::text[])
                AS u(external_id, ident, title, source_id, closes_at, posted_at,
                     posted_at_origin, kind, codes, set_aside, description,
-                    place_of_performance)
+                    place_of_performance, document_key)
            RETURNING id, identity_key`,
           [
             inserts.map((i) => i.external_id),
@@ -480,6 +498,7 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
             inserts.map((i) => i.set_aside),
             inserts.map((i) => i.description),
             inserts.map((i) => i.place_of_performance),
+            inserts.map((i) => i.document_key),
           ],
         )
       : [];
@@ -553,6 +572,19 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
              FROM unnest($1::int[], $2::text[]) AS u(id, place)
             WHERE s.id = u.id AND s.place_of_performance IS DISTINCT FROM u.place`,
           [[...placeUpdates.keys()], [...placeUpdates.values()]],
+        )
+      : 0;
+
+    /* WHICH KEY OPENS THE DOCUMENTS. Same IS DISTINCT FROM guard, same
+     * reason: NULL is the whole case (every HigherGov row ingested before
+     * 2026-09-13), and `<>` against NULL would update nothing and look like
+     * it worked. */
+    const documentKeysSet = documentKeyUpdates.size
+      ? await q.run(
+          `UPDATE solicitation s SET document_key = u.document_key
+             FROM unnest($1::int[], $2::text[]) AS u(id, document_key)
+            WHERE s.id = u.id AND s.document_key IS DISTINCT FROM u.document_key`,
+          [[...documentKeyUpdates.keys()], [...documentKeyUpdates.values()]],
         )
       : 0;
 
@@ -685,7 +717,8 @@ export async function mergeSightings(sourceId?: number): Promise<MergeResult> {
 
     return {
       created: inserted.length, updated, linked, orgsAttached,
-      deadlinesSet, postedSet, descriptionsSet, placesSet, kindsSet, codesSet, setAsidesSet,
+      deadlinesSet, postedSet, descriptionsSet, placesSet, documentKeysSet, kindsSet, codesSet,
+      setAsidesSet,
     };
   });
 }

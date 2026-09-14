@@ -24,7 +24,16 @@ import { COVERAGE } from "../coverage/thresholds.js";
 import { costOfThrownCall, redact } from "../coverage/highergov-client.js";
 import { isMeteredSourceName } from "../scrape/adapters/registry.js";
 
-export type FetchReason = "fetched" | "already-looked" | "unsupported" | "ceiling";
+/* "no-document-key" (2026-09-13): the source's client is keyed by
+ * `document_key` and this row has none -- ingested before the key was
+ * captured. Refused before any request, so it costs nothing and stamps
+ * nothing; the row becomes askable the moment a merge lands its key. */
+export type FetchReason =
+  | "fetched"
+  | "already-looked"
+  | "unsupported"
+  | "no-document-key"
+  | "ceiling";
 
 export interface FetchOutcome {
   reason: FetchReason;
@@ -36,6 +45,7 @@ export interface FetchOutcome {
 interface Row {
   id: number;
   external_id: string | null;
+  document_key: string | null;
   source_id: number;
   source_name: string;
   checked: Date | null;
@@ -46,7 +56,7 @@ export async function fetchDocumentsFor(
   fetchImpl: typeof fetch = fetch,
 ): Promise<FetchOutcome> {
   const row = await one<Row>(
-    `SELECT s.id, s.external_id, s.source_id, src.name AS source_name,
+    `SELECT s.id, s.external_id, s.document_key, s.source_id, src.name AS source_name,
             s.attachments_checked_at AS checked
        FROM solicitation s
        JOIN source src ON src.id = s.source_id
@@ -66,6 +76,17 @@ export async function fetchDocumentsFor(
    * is the D3 error in a third place. */
   if (!client || !row.external_id) return { reason: "unsupported", spent: 0, documents: 0 };
 
+  /* 🔴 THE KEY THE CLIENT IS ASKED BY, and the refusal when there is none
+   * (2026-09-13). HigherGov's /document/ takes `related_key`, stored as
+   * `document_key`; a row ingested before that was captured has none, and
+   * the only thing sending anything else buys is a 400. So the request is
+   * not made: nothing spent, nothing stamped (we did not look, and the row
+   * must stay askable once a merge lands its key), and a reason of its own
+   * so the screen can say WHY rather than "no documents". SAM is keyed by
+   * external_id, already checked above, and is untouched by this. */
+  const key = client.keyedBy === "document-key" ? row.document_key : row.external_id;
+  if (!key) return { reason: "no-document-key", spent: 0, documents: 0 };
+
   /* 🔴 FIXED (Task 7 review round 2, the same defect run.ts was fixed for).
    * `>= MONTHLY_RECORD_CEILING` only refuses once the ceiling is ALREADY
    * crossed -- a month sitting one record under it would still wave through
@@ -80,7 +101,7 @@ export async function fetchDocumentsFor(
   /* Page one and stop -- CLAUDE.md §5.2. The client does not page. */
   let fetched: DocumentFetchResult;
   try {
-    fetched = await client.fetchFor(row.external_id, fetchImpl);
+    fetched = await client.fetchFor(key, fetchImpl);
   } catch (err) {
     /* 🔴 THE THIRD CALL SITE (Task 7 review round 2). Before HigherGov was
      * registered, `client` here was always SAM.gov -- free, and every one of

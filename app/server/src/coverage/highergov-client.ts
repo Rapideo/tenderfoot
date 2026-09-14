@@ -84,6 +84,16 @@ export interface FeedNotice {
   postedDate: string | null;
   versionKey: string | null;
   title: string | null;
+  /** The vendor's `related_key` for this notice's documents, lifted out of
+   * `document_path` at parse time -- the ONLY place that field is ever read
+   * -- because /document/ requires it and nothing else identifies the set
+   * (the endpoint's own description: "found in the document_path field in
+   * the Opportunity endpoint"). An identifier, not a credential: the api_key
+   * is a separate query parameter on the same URL and is still dropped. Also
+   * present in `raw` as `document_key`, so it survives the artifact and the
+   * merge like any other sourced field. Null when the vendor sent no path or
+   * a path without the key. */
+  documentKey: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -354,8 +364,17 @@ export interface HigherGovClient {
   fetchBySourceId(sourceId: string, fetchImpl?: typeof fetch): Promise<FeedResult>;
   /* WARNING: ~11 records per call, verified 2026-09-03 (the meter moved
    * 478 -> 489 on one call returning 1 opportunity + 10 documents). This is
-   * the single most expensive thing in the codebase per invocation. */
-  fetchDocuments(sourceId: string, fetchImpl?: typeof fetch): Promise<DocumentsResult>;
+   * the single most expensive thing in the codebase per invocation.
+   *
+   * 🔴 TAKES THE DOCUMENT KEY, NOT THE NOTICE ID (2026-09-13). /document/
+   * accepts exactly five parameters -- api_key, related_key, ordering,
+   * page_number, page_size -- and `source_id` is not one of them. This
+   * method used to send it, which is what every attempt's `400` was: a
+   * rejected request, not a burned key. The key is FeedNotice.documentKey,
+   * lifted out of document_path at parse time and stored on the
+   * solicitation; a row ingested before that was captured has none, and
+   * fetch-documents-for.ts refuses (free) rather than guess. */
+  fetchDocuments(documentKey: string, fetchImpl?: typeof fetch): Promise<DocumentsResult>;
 }
 
 /* Matches an api_key wherever it appears in a string, in any nesting. Broad
@@ -420,6 +439,27 @@ function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
+/* THE ONE READ OF document_path, AND IT READS ONE QUERY PARAMETER. The field
+ * is the vendor's pre-signed URL into /document/, shaped
+ * `.../document/?related_key=<key>&api_key=<credential>`. `related_key` is
+ * the identifier that endpoint requires ("found in the document_path field
+ * in the Opportunity endpoint" -- its own schema description); `api_key` is
+ * the credential CLAUDE.md §5.3 exists for. This takes the first and never
+ * touches the second. Anything that is not a parseable URL, or a URL without
+ * the parameter, yields null -- the row is then simply a row whose documents
+ * cannot be asked for, which fetch-documents-for.ts reports as such rather
+ * than guessing a key. */
+function documentKeyFrom(documentPath: unknown): string | null {
+  if (typeof documentPath !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(documentPath);
+  } catch {
+    return null;
+  }
+  return str(url.searchParams.get("related_key"));
+}
+
 function toNotice(r: RawResult): FeedNotice | null {
   const externalId = str(r.source_id);
   if (!externalId) return null;
@@ -429,10 +469,19 @@ function toNotice(r: RawResult): FeedNotice | null {
    * else, so "we only copy four fields" is no longer the guarantee. Then
    * redact() walks every remaining value recursively to scrub any key-shaped
    * strings nested at any depth -- CLAUDE.md §5.3 rule 2: scrubbing happens
-   * at the BOUNDARY, making this the one place the guarantee is enforced. */
-  const { document_path: _dropped, ...rest } = r;
+   * at the BOUNDARY, making this the one place the guarantee is enforced.
+   *
+   * ONE thing is read off it before it goes: related_key (documentKeyFrom
+   * above). It lands in `raw` under a name of ours, `document_key`, so it
+   * rides the artifact and the merge exactly as `pop_state` does -- a
+   * sourced value, just one the vendor delivers inside a URL rather than as
+   * a field. Set only when present, so a keyless row has no such field
+   * rather than a null one. */
+  const { document_path, ...rest } = r;
+  const documentKey = documentKeyFrom(document_path);
   return {
     externalId,
+    documentKey,
     /* 🔴 BOTH DATES GO THROUGH redact(), and it is not decoration. Either one
      * can become the item's `modifiedAt` (scrape/adapters/highergov.ts), and
      * `modifiedAt` is persisted -- scrape/run.ts folds it into the run's
@@ -447,7 +496,7 @@ function toNotice(r: RawResult): FeedNotice | null {
     postedDate: redact(str(r.posted_date)),
     versionKey: str(r.version_key),
     title: str(r.title),
-    raw: redact(rest),
+    raw: redact(documentKey === null ? rest : { ...rest, document_key: documentKey }),
   };
 }
 
@@ -869,13 +918,16 @@ export const higherGovClient: HigherGovClient = {
     return get(url, fetchImpl);
   },
 
-  async fetchDocuments(sourceId, fetchImpl = fetch) {
+  async fetchDocuments(documentKey, fetchImpl = fetch) {
     const url = new URL(`${HOST}/document/`);
     url.searchParams.set("api_key", apiKey());
-    url.searchParams.set("source_id", sourceId);
+    /* related_key, the endpoint's one required identifier -- see the
+     * interface comment. NOT source_id: the endpoint does not take it, and
+     * sending it was the 400. */
+    url.searchParams.set("related_key", documentKey);
     /* 🔴 No search_id, for the exact reason fetchBySourceId gives above: this
-     * is a lookup by a specific notice's id, and narrowing it by a saved
-     * search would report real documents as absent merely because the
+     * is a lookup by a specific document set's key, and narrowing it by a
+     * saved search would report real documents as absent merely because the
      * opportunity fell outside that search's scope. */
     return getDocuments(url, fetchImpl);
   },

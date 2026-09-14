@@ -54,7 +54,7 @@ test("a run records what the vendor billed in api_spend", async () => {
     client: fakeClient({
       "2026-09-03": {
         notices: [
-          { externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: "v1", title: "t", raw: {} },
+          { externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: "v1", title: "t", documentKey: null, raw: {} },
         ],
         records: 5,
         feedCount: 5,
@@ -80,7 +80,7 @@ test("the spend is recorded even when the item write fails", async () => {
   const client: HigherGovClient = {
     async fetchDay() {
       return {
-        notices: [{ externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, raw: {} }],
+        notices: [{ externalId: "A", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
         records: 7,
         feedCount: 7,
         pages: 1,
@@ -232,7 +232,7 @@ test("a notice absent from the window is looked up by id before being called mis
     async fetchBySourceId(sourceId) {
       return {
         notices: [
-          { externalId: sourceId, capturedDate: "2026-08-01", postedDate: null, versionKey: null, title: null, raw: {} },
+          { externalId: sourceId, capturedDate: "2026-08-01", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} },
         ],
         records: 1,
         feedCount: 1,
@@ -323,6 +323,7 @@ test("a multi-page day bought WHOLE is graded, not refused", async () => {
             postedDate: null,
             versionKey: null,
             title: null,
+            documentKey: null,
             raw: {},
           },
         ],
@@ -630,7 +631,7 @@ test("a notice settled as carried by an earlier run is not re-asked, and does no
     async fetchDay(capturedDate) {
       if (capturedDate === "2026-09-03") {
         return {
-          notices: [{ externalId: "X", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, raw: {} }],
+          notices: [{ externalId: "X", capturedDate: "2026-09-03", postedDate: null, versionKey: null, title: null, documentKey: null, raw: {} }],
           records: 1,
           feedCount: 1,
           pages: 1,
