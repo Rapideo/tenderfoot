@@ -668,3 +668,29 @@ August 30, 2026:
 286. Merged to main, --no-ff, sixty-one commits. Gate green at 430 tests. SP4 is done and the next slice is SP6, which is the GO/NO-GO gate — and which now also carries two bullets of SP4's own demo criterion, deferred to it because they need a record view that does not exist.
 
 287. The honest summary: thirteen review findings across two rounds, plus one the live run found and one I found while fixing another. Not one of them was visible to a green suite. The recall number is 12.5% and the denominator assumes every miss was ours, which nobody has checked — that's the labelling task, and it's the one thing here a person has to do.
+
+September 15, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand. Covers the evening session: the three waiting ruling sheets, their build and merge, and the last night of the HigherGov trial. Aug 31 – Sep 14 have no entries and were deliberately not backfilled.]*
+
+288. Ruled the three sheets that had been waiting since the 13th — D15 buy the key on demand, D16 the invented head, D17 the F6 statistic — all three the recommended option, dictated rather than clicked. Wrote them into each sheet's own store with a `recorded_by` field saying exactly that, because a future reader finding "Ruled · A" deserves to know whether a hand clicked it.
+
+289. Built all three TDD, eleven new tests, each watched failing first. The one worth recording: D16's new head is gated on the row holding nothing, which is not what the sheet said. An IDOA row can be `unsupported` and still hold real files, and there is already a regression test pinning `BUNDLE — 1 FILE` for exactly that. Replacing a true count with "DOCUMENTS NOT REQUESTED" would have been a second falsehood curing the first. Flagged it to Matt as a narrowing rather than folding it in quietly.
+
+290. Mutation-tested four things rather than trusting a green suite: F6's inclusive boundary, D16's not-asked guard, D15's two-call ceiling, and D15's key persistence. All four turned exactly the expected test red and nothing else.
+
+291. The Chrome extension could not reach localhost — it renders example.com fine, so it is site permission and not connection. Asked before falling back, then drove CDP on a throwaway headless profile. Three states seen on screen and not merely read out of the DOM.
+
+292. Matt's dashboard audit read 6,767. Our ledger read 6,867. The gap is exactly `api_spend` row 211 — the conservative 100 charged for a 400 refusal on 09-08. "A refused request costs nothing" stopped being an argument and became a measurement. Did not correct the row: it is the only instrument we have for spend, and rewriting it unasked is not on.
+
+293. Bought a ~5-record dry run to read `KEYLESS PATHS` and it does not print one — `--dry-run` exits before the walk that emits it. Priced the question correctly and bought the wrong thing.
+
+294. Then the trap that actually mattered. The ingest reported six sightings imported, clean, no warnings, and `document_key` read 0 of 3,238 — which is indistinguishable from the broken parse the spend existed to test. `npm run ingest:highergov` does not merge. `npm run merge` turned 0 into 6. Hit the same trap twice in one session and nearly "fixed" working code the first time.
+
+295. Recall came back strong and about the wrong thing: 98.7–100% coverage and 37–39 days of bidding room still left when HigherGov first carries a notice — every one of the 82 notices `state_agency`, with `sub_state` reading NOT MEASURED on every run. HigherGov was bought for sub-state. The free answer key is IDOA, which is itself a state-agency source, so no amount of money closes that gap. It is a flaw in the evaluation design, not in the vendor.
+
+296. Spent 71 records chasing a cohort floor of 100 that was unreachable at any price — only 82 distinct notices have ever existed in the answer key. One free query against `coverage_item` would have said so before the first run rather than after the fourth.
+
+297. The harvest's obvious target was empty, and establishing that cost nothing: 260 day-artifacts already cover Jan 1 – Sep 17 on `captured_date` and 234 of them hold zero rows. The value was on the other axis. `posted_date` for the unheld months bought 1,685 records of archive — 3,238 rows to 4,377 — and 1,149 of them arrived already carrying document keys, because the harvest ran through the client that lifts the key at parse. D15's "the step retires itself" is now proven rather than promised.
+
+298. Closed the trial at 8,682 of 10,000 on Matt's ruling, holding 318 back. The floor now fails one predicate instead of five: F7, document reachability, 7 of 293. And F7 cannot be built — D2 put documents on demand, so it is the first predicate that closes only by the product being used.

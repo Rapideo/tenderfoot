@@ -1,6 +1,6 @@
 # Tenderfoot — status
 
-**Updated 2026-09-13.** One screen. The reasoning lives elsewhere; this is only where things stand.
+**Updated 2026-09-15.** One screen. The reasoning lives elsewhere; this is only where things stand.
 
 > **⚖️ ALL SEVEN DECISIONS ARE ANSWERED (2026-09-04), AND ~~FIVE ARE BUILT~~ ALL SEVEN ARE BUILT (2026-09-05).** Ruling sheet: <https://claude.ai/code/artifact/4488f337-abc2-4c2c-a0f5-2b6f342c2272>; the answers live in its own store (`read_db`, collection `rulings`, docs `d1`…`d7`). **Do not re-ask any of them.** Built and pushed to `main`: **D3** (R9's null check — Illinois BidBuy now grades `weak` by measurement where Kentucky stays `unknown`), **D1** (HigherGov's R7 ruled, narrow reading — data only, no grading code moved), **D4/D5** (the single ratification flag split in two: the floor is RATIFIED, R7 stays PROVISIONAL and every R7 grade now says so), **D6** and **D7** (both now fully DONE, not just pushed — see the correction directly below). **D2 is also built** — the on-demand-documents mechanism, proven against SAM.gov at zero metered cost — ~~but on branch `d2-on-demand-documents`, not yet merged~~ **✅ AND MERGED, `--no-ff`, at `d60ae40` — corrected 2026-09-06.** This clause described the branch state and stayed unchanged through the merge that ended it, the same way SP2's and SP3.6's rows once did. **Gate re-run on the merged result 2026-09-06: 825 tests / 93 files, exit 0** — the identical figure the branch carried, so the merge introduced nothing. `main == origin/main`. See the ruling table and the 2026-09-05 RESUME HERE entry for what it does and does not cover.
 >
@@ -274,7 +274,7 @@ VITE_API_TARGET=http://localhost:3010 npm run dev --workspace app/client
 
 ---
 
-## 🔖 RESUME HERE — updated 2026-09-13 (late)
+## 🔖 RESUME HERE — updated 2026-09-15 (late)
 
 ## ✅ THE 150 ARE TRIAGED — 11 INTERESTED, 139 NOT INTERESTED, EVERY ONE WITH A REASON IN MATT'S OWN WORDS
 
@@ -376,7 +376,21 @@ Two facts before re-asking, which are what the ruling was made on: **the cap is 
 >
 > 🛑 **SPENDING IS CLOSED FOR THIS TRIAL — Matt's ruling, 2026-09-15: *"Let's stop spending. We'll save some for tomorrow if something else happens."*** Final position **8,682 of 10,000**, leaving **318 under the code ceiling and 1,318 under the allowance, deliberately unspent and held in reserve.** §5.1 resumes in full: **propose and wait.** The recommendation Matt accepted was to stop — the remaining budget buys only 2025 postings, which are long closed and cannot be bid, and no amount of it closes the `sub_state` measurement gap, because what is missing there is a free answer key and not money.
 >
-> ▶️ **NEXT, AND IT COSTS NOTHING: the chip derivation, with Matt, from [`docs/2026-09-13-reason-corpus.md`](docs/2026-09-13-reason-corpus.md).** 150 blocks, 11 Interested. No API calls, no rulings outstanding for it. That is the resume point.
+> ## ▶️ START HERE TOMORROW — ordered, and the first three cost nothing
+>
+> **1. The chip derivation, WITH MATT, from [`docs/2026-09-13-reason-corpus.md`](docs/2026-09-13-reason-corpus.md).** 150 blocks, 11 Interested, a blank `→ chip:` per block. No API calls, no rulings outstanding, and it is the thing everything else has been waiting on. Under SVRC 1.1.4 each chip carries a class on the way in and the **capacity class is excluded from anything that learns**. Then unpin `Queue.test.tsx`'s no-chips assertion, record the deviation, and build the chips with the free-text escape hatch the SVRC requires. *(If the 150 were touched again since, re-run `node --env-file-if-exists=.env scripts/reason-corpus.mjs --sample=2 --out=docs/2026-09-13-reason-corpus.md` first — read-only and idempotent.)*
+>
+> **2. Two things I surfaced on 2026-09-15 that are Matt's to rule, both free, both small:**
+>    - **D31's narrowing.** D16 said one head for all three non-asking outcomes; I ship it only when the row ALSO holds nothing, because an `unsupported` IDOA row can hold real files and a regression test pins `BUNDLE — 1 FILE` for exactly that. One condition to drop if he disagrees. Argument in `docs/admin-deviations.md` D31.
+>    - **R7's broken mirror.** D17 removed F6's p10, so `p6DescriptionP10Adequate` now mirrors nothing — and R7's p10 collapses on precisely the thin-listing sources that made F6's unusable (HigherGov's is 29). An R7 description grade on such a source measures the market, not the source. **Should be settled before R7 is ratified.** Recorded in `app/server/src/fitness/thresholds.ts` and the data-fitness spec §3.2.
+>
+> **3. Grade HigherGov itself.** `R7 UNKNOWN — 0 of 5 properties measured, 2 needed before a profile is asserted.` We bought coverage evidence all week and never graded the source. Check first whether it can be measured from what we now hold (4,377 rows) — it probably can, for free.
+>
+> **4. Then, when Matt wants it: the subscription decision.** $500/yr. STRONG on depth, access and incrementality; 98.7–100% recall and 37–39 days of lead time **on state agencies**; **silent on sub-state**, which is what it was bought for, and no free answer key exists to close that. It will be judgment plus a strong state-agency result, not the evidence we set out to gather. ⚠️ Re-read HigherGov's **21.7-day median insert lag** after a few days of ordinary operation before treating it as a freshness problem — today's backfill of January postings almost certainly inflates it.
+>
+> **Still open from before, unchanged:** the working-set plan's **§5** · the deadline-labelling task (⏸ PARKED by ruling, worksheet at `docs/2026-08-30-deadline-labelling.md`).
+>
+> **And the one that closes itself:** **F7 is the floor's last failing predicate (7 of 293) and cannot be built.** D2 put documents on demand, so it rises every time somebody triages and opens records. It is a usage metric wearing a data metric's clothes.
 >
 > 🛑 **AND THE TRIAL ENDS IN TWO DAYS (Matt, 2026-09-15).** 3,233 records left of the 10,000 allowance; **2,233 before `MONTHLY_RECORD_CEILING` (9,000) refuses first**, which is the binding number. **Ruling sheet D18–D19: <https://claude.ai/artifact/N9CCdMYE7jzLqrPrCAQef5>** (`read_db`, collection `rulings`, docs `d18`, `d19`). D18 asks whether to prove the `related_key` parse with a ~5-record sample before spending on it; D19 asks how to allocate the rest — measure (recall, decide the subscription) or harvest (listings, 1 record each, gone when the trial lapses). **Nothing is called until he rules (§5.1).** Two facts the sheet turns on: **all 3,238 HigherGov rows are keyless and none has documents**, and **only 3 of the 11 Interested rows are still open** — the other 8 have closed, so documents for them cannot be bid.
 
