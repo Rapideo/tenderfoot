@@ -710,26 +710,242 @@ test("a HigherGov row is asked for by its document key, not its notice id", asyn
  * nothing stamped (we did not look, and the row must stay askable once it
  * has a key), and the vendor never called. The same reasoning as
  * "unsupported": an absence of capability is not an absence of documents. */
-test("a HigherGov row with no document key is refused before any request: free, unstamped, distinct", async () => {
-  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-unkeyed", null);
-  const exploding = (async () => {
-    throw new Error("the vendor must not be called for a row that cannot be asked for");
-  }) as unknown as typeof fetch;
+/* ---------------------------------------------------------------- D15 -- */
 
-  const out = await fetchDocumentsFor(hgSolicitationId, exploding);
+/* ⚖️ D15 (Matt, 2026-09-15, option A): THE KEY IS BOUGHT ON DEMAND.
+ *
+ * ~~A keyless row is refused before any request.~~ That was the state between
+ * 2026-09-13 and the ruling, and the test that pinned it is replaced by the
+ * ones below rather than kept, because the behaviour it asserted is the thing
+ * that changed: the vendor IS now called for a keyless row, once, to buy the
+ * one identifier /document/ requires.
+ *
+ * Why this and not a backfill: all 3,238 HigherGov rows are keyless, and
+ * buying keys for them ahead of need is 3,238–6,500 records — most of the
+ * reserve — spent overwhelmingly on rows that will be passed and never
+ * opened. The sitting ran about one Interested in ten. So the key is bought
+ * exactly when a row is opened for its documents, and every future ingest
+ * lands keys for free (the client now lifts `related_key` at parse), which
+ * means this step retires itself. */
+
+/* A fetch double that answers DIFFERENTLY per endpoint, which the key-then-
+ * documents path is the first thing here to need: `recordingFetch` answers
+ * every call the same way and cannot express "the opportunity call returns a
+ * key, the document call returns files". */
+function routingFetch(
+  routes: { opportunity?: () => unknown; document?: () => unknown },
+  status = { ok: true, status: 200 },
+): typeof fetch & { urls: string[] } {
+  const urls: string[] = [];
+  const impl = (async (url: string | URL) => {
+    const s = String(url);
+    urls.push(s);
+    const route = s.includes("/opportunity/") ? routes.opportunity : routes.document;
+    if (!route) throw new Error(`no route in this test for ${s.split("?")[0]}`);
+    return { ...status, json: async () => route() };
+  }) as unknown as typeof fetch & { urls: string[] };
+  impl.urls = urls;
+  return impl;
+}
+
+/* The vendor delivers `related_key` ONLY inside document_path, a pre-signed
+ * URL that also carries the api_key (CLAUDE.md §5.3). Built here the way the
+ * vendor sends it so the test exercises the real extraction, not a shortcut. */
+const documentPathCarrying = (key: string) =>
+  `https://www.highergov.com/api-external/document/?related_key=${key}&api_key=NOTAREALKEY00000000000000000000`;
+
+test("a keyless HigherGov row buys its key first, then fetches its documents", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-ondemand", null);
+  const fetchImpl = routingFetch({
+    opportunity: () => ({
+      meta: { pagination: { count: 1, pages: 1 } },
+      results: [
+        { source_id: "hg-notice-ondemand", document_path: documentPathCarrying("DOCKEY-bought-9") },
+      ],
+    }),
+    document: () => ({
+      meta: { pagination: { count: 1, pages: 1 } },
+      results: [{ file_name: "sow.pdf", text_extract: "Scope of work." }],
+    }),
+  });
+
+  const out = await fetchDocumentsFor(hgSolicitationId, fetchImpl);
+  expect(out.reason).toBe("fetched");
+  expect(out.documents).toBe(1);
+
+  /* TWO calls, in this order: the key cannot be asked for after the thing it
+   * unlocks. */
+  expect(fetchImpl.urls).toHaveLength(2);
+  const first = new URL(fetchImpl.urls[0]!);
+  expect(first.pathname).toBe("/api-external/opportunity/");
+  expect(first.searchParams.get("source_id")).toBe("hg-notice-ondemand");
+  const second = new URL(fetchImpl.urls[1]!);
+  expect(second.pathname).toBe("/api-external/document/");
+  expect(second.searchParams.get("related_key")).toBe("DOCKEY-bought-9");
+
+  /* PERSISTED, so the purchase is made once and not once per open. */
+  const row = await one<{ document_key: string | null }>(
+    `SELECT document_key FROM solicitation WHERE id = $1`,
+    [hgSolicitationId],
+  );
+  expect(row!.document_key).toBe("DOCKEY-bought-9");
+
+  /* BOTH calls are on the ledger, under the endpoint each actually hit --
+   * `api_spend` is the only instrument that can answer "how much is left"
+   * (CLAUDE.md §5.1), and a key purchase filed under `document` would make
+   * the opportunity endpoint's cost invisible. */
+  const spend = await all<{ endpoint: string; records: number }>(
+    `SELECT endpoint, records FROM api_spend WHERE solicitation_id = $1 ORDER BY endpoint`,
+    [hgSolicitationId],
+  );
+  expect(spend.map((s) => s.endpoint)).toEqual(["document", "opportunity"]);
+  /* `spent` is what the VENDOR billed for the whole operation, both calls. */
+  expect(out.spent).toBe(spend.reduce((t, s) => t + s.records, 0));
+});
+
+/* The second open must not buy the key again. Without the persisted write
+ * above this is the failure that costs real money -- quietly, one record at a
+ * time, on every reopen of every keyless row. */
+test("a bought key is used on the next open, not bought again", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-once", null);
+  const buy = routingFetch({
+    opportunity: () => ({
+      meta: { pagination: { count: 1, pages: 1 } },
+      results: [
+        { source_id: "hg-notice-once", document_path: documentPathCarrying("DOCKEY-once-3") },
+      ],
+    }),
+    document: () => ({ meta: { pagination: { count: 0, pages: 1 } }, results: [] }),
+  });
+  await fetchDocumentsFor(hgSolicitationId, buy);
+  expect(buy.urls).toHaveLength(2);
+
+  /* Clear the stamp so the guard above does not short-circuit this second
+   * call -- the thing under test is the KEY, not the already-looked rule. */
+  await run(`UPDATE solicitation SET attachments_checked_at = NULL WHERE id = $1`, [
+    hgSolicitationId,
+  ]);
+
+  const reopen = routingFetch({
+    opportunity: () => {
+      throw new Error("the key was already bought; it must not be bought twice");
+    },
+    document: () => ({ meta: { pagination: { count: 0, pages: 1 } }, results: [] }),
+  });
+  const out = await fetchDocumentsFor(hgSolicitationId, reopen);
+  expect(out.reason).toBe("fetched");
+  expect(reopen.urls).toHaveLength(1);
+  expect(new URL(reopen.urls[0]!).searchParams.get("related_key")).toBe("DOCKEY-once-3");
+});
+
+/* THE VENDOR CAN ANSWER WITHOUT A KEY, and that answer is not free. The row
+ * stays refused and unstamped -- it is still a row we could not ask about --
+ * but the lookup billed, so the ledger must carry it. Pricing this at zero
+ * is the under-report api-spend.ts's header calls the dangerous direction. */
+test("a key lookup that finds no key still costs, and the row stays refused and unstamped", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-nokey", null);
+  const fetchImpl = routingFetch({
+    opportunity: () => ({
+      meta: { pagination: { count: 1, pages: 1 } },
+      /* A real notice, with a document_path that carries no related_key --
+       * the shape `keylessPaths` exists to measure on the first live run. */
+      results: [{ source_id: "hg-notice-nokey", document_path: "https://www.highergov.com/x/" }],
+    }),
+  });
+
+  const out = await fetchDocumentsFor(hgSolicitationId, fetchImpl);
   expect(out.reason).toBe("no-document-key");
-  expect(out.spent).toBe(0);
   expect(out.documents).toBe(0);
+  expect(out.spent).toBeGreaterThan(0);
 
+  expect(fetchImpl.urls).toHaveLength(1);
   const stamp = await one<{ attachments_checked_at: Date | null }>(
     `SELECT attachments_checked_at FROM solicitation WHERE id = $1`,
     [hgSolicitationId],
   );
   expect(stamp!.attachments_checked_at).toBeNull();
-  expect(await all(`SELECT id FROM api_spend WHERE solicitation_id = $1`, [hgSolicitationId]))
-    .toHaveLength(0);
-  expect(await all(`SELECT id FROM document WHERE solicitation_id = $1`, [hgSolicitationId]))
-    .toHaveLength(0);
+
+  const spend = await all<{ endpoint: string; records: number }>(
+    `SELECT endpoint, records FROM api_spend WHERE solicitation_id = $1`,
+    [hgSolicitationId],
+  );
+  expect(spend).toHaveLength(1);
+  expect(spend[0]!.endpoint).toBe("opportunity");
+  expect(spend[0]!.records).toBe(out.spent);
+});
+
+/* 🔴 THE CEILING MUST PRICE BOTH CALLS, NOT ONE. A keyless row now costs an
+ * opportunity call AND a document call, so the refusal has to account for
+ * what THIS open could still spend -- the same reasoning the existing
+ * `> MONTHLY_RECORD_CEILING` fix was made for, applied to a path that got
+ * more expensive after that fix was written. At exactly one call's headroom a
+ * KEYED row proceeds and a KEYLESS one must not. */
+test("the ceiling refuses a keyless row that a keyed row at the same spend would clear", async () => {
+  await run(`INSERT INTO api_spend (source_id, endpoint, records) VALUES ($1, 'document', $2)`, [
+    higherGovId,
+    MONTHLY_RECORD_CEILING - COVERAGE.unparseableResponseRecords,
+  ]);
+  const exploding = (async () => {
+    throw new Error("the ceiling must be checked before the source is called");
+  }) as unknown as typeof fetch;
+
+  const keyless = await insertHigherGovSolicitation("hg-notice-ceiling-unkeyed", null);
+  const out = await fetchDocumentsFor(keyless, exploding);
+  expect(out.reason).toBe("ceiling");
+  expect(out.spent).toBe(0);
+
+  /* The other side of the same boundary, in the same test because the pair is
+   * the assertion: one call's headroom is enough for one call. */
+  const keyed = await insertHigherGovSolicitation("hg-notice-ceiling-keyed", "DOCKEY-ceil-1");
+  const ok = await fetchDocumentsFor(
+    keyed,
+    routingFetch({ document: () => ({ meta: { pagination: { count: 0, pages: 1 } }, results: [] }) }),
+  );
+  expect(ok.reason).toBe("fetched");
+});
+
+/* The key lookup gets the SAME conservative treatment the document call
+ * already has: a malformed 200 means the vendor billed records we could not
+ * read. Tallied under `opportunity`, because that is the endpoint that was
+ * actually called and the ledger is read per endpoint. */
+test("a key lookup that throws after billing is tallied conservatively, under opportunity", async () => {
+  const hgSolicitationId = await insertHigherGovSolicitation("hg-notice-keythrow", null);
+  const malformed = routingFetch({
+    opportunity: () => {
+      throw new SyntaxError("Unexpected end of JSON input");
+    },
+  });
+
+  await expect(fetchDocumentsFor(hgSolicitationId, malformed)).rejects.toThrow(
+    /malformed JSON body/,
+  );
+
+  const rows = await all<{ records: number; endpoint: string }>(
+    `SELECT records, endpoint FROM api_spend WHERE solicitation_id = $1`,
+    [hgSolicitationId],
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.endpoint).toBe("opportunity");
+  expect(rows[0]!.records).toBe(COVERAGE.unparseableResponseRecords);
+});
+
+/* A SAM row has no key concept at all, so none of the above may reach it:
+ * `keyedBy` is "external-id" there and a missing external_id is already
+ * "unsupported" long before this. Pins that D15 did not widen the lookup to
+ * every source. */
+test("a keyless SAM.gov row is still unsupported, never sent for a key lookup", async () => {
+  const samNoId = await insert(
+    `INSERT INTO solicitation (title, source_id, external_id, posted_at, posted_at_origin)
+     VALUES ('no notice id', $1, NULL, '2026-08-01', 'published') RETURNING id`,
+    [samId],
+  );
+  const exploding = (async () => {
+    throw new Error("SAM has no key to buy; nothing may be called");
+  }) as unknown as typeof fetch;
+
+  const out = await fetchDocumentsFor(samNoId, exploding);
+  expect(out.reason).toBe("unsupported");
+  expect(out.spent).toBe(0);
 });
 
 /* SAM is keyed by its notice id and has no document key; the new column must

@@ -168,6 +168,17 @@
   letter-spacing: var(--tracking-label-tight);
   color: var(--text5);
 }
+/* D16/D31. The reason beneath DOCUMENTS NOT REQUESTED. No bundle declaration
+ * to match -- the bundle has no "could not ask" state at all, which is why
+ * D16 was a ruling -- so it borrows the doclist head's own padding and sits a
+ * step quieter than it (--text6 against the head's --text5), the same
+ * relationship the record screen already uses for a label and its gloss. */
+.record__doclist-why {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--brdsoft2);
+  font: var(--type-body-small);
+  color: var(--text6);
+}
 .record__docrow {
   width: 100%;
   display: flex;

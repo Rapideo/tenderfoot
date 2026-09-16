@@ -224,6 +224,66 @@ test("an unsupported outcome does not override a real, already-known document co
   expect(screen.queryByText(/BUNDLE — 0 FILES/)).toBeNull();
 });
 
+/* ---------------------------------------------------------------- D16 -- */
+
+/* ⚖️ D16 (Matt, 2026-09-15, option A): ONE INVENTED HEAD FOR "WE COULD NOT
+ * ASK", with the reason beneath it. Deviation D31.
+ *
+ * The defect it fixes is D3's error rendered on screen. `unsupported`,
+ * `ceiling` and `no-document-key` all settled CHECKING into `BUNDLE — 0
+ * FILES` — "we looked and there are none" — over a row the source was never
+ * asked about. Absence of CAPABILITY was being shown as absence of DOCUMENTS,
+ * which is the one confusion this project keeps paying for.
+ *
+ * ⚠️ THE HEAD IS GATED ON HOLDING NOTHING, and that is NOT in D16's text.
+ * The sheet framed all three outcomes as rendering `BUNDLE — 0 FILES`, but
+ * one of them does not have to: IDOA writes `document` rows through
+ * discover-idoa.ts and never stamps `attachments_checked_at`, so an
+ * `unsupported` row can arrive holding real files (the test directly above
+ * pins exactly that, and it is a REGRESSION test — it was a live bug). For
+ * such a row `BUNDLE — 1 FILE` is simply TRUE, and replacing it with
+ * "DOCUMENTS NOT REQUESTED" would invent a second falsehood to cure the
+ * first, over a file list rendered immediately below the head. So the new
+ * head shows only where the old lie actually appeared: not asked AND nothing
+ * held. Flagged to Matt rather than folded in silently. */
+test("a keyless row says the source was never asked, not that it has no files", async () => {
+  renderRecordCounting(UNCHECKED, { reason: "no-document-key", spent: 0, documents: 0 });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/DOCUMENTS NOT REQUESTED/)).toBeTruthy());
+  expect(screen.getByText(/no document key on this row/)).toBeTruthy();
+  expect(screen.queryByText(/BUNDLE — 0 FILES/)).toBeNull();
+});
+
+test("a row refused at the ceiling says so beneath the head", async () => {
+  renderRecordCounting(UNCHECKED, { reason: "ceiling", spent: 0, documents: 0 });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/DOCUMENTS NOT REQUESTED/)).toBeTruthy());
+  expect(screen.getByText(/at the monthly ceiling/)).toBeTruthy();
+});
+
+test("a source with no document client says so beneath the head", async () => {
+  renderRecordCounting(UNCHECKED, { reason: "unsupported", spent: 0, documents: 0 });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/DOCUMENTS NOT REQUESTED/)).toBeTruthy());
+  expect(screen.getByText(/no client for this source/)).toBeTruthy();
+});
+
+/* THE OTHER HALF, and the reason the new head cannot simply replace the old
+ * one. A "fetched" outcome that found nothing IS "we looked and there are
+ * none" -- the true statement `BUNDLE — 0 FILES` was always meant to make.
+ * Without this test, gating the new head on `count === 0` alone would pass
+ * every test above while erasing the genuine empty state. */
+test("a fetch that really looked and found nothing still says BUNDLE — 0 FILES", async () => {
+  renderRecordCounting(UNCHECKED, { reason: "fetched", spent: 11, documents: 0 });
+  await waitFor(() => expect(screen.getByRole("tab", { name: /documents/i })).toBeTruthy());
+  await openTab(/documents/i);
+  await waitFor(() => expect(screen.getByText(/BUNDLE — 0 FILES/)).toBeTruthy());
+  expect(screen.queryByText(/DOCUMENTS NOT REQUESTED/)).toBeNull();
+});
+
 /* Design spec §8's OTHER client state. Not in the brief's three tests, and
  * added because the browser click-through (CLAUDE.md §4) could not catch it
  * on screen: a real SAM.gov round trip resolved faster than a screenshot

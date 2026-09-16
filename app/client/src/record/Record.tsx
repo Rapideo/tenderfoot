@@ -107,6 +107,20 @@ function extColour(mediaType: string | null): string {
 
 const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%`);
 
+/* ⚖️ D16 (Matt, 2026-09-15, option A), DEVIATION D31. The three outcomes that
+ * never asked the source anything, and the sub-line each one shows.
+ *
+ * `already-looked` is deliberately absent: it means we DID ask, in an earlier
+ * session, so its count is real. `fetched` is absent for the same reason.
+ * Keyed by the server's own `FetchReason` strings (fetch-documents-for.ts) --
+ * a fourth non-asking outcome added there without a line here renders the
+ * ordinary count, which is the old lie returning quietly. */
+const NOT_ASKED_REASONS: Record<string, string> = {
+  "no-document-key": "no document key on this row",
+  ceiling: "at the monthly ceiling",
+  unsupported: "no client for this source",
+};
+
 /* D28 (corrected on review, fix round 1): only ONE state needed inventing.
  * The bundle's Documents tab is a static fixture that always has files, so
  * it never needed a "not yet looked" rendering -- CHECKING FOR DOCUMENTS is
@@ -121,9 +135,29 @@ const pct = (c: number | null) => (c === null ? "—" : `${Math.round(c * 100)}%
  * `checkedAt` is compared with `=== null` on purpose, not `?? falsy`: a
  * fixture that omits the field entirely (every OLDER test in this file)
  * reads `undefined`, which must fall through to the ordinary count below,
- * not into CHECKING -- there is nothing to check for those records. */
-function doclistHead(checkedAt: string | null | undefined, count: number): string {
+ * not into CHECKING -- there is nothing to check for those records.
+ *
+ * ⚠️ D16 ADDED A THIRD STATE TO THIS FUNCTION on 2026-09-15, so the opening
+ * sentence above is true of D28's day and not of today. What D28 got right is
+ * why `BUNDLE — 0 FILES` was left alone THEN: it is the honest head for a row
+ * we really did look at, and inventing a second string for it would have been
+ * the richer-than-the-bundle treatment §7.10 warns against. What it could not
+ * see is that three outcomes reach that same head WITHOUT having looked. */
+/* ⚠️ `notAskedWhy` DOES NOT WIN OVER A REAL COUNT, and the `count === 0` guard
+ * is the whole of that rule. An `unsupported` row can hold documents already:
+ * discover-idoa.ts writes `document` rows and never stamps
+ * `attachments_checked_at`, so IDOA records arrive not-asked WITH files. For
+ * those, `BUNDLE — 1 FILE` is true and is rendered directly above the file
+ * list itself; showing "DOCUMENTS NOT REQUESTED" over a visible file would
+ * swap D3's error for a plainer one. D16's sheet framed all three outcomes as
+ * rendering `BUNDLE — 0 FILES`, which is where the lie actually lived. */
+function doclistHead(
+  checkedAt: string | null | undefined,
+  count: number,
+  notAskedWhy: string | null,
+): string {
   if (checkedAt === null) return "CHECKING FOR DOCUMENTS…";
+  if (notAskedWhy !== null && count === 0) return "DOCUMENTS NOT REQUESTED";
   return `BUNDLE — ${count} FILE${count === 1 ? "" : "S"}`;
 }
 
@@ -228,9 +262,17 @@ export function Record() {
    * leak onto a newly opened one. */
   const [freshDocCount, setFreshDocCount] = useState<number | null>(null);
 
+  /* D16/D31. Null means "no outcome has told us the source went unasked" --
+   * the state every record starts in, and the one a previously-checked record
+   * stays in (it gets no POST at all, and its count is a real one). Reset
+   * alongside `freshDocCount` below so a refused record's reason cannot leak
+   * onto the next record opened. */
+  const [notAskedWhy, setNotAskedWhy] = useState<string | null>(null);
+
   useEffect(() => {
     let live = true;
     setFreshDocCount(null);
+    setNotAskedWhy(null);
     fetch(`/api/solicitations/${id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => live && setBody(b as RecordBody))
@@ -271,6 +313,11 @@ export function Record() {
         if (outcome && outcome.reason === "fetched" && typeof outcome.documents === "number") {
           setFreshDocCount(outcome.documents);
         }
+        /* D16/D31. Recorded for EVERY non-asking outcome, whether or not the
+         * head ends up showing it -- a row that holds files keeps its count
+         * (see doclistHead), and this state simply goes unread there. */
+        const why = outcome?.reason ? NOT_ASKED_REASONS[outcome.reason] : undefined;
+        if (why) setNotAskedWhy(why);
       })
       .catch(() => {
         /* Left null. A network failure is not "we looked" -- the bundle
@@ -400,8 +447,21 @@ export function Record() {
         <div className="record__docs">
           <div className="record__doclist">
             <div className="record__doclist-head">
-              {doclistHead(body.attachments_checked_at, freshDocCount ?? body.documents.length)}
+              {doclistHead(
+                body.attachments_checked_at,
+                freshDocCount ?? body.documents.length,
+                notAskedWhy,
+              )}
             </div>
+            {/* D16/D31: the reason, beneath the invented head and only where
+              * that head is actually showing. Same condition as doclistHead's
+              * own branch -- a row that kept its real count must not carry a
+              * "why we did not ask" line under a file list. */}
+            {body.attachments_checked_at !== null &&
+              notAskedWhy !== null &&
+              (freshDocCount ?? body.documents.length) === 0 && (
+                <div className="record__doclist-why">{notAskedWhy}</div>
+              )}
             {body.documents.map((d) => (
               <button
                 key={d.id}

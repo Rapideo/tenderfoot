@@ -1433,3 +1433,71 @@ vocabulary would have to be derived from.** `Queue.test.tsx` pins their absence.
    Interested is consistently the inverse of what gets written on Pass, one prompt and a
    direction flag would be the simpler shape — but that is a finding from the corpus, which
    is the thing this deviation exists to produce.
+
+---
+
+## D31 — the bundle has no "we could not ask" state, so one head string was invented for all three
+
+**⚖️ Ruled by Matt 2026-09-15, ruling sheet D16, option A** (`read_db` on
+<https://claude.ai/artifact/HmeKEpC3eg4AuUhotaKztn>, collection `rulings`, doc `d16`). A §7.10
+question, put to him as one rather than resolved in a commit, per CLAUDE.md §1's conflict clause.
+
+### What the bundle draws
+
+Nothing for this. The Documents tab (`tabDocs`, V1.2 index ~581620) computes its head
+unconditionally as `"BUNDLE — " + D.docs.length + " FILES"`, with no branch for zero and no concept
+of a fetch that did not happen — D28 established that in full, because the mockup's five fixture
+solicitations always carry files.
+
+### The defect, which predates this ruling
+
+Three server outcomes settle the head without the source ever having been asked:
+
+| `FetchReason` | What it means | What the screen said |
+|---|---|---|
+| `unsupported` | no `DOCUMENT_CLIENTS` entry (IDOA today) | `BUNDLE — 0 FILES` |
+| `ceiling` | the monthly record ceiling would be crossed | `BUNDLE — 0 FILES` |
+| `no-document-key` | HigherGov row ingested before the key was captured | `BUNDLE — 0 FILES` |
+
+`BUNDLE — 0 FILES` asserts **we looked and there are none.** For all three, nobody looked. This is
+exactly the error D3 is named for — an absence of *capability* rendered as an absence of *documents*
+— reaching the screen. Two of the three predate the document-key work; `no-document-key` is the
+third and is what made it worth ruling on rather than living with.
+
+### What we ship instead
+
+One invented head, `DOCUMENTS NOT REQUESTED`, with the reason directly beneath it in a new
+`record__doclist-why` line: *"no document key on this row"*, *"at the monthly ceiling"*, *"no client
+for this source"*. One string, not three, because the distinction a reader needs at the head is
+**asked vs. not asked**; the *why* is a detail and is rendered as one.
+
+The new line borrows the doclist head's own padding and sits a step quieter than it (`--text6`
+against the head's `--text5`) — no new tokens, per CLAUDE.md §1.
+
+### 🔴 The head is gated on holding nothing, and that is NOT in D16's text
+
+**D16's sheet framed all three outcomes as rendering `BUNDLE — 0 FILES`. One of them need not.**
+`discover-idoa.ts` writes `document` rows and never stamps `attachments_checked_at`, so an IDOA
+record can arrive **not-asked and holding real files.** There is already a regression test pinning
+that exact case (`an unsupported outcome does not override a real, already-known document count`) —
+it was a live bug, caught in final review of D2.
+
+For such a row `BUNDLE — 1 FILE` is **true**, and it renders directly above the file list itself.
+Replacing it with `DOCUMENTS NOT REQUESTED` would have invented a second falsehood to cure the
+first, over a visible file. So the new head shows only where the old lie actually appeared: **not
+asked AND nothing held.** The reason line follows the same condition.
+
+This is a narrowing of the ruled option, not a departure from it — D16 exists to stop the screen
+claiming we looked when we did not, and a row showing its real file count makes no such claim.
+**Flagged to Matt in the same breath as the build rather than folded in silently**, per CLAUDE.md
+§1: if he wants the head to win over a held count, it is one condition to drop.
+
+### What would reopen it
+
+1. **The bundle grows the state.** If a later prototype draws a not-asked treatment, it wins and
+   this string is replaced by whatever it draws.
+2. **A fourth non-asking outcome appears.** `NOT_ASKED_REASONS` is keyed by the server's own
+   `FetchReason` strings; a new one added to `fetch-documents-for.ts` without a line here renders
+   the ordinary count, which is the old lie returning quietly. The map is the coupling to watch.
+3. **`no-document-key` stops happening.** D15-A retires it for any row that gets opened, and every
+   future ingest lands keys for free. `unsupported` and `ceiling` keep the string alive regardless.
