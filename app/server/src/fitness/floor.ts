@@ -212,12 +212,21 @@ export async function measureF5(): Promise<PredicateResult> {
   };
 }
 
-/* F6. p10 rather than the median, deliberately.
+/* F6. ~~p10 rather than the median, deliberately.~~ SUPERSEDED 2026-09-15 by
+ * D17 — F6 measures neither a p10 nor a median now. The paragraph is kept
+ * because its REASONING survived the ruling and explains what replaced it:
  *
- * Sample 2's MEDIAN description is a comfortable 515 characters and 6 of 25 are
- * still under 200. A median hides the tail, and the tail is where a triage
- * decision becomes impossible. Restricted to biddable kinds because an award
- * notice's empty description is not a defect -- there is nothing to decide. */
+ * "Sample 2's MEDIAN description is a comfortable 515 characters and 6 of 25
+ * are still under 200. A median hides the tail, and the tail is where a triage
+ * decision becomes impossible."
+ *
+ * That was right about the tail and wrong about the instrument. A p10 is a
+ * tail-reading statistic only where the tail is thin; against a market where
+ * a QUARTER of listings are unreadable it saturates and reports 29 forever.
+ * Measuring the SIZE of the tail directly says the same thing and keeps saying
+ * it as the tail moves. Restricted to biddable kinds throughout, because an
+ * award notice's empty description is not a defect -- there is nothing to
+ * decide. */
 /* ⚖️ RULING ① (Matt, 2026-09-07): F6 measures what we have LOOKED AT.
  *
  * An empty description on a row whose documents were never fetched is not
@@ -236,12 +245,26 @@ export async function measureF5(): Promise<PredicateResult> {
  * ⚠️ CHANGES A PREDICATE MATT RATIFIED IN D4. It changes the POPULATION,
  * not the threshold, and it makes F6 harder to satisfy by accident rather
  * than easier -- but it is a change to a ratified predicate. */
+/* ⚖️ AMENDED 2026-09-15 BY MATT — ruling sheet D17, option C. The statistic
+ * changed, not just the number: a 10th percentile clears a floor only if fewer
+ * than one row in ten sits below it, and on the real population 39.9% of
+ * HigherGov's biddable rows are under 200 characters. Every live source failed,
+ * SAM.gov included, so no threshold could pass. thresholds.ts carries the full
+ * argument and the warning that 30% is set to the market as found.
+ *
+ * ⚠️ THE COMPARISON DIRECTION IS INVERTED FROM WHAT F6 USED TO DO. It was
+ * `measured >= threshold`; it is now `measured <= threshold`, because the
+ * measurement is a share of BAD rows rather than a length of a good one.
+ * Precedent for a max-direction predicate is F4 (`maxIngestGapWeeks`), and
+ * like F4 the direction is carried in the statement and the detail rather than
+ * in a symbol the CLI would have to know how to render. */
 export async function measureF6(): Promise<PredicateResult> {
-  const statement = "The 10th-percentile description on a biddable row is readable";
-  const row = await one<{ p10: number | null; n: string }>(
-    `SELECT percentile_cont(0.1) WITHIN GROUP (
-              ORDER BY length(coalesce(s.description, ''))
-            ) AS p10,
+  const statement = "Few enough biddable rows are too thin to triage from";
+  const threshold = THRESHOLDS.maxThinDescriptionShare;
+  const row = await one<{ thin: string; n: string }>(
+    `SELECT count(*) FILTER (
+              WHERE length(coalesce(s.description, '')) < $1
+            ) AS thin,
             count(*) AS n
        FROM solicitation s
       WHERE ${NOT_BIDDABLE_SQL}
@@ -249,28 +272,34 @@ export async function measureF6(): Promise<PredicateResult> {
           length(coalesce(s.description, '')) > 0
           OR s.attachments_checked_at IS NOT NULL
         )`,
+    [THRESHOLDS.thinDescriptionChars],
   );
   const n = Number(row?.n ?? 0);
-  if (n === 0 || row?.p10 === null || row?.p10 === undefined) {
+  if (n === 0) {
     return {
       id: "F6",
       property: "P6",
       statement,
-      threshold: THRESHOLDS.minDescriptionP10Chars,
+      threshold,
       measured: "unknown",
       verdict: "unknown",
       detail: "No biddable rows to measure.",
     };
   }
-  const p10 = Math.round(row.p10);
+  const thin = Number(row?.thin ?? 0);
+  const share = thin / n;
   return {
     id: "F6",
     property: "P6",
     statement,
-    threshold: THRESHOLDS.minDescriptionP10Chars,
-    measured: p10,
-    verdict: p10 >= THRESHOLDS.minDescriptionP10Chars ? "pass" : "fail",
-    detail: `p10 = ${p10} characters over ${n} examined biddable rows.`,
+    threshold,
+    measured: share,
+    /* AT MOST 30% is what was ruled, so the boundary is inclusive. */
+    verdict: share <= threshold ? "pass" : "fail",
+    detail:
+      `${(share * 100).toFixed(1)}% of biddable rows have a description under ` +
+      `${THRESHOLDS.thinDescriptionChars} characters — ${thin} of ` +
+      `${n} examined biddable row${n === 1 ? "" : "s"}.`,
   };
 }
 

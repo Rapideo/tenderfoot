@@ -228,36 +228,72 @@ test("F5 counts real decisions and ignores the 'New' placeholder", async () => {
   expect(r.verdict).toBe("fail");
 });
 
-/* p10 rather than the median, because a median hides the tail and the tail is
- * where a triage decision becomes impossible. */
-test("F6 reports p10 over biddable rows only", async () => {
+/* ⚖️ D17 (Matt, 2026-09-15, option C). F6 NO LONGER ASKS FOR A p10, and the
+ * statistic was the defect rather than the number. A 10th percentile clears a
+ * floor only if fewer than one row in ten sits below it; on HigherGov 39.9% of
+ * biddable rows are under 200 characters and 27.8% under 100, so its p10 is 29
+ * and NO threshold above ~15 characters could ever pass. Lowering 200 to 100
+ * changed nothing (SAM's own p10 is 68). The state-and-local market publishes
+ * thin listings as a matter of course -- Kentucky's non-empty median is 38
+ * characters -- and p10 was chosen for a market that does not.
+ *
+ * F6 now measures THE SHARE OF BIDDABLE ROWS TOO THIN TO TRIAGE FROM, at the
+ * length Matt's own 150 dictated reasons put the break: reasons citing thin
+ * information were 7 of 13 on empty descriptions and 4 of 11 at 1-99
+ * characters, then 0 of 4 at 100-199. The rows where the listing failed him
+ * sit under 100, not under 200. */
+test("F6 fails when more than the ruled share of biddable rows are too thin", async () => {
   await reset();
-  const src = await source("F6 source", "US");
-  /* TWO short rows, not one. percentile_cont INTERPOLATES: with a single short
-   * row in ten, p10 lands between values[0] and values[1] at 815 -- which is
-   * correct behaviour and made the first version of this test wrong. Two short
-   * rows put both interpolation endpoints at 50. */
-  for (let i = 0; i < 8; i++) await sol(src, null, null, "Solicitation", "x".repeat(900));
-  await sol(src, null, null, "Solicitation", "x".repeat(50));
-  await sol(src, null, null, "Solicitation", "x".repeat(50));
+  const src = await source("F6 thin", "US");
+  for (let i = 0; i < 6; i++) await sol(src, null, null, "Solicitation", "x".repeat(900));
+  for (let i = 0; i < 4; i++) await sol(src, null, null, "Solicitation", "x".repeat(50));
   /* An award notice with an empty description is not a defect -- there is
-   * nothing to decide -- and it must not drag p10 down. */
+   * nothing to decide -- and it must not enter the denominator. */
   await sol(src, null, null, "Award Notice", "");
 
   const r = await measureF6();
   expect(r.id).toBe("F6");
-  expect(Number(r.measured)).toBeLessThan(200);
+  expect(Number(r.measured)).toBeCloseTo(0.4, 5);
   expect(r.verdict).toBe("fail");
-  expect(r.detail).toContain("over 10 examined biddable rows");
+  expect(r.detail).toContain("10 examined biddable rows");
 });
 
-test("F6 passes when even the tail is readable", async () => {
+test("F6 passes when thin descriptions stay within the ruled share", async () => {
   await reset();
   const src = await source("F6 healthy", "US");
-  for (let i = 0; i < 10; i++) await sol(src, null, null, "Solicitation", "x".repeat(900));
+  for (let i = 0; i < 9; i++) await sol(src, null, null, "Solicitation", "x".repeat(900));
+  await sol(src, null, null, "Solicitation", "x".repeat(50));
 
   const r = await measureF6();
-  expect(Number(r.measured)).toBeGreaterThanOrEqual(200);
+  expect(Number(r.measured)).toBeCloseTo(0.1, 5);
+  expect(r.verdict).toBe("pass");
+});
+
+/* THE BOUNDARY IS INCLUSIVE -- "at MOST 30%" is what was ruled, so exactly
+ * 30% passes. Worth pinning rather than leaving to a comparison operator: the
+ * sheet said plainly that 30% sits just above today's worst source (HigherGov
+ * 27.8%), so this boundary is precisely where the ruling bites. */
+test("F6 passes at exactly the ruled share", async () => {
+  await reset();
+  const src = await source("F6 boundary", "US");
+  for (let i = 0; i < 7; i++) await sol(src, null, null, "Solicitation", "x".repeat(900));
+  for (let i = 0; i < 3; i++) await sol(src, null, null, "Solicitation", "x".repeat(50));
+
+  const r = await measureF6();
+  expect(Number(r.measured)).toBeCloseTo(0.3, 5);
+  expect(r.verdict).toBe("pass");
+});
+
+/* "UNDER 100 characters" is the ruled wording, so 100 itself is not thin.
+ * Pins the comparison against an off-by-one nobody would see in a share. */
+test("F6 does not count a description of exactly 100 characters as thin", async () => {
+  await reset();
+  const src = await source("F6 exact", "US");
+  for (let i = 0; i < 9; i++) await sol(src, null, null, "Solicitation", "x".repeat(900));
+  await sol(src, null, null, "Solicitation", "x".repeat(100));
+
+  const r = await measureF6();
+  expect(Number(r.measured)).toBe(0);
   expect(r.verdict).toBe("pass");
 });
 
@@ -274,7 +310,11 @@ test("F6 ignores an empty description nobody has looked for documents on", async
   await sol(s, null, null, null, "x".repeat(400), null);
   await sol(s, null, null, null, "", null);
   const f6 = await measureF6();
-  expect(f6.measured).toBe(400);
+  /* The unexamined empty row leaves the POPULATION entirely, so the one row
+   * that remains is 0% thin -- not the 50% it would read if ruling ① were
+   * dropped. D17 changed the statistic, not this population rule. */
+  expect(Number(f6.measured)).toBe(0);
+  expect(f6.detail).toContain("1 examined biddable row.");
 });
 
 /* AND THE OTHER HALF, which is what stops this becoming a way to hide a
@@ -286,7 +326,10 @@ test("F6 counts an empty description we did look for documents on", async () => 
   await sol(s, null, null, null, "x".repeat(400), "2026-09-07T00:00:00Z");
   await sol(s, null, null, null, "", "2026-09-07T00:00:00Z");
   const f6 = await measureF6();
-  expect(Number(f6.measured)).toBeLessThan(400);
+  /* Half the examined population is unreadable, which is well past the ruled
+   * share -- the gap is real and F6 must still feel it. */
+  expect(Number(f6.measured)).toBe(0.5);
+  expect(f6.verdict).toBe("fail");
 });
 
 test("F7 measures reachability only over rows that defer to a document", async () => {

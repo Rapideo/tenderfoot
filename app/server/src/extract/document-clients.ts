@@ -93,6 +93,26 @@ export interface DocumentClient {
   keyedBy: "external-id" | "document-key";
   /** `key` is the value of the column `keyedBy` names. */
   fetchFor(key: string, fetchImpl?: typeof fetch): Promise<DocumentFetchResult>;
+  /* ⚖️ D15 (Matt, 2026-09-15, option A): BUY THE KEY ON DEMAND.
+   *
+   * Present only on a source whose key is something the vendor can be ASKED
+   * for. SAM has no such concept -- its key IS the notice id, already on the
+   * row -- so `samDocumentClient` omits this, and its absence is what
+   * fetch-documents-for.ts reads to decide whether a keyless row is
+   * refusable or merely unbought. Declared on the interface rather than
+   * branched on a source NAME at the call site: `isMeteredSourceName`'s own
+   * history (a hardcoded "HigherGov" comparison that would have silently
+   * mis-billed the second metered source) is the precedent.
+   *
+   * ⚠️ METERED. Returns what the vendor billed alongside the key, and the
+   * caller records BOTH -- a key purchase that does not reach `api_spend` is
+   * invisible to the only instrument that can answer "how much is left"
+   * (CLAUDE.md §5.1). `key: null` means the vendor answered and had no key
+   * to give, which still cost records. */
+  fetchKeyFor?(
+    externalId: string,
+    fetchImpl?: typeof fetch,
+  ): Promise<{ key: string | null; records: number }>;
 }
 
 export const samDocumentClient: DocumentClient = {
@@ -155,6 +175,22 @@ export const higherGovDocumentClient: DocumentClient = {
       extractedText: d.textExtract,
     }));
     return { documents, records };
+  },
+
+  /* D15-A. One /opportunity/ call by source_id, for the one field the vendor
+   * will not give us any other way. Still a THIN MAPPER: fetchBySourceId
+   * builds the URL and holds the credential, and `documentKey` has already
+   * been lifted out of document_path inside the client (CLAUDE.md §5.3 --
+   * the path itself never leaves that module).
+   *
+   * ⚠️ FIRST NOTICE WITH A KEY, not first notice. ~6% of notices are held by
+   * the vendor in more than one version, so this can answer with several rows
+   * for one source_id; any of their keys opens the same document set, but a
+   * version that happens to carry none must not shadow one that does. */
+  async fetchKeyFor(externalId, fetchImpl = fetch) {
+    const result = await higherGovClient.fetchBySourceId(externalId, fetchImpl);
+    const keyed = result.notices.find((n) => n.documentKey !== null);
+    return { key: keyed?.documentKey ?? null, records: result.records };
   },
 };
 

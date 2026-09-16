@@ -132,8 +132,48 @@ Target.** It returns to the floor only if a source is admitted that supplies it.
 | **F3** | No silent recall loss from unusable deadlines | P5 | `0 rows dropped without surfacing` | **Held.** `EFFECTIVE_CLOSES_AT` treats impossible as unknown; `DEADLINE_UNRELIABLE` tells the client. Shipped `7964047` | ✅ **PASS** |
 | **F4** | Coverage is continuous over the adjudication window | P4 | `proposed: no gap > 7 days across the window` | **3 usable weeks** (08-10, -17, -24). Earlier weeks read 1–3 rows — our scrape history, not the market | 🔴 **FAIL** |
 | **F5** | Enough decisions to compute Interested-per-hundred | P9 | `proposed: 100` | **3** (sample 1). Sample 2 drawn at 100, decided 0 | 🔴 **FAIL** |
-| **F6** | Biddable rows carry a readable description | P6 | `proposed: p10 ≥ 200 chars` | **8,484 of 9,883** carry any. Sample 2: 100/100 present, median 515, **6 of 25 under 200** | 🟡 **MARGINAL** |
+| **F6** | Biddable rows carry a readable description | P6 | ~~`proposed: p10 ≥ 200 chars`~~ **AMENDED — see below** | **8,484 of 9,883** carry any. Sample 2: 100/100 present, median 515, **6 of 25 under 200** | 🟡 **MARGINAL** |
 | **F7** | Where a description defers to a document, we hold it | P7 | `proposed: ≥ 80%` | **12 documents across 9,883 solicitations** | 🔴 **FAIL** |
+
+#### ⚖️ AMENDMENT — F6's STATISTIC, ruled by Matt 2026-09-15 (sheet D17, option C)
+
+**F6 no longer reads a 10th percentile.** It now reads: **at most 30% of biddable rows may
+carry a description under 100 characters.** Ruling sheet:
+<https://claude.ai/artifact/9giujnsNCUKdXbyHcvevEM> (`read_db`, collection `rulings`, doc `d17`).
+Recorded here per CLAUDE.md §1 because it changes a predicate ratified in D4 — a threshold this
+spec's §8.1 had listed as an open question and D4 had closed.
+
+**Why the p10 could not stand, measured 2026-09-13 over the real population** (this table's own
+figures were a 25-row federal sample, which is the whole problem):
+
+| Source | n | p10 | median | under 200 | under 100 |
+|---|---|---|---|---|---|
+| HigherGov | 2,056 | **29** | 279 | 39.9% | 27.8% |
+| SAM.gov | 1,229 | **68** | 917 | 19.1% | 14.0% |
+| Indiana IDOA | 45 | 472 | 892 | 2.2% | 0.0% |
+| **Combined — what F6 reads** | 3,356 | **40** | | | **≈22%** |
+
+A 10th percentile clears a floor only if fewer than one row in ten sits below it. Nearly a
+quarter of this market's biddable rows are under 100 characters, so the p10 saturates: **no
+threshold above ~15 characters passes, and lowering 200 to 100 changes nothing.** Every live
+source failed, including SAM.gov — the data the 200 was calibrated on. The statistic was chosen
+for a market that does not publish thin listings, and the state-and-local market does
+(Kentucky's non-empty median is 38 characters).
+
+**Where the 100-character break comes from:** Matt's own 150 dictated triage reasons. Reasons
+citing thin information ran **7 of 13** on empty descriptions and **4 of 11** at 1–99 characters,
+then **0 of 4** at 100–199 and a 2-in-23 background rate above 200. The rows where the listing
+failed him sit under 100, not under 200.
+
+**⚠️ 30% is set to the market as found, and the sheet said so rather than dressing it as a
+standard.** It sits just above today's worst source. A future reader deciding whether F6 is a
+real floor or a rubber stamp should know it was chosen knowing that.
+
+**Not changed:** the POPULATION (ruling ①, 2026-09-07 — rows with a description, or whose
+documents were fetched), and the rubric's own `p6DescriptionP10Adequate`, which D17 deliberately
+left on R7 where a per-source reading belongs. ⚠️ That leaves R7 reading a p10 that collapses on
+exactly the sources F6's did — a live defect in the rubric, unruled, and it should go to Matt
+before R7 is ratified. `app/server/src/fitness/thresholds.ts` carries the same warning.
 
 ### 3.3 What the floor says today
 
@@ -304,8 +344,11 @@ standing rules:
 
 ## 8. Open questions, carried rather than resolved
 
-1. **The thresholds in §3.2 are proposals.** F1 = 2 sources, F5 = 100 decisions,
-   F6 = p10 ≥ 200 chars, F7 = 80%. Each needs a ruling.
+1. ~~**The thresholds in §3.2 are proposals.** F1 = 2 sources, F5 = 100 decisions,
+   F6 = p10 ≥ 200 chars, F7 = 80%. Each needs a ruling.~~ ✅ **CLOSED.** All four
+   were ratified by Matt on 2026-09-04 (sheet D4, option A). **F6's was then
+   AMENDED on 2026-09-15 (sheet D17, option C) — the statistic changed, not
+   merely the number; see the amendment block under §3.2.**
 2. **What is the adjudication window F4 measures continuity over?** The floor
    cannot say "no gaps" without saying "over what."
 3. **Does a failing floor block the *contract* work too, or only the GO/NO-GO?**

@@ -26,8 +26,12 @@ import { isMeteredSourceName } from "../scrape/adapters/registry.js";
 
 /* "no-document-key" (2026-09-13): the source's client is keyed by
  * `document_key` and this row has none -- ingested before the key was
- * captured. Refused before any request, so it costs nothing and stamps
- * nothing; the row becomes askable the moment a merge lands its key. */
+ * captured. Nothing is stamped, so the row stays askable.
+ *
+ * ⚠️ IT NO LONGER ALWAYS COSTS NOTHING (D15, 2026-09-15). Where the client
+ * can buy a key, one call is made first; this outcome then means the VENDOR
+ * answered and had no key to give, which is a billed call. Free only where
+ * the client has no `fetchKeyFor` at all. */
 export type FetchReason =
   | "fetched"
   | "already-looked"
@@ -37,7 +41,15 @@ export type FetchReason =
 
 export interface FetchOutcome {
   reason: FetchReason;
-  /** Records the vendor billed. Always 0 unless `reason` is "fetched". */
+  /** Records the vendor billed across every call this open made.
+   *
+   * ⚠️ NO LONGER "always 0 unless `reason` is 'fetched'", which it was until
+   * D15 (2026-09-15). A keyless row now buys its key BEFORE it can ask for
+   * documents, and the vendor can answer that lookup without a key -- so a
+   * `no-document-key` outcome can carry a real, non-zero cost. Anything
+   * reading this to mean "a refusal was free" is reading a rule that has
+   * been repealed; `ceiling` and `unsupported` are still genuinely free,
+   * because neither reaches the vendor at all. */
   spent: number;
   documents: number;
 }
@@ -71,36 +83,129 @@ export async function fetchDocumentsFor(
   if (row.checked !== null) return { reason: "already-looked", spent: 0, documents: 0 };
 
   const client = DOCUMENT_CLIENTS[row.source_name];
+  /* Captured into a const rather than re-read off `row` below: narrowing on a
+   * mutable object property does not survive the intervening awaits and the
+   * closure that captures `row`, and the key lookup needs a plain `string`. */
+  const externalId = row.external_id;
   /* NOT stamped on this path. We did not look; we were unable to. Stamping
    * would record an absence of capability as an absence of documents, which
    * is the D3 error in a third place. */
-  if (!client || !row.external_id) return { reason: "unsupported", spent: 0, documents: 0 };
+  if (!client || !externalId) return { reason: "unsupported", spent: 0, documents: 0 };
 
   /* 🔴 THE KEY THE CLIENT IS ASKED BY, and the refusal when there is none
    * (2026-09-13). HigherGov's /document/ takes `related_key`, stored as
    * `document_key`; a row ingested before that was captured has none, and
-   * the only thing sending anything else buys is a 400. So the request is
-   * not made: nothing spent, nothing stamped (we did not look, and the row
-   * must stay askable once a merge lands its key), and a reason of its own
-   * so a caller CAN tell it from "no documents". ⚠️ Today no caller does:
-   * Record.tsx clears CHECKING on every settled outcome and renders
-   * `BUNDLE — 0 FILES` for this one, as it already did for "unsupported" and
-   * "ceiling" -- the bundle has no "could not ask" state, and inventing one
-   * is a §7.10 question, on the D16 sheet. SAM is keyed by external_id,
-   * already checked above, and is untouched by this. */
-  const key = client.keyedBy === "document-key" ? row.document_key : row.external_id;
-  if (!key) return { reason: "no-document-key", spent: 0, documents: 0 };
+   * the only thing sending anything else buys is a 400. Nothing is stamped
+   * on that path (we did not look, and the row must stay askable), and the
+   * outcome has a reason of its own so a caller CAN tell it from "no
+   * documents".
+   *
+   * ✅ A CALLER NOW DOES, and the row is no longer simply refused. Two things
+   * changed on 2026-09-15: D16 gave Record.tsx the `DOCUMENTS NOT REQUESTED`
+   * head for exactly this outcome (deviation D31), retiring the note that
+   * used to stand here saying no caller could tell; and D15, directly below,
+   * made the missing key something we BUY rather than something we give up
+   * on -- so "the request is not made, nothing spent" is true now only of a
+   * source with no `fetchKeyFor`. SAM is keyed by external_id, already
+   * checked above, and is untouched by either. */
+  let key = client.keyedBy === "document-key" ? row.document_key : externalId;
+
+  /* ⚖️ D15 (Matt, 2026-09-15, option A). A keyless row is no longer simply
+   * refused: if the source can be ASKED for the key, we buy it here, once,
+   * and the row becomes askable for good. All 3,238 HigherGov rows predate
+   * the parse that captures it, and a backfill of them would be 3,238-6,500
+   * records spent overwhelmingly on rows that are never opened (the sitting
+   * ran about one Interested in ten). `fetchKeyFor`'s ABSENCE is what still
+   * makes a row refusable -- SAM has no such concept. */
+  const needsKeyLookup = !key && typeof client.fetchKeyFor === "function";
+  if (!key && !needsKeyLookup) return { reason: "no-document-key", spent: 0, documents: 0 };
 
   /* 🔴 FIXED (Task 7 review round 2, the same defect run.ts was fixed for).
    * `>= MONTHLY_RECORD_CEILING` only refuses once the ceiling is ALREADY
    * crossed -- a month sitting one record under it would still wave through
    * a call that could cost up to COVERAGE.unparseableResponseRecords more,
    * crossing the ceiling anyway. The refusal must account for what THIS call
-   * could still spend, not merely what has already been spent. */
+   * could still spend, not merely what has already been spent.
+   *
+   * 🔴 D15 WIDENED THIS, and the widening is the point. The refusal must
+   * account for what THIS OPEN could still spend -- which is now up to TWO
+   * calls for a keyless row (the key, then the documents), not one. Leaving
+   * it at one would let an open begin with exactly one call's headroom, buy
+   * the key, and then be unable to afford the documents it was bought for:
+   * the worst possible outcome, money spent for nothing. */
+  const callsThisOpen = needsKeyLookup ? 2 : 1;
   const alreadySpent = await spentThisMonth(row.source_name);
-  if (alreadySpent + COVERAGE.unparseableResponseRecords > MONTHLY_RECORD_CEILING) {
+  if (alreadySpent + callsThisOpen * COVERAGE.unparseableResponseRecords > MONTHLY_RECORD_CEILING) {
     return { reason: "ceiling", spent: 0, documents: 0 };
   }
+
+  /* The conservative tally both metered call sites need, written once. See
+   * the long comment on the document call's own catch below for why an
+   * unparseable response must be priced at all, why a REFUSAL must not be,
+   * and why the tally's own failure may never replace the vendor's error. */
+  const tallyThrownCall = async (endpoint: "opportunity" | "document", err: unknown) => {
+    if (!isMeteredSourceName(row.source_name)) return;
+    try {
+      await recordSpend(
+        { run },
+        {
+          sourceId: row.source_id,
+          endpoint,
+          records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
+          solicitationId: row.id,
+        },
+      );
+    } catch (tallyErr) {
+      console.error(
+        redact(
+          `Failed to record conservative spend after a vendor error (original error follows): ${
+            tallyErr instanceof Error ? (tallyErr.stack ?? tallyErr.message) : String(tallyErr)
+          }`,
+        ),
+      );
+    }
+  };
+
+  /* D15-A: THE KEY PURCHASE. Committed the moment it is known, in its own
+   * write, for the same reason the document spend below is: once the vendor
+   * has answered, nothing that fails afterwards can un-bill it, and a key
+   * lost to a rolled-back transaction is a key we would buy a second time. */
+  let spentOnKey = 0;
+  if (needsKeyLookup) {
+    let bought: { key: string | null; records: number };
+    try {
+      bought = await client.fetchKeyFor!(externalId, fetchImpl);
+    } catch (err) {
+      await tallyThrownCall("opportunity", err);
+      throw err;
+    }
+    spentOnKey = bought.records;
+    await recordSpend(
+      { run },
+      {
+        sourceId: row.source_id,
+        endpoint: "opportunity",
+        records: bought.records,
+        solicitationId: row.id,
+      },
+    );
+    /* THE VENDOR ANSWERED AND HAD NO KEY. Still refused, still unstamped --
+     * we did not look -- but no longer free, so the cost is reported rather
+     * than swallowed. `keylessPaths` on the ingest measures how often this
+     * shape occurs; if it is EVERY row, the parse is wrong and not the
+     * vendor (review finding, 2026-09-13). */
+    if (!bought.key) return { reason: "no-document-key", spent: spentOnKey, documents: 0 };
+    await run(`UPDATE solicitation SET document_key = $1 WHERE id = $2`, [bought.key, row.id]);
+    key = bought.key;
+  }
+
+  /* Unreachable today, and written as a real check rather than a `key!`
+   * assertion on purpose: the guard above returns when a row has no key and
+   * no way to buy one, and the purchase block either returns or assigns one,
+   * so `key` is a string by here. An edit that breaks that invariant should
+   * fail as a refusal that costs nothing, not as a request to the vendor
+   * carrying `null`. */
+  if (!key) return { reason: "no-document-key", spent: spentOnKey, documents: 0 };
 
   /* Page one and stop -- CLAUDE.md §5.2. The client does not page. */
   let fetched: DocumentFetchResult;
@@ -159,39 +264,20 @@ export async function fetchDocumentsFor(
      * name-keyed form of the same question, so this branch now tracks the
      * registry's own flag for however many metered sources ever exist, not a
      * string literal. */
-    if (isMeteredSourceName(row.source_name)) {
-      /* 🔴 FIXED (same review). The catch this comment sits in exists so the
-       * VENDOR's error always reaches the caller -- but `recordSpend` is a
-       * database write and can itself throw (a degraded compute, CLAUDE.md
-       * §4's own "Connection terminated unexpectedly"). Unguarded, that
-       * second throw would replace `err` before `throw err` below ever ran:
-       * the ledger is unaffected either way (no row is written in either
-       * case), but the operator would see a database error instead of the
-       * vendor's own -- exactly the diagnostic this catch exists to
-       * preserve. Same shape as the two equivalent catches in
-       * ingest/highergov-cli.ts (commit 05dd64e): the tally is wrapped and
-       * its own failure only logged, never allowed to compete with the error
-       * it was recording. */
-      try {
-        await recordSpend(
-          { run },
-          {
-            sourceId: row.source_id,
-            endpoint: "document",
-            records: costOfThrownCall(err, COVERAGE.unparseableResponseRecords),
-            solicitationId: row.id,
-          },
-        );
-      } catch (tallyErr) {
-        console.error(
-          redact(
-            `Failed to record conservative spend after a vendor error (original error follows): ${
-              tallyErr instanceof Error ? (tallyErr.stack ?? tallyErr.message) : String(tallyErr)
-            }`,
-          ),
-        );
-      }
-    }
+    /* 🔴 FIXED (same review), and since D15 this lives in `tallyThrownCall`
+     * above because a second metered call site now needs it identically. The
+     * catch this comment sits in exists so the VENDOR's error always reaches
+     * the caller -- but `recordSpend` is a database write and can itself
+     * throw (a degraded compute, CLAUDE.md §4's own "Connection terminated
+     * unexpectedly"). Unguarded, that second throw would replace `err` before
+     * `throw err` below ever ran: the ledger is unaffected either way (no row
+     * is written in either case), but the operator would see a database error
+     * instead of the vendor's own -- exactly the diagnostic this catch exists
+     * to preserve. Same shape as the two equivalent catches in
+     * ingest/highergov-cli.ts (commit 05dd64e): the tally is wrapped and its
+     * own failure only logged, never allowed to compete with the error it was
+     * recording. */
+    await tallyThrownCall("document", err);
     throw err;
   }
 
@@ -309,5 +395,12 @@ export async function fetchDocumentsFor(
     await q.run(`UPDATE solicitation SET attachments_checked_at = now() WHERE id = $1`, [row.id]);
   });
 
-  return { reason: "fetched", spent: fetched.records, documents: fetched.documents.length };
+  /* `spent` is the WHOLE operation's bill, so a key bought on the way in
+   * (D15) is included. A caller reading this to decide what an open cost
+   * must not be handed the documents call alone. */
+  return {
+    reason: "fetched",
+    spent: spentOnKey + fetched.records,
+    documents: fetched.documents.length,
+  };
 }
