@@ -18,3 +18,6 @@ runs/
 # them under .claude/worktrees/). A worktree here is a second copy of the whole
 # tree; vitest.config.ts excludes it from the gate for the same reason.
 .claude/
+
+# Addendum PDF proofs are a build byproduct (docs/addendum/build.py --proof)
+docs/addendum/proof/

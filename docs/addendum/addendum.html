@@ -1,0 +1,304 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tenderfoot — Behind the explainer</title>
+<style>
+  /* Typography and tokens are the explainer's own (../explainer/explainer.html),
+     so the two documents read as one set. Fonts are shared, not copied. */
+  @font-face{font-family:'Plex';src:url('../explainer/fonts/IBMPlexSans-400.woff2')format('woff2');font-weight:400}
+  @font-face{font-family:'Plex';src:url('../explainer/fonts/IBMPlexSans-500.woff2')format('woff2');font-weight:500}
+  @font-face{font-family:'Plex';src:url('../explainer/fonts/IBMPlexSans-600.woff2')format('woff2');font-weight:600}
+  @font-face{font-family:'Plex';src:url('../explainer/fonts/IBMPlexSans-700.woff2')format('woff2');font-weight:700}
+  @font-face{font-family:'PlexM';src:url('../explainer/fonts/IBMPlexMono-400.woff2')format('woff2');font-weight:400}
+  @font-face{font-family:'PlexM';src:url('../explainer/fonts/IBMPlexMono-500.woff2')format('woff2');font-weight:500}
+  @font-face{font-family:'PlexM';src:url('../explainer/fonts/IBMPlexMono-600.woff2')format('woff2');font-weight:600}
+
+  :root{
+    --accent:#1b6a8c; --accent-deep:#12506b; --accent-wash:#e7f1f6; --accent-wash-2:#f2f8fb;
+    --ink:#0f1a20; --ink-2:#22333d; --on-ink:#e6eef2; --on-ink-mute:#8fa3ad;
+    --tx:#14181c; --tx-2:#3d474e; --tx-3:#5a666e; --mute:#6d7c85; --label:#93a0a8;
+    --canvas:#eaeef0; --surface:#fff; --line:#dfe4e8; --line-soft:#edf1f3;
+    --pos:#2e7d5b; --caution:#b5761a; --neg:#a33a2e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  @page{size:8.5in 11in;margin:0}
+  html,body{font-family:'Plex',system-ui,sans-serif;color:var(--tx);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .pg{width:8.5in;height:11in;position:relative;overflow:hidden;page-break-after:always;
+      background:var(--surface);padding:0.72in 0.68in 0.92in;
+      display:flex;flex-direction:column}
+  .pg:last-child{page-break-after:auto}
+  .pg > .tail{margin-top:auto}
+
+  .lbl{font-family:'PlexM';font-size:8pt;letter-spacing:.13em;text-transform:uppercase;color:var(--label);font-weight:500}
+  h1{font-size:30pt;line-height:1.07;font-weight:600;letter-spacing:-.017em}
+  h2{font-size:20pt;line-height:1.13;font-weight:600;letter-spacing:-.013em;margin-bottom:.09in}
+  h4{font-size:10.4pt;font-weight:600;margin-bottom:.05in;color:var(--tx)}
+  .lede{font-size:11pt;line-height:1.48;color:var(--tx-2);max-width:6.6in}
+  p{font-size:10pt;line-height:1.52;color:var(--tx-2)}
+  p + p{margin-top:.1in}
+  strong{color:var(--tx);font-weight:600}
+  em{font-style:italic}
+  .rule{height:2.5px;width:.62in;background:var(--accent);margin:.13in 0 .16in}
+
+  .foot{position:absolute;left:.68in;right:.68in;bottom:.42in;display:flex;justify-content:space-between;
+        border-top:1px solid var(--line-soft);padding-top:.09in}
+  .foot span{font-family:'PlexM';font-size:7.4pt;letter-spacing:.1em;color:var(--label);text-transform:uppercase}
+
+  /* Page 1 wears a band rather than a full cover: an addendum is read after
+     the explainer, and a second dark cover would claim a weight it does not
+     carry. The lockup is the explainer's, at the explainer's proportions. */
+  .band{background:var(--ink);color:var(--on-ink);margin:-0.72in -0.68in .24in;padding:.44in .68in .34in;
+        display:flex;justify-content:space-between;align-items:flex-end}
+  .band .mark{width:.34in;height:.34in;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:.14in}
+  .band .mark i{width:.115in;height:.115in;background:#fff;border-radius:2px;display:block}
+  .band h1{color:#fff;font-size:26pt;letter-spacing:-.022em}
+  .band .sub{font-size:13.5pt;color:var(--on-ink);margin-top:.08in;font-weight:400;letter-spacing:-.006em}
+  .band .meta{font-family:'PlexM';font-size:7.8pt;letter-spacing:.13em;color:var(--on-ink-mute);text-transform:uppercase;line-height:1.9;text-align:right;white-space:nowrap;flex-shrink:0;padding-left:.3in}
+  .band .meta b{color:var(--on-ink);font-weight:500}
+
+  /* The promise table: page · promise · status. Status words are the whole
+     point of the table, so they carry colour and the mono label voice. */
+  .promise{display:grid;grid-template-columns:1in 2.35in 1fr;margin-top:.16in;border-top:1px solid var(--line)}
+  .promise > div{padding:.06in .12in .065in 0;border-bottom:1px solid var(--line-soft);font-size:8.8pt;line-height:1.42;color:var(--tx-2)}
+  .promise .h{font-family:'PlexM';font-size:7.6pt;letter-spacing:.12em;text-transform:uppercase;color:var(--label);font-weight:500;
+              padding:.055in .12in .055in 0;border-bottom:1px solid var(--line)}
+  .promise .pgn{font-family:'PlexM';font-size:8.2pt;color:var(--accent);font-weight:600;letter-spacing:.04em;line-height:1.5}
+  .promise .pgn small{display:block;font-family:'Plex';font-size:8.6pt;color:var(--tx);font-weight:600;letter-spacing:0;margin-top:.02in}
+  .st{font-family:'PlexM';font-size:7.9pt;letter-spacing:.09em;text-transform:uppercase;font-weight:600;display:block;margin-bottom:.025in}
+  .st.built{color:var(--pos)} .st.part{color:var(--caution)} .st.not{color:var(--neg)} .st.parked{color:var(--mute)}
+
+  .note{background:var(--accent-wash-2);border:1px solid #cfe4ee;border-radius:9px;padding:.18in .2in;margin-top:.16in}
+  .note p{font-size:9.5pt;line-height:1.5;color:var(--tx-2)}
+  .note .lbl{display:block;margin-bottom:.06in;color:var(--accent);font-weight:600}
+  .warn{background:#fdf6e7;border:1px solid #f0e2c2;border-radius:9px;padding:.18in .2in;margin-top:.16in}
+  .warn p{font-size:9.5pt;line-height:1.5;color:var(--tx-2)}
+  .warn .lbl{display:block;margin-bottom:.06in;color:#8a6a2a;font-weight:600}
+  .note ul,.warn ul{list-style:none;margin-top:.02in}
+  .note li,.warn li{font-size:9.5pt;line-height:1.5;color:var(--tx-2);padding-left:.16in;position:relative;margin-top:.05in}
+  .note li::before,.warn li::before{content:"—";position:absolute;left:0;color:var(--label)}
+
+  /* Page 2: the three moves, each a card, with the sources as a numbers strip. */
+  .moves{display:flex;flex-direction:column;gap:.12in;margin:.18in 0 0}
+  .move{display:flex;gap:.22in;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:.16in .2in}
+  .move .k{font-family:'PlexM';font-size:21pt;font-weight:600;color:var(--accent);line-height:.92;min-width:.5in}
+  .move h3{font-size:12.4pt;font-weight:600;margin-bottom:.045in;letter-spacing:-.01em}
+  .move p{font-size:9.6pt;line-height:1.5}
+  .move .body{flex:1}
+  .srcs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.14in;margin-top:.12in}
+  .src{border-top:2px solid var(--accent);padding-top:.07in}
+  .src b{font-family:'PlexM';font-size:13.5pt;font-weight:600;color:var(--tx);display:block;line-height:1.1}
+  .src .n{font-size:9pt;font-weight:600;color:var(--tx);margin-top:.03in}
+  .src p{font-size:8.5pt;line-height:1.45;color:var(--tx-3);margin-top:.02in}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:.13in}
+  .pair .move{padding:.17in .2in}
+
+  /* Page 3: the facts block is the explainer's, reused for the four numbers
+     a manager will quote. */
+  .factwrap{padding-top:.16in}
+  .facts{background:var(--ink);border-radius:10px;padding:.17in .24in .19in}
+  .facts .lbl{color:var(--on-ink-mute);margin-bottom:.11in;display:block}
+  .fgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:0 .2in}
+  .fact{border-top:1px solid rgba(255,255,255,.16);padding-top:.09in}
+  .fact b{font-family:'PlexM';font-size:12.5pt;color:#fff;font-weight:600;display:block;line-height:1.1;margin-bottom:.05in;white-space:nowrap}
+  .fact span{font-size:8.4pt;color:var(--on-ink);line-height:1.42;opacity:.93;display:block}
+  .pull{border-left:3px solid var(--accent);padding:.03in 0 .03in .21in;margin:.14in 0;
+        font-size:11.2pt;line-height:1.4;color:var(--tx);font-weight:500;letter-spacing:-.008em}
+  .pull small{display:block;font-family:'PlexM';font-size:7.6pt;letter-spacing:.12em;text-transform:uppercase;color:var(--label);font-weight:500;margin-top:.06in}
+  .para h4{margin-top:.085in}
+  .para h4:first-child{margin-top:0}
+
+  /* Page 4: six steps as a two-column card grid, numbered in the mono voice. */
+  .steps{display:grid;grid-template-columns:1fr 1fr;gap:.11in;margin-top:.16in}
+  .step{border:1px solid var(--line);border-radius:9px;padding:.14in .17in;position:relative}
+  .step .n{font-family:'PlexM';font-size:8pt;color:var(--accent);font-weight:600;letter-spacing:.1em}
+  .step .n.gate{color:var(--caution)}
+  .step h3{font-size:11pt;margin:.045in 0 .05in;font-weight:600;letter-spacing:-.008em}
+  .step p{font-size:9.1pt;line-height:1.48;color:var(--tx-3)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:.16in;margin-top:.02in}
+  .two .note,.two .warn{margin-top:.16in}
+  .fine{font-size:8.4pt;line-height:1.5;color:var(--mute);font-style:italic}
+</style>
+
+<!-- 1 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="band">
+    <div>
+      <div class="mark"><i></i></div>
+      <h1>Tenderfoot</h1>
+      <div class="sub">Behind the explainer — what is actually built, and where the team is</div>
+    </div>
+    <div class="meta">Addendum for management<br><b>16 September 2026</b><br>Companion to the explainer of August 2026</div>
+  </div>
+
+  <div>
+    <div class="lbl">1 · What the explainer promotes</div>
+    <div class="rule"></div>
+    <p class="lede">The explainer sells the destination; this document says what is standing on the site today, and what the crew is doing next. It was written to show the <strong>finished product</strong> rather than the first release — its own closing page says so. Five weeks on, each promise against what exists:</p>
+  </div>
+
+  <div class="promise">
+    <div class="h">Page</div><div class="h">The promise</div><div class="h">Where it stands today</div>
+
+    <div class="pgn">03<small>What it does</small></div>
+    <div>It collects from every source you switch on, prepares the documents and facts, and you decide with a reason.</div>
+    <div><span class="st built">Built</span>All three moves exist and have been used on real data.</div>
+
+    <div class="pgn">04<small>The daily driver</small></div>
+    <div>One opportunity at a time, keyboard-only. Interested, Pass, Undo.</div>
+    <div><span class="st built">Built · used in anger</span>150 real opportunities were triaged in the app on 13 September.</div>
+
+    <div class="pgn">05<small>Evidence</small></div>
+    <div>Scores that quote the sentence they came from.</div>
+    <div><span class="st parked">Parked, by design</span>V1 has no scores (page 2). The citation mechanism does exist for extracted facts: every deadline points to its passage.</div>
+
+    <div class="pgn">06<small>The brief</small></div>
+    <div>What the work is, why it fits, what is missing.</div>
+    <div><span class="st not">Not built</span>The record screen exists with its Extracted Fields, Documents and Timeline tabs; Brief is shown as parked.</div>
+
+    <div class="pgn">07<small>The headline feature</small></div>
+    <div>Contracts expiring, months before an RFP.</div>
+    <div><span class="st part">Data loaded · screen not built</span>All 204,920 Indiana contracts are in production; the radar screen is scheduled after the go / no-go.</div>
+
+    <div class="pgn">08<small>Recall</small></div>
+    <div>Rejected is filed with its reason, never deleted.</div>
+    <div><span class="st part">Partly</span>Every decision carries a reason in the reader's own words and can be undone. The drawer of machine-rejected items has nothing to hold: V1 rejects nothing on your behalf.</div>
+
+    <div class="pgn">09<small>Configuration</small></div>
+    <div>Your firm is a row; sources are the control.</div>
+    <div><span class="st built">Built</span>The firm profile is editable data; the Source Registry shows every source with its health, and each can be checked or run from the screen.</div>
+  </div>
+
+  <div class="note tail">
+    <span class="lbl">Two things to say plainly about the explainer itself</span>
+    <p>Its screenshots carry a placeholder wordmark and predate the current prototype, so it stays internal until rebuilt. And its closing “Where this stands” page describes the plan as it was in August; page 3 here replaces it.</p>
+  </div>
+
+  <div class="foot"><span>Tenderfoot · Addendum to the explainer · September 2026</span><span>1</span></div>
+</section>
+
+<!-- 2 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl">2 · What the software does</div>
+  <div class="rule"></div>
+  <h2>What is actually running today</h2>
+  <p class="lede">A deployed web application with a real database behind it, built since 3 August: <strong>607 commits, over 1,100 automated tests</strong>, and a CI gate that must pass before anything merges.</p>
+
+  <div class="moves">
+    <div class="move"><div class="k">01</div><div class="body">
+      <h3>It collects — from three live sources</h3>
+      <p>One solicitation seen on two sources becomes one record. Nothing is filtered out on the reader's behalf.</p>
+      <div class="srcs">
+        <div class="src"><b>9,883</b><div class="n">SAM.gov</div><p>Federal solicitations, pulled directly and free. In production.</p></div>
+        <div class="src"><b>4,377</b><div class="n">HigherGov</div><p>Paid aggregator: IN, OH, MI, IL, KY at state <em>and</em> local level. 851 buying organisations; a complete 28-day window bought so coverage could be measured, not guessed.</p></div>
+        <div class="src"><b>204,920</b><div class="n">Indiana contract register</div><p>Every contract the state holds, with value and end date. The data behind the expiration radar — loaded, waiting for its screen.</p></div>
+      </div>
+    </div></div>
+
+    <div class="pair">
+      <div class="move"><div class="k">02</div><div class="body">
+        <h3>It prepares</h3>
+        <p>When a reader opens a solicitation, its documents are fetched and read, and facts — the deadline first — are extracted with a confidence and the passage they came from. First live measurement: the deadline was <strong>right every time it was found (100% precision)</strong> and <strong>found less often than we want (recall 12.5%</strong>, a lower bound not yet validated by hand-labelling).</p>
+      </div></div>
+      <div class="move"><div class="k">03</div><div class="body">
+        <h3>You decide</h3>
+        <p>The queue is real. One opportunity, keyboard-only, Interested or Pass with a required reason. The reasons are captured verbatim, and they are the raw material for the next design step (page 4).</p>
+        <p style="margin-top:.08in"><strong>And it administers itself:</strong> a Source Registry with a health check and a run control per source; a firm profile held as data, not code; a spend ledger for the one metered source.</p>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="warn tail">
+    <span class="lbl">What it deliberately does not do</span>
+    <ul>
+      <li><strong>It does not rank, score or filter.</strong> V1 returns everything from every switched-on source. Decided 11 August, and a reason rather than an omission: a system that returns everything cannot silently miss anything, and nobody knew what the sources actually publish until it ran. That measurement is now in hand.</li>
+      <li><strong>It does not run unattended.</strong> Every ingest is started by an operator. Scheduling is the first thing after the go / no-go.</li>
+      <li><strong>It does not yet show the radar, the brief, organisations, or reports.</strong> Those destinations exist in the navigation and say honestly that they are not built.</li>
+    </ul>
+  </div>
+
+  <div class="foot"><span>Tenderfoot · Addendum to the explainer · September 2026</span><span>2</span></div>
+</section>
+
+<!-- 3 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl">3 · Note to management</div>
+  <div class="rule"></div>
+  <h2>Where the team is</h2>
+  <p class="lede"><strong>The short version.</strong> The plumbing is built and proven on real data. On 3 September the project turned from building screens to measuring the sources they depend on; that measurement is nearly complete. One decision sits with management, one gate with the team.</p>
+
+  <div class="para" style="margin-top:.2in">
+    <h4>How we got here</h4>
+    <p>August was construction — schema, a design system matched pixel-for-pixel to the prototype, federal ingestion, cross-source merging, document extraction, the triage screen — each slice merged with its tests. By month's end the app was deployed and taking real federal data.</p>
+
+    <div class="pull">“Once we have both our reliable upstreams defined, we can then flesh out the rest of the app with real data and analysis methods, instead of just hoping that the source meets our criteria.”<small>Matt · 3 September · the pivot</small></div>
+
+    <h4>The pivot</h4>
+    <p>Measured, the free state portals were thin — Indiana's publishes no archive, Kentucky's and Michigan's show only what is open today, Ohio's can only be read by hand. Rather than build screens over a weak foundation, the team built a <strong>data floor</strong> — seven pass/fail tests the data must meet before a go / no-go means anything — and evaluated a paid aggregator against a free answer key.</p>
+
+    <h4>The finding</h4>
+    <p>HigherGov, on a two-week trial, recalled nearly every state-agency notice with five weeks of bidding time still left when it first carried them, and holds an Indiana archive back to 2013 that the state itself does not publish. <strong>That is a buy at $500 a year.</strong> One honest caveat: it was bought for city, county and school-district coverage, and that segment could not be measured — there is no free source to check it against.</p>
+
+    <h4>The gate, and the cost discipline</h4>
+    <p>The data floor now passes six of its seven tests; the seventh — where a listing defers to a document, we hold the document — can only close through use, because documents are fetched on demand to protect the metered budget. In practice, <strong>the go / no-go is ready to be taken.</strong> That budget, 10,000 records a month, is the project's one metered thing, and two rules bind every call: nothing is fetched without approval outside a small standing allowance, and rejection must be free — documents are bought only for what survives its listing. A key that leaked on 3 September was rotated within the hour, and every response is now scrubbed at the boundary.</p>
+  </div>
+
+  <div class="factwrap tail"><div class="facts">
+    <span class="lbl">The four numbers to quote</span>
+    <div class="fgrid">
+      <div class="fact"><b>98.7–100%</b><span>of state-agency notices recalled by HigherGov against a free answer key.</span></div>
+      <div class="fact"><b>37–39 days</b><span>of bidding time still left, median, when HigherGov first carries a notice.</span></div>
+      <div class="fact"><b>6 of 7</b><span>data-floor tests passing. The seventh closes only through use.</span></div>
+      <div class="fact"><b>8,682/10,000</b><span>metered records spent by the trial's close; the rest deliberately unspent.</span></div>
+    </div>
+  </div></div>
+
+  <div class="foot"><span>Tenderfoot · Addendum to the explainer · September 2026</span><span>3</span></div>
+</section>
+
+<!-- 4 ---------------------------------------------------------------- -->
+<section class="pg">
+  <div class="lbl">4 · What lies before us</div>
+  <div class="rule"></div>
+  <h2>In order, each gated on the one before it</h2>
+
+  <div class="steps">
+    <div class="step"><div class="n">01 · NOW · FREE</div><h3>Turn the 150 reasons into a vocabulary</h3>
+      <p>The triage session produced 150 decisions (11 Interested, 139 not) in the reader's own words. The fixed reasons the queue will offer — “out of state”, “deadline passed” and their siblings — are derived from those, not invented. Needs Matt at the table.</p></div>
+    <div class="step"><div class="n">02 · NOW · FREE</div><h3>Two small rulings</h3>
+      <p>Surfaced while building the last set; neither costs anything. One narrows a ruled design, the other repairs a measurement rule that no longer mirrors the one it was built to mirror.</p></div>
+    <div class="step"><div class="n gate">03 · THE GATE</div><h3>Go / no-go</h3>
+      <p>With the floor at six of seven and the sources graded, the team can put the question: does the data justify the post-gate slices?</p></div>
+    <div class="step"><div class="n">04 · ON GO</div><h3>Live ingestion</h3>
+      <p>Scheduled runs, and health alarms that fire when a source goes quiet. This is what turns an instrument into a daily tool.</p></div>
+    <div class="step"><div class="n">05 · ON GO</div><h3>The radar and reporting</h3>
+      <p>The expiration radar over the 204,920 contracts already held; source yield and market sizing.</p></div>
+    <div class="step"><div class="n">06 · LATER, DELIBERATELY</div><h3>Everything parked with a reason</h3>
+      <p>Scoring and evidence, the brief, organisations and vendors, the pipeline board, and sign-in — each parked with a reason on record, none forgotten.</p></div>
+  </div>
+
+  <div class="two">
+    <div class="note">
+      <span class="lbl">Decisions management can make now</span>
+      <ul>
+        <li><strong>The HigherGov subscription.</strong> The trial has ended. Renewal at $500/yr is recommended on the evidence on page 3, with the sub-state caveat stated.</li>
+        <li><strong>Whether the explainer goes outside the firm.</strong> Not until it is rebuilt against the current prototype and its closing page is replaced with this one.</li>
+      </ul>
+    </div>
+    <div class="warn">
+      <span class="lbl">Risks worth knowing</span>
+      <ul>
+        <li>Extraction recall is unvalidated.</li>
+        <li>The sub-state coverage the aggregator was bought for is unmeasured.</li>
+        <li>Nothing runs without a person starting it.</li>
+        <li>The app is public behind platform deployment protection only, with no sign-in yet.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tail">
+    <div class="pull">The explainer promised a tool that removes every reason the bid decision is slow. What exists today does the collecting and the preparing on real data, at a known cost, and has been used to decide. The rest is sequenced behind a gate that is ready to be taken.</div>
+    <p class="fine">Every figure here is traceable to the project's own records as of 16 September 2026: STATUS.md, the session log, the plan of action, and the fitness and platform-comparison documents under docs/.</p>
+  </div>
+
+  <div class="foot"><span>Tenderfoot · Addendum to the explainer · September 2026</span><span>4</span></div>
+</section>
