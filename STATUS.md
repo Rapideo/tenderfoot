@@ -355,6 +355,25 @@ Two facts before re-asking, which are what the ruling was made on: **the cap is 
 >
 > ⚠️ **Two days can never complete under `maxRecordsPerRun: 40` — 2026-09-03 (2 pages) and 2026-09-10 (6 pages).** The walk refuses a page it cannot guarantee fits in the remaining budget, so a multi-page day is structurally ungradeable at this cap. Raising it would not have helped C4 anyway (those days add no NEW notices), which is why it was left alone. **The earlier run ABORTED** on 2026-09-03 the same way, against `maxRecordsPerRun: 40` — a cap the file itself flags as UNRATIFIED, picked by an agent and never put to Matt.** So finishing the cohort means either narrower windows (several runs at ≤40 each) or raising that cap, and raising it is his call, not a code change to make quietly.
 >
+> 🌾 **THE HARVEST IS DONE — 1,685 RECORDS, AND THE ARCHIVE WENT FROM 90 DAYS TO THE FULL YEAR TO DATE (2026-09-15, Matt: "do the harvest").**
+>
+> **First, what the harvest was NOT.** The obvious target was empty: 260 day-artifacts already cover **2026-01-01 → 09-17 on `captured_date` with no gaps**, **234 of them hold zero sightings**, none was partial, and all of them together hold 155 rows. That axis was exhausted, and a scan of the artifacts on disk said so for free before a record was spent.
+>
+> **The value was on the OTHER AXIS.** A costed `--dry-run` on `--axis=posted_date` for March returned 20 records/day where `captured_date` had returned nothing — our holdings started at posted **2026-06-09**, so everything published before that was unbought. Three windows, all loaded whole, no day truncated: **05-01→06-08 (305) · 03-01→04-30 (690) · 01-01→02-28 (690)**.
+>
+> | | before | after |
+> |---|---|---|
+> | HigherGov rows | 3,238 | **4,377** |
+> | posted range | 2026-06-09 → 09-07 | **2026-01-01 → 09-07** |
+> | rows carrying a document key | **0** | **1,149** |
+> | open + biddable HigherGov rows | — | **1,365** |
+>
+> ⚖️ **D15's "the step retires itself" is now proven, not promised.** The 1,149 keys were not bought — they arrived free on ingest, because the harvest ran through the client that lifts `related_key` at parse. On-demand key purchase now applies only to the older keyless rows, exactly as the ruling argued it would.
+>
+> 🔴 **AND THE MERGE TRAP BIT TWICE, SO IT IS WORTH REPEATING: `npm run ingest:highergov` DOES NOT MERGE.** The harvest imported 7,099 sightings that stayed sightings until `npm run merge` ran and produced 4,377 canonical rows. Any future ingest that skips it will look exactly like an ingest that did nothing.
+>
+> 💰 **Spend 6,987 → 8,682. 318 left before `MONTHLY_RECORD_CEILING` (9,000); 1,318 before the 10,000 allowance.** The ~1,000 gap between ceiling and allowance is unusable without raising a **ratified** number, and it is lost when the trial lapses — **Matt's call, not a code change to make quietly.**
+>
 > 🛑 **AND THE TRIAL ENDS IN TWO DAYS (Matt, 2026-09-15).** 3,233 records left of the 10,000 allowance; **2,233 before `MONTHLY_RECORD_CEILING` (9,000) refuses first**, which is the binding number. **Ruling sheet D18–D19: <https://claude.ai/artifact/N9CCdMYE7jzLqrPrCAQef5>** (`read_db`, collection `rulings`, docs `d18`, `d19`). D18 asks whether to prove the `related_key` parse with a ~5-record sample before spending on it; D19 asks how to allocate the rest — measure (recall, decide the subscription) or harvest (listings, 1 record each, gone when the trial lapses). **Nothing is called until he rules (§5.1).** Two facts the sheet turns on: **all 3,238 HigherGov rows are keyless and none has documents**, and **only 3 of the 11 Interested rows are still open** — the other 8 have closed, so documents for them cannot be bid.
 
 **Waiting on Matt, first thing:** ~~the 150 decisions~~ done · ~~D13/D14~~ ruled · ~~**D15/D16** (document key for existing rows; the record screen's "could not ask" state)~~ ruled 2026-09-15, A and A · ~~**D17** (F6's statistic, now measured)~~ ruled 2026-09-15, C · ~~**the push**~~ **✅ MERGED `--no-ff` at `4a99561` and PUSHED 2026-09-15; gate re-run on the merged result, 1150 tests / 104 files, exit 0. `main == origin/main`.** · ~~a dashboard reading for row 211~~ ✅ done 2026-09-15, reconciled exactly · the working-set plan's §5 · ~~the merge~~ done. **Then the chip derivation, together, from `docs/2026-09-13-reason-corpus.md`.**
