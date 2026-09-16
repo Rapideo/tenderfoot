@@ -725,6 +725,86 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 
 ---
 
+### 2.35 A probe that stops before the step that prints the answer sells you a projection, not the answer
+
+**Observed 2026-09-15.** A ruling approved spending ~5 metered records on a `--dry-run` sample to settle whether a parse assumption held, because the ingest prints `KEYLESS PATHS: N` for exactly that question. The dry run cost its 5 records and printed a *projection* — it stops **before** the day-walk, and the `KEYLESS PATHS` line is emitted **by the walk**. The answer was not bought. The real one-day walk cost 6 more and settled it.
+
+**Why it was missed.** The flag's name describes its *purpose* (price a window without committing) and the question was about its *output*. Both were true of the same command, so the reasoning never separated "what does this cost" from "what does this return". The approval was written in good faith, priced correctly, and still bought the wrong thing.
+
+**Proposed generalisation.** **When a spend is approved to obtain a specific output, name the line of output it will produce and confirm the chosen command reaches the code that emits it.** A probe is characterised by where it *stops*, not only by what it costs.
+
+> **The tell is an approval of the form "run X to learn Y", where Y is a named log line or field.** Grep for the emitter and check it sits before the probe's exit.
+
+**The check that catches it.** Before proposing a metered probe, cite the file and line that prints the answer, and the exit path the probe takes. If the exit precedes the emitter, the probe is the wrong instrument.
+
+**Why not promoted.** One instance, and it cost 5 records rather than anything serious — but it is the same *class* as 2.34 (free oracle overlooked): a question about instruments answered by assumption instead of by reading.
+
+---
+
+### 2.36 When a stage reports success and the next stage reads empty, suspect the step between them before the stage itself
+
+**Observed 2026-09-15.** `npm run ingest:highergov` reported "6 sighting(s) imported" and no warnings. The column those sightings were bought to populate, `solicitation.document_key`, read **0 of 3,238**. The obvious reading — the parse is broken, which is exactly the risk the spend existed to test — was wrong. The ingest CLI **does not merge**; the keys were sitting in `sighting`, and `npm run merge` (local, free) turned 0 into 6.
+
+**Why it is dangerous.** The failure is indistinguishable, at the point of observation, from the failure you were looking for. A confirmation-shaped question ("did the parse work?") gets a confirmation-shaped answer ("no") from a missing step nobody asked about. Had the next action been "fix the parse", it would have been a fix to working code, justified by real evidence.
+
+**Proposed generalisation.** **Before concluding that a stage failed, enumerate the stages between it and where you are reading.** The evidence is only evidence about the *whole chain*; attributing it to one link requires knowing the links. State the chain explicitly — *fetch → parse → artifact → import → merge → column* — and check each boundary before diagnosing.
+
+> **The tell is a clean run followed by an empty read.** A genuine defect usually leaves a complaint somewhere; a missing step leaves silence at both ends.
+
+**The check that catches it.** An operator command's header should say what it does **and what it does not do next**. `ingest:highergov`'s did not, and the same trap was hit twice in one session.
+
+**Why not promoted.** Two instances, both this session, both the same command. Worth promoting if a second command in this repo shows the same shape.
+
+---
+
+### 2.37 Before spending to reach a threshold, check whether the threshold is reachable at any price
+
+**Observed 2026-09-15.** A coverage measurement reported both its gates as `unknown` because the settled cohort was 77 against a floor of 100. The obvious and approved response was to buy more: four further runs, 71 metered records. The cohort moved 77 → 82 and then stopped, because **only 82 distinct notices have ever existed in the answer key** — the key is a free scrape of one source, which currently lists 66. The floor of 100 was unreachable for any amount of money, and one free query against the stored items said so.
+
+**Why it was missed.** The threshold and the measurement were designed together, and the threshold was chosen as a statistical floor without anyone checking it against the *supply* of the thing being counted. The spending plan then treated "below the floor" as a budget problem, because that is what a floor usually is.
+
+**Proposed generalisation.** **A threshold over a population is only a spending target if the population can grow to meet it.** Before funding a run at a floor, measure the size of the available universe and compare. Where the universe is smaller than the floor, the finding is *the threshold is wrong or the instrument is too small* — never *spend more*.
+
+> **The tell is a cohort or sample floor that has not moved across several runs.** Count distinct units observed, not units processed; processing the same units again is work, not evidence.
+
+**The check that catches it.** Any gate of the form "n ≥ N" carries, beside it, the measured ceiling of n. Where that ceiling is below N, the gate reports *unreachable*, not *fail*.
+
+**Why not promoted.** One instance, but it is cheap to apply and it cost 71 metered records on a trial's last day.
+
+---
+
+### 2.38 Measure the segment you are buying for, not the segment your free answer key happens to cover
+
+**Observed 2026-09-15.** A paid source was trialled specifically for its **sub-state** coverage — the project's own standing instructions say so in as many words, and record that 58% of sub-state rows carry no description, which is the gap the purchase was meant to close. The trial's recall measurement returned **98.7–100% coverage and 37–39 days of median lead time**, and every one of its 82 notices was `state_agency`. The `sub_state` segment read `NOT MEASURED` on every run, because the free answer key used to grade recall is itself a state-agency source.
+
+**Why it is dangerous.** The number is real, flattering, and about the wrong thing. Nothing in the output is false — the segment label is right there. But a headline figure with a segment caveat gets read as a headline figure, and a purchase decision made on it would rest on evidence from the segment that was **not** in question.
+
+**Proposed generalisation.** **State the segment a purchase is justified by, then check that the measurement covers that segment, before the measurement is funded.** Where no free answer key exists for the segment that matters, that absence *is* the finding — and it is a finding about the **evaluation design**, not about the vendor.
+
+> **The tell is a segmented metric where one segment reads `NOT MEASURED` and the others look good.** Ask which segment the money was for.
+
+**The check that catches it.** A trial plan names its decisive segment in one line, and the measurement's segment breakdown is checked against that line at design time, not at reporting time.
+
+**Why not promoted.** One instance — but it is the single most consequential thing learned in the trial, and it was learned after the money was spent rather than before.
+
+---
+
+### 2.39 A per-unit cost quoted as a flat average hides whether it scales, and the shape decides the strategy
+
+**Observed 2026-09-15.** The cost of fetching one notice's documents was carried through the project as **"~11 records"**, measured once from a call that happened to return ten documents. That flat figure drove two real conclusions: that a bulk document pass was structurally impossible, and that on-demand fetching was expensive enough to need its own ruling. The first live runs measured **5, 2 and 11** — the real shape is **`1 + N documents`**. A thin notice costs 2.
+
+**Why it matters.** A flat average and a linear shape support different strategies. Under "~11 flat", every notice is equally expensive and triage-before-fetch is the only affordable design. Under "1 + N", cost tracks the thing you actually wanted — how much material there is — the cheap notices are nearly free, and the expensive ones are expensive *because they are substantial*. The design chosen was still right, but it was right for a reason nobody had measured.
+
+**Proposed generalisation.** **Record a measured unit cost together with the quantity it was measured at, and do not generalise it to a rate until a second and third observation agree.** One sample gives a value; it does not give a shape, and the shape is what strategy answers to.
+
+> **The tell is a cost cited as "~N per X" with no dispersion and a single source measurement.** Write it as "N at one observation (X = k)" until there are three.
+
+**The check that catches it.** Any cost constant used in a planning argument carries its sample size in the comment beside it.
+
+**Why not promoted.** One instance, and the strategy it informed survived the correction — which is precisely why it is worth writing down: the reasoning was lucky, not sound.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.
