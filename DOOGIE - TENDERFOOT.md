@@ -694,3 +694,31 @@ September 15, 2026:
 297. The harvest's obvious target was empty, and establishing that cost nothing: 260 day-artifacts already cover Jan 1 – Sep 17 on `captured_date` and 234 of them hold zero rows. The value was on the other axis. `posted_date` for the unheld months bought 1,685 records of archive — 3,238 rows to 4,377 — and 1,149 of them arrived already carrying document keys, because the harvest ran through the client that lifts the key at parse. D15's "the step retires itself" is now proven rather than promised.
 
 298. Closed the trial at 8,682 of 10,000 on Matt's ruling, holding 318 back. The floor now fails one predicate instead of five: F7, document reachability, 7 of 293. And F7 cannot be built — D2 put documents on demand, so it is the first predicate that closes only by the product being used.
+
+September 16, 2026:
+
+*[AI-GENERATED ENTRY — written by Claude at my request. I normally do these by hand. Covers the day: the chip derivation, the rulings, the build, the merge.]*
+
+299. Opened the day to find a session the docs did not know about. Between last night's close-out and one in the morning a management addendum to the explainer had been built and left uncommitted — four pages, a Playwright build, a README that says when to rebuild it. STATUS got a dated block saying so before anything else moved, and migration 034 was confirmed in production on the way, which the 13th had asked for and nobody had done.
+
+300. Read all 150 reasons. Not skimmed — every block, with the card beside it. Eighty percent of the passes are one sentence with a different noun: "construction is not something we do", "we are not a chemical supplier", "laboratory services would be a blacklist item". The noun is the valuable part, and the spec already knew it — §4.2 says the negative profile is built from exactly these, and the field is still empty.
+
+301. Wrote the first count as 111 and the script said 113. Two flagged items and one I had simply missed were being carried in prose. The lesson went into the playbook as 2.40: compute the tallies from the assignment file, and never type a count the script has not produced.
+
+302. Matt ruled one chip for the mass before the sheet existed. Recorded it in the sheet's own store with a `recorded_by` field saying so — a future reader finding "Ruled · A" should know whether a hand clicked it.
+
+303. The sheet's lower half is every one of the 150 under the chip its words produced, with a control to move it and an editable name on each chip. He reviewed, moved nothing, renamed nothing, and ruled all four remaining in one sentence. The absence of moves is the evidence; a list with counts would have asked him to trust the clustering instead.
+
+304. One question the sheet could not carry, asked in chat because it is a prototype-versus-ruling conflict under CLAUDE.md §1: the bundle's guard is a chip OR text, and D30 said free text is required. He took the bundle's guard back with one exception — "Not a service we provide" alone is not a decision, because the noun is what the negative profile needs. That rule is one flag on one chip.
+
+305. Zero of 139 passes reached for four of the bundle's eight chips — Deadline too close, Too small, Set-aside ineligible, Cost to pursue too high. One chip ships with no corpus behind it at all: "No capacity right now", on 1.1.4's mandate that the capacity class arrive classified rather than inferred from prose later. It says so on the sheet and in the migration.
+
+306. Built it TDD, twenty-three tests each watched failing first. The two tests that had pinned "no chips" since the 2nd and the 8th were inverted rather than deleted, so the reversal is in the diff. The bundle's placeholder came home on both branches — with chips back, "…or say it in your own words" is right again, and that piece of D30 closes.
+
+307. Five mutations, whole file each: the detail guard deleted turned three tests red across two files, the step check one, the dedupe one, the client guard one, Back-not-clearing one. Each turned exactly what it should and nothing else.
+
+308. Twenty minutes lost to the browser, and the diagnosis from the 15th was wrong. The extension was not blocked from localhost — it was answering from a Mac that is also connected to the account, whose localhost is not this machine. Every local page read as an error page while example.com rendered fine, which is exactly what a permission block looks like. Matt's "make sure it's the local windows chrome" was the whole fix. It is in CLAUDE.md §4 now, and in memory.
+
+309. Clicked through on the real queue against the dev database without writing a decision: both chip rows, two chips selected at once, the "which service?" refusal in a callout, Back clearing everything. Verified by query afterwards that no pursuit row had been written. The toast is the one thing not seen on screen, because seeing it means writing to his triage data.
+
+310. Merged --no-ff and confirmed the merged tree byte-identical to the gated branch tip, so the gate figure stands without a second run. Pushed. The push deploys migration 035 to production through the build's own migrate:deploy — a column with a default, no data touched — and the first thing tomorrow is reading it back off /api/health.
