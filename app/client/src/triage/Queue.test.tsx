@@ -550,7 +550,13 @@ test("all seven channels are offered, in the migration's order", async () => {
   screen.getByRole("button", { name: /^interested$/i }).click();
 
   await waitFor(() => expect(screen.getByRole("button", { name: "Nowhere" })).toBeTruthy());
-  const chips = Array.from(document.querySelectorAll(".choice-chip")).map((c) => c.textContent);
+  /* The FIRST chip row is the channel's; the reason chips (migration 035)
+   * sit in a second row under their own question and are asserted in their
+   * own test. Scoped to the first `.queue__reason-chips` so a reason chip
+   * can never satisfy -- or break -- a claim about channels. */
+  const chips = Array.from(
+    document.querySelector(".queue__reason-chips")!.querySelectorAll(".choice-chip"),
+  ).map((c) => c.textContent);
   expect(chips).toEqual([
     "Already knew",
     "Indiana email",
@@ -608,9 +614,13 @@ test("a Pass carries no channel", async () => {
 
   screen.getByRole("button", { name: /^pass$/i }).click();
   await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
-  /* No chip row on this branch: SVRC 1.1.4 parked reason chips pending a
-   * hand-run, and the discovery chips must not leak across the mode. */
-  expect(document.querySelectorAll(".choice-chip")).toHaveLength(0);
+  /* The chips on this branch are the seven REASON chips (migration 035,
+   * derived from the 150 -- D21 and D24), and none of them is a discovery
+   * channel: the channel row must not leak across the mode. This assertion
+   * read `toHaveLength(0)` from 2026-09-02 to 2026-09-16, while SVRC 1.1.4
+   * had reason chips parked pending the hand-run. */
+  expect(document.querySelectorAll(".choice-chip")).toHaveLength(7);
+  expect(screen.queryByRole("button", { name: "Nowhere" })).toBeNull();
 
   typeReason("Out of geography");
 
@@ -737,7 +747,7 @@ test("Interested is blocked until a reason is given, and nothing reaches the ser
 
   screen.getByRole("button", { name: /confirm interested/i }).click();
   await waitFor(() =>
-    expect(screen.getByText("A reason is required on Interested.")).toBeTruthy(),
+    expect(screen.getByText(/A reason is required on Interested/)).toBeTruthy(),
   );
 
   const posts = fetchMock.mock.calls.filter((c) => (c[1] as any)?.method === "POST");
@@ -791,7 +801,7 @@ test("the good-fit prompt reads as the pair of the rejection prompt, not as an o
   expect(screen.getByText("WHERE ELSE WOULD THIS HAVE REACHED YOU? — REQUIRED")).toBeTruthy();
 });
 
-test("the good-fit reason is free text -- no chips are offered for it", async () => {
+test("the good-fit reason offers the five DERIVED chips, under the channel row, and not the bundle's", async () => {
   stub(page());
   sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
   renderQueue();
@@ -800,14 +810,31 @@ test("the good-fit reason is free text -- no chips are offered for it", async ()
   screen.getByRole("button", { name: /^interested$/i }).click();
   await waitFor(() => expect(screen.getByText("WHY THIS ONE? — REQUIRED")).toBeTruthy());
 
-  /* SEVEN CHIPS, and all seven are the migration's channels. SVRC 1.1.4
-   * ratified free text only for V1: a preset reason vocabulary would flatten
-   * the signal it exists to capture, and a vocabulary has to be DERIVED from
-   * what gets written here rather than guessed before it is. The bundle's own
-   * fit chips are the shape that must not appear. */
-  expect(document.querySelectorAll(".choice-chip")).toHaveLength(7);
+  /* TWELVE CHIPS: the seven channels, then the five reason chips. This test
+   * asserted "seven, and no fit chips" from 2026-09-08 to 2026-09-16, while
+   * SVRC 1.1.4 kept reason chips parked until a vocabulary could be DERIVED
+   * from what got written here. It was -- 150 decisions, rulings D20-D24 --
+   * and the eleven Interested reasons sorted into four (D22-A) plus the
+   * evidence chip that sits on both steps (D23-A). The bundle's own YES_CHIPS
+   * are still the shape that must not appear: three of its four have no
+   * corpus behind them, and the fourth ("Strong fit") is Matt's "Perfect fit"
+   * under the bundle's word. */
+  const chips = Array.from(document.querySelectorAll(".choice-chip")).map((c) => c.textContent);
+  expect(chips).toHaveLength(12);
+  expect(chips.slice(7)).toEqual([
+    "Perfect fit",
+    "Our kind of work",
+    "Could source it",
+    "New market, worth a look",
+    "Not enough information",
+  ]);
+  /* Reading order is the bundle's frame twice over: question, chips,
+   * question, chips, field -- the reason chips answer the SECOND question,
+   * so they sit under it, not under the channel prompt. */
+  const secondHead = screen.getByText("WHY THIS ONE? — REQUIRED").closest(".queue__reason-head")!;
+  expect(secondHead.nextElementSibling!.className).toContain("queue__reason-chips");
   expect(screen.queryByText("Strong fit")).toBeNull();
-  expect(screen.queryByText("Sub-teaming play")).toBeNull();
+  expect(screen.queryByText("Sub / teaming play")).toBeNull();
   expect(screen.queryByText("Watch only")).toBeNull();
 });
 
@@ -1028,4 +1055,222 @@ test("the cost panel survives beside it -- parked chrome is built, not trimmed",
    * description and would silently drop the bundle's own chrome. */
   expect(screen.getByText("COST TO PURSUE — FACTS, NOT A SCORE")).toBeTruthy();
   expect(screen.getByText(/WHAT THIS IS/i)).toBeTruthy();
+});
+
+/* ---------------------------------------------------------------------------
+ * REASON CHIPS -- migration 035, rulings D20-D24 (2026-09-16), deviation D32.
+ * The vocabulary is derived from the 150 (shared REASON_CHIPS); these tests
+ * are about the bundle's chip MECHANICS carrying it: multi-select toggles,
+ * a chip or text confirms, and the one chip that needs its noun.
+ * ------------------------------------------------------------------------- */
+
+test("the seven Pass chips are offered, in the vocabulary's order", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+  const chips = Array.from(document.querySelectorAll(".choice-chip")).map((c) => c.textContent);
+  /* Largest cluster first: 113 of 139 is the first chip under the cursor.
+   * "No capacity right now" is last and is the one chip with no corpus
+   * behind it (D24-A). The bundle's four unused words -- Deadline too close,
+   * Too small, Set-aside ineligible, Cost to pursue too high -- are absent
+   * because zero of 139 reached for them (D21-A). */
+  expect(chips).toEqual([
+    "Not a service we provide",
+    "Not enough information",
+    "Not an actual bid",
+    "Seen already",
+    "Must be on-site",
+    "Too specific — no room for us",
+    "No capacity right now",
+  ]);
+  expect(screen.queryByText("Deadline too close")).toBeNull();
+  expect(screen.queryByText("Cost to pursue too high")).toBeNull();
+});
+
+/* THE BUNDLE'S GUARD: `!picked.length && !freeText.trim()` -- a chip OR text.
+ * Ruled by Matt 2026-09-16 over D30's literal "free text required". */
+test("a Pass by chip alone confirms, and the POST carries reason_chips with no reason", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Not an actual bid" })).toBeTruthy());
+  screen.getByRole("button", { name: "Not an actual bid" }).click();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Not an actual bid" }).getAttribute("aria-pressed"),
+    ).toBe("true"),
+  );
+  screen.getByRole("button", { name: /confirm pass/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.state).toBe("Not Interested");
+  expect(body.reason_chips).toEqual(["not-an-actual-bid"]);
+  expect(body.reason).toBeNull();
+});
+
+test("reason chips are multi-select: a second adds, a repeat removes", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Seen already" })).toBeTruthy());
+  screen.getByRole("button", { name: "Seen already" }).click();
+  await waitFor(() => expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(1));
+  screen.getByRole("button", { name: "Not enough information" }).click();
+  /* Two on -- the channel row's single-select REPLACES; this row APPENDS, as
+   * the bundle's `picked` array does, because a pass may have two reasons
+   * (about six of the 139 did). */
+  await waitFor(() => expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(2));
+  screen.getByRole("button", { name: "Seen already" }).click();
+  await waitFor(() => expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(1));
+  expect(
+    screen.getByRole("button", { name: "Not enough information" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+});
+
+/* THE ONE EXCEPTION -- D20-A. The category noun seeds the negative profile
+ * (spec §4.2), and the chip alone does not carry it. Blocked HERE as well as
+ * on the server, so a mis-tap never becomes a request. */
+test("Not a service we provide alone is blocked, names the chip, and nothing reaches the server", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Not a service we provide" })).toBeTruthy(),
+  );
+  screen.getByRole("button", { name: "Not a service we provide" }).click();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Not a service we provide" }).getAttribute("aria-pressed"),
+    ).toBe("true"),
+  );
+  screen.getByRole("button", { name: /confirm pass/i }).click();
+  await waitFor(() => expect(screen.getByText(/which service/i)).toBeTruthy());
+  expect(fetchMock.mock.calls.filter((c) => (c[1] as any)?.method === "POST")).toHaveLength(0);
+
+  /* ...and with the noun typed, it goes through, carrying both. */
+  typeReason("roofing");
+  await waitFor(() =>
+    expect((screen.getByLabelText("Reason") as HTMLInputElement).value).toBe("roofing"),
+  );
+  screen.getByRole("button", { name: /confirm pass/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.reason_chips).toEqual(["not-a-service"]);
+  expect(body.reason).toBe("roofing");
+});
+
+test("the Interested POST carries reason chips beside the channel, and a chip alone is enough", async () => {
+  const fetchMock = stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Nowhere" })).toBeTruthy());
+  screen.getByRole("button", { name: "Nowhere" }).click();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Nowhere" }).getAttribute("aria-pressed")).toBe("true"),
+  );
+  screen.getByRole("button", { name: "Perfect fit" }).click();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Perfect fit" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    ),
+  );
+  screen.getByRole("button", { name: /confirm interested/i }).click();
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some((c) => (c[1] as any)?.method === "POST")).toBe(true),
+  );
+  const body = JSON.parse(
+    (fetchMock.mock.calls.find((c) => (c[1] as any)?.method === "POST")![1] as any).body,
+  );
+  expect(body.state).toBe("Interested");
+  expect(body.discovery_channel).toBe("nowhere");
+  expect(body.reason_chips).toEqual(["perfect-fit"]);
+  expect(body.reason).toBeNull();
+});
+
+/* The bundle's cancelReason resets `picked` and `freeText` together; a chip
+ * left on from an abandoned step would otherwise be sitting there, selected,
+ * when the next card's step opened. Same rule the channel already follows. */
+test("backing out clears the chips rather than carrying them over", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Seen already" })).toBeTruthy());
+  screen.getByRole("button", { name: "Seen already" }).click();
+  await waitFor(() => expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(1));
+  screen.getByRole("button", { name: "Back" }).click();
+  await waitFor(() => expect(screen.queryByLabelText("Reason")).toBeNull());
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Seen already" })).toBeTruthy());
+  expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(0);
+});
+
+test("a Pass toast names the chips picked, in the vocabulary's words", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  sessionStorage.setItem("tenderfoot.decidedBy", "matt");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Seen already" })).toBeTruthy());
+  screen.getByRole("button", { name: "Seen already" }).click();
+  await waitFor(() => expect(document.querySelectorAll(".choice-chip--on")).toHaveLength(1));
+  screen.getByRole("button", { name: /confirm pass/i }).click();
+  await waitFor(() => expect(screen.getByText(/Passed · Seen already/)).toBeTruthy());
+});
+
+/* THE PLACEHOLDER COMES HOME. The bundle uses one string on both steps --
+ * "…or say it in your own words (this is the training signal)" -- and D30
+ * dropped the "…or" on Interested because, with no chips, "or" invited
+ * skipping a required field. There are chips now, and the field IS the
+ * alternative to them again, so the bundle's own string is right on both
+ * branches and that half of D30 closes. */
+test("the reason placeholder is the bundle's one string, on both branches", async () => {
+  stub(page());
+  sessionStorage.setItem("tenderfoot.adminSecret", "s3cret");
+  renderQueue();
+  await waitFor(() => expect(screen.getByText(ITEM.title)).toBeTruthy());
+
+  screen.getByRole("button", { name: /^pass$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+  expect((screen.getByLabelText("Reason") as HTMLInputElement).placeholder).toBe(
+    "…or say it in your own words (this is the training signal)",
+  );
+  screen.getByRole("button", { name: "Back" }).click();
+  await waitFor(() => expect(screen.queryByLabelText("Reason")).toBeNull());
+  screen.getByRole("button", { name: /^interested$/i }).click();
+  await waitFor(() => expect(screen.getByLabelText("Reason")).toBeTruthy());
+  expect((screen.getByLabelText("Reason") as HTMLInputElement).placeholder).toBe(
+    "…or say it in your own words (this is the training signal)",
+  );
 });

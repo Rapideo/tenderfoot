@@ -1501,3 +1501,136 @@ claiming we looked when we did not, and a row showing its real file count makes 
    the ordinary count, which is the old lie returning quietly. The map is the coupling to watch.
 3. **`no-document-key` stops happening.** D15-A retires it for any row that gets opened, and every
    future ingest lands keys for free. `unsupported` and `ceiling` keep the string alive regardless.
+
+---
+
+## D32 — reason chips return, DERIVED, and the Interested step carries two chip rows the bundle draws as one
+
+**⚖️ Ruled by Matt 2026-09-16, ruling sheet D20–D24, every one the recommended option**
+(`read_db` on <https://claude.ai/artifact/NdhuQyUot3itr9ciQ7zHC7>, collection `rulings`, docs
+`d20`…`d24`; D20 dictated in session before the sheet existed, D21–D24 by *"I am good with ALL
+of your recommendations"*, each written into the store by Claude with a `recorded_by` field
+saying so). Plus one ruling made in chat the same day, on the guard — recorded below.
+
+**This is the entry D30 said would come.** Its own *"what would reopen it"* §1: *"The sitting
+produces a vocabulary. Once there are 150 hand-written fit reasons, the derived-from-evidence
+chip set SVRC 1.1.4 has been waiting for becomes writable — and it would sit beside this box,
+the way the channel chips do, not replace it."* The sitting happened on 2026-09-13 — 150
+decisions, 11 Interested, 139 not, every one in Matt's own words, the shortcut declined —
+and the vocabulary is what those words clustered into.
+
+### What the bundle draws
+
+The V1.2 bundle's decision step is one frame on both branches — prompt, help, **one row of
+multi-select chips**, a free-text field, Back, confirm — and its chips are two invented lists:
+
+```js
+const PASS_CHIPS = ["Out of geography", "No capability match", "Incumbent locked", "Too small",
+                    "Capacity — too large", "Deadline too close", "Set-aside ineligible",
+                    "Cost to pursue too high"];
+const YES_CHIPS  = ["Strong fit", "Sub / teaming play", "Known buyer", "Watch only"];
+```
+
+with the guard `if (kind === "pass" && !picked.length && !freeText.trim()) return;` — a chip
+**or** text on Pass, nothing required on Interested.
+
+### What we ship instead
+
+**The bundle's frame and the bundle's mechanics, carrying a vocabulary that is ours because it
+is Matt's.** Eleven chips, each with a class on the way in (SVRC 1.1.4's one condition), in
+`@tenderfoot/shared`'s `REASON_CHIPS`, pinned by migration 035's CHECK:
+
+| step | chips, in render order | n of 150 | class |
+|---|---|---|---|
+| Pass | `Not a service we provide` | 113 | fit |
+| | `Not enough information` | 13 (+4 second) | evidence |
+| | `Not an actual bid` | 8 | notice |
+| | `Seen already` | 2 | notice |
+| | `Must be on-site` | 2 (+1 second) | eligibility |
+| | `Too specific — no room for us` | 1 | fit |
+| | `No capacity right now` | **0** | **capacity** |
+| Interested | `Perfect fit` | 2 | fit |
+| | `Our kind of work` | 5 | fit |
+| | `Could source it` | 2 | fit |
+| | `New market, worth a look` | 1 | fit |
+| | `Not enough information` | 1 (+5 second) | evidence |
+
+**Multi-select, as the bundle's `picked` is** — about six of the 139 carry two reasons.
+**The bundle's guard is back on both branches** — a chip or text confirms — with **one
+exception**, ruled by Matt in session 2026-09-16 over D30's literal "free text required":
+`Not a service we provide` alone is not a decision, because D20-A keeps the category noun in
+the reason field and that noun is what spec §4.2 builds the negative profile from. The server
+refuses it with a sentence naming the chip (*"needs the detail in the reason: which
+service?"*, 400 on `reason`); the client mirrors it.
+
+**The placeholder comes home.** D30 §3 branched it because, with no chips, the bundle's
+*"…or say it in your own words"* invited skipping a required field. There are chips; the
+field is the alternative to them again; both branches now carry the bundle's one string
+verbatim. That cost of D30 is closed.
+
+### Where it deviates, in two places
+
+**1. The words are not the bundle's.** Of the bundle's twelve, only four have any echo in the
+150 — `Strong fit` (Matt's *"perfect"*, ×2), `Capacity — too large` (one ambiguous instance),
+`Out of geography` (*"must be on-site"*, ×2), `Incumbent locked` (*"hyper-specific to a single
+platform"*, ×1) — and eight have none: **zero of 139 passes reached for** `Deadline too close`,
+`Too small`, `Set-aside ineligible`, `Cost to pursue too high`, `No capability match` (they said
+*which* service, every time), and zero of 11 for `Sub / teaming play`, `Known buyer`,
+`Watch only`. §7.10 says copy is specification, and it is — for the bundle's copy. This
+vocabulary was ruled on 2026-09-13 to be **derived, not the bundle's**, before the sitting
+began, and the pass-chips ruling of 2026-09-02 (*"we do want chips … but not now"*) parked the
+bundle's list explicitly rather than adopting it. The bundle's word is kept beside each chip
+that has one (`bundle:` in `REASON_CHIPS`) so the mapping is on record.
+
+**2. Two chip rows on the Interested step.** The bundle draws one row per step. Ours has the
+channel row (D21, single-select, unswitchable) under `WHERE ELSE WOULD THIS HAVE REACHED
+YOU?` and the reason row (multi-select) under `WHY THIS ONE?` — question, chips, question,
+chips, field. Same primitive (`ChoiceChip`), same container (`.queue__reason-chips`), same
+pixels; the deviation is a second instance of a thing the bundle draws once, because the step
+asks a second question the bundle does not ask (D30).
+
+### What it costs
+
+1. **A chip with no evidence behind it.** `No capacity right now` has 0–1 of 139 (N40, *"do not
+   have the resources for currently"*, as much capability as capacity). It ships on 1.1.4's
+   mandate alone — the capacity class must arrive **classified**, and a chip is the only way a
+   capacity reason arrives classified rather than inferred from prose. Its group on the sheet
+   says so, and so does the migration.
+2. **An eleven-decision corpus on the Interested side.** The four fit chips are a first cut. The
+   sheet's roster is where they get corrected as more come in; adding a chip is a ruling and a
+   migration, on purpose.
+3. **The one-tap pass exists now**, which D30 argued against for the corpus's sake. The
+   `needsDetail` rule keeps the noun on the 80% case; the other six Pass chips lose nothing by
+   being a tap — *"not an actual bid"* is the whole reason.
+4. **`Queue.test.tsx`'s two no-chips pins are inverted, not deleted**, so the reversal is
+   visible in the diff: *"a Pass carries no channel"* now asserts seven reason chips and no
+   channel; *"the good-fit reason is free text"* now asserts the five derived chips under the
+   second head and the bundle's three absent.
+5. **Nothing outside the queue reads the chips.** `decision.reason_chips` comes back on every
+   latest-pursuit row and on the record's `decision` object; only the queue's toast reads it.
+   The record screen renders no decision at all today (verified 2026-09-16: no client file
+   outside the queue consumes `decision`), so this is not a display left stale — it is a
+   display not yet built, and the chips wait there with the reason.
+
+### What it does NOT decide, named so it is not mistaken for decided
+
+- **The negative profile.** Spec §4.2 says it is built from exactly these 113 no-bid reasons.
+  `firm_profile.negative_profile` is still empty. The nouns are now findable —
+  `WHERE reason_chips @> '{not-a-service}'` — and the derivation is its own step.
+- **D2's trigger.** An Interested row wearing `Not enough information` is precisely the row the
+  on-demand document fetch exists for. Whether the chip *triggers* the fetch is a later ruling;
+  whether it is *recorded* was D23.
+- **The R7 mirror.** Unchanged and still Matt's to rule (STATUS, 2026-09-15 §2).
+
+### What would reopen it
+
+1. **The bundle redraws the step.** A later prototype version with a derived-looking vocabulary
+   or a two-question step wins on its own words, per §1's `Proto` audit.
+2. **A chip's count says the vocabulary was wrong.** If `not-enough-info` dominates a source, that
+   is F6's finding about the source, not a reason for a new chip. If free text keeps saying the
+   same new thing, that is a chip being earned — re-run `scripts/reason-corpus.mjs` and derive
+   again.
+3. **Something starts learning from reasons.** The first consumer must filter `no-capacity` out
+   before reading a row (spec §1); the class is on the chip so that this is a `WHERE`, not a
+   judgement. If a consumer reads `pursuit.reason` without that filter, this deviation's whole
+   argument for the capacity chip is void.

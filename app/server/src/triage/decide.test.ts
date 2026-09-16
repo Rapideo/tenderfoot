@@ -6,7 +6,7 @@ await resetSchema();
 
 const { migrate } = await import("../db/migrate.js");
 const { all, close, insert } = await import("../db/index.js");
-const { recordDecision, ReasonRequiredError, DiscoveryChannelRequiredError } =
+const { recordDecision, ReasonRequiredError, DiscoveryChannelRequiredError, ReasonChipInvalidError } =
   await import("./decide.js");
 
 beforeAll(async () => {
@@ -280,4 +280,190 @@ test("a channel outside the vocabulary is rejected by the schema", async () => {
       reason: "testing the vocabulary, not the prompt",
     }),
   ).rejects.toThrow();
+});
+
+/* ---------------------------------------------------------------------------
+ * REASON CHIPS -- migration 035, rulings D20-D24 (2026-09-16). The vocabulary
+ * is derived from the 150-decision hand-run; see @tenderfoot/shared's
+ * REASON_CHIPS for the words and the classes. These tests are about what the
+ * server does with a chip, not about the words.
+ * ------------------------------------------------------------------------- */
+
+test("chips are stored with the decision, in the order given, and come back on the latest row", async () => {
+  const id = await sol("chips stored");
+  const latest = await recordDecision({
+    solicitationId: id,
+    state: "Not Interested",
+    reasonChips: ["not-enough-info", "seen-already"],
+    reason: "third time this week, and still no description",
+  });
+  expect(latest.reason_chips).toEqual(["not-enough-info", "seen-already"]);
+  const [row] = await all<{ reason_chips: string[] }>(
+    `SELECT reason_chips FROM pursuit WHERE solicitation_id = $1`,
+    [id],
+  );
+  expect(row!.reason_chips).toEqual(["not-enough-info", "seen-already"]);
+});
+
+/* THE BUNDLE'S OWN GUARD: `if (kind === "pass" && !picked.length &&
+ * !freeText.trim()) return;` -- a chip OR text. Ruled by Matt 2026-09-16 in
+ * session over D30's literal "free text required", with one exception below. */
+test("a chip alone satisfies the Pass requirement -- the bundle's guard", async () => {
+  const id = await sol("one tap");
+  const latest = await recordDecision({
+    solicitationId: id,
+    state: "Not Interested",
+    reasonChips: ["not-an-actual-bid"],
+  });
+  expect(latest.state).toBe("Not Interested");
+  expect(latest.reason).toBeNull();
+  expect(latest.reason_chips).toEqual(["not-an-actual-bid"]);
+});
+
+test("a chip alone satisfies Interested too, once the channel is there", async () => {
+  const id = await sol("one tap, interested");
+  const latest = await recordDecision({
+    solicitationId: id,
+    state: "Interested",
+    discoveryChannel: "nowhere",
+    reasonChips: ["perfect-fit"],
+  });
+  expect(latest.reason).toBeNull();
+  expect(latest.reason_chips).toEqual(["perfect-fit"]);
+});
+
+/* THE ONE EXCEPTION -- D20-A. "Not a service we provide" is 113 of the 139
+ * and its noun is the valuable part: spec §4.2 builds the negative profile
+ * from exactly these. A tap on it alone loses the noun, so it is not a
+ * complete decision. */
+test("not-a-service alone is not a decision: the category noun must be in the reason", async () => {
+  const id = await sol("needs the noun");
+  await expect(
+    recordDecision({ solicitationId: id, state: "Not Interested", reasonChips: ["not-a-service"] }),
+  ).rejects.toBeInstanceOf(ReasonRequiredError);
+  await expect(
+    recordDecision({
+      solicitationId: id,
+      state: "Not Interested",
+      reasonChips: ["not-a-service"],
+      reason: "   ",
+    }),
+  ).rejects.toBeInstanceOf(ReasonRequiredError);
+  const latest = await recordDecision({
+    solicitationId: id,
+    state: "Not Interested",
+    reasonChips: ["not-a-service"],
+    reason: "roofing",
+  });
+  expect(latest.reason).toBe("roofing");
+  expect(latest.reason_chips).toEqual(["not-a-service"]);
+});
+
+test("the detail refusal says which chip asked for it", async () => {
+  const id = await sol("names the chip");
+  await expect(
+    recordDecision({ solicitationId: id, state: "Not Interested", reasonChips: ["not-a-service"] }),
+  ).rejects.toThrow(/Not a service we provide/);
+});
+
+test("a chip outside the vocabulary is refused before it reaches the database", async () => {
+  const id = await sol("bad chip");
+  await expect(
+    recordDecision({
+      solicitationId: id,
+      state: "Not Interested",
+      reasonChips: ["deadline-too-close"],
+      reason: "the bundle's word, which nobody reached for",
+    }),
+  ).rejects.toBeInstanceOf(ReasonChipInvalidError);
+});
+
+/* Which STEP a chip belongs to is an application rule, not a CHECK (migration
+ * 035 says why). An Interested wearing a Pass chip would put "not a service we
+ * provide" on a row that says the opposite. */
+test("a chip from the other branch is refused, and the shared one is not", async () => {
+  const id = await sol("wrong branch");
+  await expect(
+    recordDecision({
+      solicitationId: id,
+      state: "Interested",
+      discoveryChannel: "nowhere",
+      reasonChips: ["not-a-service"],
+      reason: "contradiction",
+    }),
+  ).rejects.toBeInstanceOf(ReasonChipInvalidError);
+  await expect(
+    recordDecision({
+      solicitationId: id,
+      state: "Not Interested",
+      reasonChips: ["perfect-fit"],
+      reason: "contradiction the other way",
+    }),
+  ).rejects.toBeInstanceOf(ReasonChipInvalidError);
+  /* D23-A: `not-enough-info` is on both steps -- the same judgement on both
+   * sides of the decision. */
+  const soft = await recordDecision({
+    solicitationId: id,
+    state: "Interested",
+    discoveryChannel: "portal",
+    reasonChips: ["not-enough-info"],
+  });
+  expect(soft.reason_chips).toEqual(["not-enough-info"]);
+});
+
+test("a repeated chip is stored once", async () => {
+  const id = await sol("dedupe");
+  const latest = await recordDecision({
+    solicitationId: id,
+    state: "Not Interested",
+    reasonChips: ["seen-already", "seen-already"],
+  });
+  expect(latest.reason_chips).toEqual(["seen-already"]);
+});
+
+/* Undo is not a decision (D30's own note): it carries nothing, and a caller
+ * that sends chips with it is ignored rather than refused, the same way a
+ * channel on a Pass is. */
+test("New stores no chips, whatever the caller sent", async () => {
+  const id = await sol("undo carries nothing");
+  await recordDecision({ solicitationId: id, state: "Not Interested", reasonChips: ["seen-already"] });
+  const latest = await recordDecision({ solicitationId: id, state: "New", reasonChips: ["seen-already"] });
+  expect(latest.state).toBe("New");
+  expect(latest.reason_chips).toEqual([]);
+});
+
+/* Every row written before migration 035 reads as chip-less, not unknown --
+ * '{}' not NULL. The CHECK is proved by going round the application guard
+ * with a hand-written INSERT, the way a fixture or a future CLI might. */
+test("a chip outside the vocabulary is rejected by the schema, even past the guard", async () => {
+  const id = await sol("schema check");
+  await expect(
+    insert(
+      `INSERT INTO pursuit (solicitation_id, state, reason, decided_at, reason_chips)
+       VALUES ($1, 'Not Interested', 'x', $2, ARRAY['carrier_pigeon']) RETURNING id`,
+      [id, new Date().toISOString()],
+    ),
+  ).rejects.toThrow(/pursuit_reason_chips_valid/);
+  const plain = await recordDecision({ solicitationId: id, state: "Not Interested", reason: "no chips at all" });
+  expect(plain.reason_chips).toEqual([]);
+});
+
+/* The vocabulary declares which steps each chip belongs to (`branches`); the
+ * render order per step is a second, explicit list (STEP_ORDER, via
+ * reasonChipsFor). Two lists that say the same thing can disagree, and the
+ * one nobody looks at wins silently -- so they are pinned to each other. */
+test("each step offers exactly the chips that declare it, once each", async () => {
+  const { REASON_CHIPS, reasonChipsFor } = await import("@tenderfoot/shared");
+  for (const branch of ["pass", "interested"] as const) {
+    const offered = reasonChipsFor(branch).map((c) => c.id);
+    const declared = REASON_CHIPS.filter((c) =>
+      (c.branches as ReadonlyArray<string>).includes(branch),
+    ).map((c) => c.id);
+    expect([...offered].sort()).toEqual([...declared].sort());
+    expect(new Set(offered).size).toBe(offered.length);
+  }
+  /* And migration 035's CHECK lists the same eleven -- proved by the
+   * "rejected by the schema" test above for a stranger, and here for every
+   * member: each id must be insertable. */
+  expect(REASON_CHIPS).toHaveLength(11);
 });

@@ -313,3 +313,107 @@ export const DISCOVERY_CHANNELS = [
 ] as const;
 
 export type DiscoveryChannel = (typeof DISCOVERY_CHANNELS)[number];
+
+/* REASON CHIPS -- the vocabulary SVRC Region 1.1.4 said had to be DERIVED from
+ * a hand-run rather than invented ahead of it. It was: 150 decisions on
+ * 2026-09-13 (11 Interested, 139 not), every one in Matt's own words, read
+ * block by block and clustered on ruling sheet D20-D24 (2026-09-16). The
+ * counts are the sheet's; the words are his.
+ *
+ * EVERY CHIP CARRIES A CLASS ON THE WAY IN. That is the one requirement the
+ * design spec's §6 hands forward and 1.1.4 restates: a recorded reason is
+ * classified at capture, never inferred from its text afterwards, so that
+ * the CAPACITY class can be excluded from anything that learns (spec §1 --
+ * "a recorded capacity judgment is a journal entry. It may never become model
+ * input, a score, a weight, a filter, or a learned rule"). Nothing learns yet.
+ * The class is here so that when something does, the exclusion is a filter
+ * on a column and not a reading of prose.
+ *
+ *   fit          the work against what the firm does; what qualification
+ *                would one day learn from
+ *   evidence     the listing was too thin to decide -- says something about
+ *                the SOURCE (F6, R7), nothing about the fit
+ *   notice       not a solicitation, or a duplicate -- feeds gates and the
+ *                merge, not the fit
+ *   eligibility  where the firm's people are (`remote_ok` in the profile
+ *                model); hard-gate material
+ *   capacity     the firm's workload today; may be counted, never acted on
+ *
+ * `not-a-service` is 113 of the 139 passes and its NOUN is the valuable part
+ * ("we are not a chemical supplier", "laboratory services would be a
+ * blacklist item"): spec §4.2 says the negative profile is built from exactly
+ * these. D20 (ruled A) keeps it ONE chip and keeps the noun in the reason
+ * field, so `needsDetail` is the rule that a tap on it alone is not a
+ * complete decision -- ruled by Matt 2026-09-16 in session, with the
+ * bundle's own guard (a chip OR text) everywhere else.
+ *
+ * `no-capacity` is the one chip with no corpus behind it (0-1 of 139, D24
+ * ruled A). It exists to enforce the class rule above, not to describe the
+ * 150: a capacity reason typed as free text arrives unclassified, and the
+ * exclusion cannot be applied to what was never classified.
+ *
+ * ORDER IS THE ORDER THE CHIPS RENDER IN, largest cluster first on each
+ * branch, and it is the order migration 035 lists them in. `bundle` is the
+ * frozen V1.2 mockup's own word where it has one (PASS_CHIPS / YES_CHIPS),
+ * kept for the deviation record; the label shipped is the derived one. */
+export type ReasonChipClass = "fit" | "evidence" | "notice" | "eligibility" | "capacity";
+
+export interface ReasonChip {
+  id: string;
+  label: string;
+  cls: ReasonChipClass;
+  /** which decision step offers it */
+  branches: ReadonlyArray<"pass" | "interested">;
+  /** a tap on this chip alone is not a complete decision -- the reason field
+   * must carry the detail (D20-A: the category noun seeds the negative
+   * profile) */
+  needsDetail?: true;
+  /** the V1.2 bundle's word for the same idea, where it has one */
+  bundle?: string;
+}
+
+export const REASON_CHIPS = [
+  { id: "not-a-service",     label: "Not a service we provide",      cls: "fit",         branches: ["pass"], needsDetail: true },
+  { id: "not-enough-info",   label: "Not enough information",        cls: "evidence",    branches: ["pass", "interested"] },
+  { id: "not-an-actual-bid", label: "Not an actual bid",             cls: "notice",      branches: ["pass"] },
+  { id: "seen-already",      label: "Seen already",                  cls: "notice",      branches: ["pass"] },
+  { id: "must-be-on-site",   label: "Must be on-site",               cls: "eligibility", branches: ["pass"], bundle: "Out of geography" },
+  { id: "too-specific",      label: "Too specific — no room for us", cls: "fit",         branches: ["pass"], bundle: "Incumbent locked" },
+  { id: "no-capacity",       label: "No capacity right now",         cls: "capacity",    branches: ["pass"], bundle: "Capacity — too large" },
+  { id: "perfect-fit",       label: "Perfect fit",                   cls: "fit",         branches: ["interested"], bundle: "Strong fit" },
+  { id: "our-kind-of-work",  label: "Our kind of work",              cls: "fit",         branches: ["interested"] },
+  { id: "could-source-it",   label: "Could source it",               cls: "fit",         branches: ["interested"] },
+  { id: "new-market",        label: "New market, worth a look",      cls: "fit",         branches: ["interested"], bundle: "Watch only" },
+] as const satisfies ReadonlyArray<ReasonChip>;
+
+export type ReasonChipId = (typeof REASON_CHIPS)[number]["id"];
+
+/* RENDER ORDER PER STEP, largest cluster first on each. Explicit rather than
+ * a filter over REASON_CHIPS, because the one shared chip sits second on
+ * Pass (13 of 139) and LAST on Interested (1 of 11): a filter would put "Not
+ * enough information" under the cursor before "Perfect fit" on the step
+ * where it is the rarest answer. A test pins each list to the `branches`
+ * declared above, so the two cannot drift apart. */
+const STEP_ORDER = {
+  pass: [
+    "not-a-service",
+    "not-enough-info",
+    "not-an-actual-bid",
+    "seen-already",
+    "must-be-on-site",
+    "too-specific",
+    "no-capacity",
+  ],
+  interested: ["perfect-fit", "our-kind-of-work", "could-source-it", "new-market", "not-enough-info"],
+} as const satisfies Record<"pass" | "interested", ReadonlyArray<ReasonChipId>>;
+
+/** The chips offered on one step, in render order. `not-enough-info` is on
+ * both (D23, ruled A): a Pass wearing it is a soft pass, an Interested
+ * wearing it is the row D2's on-demand document fetch exists for. */
+export function reasonChipsFor(branch: "pass" | "interested"): ReadonlyArray<ReasonChip> {
+  return STEP_ORDER[branch].map((id) => reasonChipById(id)!);
+}
+
+export function reasonChipById(id: string): ReasonChip | undefined {
+  return REASON_CHIPS.find((c) => c.id === id);
+}

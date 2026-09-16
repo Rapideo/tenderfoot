@@ -8,6 +8,7 @@ import {
   recordDecision,
   ReasonRequiredError,
   DiscoveryChannelRequiredError,
+  ReasonChipInvalidError,
 } from "../triage/decide.js";
 import {
   interestedPerHundred,
@@ -121,7 +122,22 @@ triage.post(
       require_reason_on_pass,
       require_reason_on_interested,
       discovery_channel,
+      reason_chips,
     } = req.body ?? {};
+    /* SHAPE is checked here, VALUE in recordDecision, VALIDITY as a backstop
+     * by migration 035's CHECK. A string where an array was meant would be
+     * iterated character by character further down, so it is refused at the
+     * door with the field named, like every other caller defect on this
+     * route. Absent means none -- the screen sends `[]` either way. */
+    if (
+      reason_chips !== undefined &&
+      reason_chips !== null &&
+      !(Array.isArray(reason_chips) && reason_chips.every((c) => typeof c === "string"))
+    ) {
+      return res
+        .status(400)
+        .json({ error: "reason_chips must be an array of chip ids.", field: "reason_chips" });
+    }
     try {
       const latest = await recordDecision({
         solicitationId: id,
@@ -138,6 +154,7 @@ triage.post(
          * outside the vocabulary fails at the database rather than being
          * silently coerced to something countable here. */
         discoveryChannel: typeof discovery_channel === "string" ? discovery_channel : null,
+        reasonChips: (reason_chips ?? null) as string[] | null,
       } as Parameters<typeof recordDecision>[0]);
       return res.status(201).json(latest);
     } catch (err) {
@@ -152,6 +169,11 @@ triage.post(
        * user actually has to touch rather than saying "something was wrong". */
       if (err instanceof DiscoveryChannelRequiredError) {
         return res.status(400).json({ error: err.message, field: "discovery_channel" });
+      }
+      /* Migration 035: a chip the vocabulary lacks, or one from the other
+       * step. The caller's to fix, and the chip row is the control. */
+      if (err instanceof ReasonChipInvalidError) {
+        return res.status(400).json({ error: err.message, field: "reason_chips" });
       }
       throw err;
     }

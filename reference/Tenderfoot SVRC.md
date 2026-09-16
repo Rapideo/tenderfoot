@@ -205,6 +205,8 @@ Chips need a free-text escape hatch. The hand-run is currently producing reasons
 
 **And one constraint the eventual vocabulary inherits.** §1 is a mandate on the *system*, not on the user: a person may record *"too big for us right now"* and should, because it is often the true reason. What may never happen is that reason becoming model input. **So when chips return, they carry a class on the way in**, and the capacity class is excluded from anything that learns. A count may be surfaced; it may not be acted on. This is a data-flow rule, not a word ban — nothing is forbidden from being said here.
 
+**Revised 2026-09-16 — chips return, derived.** The hand-run this node was waiting for happened: 150 decisions on 2026-09-13, every one free text, the shortcut declined. Clustered on ruling sheet D20–D24 into eleven chips — seven on Pass, five on Interested, one shared — each carrying its class (fit · evidence · notice · eligibility · capacity) on the way in, exactly as the paragraph above requires. Zero of 139 passes reached for four of the bundle's eight words. The capacity chip is the one with no corpus behind it and ships on this node's mandate alone. Free text stays beside the chips on both branches; a chip or text confirms (the bundle's guard), except that *Not a service we provide* — 113 of 139 — still asks for the noun, because that noun seeds the negative profile (design spec §4.2). Vocabulary in `@tenderfoot/shared` `REASON_CHIPS`, pinned by migration 035; deviation D32 has the full argument.
+
 ### Region 1.1.5 : Gated Items Drawer — PARKED, AND THE REASON IT EXISTS DID NOT GO AWAY
 
 **PARKED 2026-08-11** — V1 has no gates, so nothing is gated and the drawer has no contents.
