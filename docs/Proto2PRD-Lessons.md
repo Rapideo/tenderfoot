@@ -805,6 +805,22 @@ The 71-item key carried its date (`captured 2026-09-02`), which is what made it
 
 ---
 
+### 2.40 Derive a vocabulary by putting every source decision under its candidate term, and let the owner move the wrong ones
+
+**Observed 2026-09-16.** SVRC 1.1.4 had parked the reason chips for five weeks on one condition: the vocabulary must be *derived from* a hand-run, not invented ahead of it. The hand-run produced 150 free-text decisions. The derivation was done by reading every one, clustering in a script (so the counts were computed, never remembered), and publishing a ruling sheet whose lower half listed **all 150 blocks under the chip each produced**, each with the card's facts, the reason verbatim, a control to move it, and an editable name on every chip. The ruling questions sat above; the evidence for each sat below. Matt reviewed, moved nothing, renamed nothing, and ruled all five in one sentence.
+
+**Why it matters.** A derived vocabulary presented as a *list with counts* asks the owner to trust the clustering. The same vocabulary presented as *the clustering itself* — every member visible under its term — lets him audit it in the time it takes to skim, and the absence of moves is then evidence, not silence. The two findings that mattered most were not chips at all and only became visible by reading every block: that the spec already wanted the negative profile built from exactly these reasons, and that one chip on the accept side named the on-demand-fetch trigger. A count would not have surfaced either.
+
+**Proposed generalisation.** **When a vocabulary, taxonomy or rule set is to be derived from a corpus the owner wrote, ship the derivation as the corpus re-sorted under its candidate terms — with a move control per item and a rename control per term — not as the terms with their tallies.** Compute the tallies from the assignment file so they cannot drift from it. Put the rulings above and the evidence below, on one page.
+
+> **The tell is a derived list whose counts were typed rather than computed.** The first draft of this one said 111; the script said 113, because two flagged items and one missed one were being carried in prose.
+
+**The check that catches it.** The assignment lives in a script whose output is the page's data; a count that appears in the page's copy must appear in the script's output first.
+
+**Why not promoted.** One instance. The pattern is the D-series ruling sheet with a roster underneath; whether the roster earns its place on a smaller corpus (twenty items) or a larger one (a thousand) is untested.
+
+---
+
 ## 3. Watch items — open questions about the method itself
 
 Not lessons. Questions the project should be able to answer by the end, and would otherwise forget it had asked.

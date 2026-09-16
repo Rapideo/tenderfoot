@@ -5,7 +5,12 @@ import {
   Button, Callout, Card, Chip, ChoiceChip, FactPanel, Keycap, MicroLabel, ScoreStrip,
   ShortcutCard,
 } from "../primitives";
-import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
+import {
+  DISCOVERY_CHANNELS,
+  reasonChipById,
+  reasonChipsFor,
+  type DiscoveryChannel,
+} from "@tenderfoot/shared";
 import { adminHeaders, clearAdminSecret, getAdminSecret } from "../admin/adminSecret";
 import { getDecidedBy } from "./decidedBy";
 import { useQueueKeys } from "./useQueueKeys";
@@ -197,6 +202,15 @@ export function Queue() {
    * migration 013 stores one column. Selecting replaces rather than appends
    * -- see the chip row's onClick. */
   const [channel, setChannel] = useState<DiscoveryChannel | null>(null);
+  /* MULTI-SELECT, as the bundle's `picked` is: a toggle appends or removes.
+   * The vocabulary is REASON_CHIPS (shared), derived from the 150 -- rulings
+   * D20-D24, 2026-09-16, deviation D32 -- and which chips this step offers is
+   * `reasonChipsFor(branch)`, not a local list. */
+  const [chips, setChips] = useState<string[]>([]);
+  const toggleChip = useCallback((id: string) => {
+    setChips((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+    setError(null);
+  }, []);
   const navigate = useNavigate();
 
   const sampleId = new URLSearchParams(window.location.search).get("sample");
@@ -223,10 +237,28 @@ export function Queue() {
     async (state: "Interested" | "Not Interested" | "New", forId?: number) => {
       const id = forId ?? current?.id;
       if (!id) return;
+      /* THE BUNDLE'S GUARD, since 2026-09-16: `if (kind === "pass" &&
+       * !picked.length && !freeText.trim()) return;` -- a chip OR text.
+       * Ruled by Matt in session over D30's literal "free text required",
+       * with one exception directly below. Mirrors recordDecision, which is
+       * the authority; this is the courtesy that keeps a mis-tap from
+       * becoming a request. */
+      const picked = state === "New" ? [] : chips;
+      /* D20-A: "Not a service we provide" is one chip for 113 of the 139, and
+       * the category noun stays in the reason field because that noun is what
+       * the negative profile is built from (spec §4.2). A tap on it alone is
+       * not a complete decision. Checked before the branch guards, as the
+       * server does, because the branch's own requirement IS met by the chip
+       * -- what is missing is different, and the sentence must say so. */
+      const detailFor = picked.map(reasonChipById).find((c) => c?.needsDetail);
+      if (detailFor && !reason.trim()) {
+        setError(`“${detailFor.label}” needs the detail in the reason: which service?`);
+        return;
+      }
       /* Mandatory on Pass -- blocked HERE as well as on the server, so a
        * mis-tap never becomes a request. */
-      if (state === "Not Interested" && !reason.trim()) {
-        setError("A reason is required on Pass.");
+      if (state === "Not Interested" && !reason.trim() && picked.length === 0) {
+        setError("A reason is required on Pass — a chip, or your own words.");
         return;
       }
       /* Mandatory on Interested, same guard for the same reason. The server
@@ -250,8 +282,8 @@ export function Queue() {
        * first rather than sending the operator to the wrong control.
        *
        * `state === "New"` is UNDO and falls through this one as well. */
-      if (state === "Interested" && !reason.trim()) {
-        setError("A reason is required on Interested.");
+      if (state === "Interested" && !reason.trim() && picked.length === 0) {
+        setError("A reason is required on Interested — a chip, or your own words.");
         return;
       }
       const secret = getAdminSecret();
@@ -275,6 +307,10 @@ export function Queue() {
            * any other state anyway -- but sending it would make the client
            * look like it believed otherwise. */
           discovery_channel: state === "Interested" ? channel : null,
+          /* Migration 035. `[]` on undo, never omitted: the route treats
+           * absent as none too, but a body that says what it means is one
+           * fewer thing a reader has to know. */
+          reason_chips: picked,
         }),
       });
       if (!res.ok) {
@@ -291,11 +327,20 @@ export function Queue() {
        * is nothing to undo back to, and the bundle sets `last: null` there
        * for the same reason. */
       const note = reason.trim();
+      /* Chips in the toast by their label, between the verb and the quoted
+       * note, so "Passed · Seen already · “third time”" reads as the decision
+       * it was. */
+      const chipLabels = picked.map((id) => reasonChipById(id)?.label ?? id);
       const parts =
         state === "Interested"
-          ? ["Interested", channel ? CHANNEL_LABELS[channel] : null, note ? `“${note}”` : null]
+          ? [
+              "Interested",
+              channel ? CHANNEL_LABELS[channel] : null,
+              ...chipLabels,
+              note ? `“${note}”` : null,
+            ]
           : state === "Not Interested"
-            ? ["Passed", note ? `“${note}”` : null]
+            ? ["Passed", ...chipLabels, note ? `“${note}”` : null]
             : [];
       const label = parts.filter(Boolean).join(" · ");
 
@@ -307,12 +352,13 @@ export function Queue() {
 
       setReason("");
       setChannel(null);
+      setChips([]);
       setError(null);
       setAskReason(null);
       setLastDecided(id);
       await load();
     },
-    [current, reason, channel, load],
+    [current, reason, channel, chips, load],
   );
 
   /* BOTH branches are two-step now: the key or the button opens a step, and
@@ -334,6 +380,7 @@ export function Queue() {
   const cancelReason = useCallback(() => {
     setAskReason(null);
     setChannel(null);
+    setChips([]);
     setError(null);
   }, []);
 
@@ -682,13 +729,24 @@ export function Queue() {
           * is unchanged -- required, single-select, preset -- and a REQUIRED
           * free-text reason now sits beside it.
           *
-          * REASON CHIPS are still correctly absent on BOTH branches -- SVRC
-          * 1.1.4 ratified free text only for V1, since a preset reason
-          * vocabulary would flatten the signal it exists to capture, and
-          * which way the decision went does not change that argument. The
-          * discovery chips do not reopen it: a REASON is an open judgement, a
-          * CHANNEL is a closed factual set, and free text cannot be counted.
-          * See migration 013. */}
+          * ⚖️ REASON CHIPS RETURNED 2026-09-16, DERIVED -- rulings D20-D24,
+          * migration 035, deviation D32. From 2026-09-02 to 2026-09-16 this
+          * comment said they were "correctly absent on BOTH branches", and
+          * they were: SVRC 1.1.4 parked them until a vocabulary could be
+          * DERIVED from a hand-run rather than guessed ahead of it. The
+          * hand-run happened (150 decisions, 2026-09-13, Matt's own words,
+          * no shortcut), the words were clustered on the ruling sheet, and
+          * the chips below are those clusters. The discovery channel row is
+          * unchanged and is still a different thing: a CHANNEL is a closed
+          * factual set; these are the open judgement, now countable.
+          *
+          * The frame is the bundle's own Pass step -- prompt, chips, field --
+          * on both branches; the bundle's chips-plus-free-text guard (a chip
+          * OR text) came back with them, ruled in session the same day, with
+          * one exception the guard in decide() names (D20-A). What the
+          * bundle does NOT draw is TWO chip rows on one step, which the
+          * Interested branch now has: channel row under its question, reason
+          * row under its own. That is D32's second half. */}
         {askReason ? (
           <div className="queue__reason">
             <div className="queue__reason-head">
@@ -741,12 +799,12 @@ export function Queue() {
               * asks the chips' question, this one asks the input's. Reading
               * order is question, chips, question, field.
               *
-              * 🔴 NO CHIPS FOR IT, and the argument is the one that already
-              * keeps them off the Pass branch: SVRC 1.1.4 ratified free text
-              * only for V1, since a preset reason vocabulary would flatten
-              * the signal it exists to capture. A vocabulary gets DERIVED
-              * from what Matt writes here; guessing it in advance is the
-              * failure D30 exists to avoid, not a shortcut to it.
+              * It had NO CHIPS from D30 (2026-09-08) to 2026-09-16, by the
+              * argument that kept them off the Pass branch too: a vocabulary
+              * gets DERIVED from what Matt writes here, not guessed ahead of
+              * it. It was derived -- D22-A gives this step four, D23-A a
+              * fifth it shares with Pass -- and they sit under THIS head,
+              * because they answer this question and not the channel's.
               *
               * The copy is written as the pair of the Pass prompt's, not a
               * copy of it -- WHY NOT? / WHY THIS ONE?, and Matt's own
@@ -763,6 +821,24 @@ export function Queue() {
               </div>
             )}
 
+            {/* THE REASON CHIPS, on both branches, in the vocabulary's own
+              * order -- largest cluster first. Multi-select: a tap toggles,
+              * as the bundle's `picked` array does, because a pass may have
+              * two reasons and about six of the 139 did. Same primitive and
+              * same container as the channel row above it; the difference is
+              * in the state each row writes, not in the pixels. */}
+            <div className="queue__reason-chips">
+              {reasonChipsFor(askReason).map((c) => (
+                <ChoiceChip
+                  key={c.id}
+                  selected={chips.includes(c.id)}
+                  onClick={() => toggleChip(c.id)}
+                >
+                  {c.label}
+                </ChoiceChip>
+              ))}
+            </div>
+
             <div className="queue__reason-row">
               <input
                 /* "Reason" on BOTH branches now. It was "Note" here, which is
@@ -775,21 +851,15 @@ export function Queue() {
                 autoFocus
                 onChange={(e) => setReason(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && void confirmReason()}
-                /* ⚖️ THE PLACEHOLDER BRANCHES, and only here. The bundle uses
-                 * one string for both branches -- "…or say it in your own
-                 * words (this is the training signal)" -- and it is right on
-                 * Pass, which has no chips, and was right on Interested when
-                 * the bundle's chips answered THIS question and the field was
-                 * an alternative to them. Ours do not: the chips answer where
-                 * the item reached you, the field asks why it fits, and both
-                 * are required. Left verbatim, "…or" would invite skipping a
-                 * required field. Same sentence, minus the "or" -- part of
-                 * D30. */
-                placeholder={
-                  askReason === "pass"
-                    ? "…or say it in your own words (this is the training signal)"
-                    : "In your own words (this is the training signal)"
-                }
+                /* THE BUNDLE'S ONE STRING, ON BOTH BRANCHES AGAIN. From D30
+                 * (2026-09-08) to 2026-09-16 this branched: Interested read
+                 * "In your own words…" because, with no reason chips, the
+                 * bundle's "…or" invited skipping a required field. The
+                 * reason chips are back and the field IS the alternative to
+                 * them on both steps, so the bundle's own sentence is right
+                 * on both and that half of D30 closes. §7.10: copy is
+                 * specification. */
+                placeholder="…or say it in your own words (this is the training signal)"
               />
               <Button variant="secondary" size="sm" ariaLabel="Back" onClick={cancelReason}>
                 Back

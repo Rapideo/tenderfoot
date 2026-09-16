@@ -235,3 +235,54 @@ test("a return to New needs neither a reason nor a channel", async () => {
   });
   expect(res.status).toBe(201);
 });
+
+/* ⚖️ REASON CHIPS AT THE ROUTE BOUNDARY -- migration 035, rulings D20-D24
+ * (2026-09-16). Same contract as the three omissions above: the caller can
+ * fix a bad chip, so 400 with the field to point at, and a chip on its own is
+ * a complete decision (the bundle's guard) except for the one that needs its
+ * noun (D20-A), which answers 400 on `reason` with a sentence naming the chip. */
+test("a Pass by chip alone is created, and the chips come back on the row", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Not Interested",
+    reason_chips: ["not-an-actual-bid"],
+  });
+  expect(res.status).toBe(201);
+  const body = (await res.json()) as any;
+  expect(body.reason_chips).toEqual(["not-an-actual-bid"]);
+  expect(body.reason).toBeNull();
+});
+
+test("a chip outside the vocabulary is a 400 naming reason_chips", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Not Interested",
+    reason_chips: ["deadline-too-close"],
+    reason: "the bundle's word",
+  });
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as any;
+  expect(body.field).toBe("reason_chips");
+  expect(body.error).toMatch(/deadline-too-close/);
+});
+
+test("not-a-service without its noun is a 400 on reason that names the chip", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Not Interested",
+    reason_chips: ["not-a-service"],
+  });
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as any;
+  expect(body.field).toBe("reason");
+  expect(body.error).toMatch(/Not a service we provide/);
+});
+
+/* A body whose reason_chips is not an array of strings is a caller defect, not
+ * something to coerce: `"reason_chips": "seen-already"` would otherwise be
+ * iterated character by character by a for-of. */
+test("reason_chips that is not an array of strings is a 400", async () => {
+  const res = await call("POST", `/api/solicitations/${solicitation}/decision`, {
+    state: "Not Interested",
+    reason_chips: "seen-already",
+  });
+  expect(res.status).toBe(400);
+  expect(((await res.json()) as any).field).toBe("reason_chips");
+});

@@ -21,7 +21,13 @@ const STATES: readonly PursuitState[] = ["New", "Triaged", "Interested", "Not In
  * mirror; this re-export keeps every existing importer of `decide.js`
  * working. */
 export { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
-import { DISCOVERY_CHANNELS, type DiscoveryChannel } from "@tenderfoot/shared";
+import {
+  DISCOVERY_CHANNELS,
+  REASON_CHIPS,
+  reasonChipById,
+  type DiscoveryChannel,
+  type ReasonChip,
+} from "@tenderfoot/shared";
 
 /* THE BRANCH A MISSING REASON WAS MISSING FROM. Both branches omit the same
  * FIELD -- `reason` -- so the route answers the same 400 naming the same
@@ -54,8 +60,18 @@ export class ReasonRequiredError extends Error {
    * still look green through the other's test. */
   readonly branch: ReasonBranch;
 
-  constructor(branch: ReasonBranch) {
-    super(REASON_REQUIRED_MESSAGE[branch]);
+  /* `detailFor` is the D20-A case: a chip was picked, so the branch's own
+   * requirement IS met, and what is missing is the detail that chip asks for.
+   * A different sentence, because the fix is different -- not "say why" but
+   * "say which". */
+  constructor(branch: ReasonBranch, detailFor?: ReasonChip) {
+    super(
+      detailFor
+        ? `"${detailFor.label}" needs the detail in the reason: which service? ` +
+            "The category is what the negative profile is built from (spec §4.2), " +
+            "and the chip alone does not carry it."
+        : REASON_REQUIRED_MESSAGE[branch],
+    );
     this.name = "ReasonRequiredError";
     this.branch = branch;
   }
@@ -75,6 +91,27 @@ export interface DecisionInput {
   requireReasonOnInterested?: boolean;
   /** REQUIRED on Interested, ignored otherwise. See recordDecision. */
   discoveryChannel?: DiscoveryChannel | null;
+  /** Migration 035, rulings D20-D24. Ids from REASON_CHIPS; multi-select, as
+   * the bundle's `picked` array is. A chip satisfies the reason requirement
+   * on its own (the bundle's guard) unless it `needsDetail`. */
+  reasonChips?: ReadonlyArray<string> | null;
+}
+
+/* A chip the vocabulary does not have, or one from the other step. Same
+ * standing as DiscoveryChannelRequiredError: the caller's to fix, so the
+ * route answers 400 with field "reason_chips". Checked HERE rather than left
+ * to migration 035's CHECK because the CHECK cannot know the step -- an
+ * Interested wearing "Not a service we provide" is a legal array on a row
+ * that says the opposite. */
+export class ReasonChipInvalidError extends Error {
+  constructor(id: string, branch: "pass" | "interested" | null) {
+    super(
+      branch
+        ? `"${id}" is not a reason chip offered on ${branch === "pass" ? "Pass" : "Interested"}.`
+        : `"${id}" is not a reason chip. One of: ${REASON_CHIPS.map((c) => c.id).join(", ")}.`,
+    );
+    this.name = "ReasonChipInvalidError";
+  }
 }
 
 /* Same shape and same reason as ReasonRequiredError: the caller can fix it, so
@@ -113,7 +150,48 @@ export async function recordDecision(input: DecisionInput): Promise<LatestPursui
   }
 
   const reason = input.reason?.trim() ? input.reason.trim() : null;
-  if (state === "Not Interested" && requireReasonOnPass && !reason) {
+
+  /* REASON CHIPS -- migration 035, rulings D20-D24 (2026-09-16). Validated
+   * BEFORE either reason guard because they change what those guards mean:
+   * a chip satisfies the requirement on its own, as the bundle's confirm()
+   * has it (`!picked.length && !freeText.trim()`), so the guards below ask
+   * "is there a chip or text", not "is there text".
+   *
+   * Deduplicated, order kept: the bundle toggles a chip out of `picked`
+   * rather than pushing it twice, so two of the same is a caller defect and
+   * not a stronger opinion. Only ever stored on a decision -- "New" is undo
+   * and carries nothing, the same rule as the channel.
+   *
+   * Step membership is checked here and not by the CHECK (035 says why). The
+   * vocabulary itself is checked here too, so a bad id fails with a sentence
+   * naming the list rather than with the constraint's name -- the CHECK is
+   * the backstop for every path that is not this function. */
+  const branch: "pass" | "interested" | null =
+    state === "Not Interested" ? "pass" : state === "Interested" ? "interested" : null;
+  const chips: ReasonChip[] = [];
+  if (branch) {
+    for (const id of input.reasonChips ?? []) {
+      const chip = reasonChipById(id);
+      if (!chip) throw new ReasonChipInvalidError(id, null);
+      if (!(chip.branches as ReadonlyArray<string>).includes(branch)) {
+        throw new ReasonChipInvalidError(id, branch);
+      }
+      if (!chips.includes(chip)) chips.push(chip);
+    }
+  }
+  const hasChip = chips.length > 0;
+  /* D20-A. "Not a service we provide" is one chip for 113 of the 139 and the
+   * category noun stays in the reason field, because that noun is what spec
+   * §4.2 builds the negative profile from. So a tap on it is not a complete
+   * decision until the field says which -- the one exception to the bundle's
+   * guard, ruled by Matt 2026-09-16 in session. Applies whether or not the
+   * branch's own switch is on: this is the chip's rule, not the branch's. */
+  const detailFor = chips.find((c) => c.needsDetail);
+  if (detailFor && !reason) {
+    throw new ReasonRequiredError(branch === "pass" ? "Not Interested" : "Interested", detailFor);
+  }
+
+  if (state === "Not Interested" && requireReasonOnPass && !reason && !hasChip) {
     throw new ReasonRequiredError("Not Interested");
   }
 
@@ -164,13 +242,13 @@ export async function recordDecision(input: DecisionInput): Promise<LatestPursui
    *
    * "New" is NOT covered, here or above: undo is not a decision, and asking a
    * mis-tap to be justified would make the correction harder than the error. */
-  if (state === "Interested" && requireReasonOnInterested && !reason) {
+  if (state === "Interested" && requireReasonOnInterested && !reason && !hasChip) {
     throw new ReasonRequiredError("Interested");
   }
 
   await run(
-    `INSERT INTO pursuit (solicitation_id, state, reason, decided_by, decided_at, discovery_channel)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO pursuit (solicitation_id, state, reason, decided_by, decided_at, discovery_channel, reason_chips)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       solicitationId,
       state,
@@ -182,6 +260,9 @@ export async function recordDecision(input: DecisionInput): Promise<LatestPursui
        * a rejected item would enter the denominator of a rate it is not part
        * of. */
       state === "Interested" ? discoveryChannel : null,
+      /* Empty on New (undo), and empty rather than NULL always -- 035 has one
+       * representation of "no chips". */
+      chips.map((c) => c.id),
     ],
   );
 

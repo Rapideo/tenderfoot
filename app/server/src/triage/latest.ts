@@ -7,6 +7,8 @@ export interface LatestPursuit {
   solicitation_id: number;
   state: PursuitState;
   reason: string | null;
+  /** migration 035: ids from REASON_CHIPS, `[]` when none -- never null */
+  reason_chips: string[];
   decided_by: string | null;
   created_at: string;
 }
@@ -21,7 +23,7 @@ export interface LatestPursuit {
  * and unsortable; id breaks a same-millisecond tie deterministically. */
 export const LATEST_PURSUIT = `
   SELECT DISTINCT ON (solicitation_id)
-         id AS pursuit_id, solicitation_id, state, reason, decided_by, created_at
+         id AS pursuit_id, solicitation_id, state, reason, reason_chips, decided_by, created_at
     FROM pursuit
    ORDER BY solicitation_id, created_at DESC, id DESC`;
 
